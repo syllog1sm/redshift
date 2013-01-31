@@ -1,0 +1,17 @@
+CXX = ?= g++
+CC ?= gcc
+CFLAGS = -Wall -Wconversion -03 -fPIC
+ARCH = -arch i386 -arch x86_64
+LL = ext/liblinear-weights-1.91
+
+cy_svm: cy_svm.pyx cy_svm.pxd lib/liblinear.so
+	python setup.py build_ext --inplace
+
+lib/liblinear.so: $(LL)/linear.cpp $(LL)/tron.cpp
+	make -C $(LL) lib
+	cp $(LL)/liblinear.so.1 lib/liblinear.so.1
+	cp $(LL)/liblinear.so.1 lib/liblinear.so
+
+clean:
+	make -C $(LL) clean
+	rm -rf *~ lib/* cy_svm.cpp *.o *.html build
