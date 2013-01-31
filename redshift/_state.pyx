@@ -119,8 +119,9 @@ cdef State init_state(size_t n):
     cdef size_t i, j
     cdef State s
     cdef int n_labels = len(io_parse.LABEL_STRS)
-    s = State(n=n, t=0, score=0.0, i=1, top=0, second=0, stack_len=1, is_finished=False)
-    for i in range(n + 10):
+    # Initialise with first word on top of stack
+    s = State(n=n, t=0, score=0.0, i=2, top=1, second=0, stack_len=2, is_finished=False)
+    for i in range(n):
         s.stack[i] = 0
         s.l_valencies[i] = 0
         s.r_valencies[i] = 0
@@ -133,6 +134,7 @@ cdef State init_state(size_t n):
         for j in range(n_labels):
             s.llabel_set[i][j] = 0
             s.rlabel_set[i][j] = 0
+    s.stack[1] = 1
     for i in range(MAX_TRANSITIONS):
         s.history[i] = 0
     return s

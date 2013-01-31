@@ -10,7 +10,7 @@ from index.hashes cimport encode_feat
 
 from _state cimport State, get_left_edge, get_right_edge
 
-DEF CONTEXT_SIZE = 66
+DEF CONTEXT_SIZE = 60
 
 # There must be a way to keep this in synch??
 N_LABELS = 0
@@ -82,12 +82,6 @@ cdef enum:
     S1rep
     S1rel
     S1re_dist
-    S_2w
-    S_2p
-    S_2l
-    S_3w
-    S_3p
-    S_3l
     S0llabs
     S0rlabs
     N0llabs
@@ -96,7 +90,7 @@ cdef enum:
 assert CONTEXT_SIZE == _context_size, "Set CONTEXT_SIZE to %d in features.pyx" % _context_size
 
 cdef int fill_context(size_t* context, size_t n0, size_t n1, n2,
-                      size_t s0, size_t s1, size_t s_2, size_t s_3,
+                      size_t s0, size_t s1,
                       size_t s0_re, size_t s1_re,
                       size_t stack_len,
                       size_t* words, size_t* pos, size_t* browns,
@@ -104,7 +98,7 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, n2,
                       size_t* s0_lkids, size_t* s0_rkids, size_t* s1_lkids, size_t* s1_rkids,
                       size_t* n0_lkids,
                       bint* s0_llabels, bint* s0_rlabels, bint* n0_llabels) except -1:
-    cdef size_t t, d
+    cdef size_t t, d, j
 
     context[N0w] = words[n0]
     context[N0p] = pos[n0]
@@ -135,15 +129,6 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, n2,
     context[S1p] = pos[s1]
     context[S1l] = labels[s1]
     
-    # These are stack[2] and stack[3], not stack[-3] and stack[-4]!
-    context[S_2w] = words[s_2]
-    context[S_2p] = pos[s_2]
-    context[S_2l] = labels[s_2]
-    
-    context[S_3w] = words[s_3]
-    context[S_3p] = pos[s_3]
-    context[S_3l] = labels[s_3]
-
     # Should this be leftmost??
     context[S1lw] = words[s1_lkids[0]]
     context[S1lp] = pos[s1_lkids[0]]
@@ -218,6 +203,7 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, n2,
     context[S0rlabs] = 0
     context[N0llabs] = 0
     for j in range(N_LABELS):
+        # Decode the binary arrays representing the label sets into integers
         context[S0llabs] += (s0_llabels[(N_LABELS - 1) - j] << j)
         context[S0rlabs] += (s0_rlabels[(N_LABELS - 1) - j] << j)
         context[N0llabs] += (n0_llabels[(N_LABELS - 1) - j] << j)
@@ -236,48 +222,6 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, n2,
     else:
         context[depth] = stack_len
     return 1
-
-
-USE_LABELS_IN_EXTRA = False
-def unigram(w, p, l):
-    if USE_LABELS_IN_EXTRA:
-        return ((w, p, l), (w, p), (w, l), (p, l), (w,), (p,), (l,))
-    else:
-        return ((w, p), (w,), (p,))
-
-def bigram(w1, p1, l1, w2, p2, l2):
-    if USE_LABELS_IN_EXTRA:
-        raise StandardError
-    else:
-        return ((w1, w2), (w1, p2), (p1, w2), (p2, p2))
-
-def brown_bigram(w1, p1, b1, b41, b61, w2, p2, b2, b42, b62):
-    return (#(b41, b42),
-            (b61, b62),
-            (b1, b2),
-            #(b41, p2),
-            #(p1, b42),
-            (b61, p2),
-            (p1, b62),
-            #(b41, w2),
-            #(w1, b41),
-            (b61, w2),
-            (w1, b62),
-            (b1, w2),
-            (w1, b2))
-
-def trigram(w1, p1, l1, w2, p2, l2, w3, p3, l3):
-    if USE_LABELS_IN_EXTRA:
-        raise StandardError
-    else:
-        return ((w1, w2, w3), (w1, w2, p3), (w1, p2, w3), (w1, p2, p3), (p1, w2, w3),
-                (p1, w2, p3), (p1, p2, w3), (p1, p2, p3))
-
-def brown_trigram(w1, p1, b1, b41, b61, w2, p2, b2, b42, b62, l3, p3, b3, b43, b63):
-    return (
-        (b41, b42, b43),
-        (b61, b62, b63),
-        (p1, b62, b63))
 
 
 cdef Predicate* predicates
@@ -425,19 +369,9 @@ cdef int make_predicates(bint add_extra, bint add_labels) except 0:
         (S0rew, N0w),
         (S0rep, N0w),
         (S0rew, N0p),
-        # Found by accident!
+        # Found by accident
         (S0w, N0lv),
         (S0p, N0lv),
-        # Features for stack[2] and stack[3] are apparently good!!
-        #(S_2w, N0w),
-        #(S_2w, N1w),
-        #(S_2p, N0p, N1w),
-        #(S_2p, N0w, N1w),
-        #(S_2w, N0p, N1p),
-        #(S_3w, N0w),
-        #(S_3w, N1w),
-        #(S_3p, S_2p, N0w),
-
     )
 
     feats = from_single + from_word_pairs + from_three_words + distance + valency + unigrams + third_order
@@ -447,7 +381,6 @@ cdef int make_predicates(bint add_extra, bint add_labels) except 0:
         feats += label_sets
     if add_extra:
         print "Using stack-second features"
-        #feats += new_extra
         feats += stack_second
     N_PREDICATES = len(feats)
     predicates = <Predicate*>malloc(N_PREDICATES * sizeof(Predicate))
@@ -481,12 +414,10 @@ cdef int extract(size_t* context, size_t* hashed,
     cdef size_t out
     cdef Predicate predicate
     global predicates
-    cdef size_t s_2 = s.stack[2]
-    cdef size_t s_3 = s.stack[3]
     cdef size_t s0_re = get_right_edge(s, s.top)
     cdef size_t s1_re = get_right_edge(s, s.second)
     fill_context(context, s.i, s.i + 1, s.i + 2,
-                 s.top, s.second, s_2, s_3, s0_re, s1_re, s.stack_len,
+                 s.top, s.second, s0_re, s1_re, s.stack_len,
                  sent.words, sent.pos, sent.browns,
                  s.heads, s.labels, s.l_valencies, s.r_valencies,
                  s.l_children[s.top], s.r_children[s.top],

@@ -65,6 +65,7 @@ cdef lmove_to_str(LMove* m):
         return '%s-%s' % (moves[<int>m.umove], label)
 
 cdef transition_to_str(State* s, LMove* parse_move, object tokens):
+    tokens = tokens + ['<end>']
     if parse_move.umove == USHIFT:
         return u'%s-->%s' % (tokens[s.i], tokens[s.top])
     elif parse_move.umove == UREDUCE:
@@ -101,10 +102,8 @@ cdef class Parser:
     cdef size_t* _context
     cdef size_t* _hashed_feats
     cdef bint* _valid_classes
-    cdef object _state_counts
     cdef TransitionSystem moves
     cdef InstanceCounter inst_counts
-    cdef size_t class_freq_thresh
     cdef object add_extra
     cdef object label_set
     cdef int feat_thresh
@@ -221,7 +220,7 @@ cdef class Parser:
     cdef int follow_gold(self, Sentence* sent, bint only_count) except -1:
         cdef LMove* move
         cdef int n_instances = 0
-        cdef State s = init_state(sent.length + 2)
+        cdef State s = init_state(sent.length)
 
         while not s.is_finished:
             features.extract(self._context, self._hashed_feats, sent, &s)
@@ -239,7 +238,7 @@ cdef class Parser:
         cdef State s
         cdef int n_instances = 0
         cdef double freq = 0
-        s = init_state(sent.length + 2)
+        s = init_state(sent.length)
         for i in range(sent.parse.n_moves):
             parse_move = &self.moves.lmoves[sent.parse.moves[i]]
             oracle_moves = self.moves.oracle(&s, sent.pos, sent.parse.labels, sent.parse.heads)
@@ -281,29 +280,25 @@ cdef class Parser:
 
     cdef int parse(self, Sentence* sent) except -1:
         cdef State s
-        cdef double p
-        cdef int label
         cdef LMove *lmove
-        cdef LMove *predicted_move
-        cdef size_t n = sent.length + 2
-        cdef size_t head, i
-        cdef UMove umove
-        cdef size_t max_label = 0
-        s = init_state(n)
+        cdef size_t n = sent.length
+        s = init_state(sent.length)
         sent.parse.n_moves = 0
         while not s.is_finished:
-            features.extract(self._context, self._hashed_feats, sent, &s)
-            self.moves.validate_moves(&s, sent.pos, self._valid_classes)
-
-            lmove = self.predict_move(self.n_preds, self._hashed_feats, self._valid_classes)
+            if s.stack_len == 1:
+                lmove = self.moves.S
+            else:
+                features.extract(self._context, self._hashed_feats, sent, &s)
+                self.moves.validate_moves(&s, sent.pos, self._valid_classes)
+                lmove = self.predict_move(self.n_preds, self._hashed_feats, self._valid_classes)
             sent.parse.moves[s.t] = lmove.id_
             sent.parse.n_moves += 1
             self.moves.transition(lmove, &s)
-        for i in range(1, sent.length + 1):
+        for i in range(1, sent.length):
             sent.parse.heads[i] = s.heads[i]
             sent.parse.labels[i] = s.labels[i]
 
-    cdef LMove* predict_move(self, size_t n, size_t* feats, bint* valid_classes):
+    cdef LMove* predict_move(self, size_t n, size_t* feats, bint* valid_classes) except NULL:
         cdef UMove umove
         cdef int label
         umove = <UMove>self.guide.predict_from_ints(n, feats, valid_classes)
@@ -319,7 +314,7 @@ cdef class Parser:
         cdef size_t i
         print "Calculating gold moves"
         for i in range(sents.length):
-            self.moves.add_gold_moves(&sents.s[i], ['<oob>'] + sents.strings[i][0] + ['<root>'])
+            self.moves.add_gold_moves(&sents.s[i], sents.strings[i][0])
 
     def get_best_moves(self, Sentences sents, Sentences gold):
         """Get a list of move taken/oracle move pairs for output"""
@@ -335,10 +330,10 @@ cdef class Parser:
             sent = &sents.s[i]
             g_labels = gold.s[i].parse.labels
             g_heads = gold.s[i].parse.heads
-            n = sent.length + 2
+            n = sent.length
             s = init_state(n)
             sent_moves = []
-            tokens = ['<oob>'] + sents.strings[i][0] + ['<root>', '<oob>']
+            tokens = sents.strings[i][0]
             while not s.is_finished:
                 best_ids = self.moves.oracle(&s, sent.pos, g_labels, g_heads)
                 best_id_str = ','.join(["%d" % id_ for id_ in best_ids])
@@ -349,8 +344,7 @@ cdef class Parser:
                 sent_moves.append((best_id_str, parse_move.id_,
                                   best_strs, lmove_to_str(parse_move), state_str))
                 self.moves.transition(parse_move, &s)
-            py_words = u' '.join(sents.strings[i][0])
-            best_moves.append((py_words, sent_moves))
+            best_moves.append((u' '.join(tokens), sent_moves))
         return best_moves
 
     def save(self):
@@ -529,7 +523,7 @@ cdef class TransitionSystem:
             pop_stack(s)
         elif lmove.umove == ULEFT:
             child = pop_stack(s)
-            if s.heads[child] >= 2:
+            if s.heads[child] != 0:
                 del_r_child(s, s.heads[child])
             head = s.i
             add_dep(s, head, child, lmove.label)
@@ -548,7 +542,7 @@ cdef class TransitionSystem:
             self.do_low_edge(s, lmove.label)
         else:
             raise StandardError(lmove_to_str(lmove))
-        if s.i == s.n and s.stack_len == 1:
+        if s.i >= (s.n - 1) and s.stack_len == 1:
             s.is_finished = True
 
     cdef int validate_moves(self, State* s, size_t* tags, bint* valid_moves) except -1:
@@ -566,9 +560,6 @@ cdef class TransitionSystem:
         if s.i < s.n:
             valid_moves[<int>USHIFT] = True
             valid_moves[<int>URIGHT] = True
-        else:
-            valid_moves[<int>USHIFT] = False
-            valid_moves[<int>URIGHT] = False
         if s.stack_len == 1:
             valid_moves[<int>UREDUCE] = False
             valid_moves[<int>ULEFT] = False
@@ -587,7 +578,6 @@ cdef class TransitionSystem:
     cdef object oracle(self, State *s, size_t* tags, size_t* g_labels, size_t* g_heads):
         cdef:
             size_t buff_i, stack_i
-
         actions = []
         if s.stack_len == 1:
             return [self.S.id_]
@@ -723,10 +713,8 @@ cdef class TransitionSystem:
 
     cdef add_gold_moves(self, Sentence* sent, object py_words):
         cdef State s
-        cdef size_t n
         cdef LMove* lmove
-        n = sent.length + 2
-        s = init_state(n)
+        s = init_state(sent.length)
         assert sent.parse.n_moves == 0
         while not s.is_finished: 
             lmove = self.static_oracle(&s, sent.pos, sent.parse.labels, sent.parse.heads)

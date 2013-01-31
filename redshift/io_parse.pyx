@@ -67,9 +67,7 @@ cdef Sentence make_sentence(size_t id_, size_t length, object py_words, object p
     # moves
     s.parse.n_moves = 0
     s.parse.score = 1.0
-    py_words = ['<oob>'] + py_words + ['<root>']
-    py_tags = ['OOB'] + py_tags + ['ROOT']
-    for i in range(length + 2):
+    for i in range(length):
         s.words[i] = index.hashes.encode_word(py_words[i])
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
     return s
@@ -94,11 +92,12 @@ def read_conll(conll_str, moves=None):
             id_ = 0
         else:
             id_ += 1
-        words = []
-        tags = []
-        heads = []
-        labels = []
-        for token_str in sent_str.split('\n'):
+        words = ['<start>']
+        tags = ['OOB']
+        heads = [0]
+        labels = [0]
+        token_strs = sent_str.split('\n')
+        for token_str in token_strs:
             pieces = token_str.split()
             if len(pieces) == 5:
                 pieces.pop(0)
@@ -109,8 +108,16 @@ def read_conll(conll_str, moves=None):
                 raise
             words.append(word)
             tags.append(pos)
-            heads.append(int(head))
+            if head == '-1':
+                head = len(token_strs)
+            heads.append(int(head) + 1)
             labels.append(STR_TO_LABEL.get(label, 0))
+        words.append('<root>')
+        tags.append('ROOT')
+        heads.append(0)
+        labels.append(0)
+        #for i, (word, head) in enumerate(zip(words, heads)):
+        #    print i, word, head
         sentences.add(id_, words, tags, heads, labels)
     if moves is not None and moves.strip():
         sentences.add_moves(moves)
@@ -126,12 +133,16 @@ def read_pos(file_str):
     sent_strs = file_str.strip().split('\n')
     sentences = Sentences(max_length=len(sent_strs))
     for i, sent_str in enumerate(sent_strs):
-        words = []
-        tags = []
+        words = ['<start>']
+        tags = ['OOB']
         for token_str in sent_str.split():
             word, pos = token_str.rsplit('/', 1)
             words.append(word)
             tags.append(pos)
+        words.append('<root>')
+        tags.append('<oob>')
+        tags.append('ROOT')
+        tags.append('OOB')
         sentences.add(i, words, tags, None, None)
     return sentences
 
@@ -152,12 +163,8 @@ cdef class Sentences:
         # NB: This doesn't initialise moves
         if heads and labels:
             for i in range(s.length):
-                if heads[i] == -1:
-                    s.parse.heads[i + 1] = s.length + 1
-                    s.parse.labels[i + 1] = ROOT_LABEL
-                else:
-                    s.parse.heads[i + 1] = <size_t>(heads[i] + 1)
-                    s.parse.labels[i + 1] = <size_t>labels[i]
+                s.parse.heads[i] = <size_t>heads[i]
+                s.parse.labels[i] = <size_t>labels[i]
         self.s[self.length] = s
         self.length += 1
         self.strings.append((words, tags))
@@ -191,12 +198,12 @@ cdef class Sentences:
         for i in range(self.length):
             s = &self.s[i]
             py_words, py_pos = self.strings[i]
-            for j in range(1, s.length + 1):
-                if s.parse.heads[j] == s.length + 1:
+            for j in range(1, s.length - 1):
+                if s.parse.heads[j] == (s.length - 1):
                     head = -1
                 else:
                     head = <int>(s.parse.heads[j] - 1)
-                fields = (j, py_words[j - 1], py_pos[j - 1], head,
+                fields = (j - 1, py_words[j], py_pos[j], head,
                           LABEL_STRS[s.parse.labels[j]])
                 out_file.write(u'%d\t%s\t%s\t%s\t%s\n' % fields)
             out_file.write(u'\n')
@@ -208,7 +215,7 @@ cdef class Sentences:
         for i in range(self.length):
             t = self.s[i]
             g = gold.s[i]
-            for j in range(1, t.length + 1):
+            for j in range(1, t.length - 1):
                 if g.parse.labels[j] == PUNCT_LABEL:
                     continue
                 nc += t.parse.heads[j] == g.parse.heads[j]
@@ -218,23 +225,5 @@ cdef class Sentences:
     def __dealloc__(self):
         free(self.s)
         
-
     property length:
         def __get__(self): return self.length
-
-    property scores:
-        def __get__(self):
-            return [p.score for p in self.parses]
-
-
-def merge_sentences(object sents_list):
-    cdef Sentences sents
-    cdef size_t max_len = sum(sents.length for sents in sents_list)
-    cdef Sentences merged = Sentences(max_len)
-    cdef size_t n = 0
-    for sents in sents_list:
-        for i in range(sents.length):
-            memcpy(&(merged.s[n]), &(sents.s[i]), sizeof(Sentence))
-            merged.strings.append(sents.strings[i])
-            n += 1
-    return merged
