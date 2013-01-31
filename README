@@ -1,0 +1,52 @@
+Transition-based shift-reduce parser with dynamic oracle and state repair.
+
+Usage:
+python scripts/train.py train_file.txt parser_model_dir/
+python scripts/parse.py parser_model_dir/ pos_tagged_file.txt output_dir/
+python scripts/evaluate.py output_dir/parses gold_parses.txt
+
+The iterative training script currently requires a server with pbs installed. The pbs-specific
+scripts are currenly missing from the repo.
+
+I usually use fabric for running the experiments; it's a python package that
+handles server-side execution very well. For instance:
+
+fab run_static:repairs_model,reattach=True,lower=True,labels=Stanford
+
+would start a model training on our server. Site-specific configuration for this
+should go in a _paths.py file imported by the fabfile.
+
+Where the action is:
+redshift/parser.pyx
+all the algorithmic code
+
+redshift/features.pyx
+the feature definitions. All features are binary, and the context vector is a fixed size.
+So there's a long enum of state properties (e.g. word-of-head-of-stack, etc).
+We first fill the full context, and then predicates are masks over it.
+
+redshift/_state.pyx
+struct representing the parser state, and functions operating on it. This could be a class,
+but I thought I'd want a beam at some point, so it's nice to have the state as just a struct
+instead of a reference-counted Python object.
+
+svm/cy_svm.pyx
+Wrapper for LibLinear
+
+Dependencies
+* Cython 0.17 (untested with 0.18)
+* Python 2.7
+* liblinear (run svm/ext/get_liblinear.sh)
+* sparsehash (formerly googlesparsehash)
+* pathlib, sh, plac (all Python modules available over pip/easy_install
+* The setup scripts are written for use with virtualenv, but it's not strictly necessary
+
+Biggest uglinesses
+* The package organisation sucks. I don't know how to organise cython packages properly
+* I've had trouble cimport'ing global variables across cython modules, so some things that should refer to constants don't
+* The code in TransitionSystem is pretty rickety from repeated experimentation
+* E.g. the names of repair moves don't currently make sense
+* Some code is unnecessarily complex for historical reasons, e.g. the way labels and moves are coupled. This needs to be refactored.
+* Raw arrays are used throughout the code; it might've been a better idea to forsake the
+  efficiency and use numpy. There are likely to be memory leaks, but in the use-case of
+  the experiments it's not important.
