@@ -1,5 +1,13 @@
 Transition-based shift-reduce parser with dynamic oracle and state repair.
 
+Setup:
+cd svm/ext
+./get_liblinear.sh
+make -C redshift && make -C svm/ && make -C index
+Put svm/lib/ on LD_LIBRARY_PATH (DYLD_LIBRARY_PATH for osx)
+Put the repo directory on the PYTHONPATH
+scripts/write_grammar.py train_dir/train.txt train_dir/rgrammar
+
 Usage:
 python scripts/train.py train_file.txt parser_model_dir/
 python scripts/parse.py parser_model_dir/ pos_tagged_file.txt output_dir/
