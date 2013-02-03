@@ -20,9 +20,7 @@ import redshift.io_parse
     no_extra_feats=("Remove extra features (never good)", "flag", "x", bool),
     feat_thresh=("Feature pruning threshold", "option", "f", int),
     allow_reattach=("Allow left-clobber", "flag", "r", bool),
-    allow_unshift=("Allow unshift", "flag", "u", bool),
     allow_move=("Allow raise/lower", "flag", "m", bool),
-    allow_invert=("Allow invert", "flag", "v", bool),
 )
 def main(train_loc, model_loc, moves_loc=None, solver_alg=6, c=1.0,
          no_extra_feats=False, label_set="MALT", feat_thresh=5,
@@ -32,18 +30,20 @@ def main(train_loc, model_loc, moves_loc=None, solver_alg=6, c=1.0,
     if allow_reattach:
         grammar_loc = train_loc.parent().join('rgrammar')
     else:
-        grammar_loc = None
+    	grammar_loc = None
     model_loc = Path(model_loc)
     if label_set == 'None':
         label_set = None
     if moves_loc is not None:
         moves_loc = Path(moves_loc)
+        if not moves_loc.exists():
+            print "Could not find moves; assuming none"
+            moves_loc = None
     yield "Initialising parser"
     parser = redshift.parser.Parser(model_loc, clean=True,
                                     solver_type=solver_alg, C=c, add_extra=not no_extra_feats,
                                     label_set=label_set, feat_thresh=feat_thresh,
-                                    allow_reattach=allow_reattach, allow_unshift=allow_unshift,
-                                    allow_invert=allow_invert, allow_move=allow_move,
+                                    allow_reattach=allow_reattach, allow_move=allow_move,
                                     grammar_loc=grammar_loc)
     yield "Reading training"
     if moves_loc is not None:
