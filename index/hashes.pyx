@@ -164,11 +164,16 @@ def init_word_idx(path):
 def init_pos_idx(path):
     global _pos_idx
     _pos_idx.set_path(path)
+    encode_pos('ROOT')
+    encode_pos('NONE')
+    encode_pos('OOB')
+
 
 def load_feat_idx(n, path):
     global _feat_idx
     _feat_idx.set_n_predicates(n)
     _feat_idx.load(path)
+
 
 def load_word_idx(path):
     global _word_idx
