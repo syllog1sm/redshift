@@ -441,7 +441,7 @@ cdef class TransitionSystem:
                         return SHIFT
             else:
                 return REDUCE
-        elif self.allow_reattach and self.grammar[tags[s.top]][tags[s.i]] > 7500:
+        if self.allow_reattach and self.grammar[tags[s.top]][tags[s.i]] > 7500:
             order = (REDUCE, RIGHT, SHIFT, LEFT)
         else:
             order = (REDUCE, SHIFT, RIGHT, LEFT)
