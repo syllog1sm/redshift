@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """Do iterative error-based training
 
 Directory structure assumed:
@@ -60,7 +61,7 @@ def split_data(train_loc, n):
             yield u'\n\n'.join(train), u'\n\n'.join(test)
 
 
-def setup_base_dir(base_dir, data_dir, train_name, moves_name, n):
+def setup_base_dir(base_dir, data_dir, train_name, n):
     if base_dir.exists():
         sh.rm('-rf', base_dir)
     base_dir.mkdir()
@@ -72,8 +73,6 @@ def setup_base_dir(base_dir, data_dir, train_name, moves_name, n):
         gold_dir.join(str(i)).mkdir()
         gold_dir.join(str(i)).join('train.parses').open('w').write(train_str)
         gold_dir.join(str(i)).join('held_out').open('w').write(ho_str)
-    for i, (train_str, _) in enumerate(split_data(Path(str(train_loc) + '.%s' % moves_name), n)):
-        gold_dir.join(str(i)).join('train.moves').open('w').write(train_str)
     gold_dir.join('train.txt').open('w').write(train_loc.open().read())
     gold_dir.join('devr.txt').open('w').write(data_dir.join('devr.txt').open().read())
     gold_dir.join('devi.txt').open('w').write(data_dir.join('devi.txt').open().read())
@@ -202,23 +201,18 @@ def mean_stdev(nums, ints=False):
     train_name=("Name of training file", "option", "t"),
     parse_percent=("Percent of held-out parses to use", "option", "p", float),
     allow_reattach=("Allow left-clobber", "flag", "r", bool),
-    allow_move_top=("Allow lower/raise of top", "flag", "m", bool),
+    allow_move=("Allow lower/raise of top", "flag", "m", bool),
     allow_unshift=("Allow unshift", "flag", "u", bool),
     allow_invert=("Allow invert", "flag", "v", bool)
 )
-def main(data_dir, base_dir, n_iter=5, n_folds=5,
+def main(data_dir, base_dir, n_iter=5, n_folds=1,
          horizon=0, add_gold=False, resume_after=0, no_extra_features=False,
-         label_set="MALT", train_name="train.txt", moves_name=None, parse_percent=1.0,
-         allow_reattach=False, allow_move_top=False, allow_unshift=False,
+         label_set="MALT", train_name="train.txt", parse_percent=1.0,
+         allow_reattach=False, allow_unshift=False, allow_move=False,
          allow_invert=False):
-    if moves_name is None:
-        if allow_reattach:
-            moves_name = 'moves'
-        else:
-            moves_name = 'moves_base'
     if resume_after <= 0:
         print 'wiping base'
-        setup_base_dir(base_dir, data_dir, train_name, moves_name, n_folds)
+        setup_base_dir(base_dir, data_dir, train_name, n_folds)
     log = base_dir.join('log').open('w')
     log.write(u'I\tAcc\tInst.\tFeats.\n')
     print 'Iter  Accuracy           Instances            Features'
@@ -236,13 +230,14 @@ def main(data_dir, base_dir, n_iter=5, n_folds=5,
         for f in range(n_folds):
             fold_dir = setup_fold_dir(base_dir, i, f, horizon, n_folds, add_gold, parse_percent)
             train_and_parse_fold(fold_dir, data_dir, i, label_set, no_extra_features,
-                allow_reattach, allow_unshift, allow_move_top, allow_invert)
+                allow_reattach, allow_unshift, allow_move, allow_invert)
         while not check_finished(base_dir.join('iters').join(str(i)), n_folds):
             time.sleep(5)
         summary = get_iter_summary(base_dir.join('iters').join(str(i)), i, n_folds)
         log.write(summary + u'\n')
         print summary
     log.close()
+
 
 if __name__ == '__main__':
     plac.call(main)
