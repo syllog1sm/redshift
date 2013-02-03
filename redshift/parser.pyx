@@ -210,6 +210,7 @@ cdef class Parser:
             #    freq = -1
             freq = 1
             if freq > 0 and not only_count:
+                assert move != ERR
                 self.guide.add_instance(move, float(freq) / n_moves, n_feats, feats)
                 if move == LEFT:
                     self.l_labeller.add_instance(label, 1, n_feats, feats)
@@ -251,6 +252,7 @@ cdef class Parser:
             sent.parse.moves[s.t] = move
             sent.parse.move_labels[s.t] = label
             sent.parse.n_moves += 1
+            assert move != ERR
             self.moves.transition(move, label, &s)
         for i in range(1, sent.length):
             sent.parse.heads[i] = s.heads[i]
@@ -362,7 +364,10 @@ cdef class TransitionSystem:
             sib = index.hashes.encode_pos(sib)
             child = index.hashes.encode_pos(child)
             self.grammar[head][child] += freq
-            self.default_labels[head][sib][child] = io_parse.STR_TO_LABEL.get(label, 0)
+            if label == 'ROOT':
+                self.default_labels[head][sib][child] = 0
+            else:
+                self.default_labels[head][sib][child] = io_parse.STR_TO_LABEL.get(label, 0)
 
     cdef int transition(self, size_t move, size_t label, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc
@@ -438,6 +443,7 @@ cdef class TransitionSystem:
             raise StandardError
 
     cdef int validate_moves(self, State* s, size_t* heads, bint* valid_moves) except -1:
+        valid_moves[ERR] = 0
         valid_moves[SHIFT] = self.s_cost(s, heads) == 0
         valid_moves[REDUCE] = self.d_cost(s, heads) == 0
         valid_moves[LEFT] = self.l_cost(s, heads) == 0
