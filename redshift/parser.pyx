@@ -205,8 +205,7 @@ cdef class Parser:
         n_moves = len(moves)
         for move, label in moves:
             # TODO: Fix this to refer to the MAX_TRANSITIONS constant
-            freq = self.inst_counts.add(move, sent_id, 256 * 5,
-                                        history, not only_count)
+            freq = self.inst_counts.add(move, sent_id, history, not only_count)
             if freq > 0 and not only_count:
                 assert move != ERR
                 self.guide.add_instance(move, float(freq) / n_moves, n_feats, feats)
