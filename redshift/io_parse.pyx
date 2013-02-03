@@ -80,8 +80,8 @@ def read_conll(conll_str, moves=None):
         Sentences sentences
     sent_strs = conll_str.strip().split('\n\n')
     set_special_pos(index.hashes.encode_pos('ROOT'),
-                         index.hashes.encode_pos('NONE'),
-                         index.hashes.encode_pos('OOB'))
+                    index.hashes.encode_pos('NONE'),
+                    index.hashes.encode_pos('OOB'))
     sentences = Sentences(max_length=len(sent_strs))
     first_sent = sent_strs[0]
     cdef size_t id_

@@ -334,7 +334,7 @@ cdef class TransitionSystem:
     cdef size_t n_labels
     cdef object py_labels
     cdef size_t[N_MOVES] offsets
-    cdef bint grammar[50][50]
+    cdef int grammar[50][50]
     cdef int default_labels[50][50][50]
     cdef object grammar_loc
 
@@ -356,15 +356,13 @@ cdef class TransitionSystem:
         for i in range(50):
             for j in range(50):
                 self.grammar[i][j] = 0
-        #for head, sib, child, freq, label in lines:
-        #    freq = int(freq)
-        #    head = index.hashes.encode_pos(head)
-        #    sib = index.hashes.encode_pos(sib)
-        #    child = index.hashes.encode_pos(child)
-        #    assert head < 50
-        #    assert child < 50
-        #    self.grammar[head][child] += freq
-            #self.default_labels[head][sib][child] = io_parse.STR_TO_LABEL.get(label, 0)
+        for head, sib, child, freq, label in lines:
+            freq = int(freq)
+            head = index.hashes.encode_pos(head)
+            sib = index.hashes.encode_pos(sib)
+            child = index.hashes.encode_pos(child)
+            self.grammar[head][child] += freq
+            self.default_labels[head][sib][child] = io_parse.STR_TO_LABEL.get(label, 0)
 
     cdef int transition(self, size_t move, size_t label, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc
@@ -429,7 +427,10 @@ cdef class TransitionSystem:
         if heads[s.i] == s.top:
             assert valid_moves[RIGHT]
             return RIGHT
-        order = (REDUCE, SHIFT, RIGHT, LEFT)
+        if self.allow_reattach and self.grammar[tags[s.top]][tags[s.i]] > 7500:
+            order = (REDUCE, RIGHT, SHIFT, LEFT)
+        else:
+            order = (REDUCE, SHIFT, RIGHT, LEFT)
         for move in order:
             if valid_moves[move]:
                 return move
@@ -453,7 +454,6 @@ cdef class TransitionSystem:
             return g_labels[get_r(s, s.top)]
         elif parse_label != 0:
             return parse_label
-        return 0
         if move == RIGHT:
             sib = get_r(s, s.top)
             sib_pos = tags[sib] if sib != 0 else io_parse.NONE_POS
