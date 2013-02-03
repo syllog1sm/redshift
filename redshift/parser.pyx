@@ -162,20 +162,20 @@ cdef class Parser:
         index.hashes.set_feat_threshold(self.feat_thresh)
         n_instances = 0
         for i in range(sents.length):
-            n_instances += self.follow_moves(&sents.s[i], True)
+            n_instances += self.follow_moves(&sents.s[i], True, sents.strings[i][0])
 
         self.guide.begin_adding_instances(n_instances)
         self.l_labeller.begin_adding_instances(n_instances)
         self.r_labeller.begin_adding_instances(n_instances)
         index.hashes.set_feat_counting(False)
         for i in range(sents.length):
-            self.follow_moves(&sents.s[i], False)
+            self.follow_moves(&sents.s[i], False, sents.strings[i][0])
 
         self.guide.train()
         self.l_labeller.train()
         self.r_labeller.train()
 
-    cdef int follow_moves(self, Sentence* sent, bint only_count) except -1:
+    cdef int follow_moves(self, Sentence* sent, bint only_count, object py_words) except -1:
         cdef size_t i = 0
         cdef double freq = 0
         cdef State s = init_state(sent.length)
@@ -191,11 +191,13 @@ cdef class Parser:
             self._add_instance(sent.id, s.history, o_moves,
                                self.n_preds, self._hashed_feats, only_count)
             n_instances += len(o_moves)
+            #print py_words[s.top],
             if p_move == ERR:
                 assert len(o_moves) == 1
                 self.moves.transition(o_moves[0][0], o_moves[0][1], &s)
             else:
                 self.moves.transition(p_move, p_label, &s)
+            #print py_words[s.top]
         return n_instances
 
     cdef int _add_instance(self, size_t sent_id, size_t* history, object moves,
@@ -371,6 +373,7 @@ cdef class TransitionSystem:
         # TODO: This might be bad; no tracing of move_labels
         s.history[s.t] = move
         s.t += 1 
+        #print lmove_to_str(move, label), 
         assert s.t < 500
         if move == SHIFT:
             push_stack(s)
@@ -428,16 +431,18 @@ cdef class TransitionSystem:
         if heads[s.i] == s.top:
             assert valid_moves[RIGHT]
             return RIGHT
-        if self.allow_reattach and self.grammar[tags[s.top]][tags[s.i]] > 7500:
+        if self.allow_move and valid_moves[REDUCE] and valid_moves[SHIFT]:
+            assert s.top != 0
+            for buff_i in range(s.i, s.n):
+                if heads[buff_i] == s.top:
+                    if valid_moves[RIGHT] and self.grammar[tags[s.top]][tags[s.i]] > 7500:
+                        return RIGHT
+                    else:
+                        return SHIFT
+            else:
+                return REDUCE
+        elif self.allow_reattach and self.grammar[tags[s.top]][tags[s.i]] > 7500:
             order = (REDUCE, RIGHT, SHIFT, LEFT)
-        #if self.allow_move and valid_moves[REDUCE] and valid_moves[RIGHT]:
-        #    return RIGHT
-        #if self.allow_move and valid_moves[REDUCE] and valid_moves[SHIFT]:
-        #    for buff_i in range(s.i, s.n):
-        #        if heads[buff_i] == s.top:
-        #            return SHIFT
-        #    else:
-        #        return REDUCE
         else:
             order = (REDUCE, SHIFT, RIGHT, LEFT)
         for move in order:
@@ -487,8 +492,8 @@ cdef class TransitionSystem:
                 cost += 1
             # This double-counts costs, which doesn't matter atm but could
             # later
-            #if self.allow_move and g_heads[s.i] == get_r(s, stack_i):
-            #    cost += 1
+            if self.allow_move and g_heads[s.i] != 0 and g_heads[s.i] == get_r(s, stack_i):
+                cost += 1
         return cost
 
     cdef int r_cost(self, State *s, size_t* g_heads):
@@ -513,15 +518,15 @@ cdef class TransitionSystem:
                 cost += 1
             # With Lower, if the head is an rchild of a stack item, right-arc
             # makes the head inaccessible
-            #if self.allow_move and g_heads[s.i] == get_r(s, stack_i):
+            if self.allow_move and g_heads[s.i] == get_r(s, stack_i) and get_r(s, stack_i) != 0:
                 # ...Unless the stack item is the top, in which case
                 # it's just what's necessary for the Lower
-            #    if stack_i != s.top:
-            #        cost += 1
+                if stack_i != s.top:
+                    cost += 1
         # This is not technically correct, but it's close (the arc could be recovered
         # via complicated repair interactions
-        #if self.allow_move and g_heads[get_r(s, s.top)] == get_r2(s, s.top):
-        #    cost += 1
+        if self.allow_move and get_r(s, s.top) != 0 and get_r2(s, s.top) != 0 and g_heads[get_r(s, s.top)] == get_r2(s, s.top):
+            cost += 1
         return cost
 
     cdef int d_cost(self, State *s, size_t* g_heads):
@@ -534,15 +539,12 @@ cdef class TransitionSystem:
             if g_heads[s.top] == buff_i and self.allow_reattach:
                 cost += 1
             if g_heads[buff_i] == s.top:
-                cost += 1
-                #if not self.allow_move:
-                #    cost += 1
-                #elif s.second == 0:
-                #    cost += 1
-                #elif s.heads[s.top] != s.second:
-                #    cost += 1
-            if g_heads[buff_i] == s.top and not self.allow_move:
-                cost += 1
+                if not self.allow_move:
+                    cost += 1
+                elif s.second == 0:
+                    cost += 1
+                elif s.heads[s.top] != s.second:
+                    cost += 1
         if self.allow_move and g_heads[s.i] == get_r(s, s.top) and g_heads[s.i] != 0:
             cost += 1
         return cost
