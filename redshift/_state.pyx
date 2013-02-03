@@ -3,7 +3,7 @@ import io_parse
 from features cimport N_LABELS
 
 DEF MAX_SENT_LEN = 256
-DEF MAX_TRANSITIONS = MAX_SENT_LEN * 5
+DEF MAX_TRANSITIONS = MAX_SENT_LEN * 2
 DEF MAX_VALENCY = 127
 
 
@@ -113,6 +113,8 @@ cdef int get_right_edge(State *s, size_t node) except -1:
         node = s.r_children[node][s.r_valencies[node] - 1]
     return node
 
+DEF START_ON_STACK = False
+
 cdef State init_state(size_t n):
     # TODO: Make this more efficient, probably by storing 0'd arrays somewhere,
     # and then copying them
@@ -120,7 +122,10 @@ cdef State init_state(size_t n):
     cdef State s
     cdef int n_labels = len(io_parse.LABEL_STRS)
     # Initialise with first word on top of stack
-    s = State(n=n, t=0, score=0.0, i=2, top=1, second=0, stack_len=2, is_finished=False)
+    if START_ON_STACK:
+        s = State(n=n, t=0, i=2, top=1, second=0, stack_len=2, is_finished=False)
+    else:
+        s = State(n=n, t=0, i=1, top=0, second=0, stack_len=1, is_finished=False)
     for i in range(n):
         s.stack[i] = 0
         s.l_valencies[i] = 0
@@ -134,7 +139,8 @@ cdef State init_state(size_t n):
         for j in range(n_labels):
             s.llabel_set[i][j] = 0
             s.rlabel_set[i][j] = 0
-    s.stack[1] = 1
+    if START_ON_STACK:
+        s.stack[1] = 1
     for i in range(MAX_TRANSITIONS):
         s.history[i] = 0
     return s

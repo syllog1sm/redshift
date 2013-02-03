@@ -12,11 +12,10 @@ cdef size_t NONE_POS
 
 cdef struct _Parse:
     size_t n_moves
-    double score
     size_t[MAX_SENT_LEN] heads
     size_t[MAX_SENT_LEN] labels
     size_t[MAX_TRANSITIONS] moves
-    double[MAX_TRANSITIONS] scores
+    size_t[MAX_TRANSITIONS] move_labels
 
 cdef struct Sentence:
     size_t id
@@ -24,8 +23,6 @@ cdef struct Sentence:
     size_t[MAX_SENT_LEN] words
     size_t[MAX_SENT_LEN] pos
     size_t[MAX_SENT_LEN] browns
-    size_t[MAX_SENT_LEN] brown4
-    size_t[MAX_SENT_LEN] brown6
     _Parse parse
 
 

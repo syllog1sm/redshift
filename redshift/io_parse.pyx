@@ -57,16 +57,14 @@ cdef Sentence make_sentence(size_t id_, size_t length, object py_words, object p
         s.words[i] = 0
         s.pos[i] = 0
         s.browns[i] = 0
-        s.brown4[i] = 0
-        s.brown6[i] = 0
         s.parse.heads[i] = 0
         s.parse.labels[i] = 0
     for i in range(MAX_TRANSITIONS):
         s.parse.moves[i] = 0
+        s.parse.move_labels[i] = 0
     # Don't initialise this, as repairs may introduce unpredictable numbers of
     # moves
     s.parse.n_moves = 0
-    s.parse.score = 1.0
     for i in range(length):
         s.words[i] = index.hashes.encode_word(py_words[i])
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
@@ -175,9 +173,10 @@ cdef class Sentences:
         for i, sent_moves in enumerate(all_moves):
             self.s[i].parse.n_moves = 0
             for j, move_str in enumerate(sent_moves.split('\n')):
-                name, lmove_id = move_str.split()
-                lmove_id = int(lmove_id)
-                self.s[i].parse.moves[j] = lmove_id
+                name, move_id, move_label = move_str.split()
+                move_id = int(move_id)
+                self.s[i].parse.moves[j] = int(move_id)
+                self.s[i].parse.move_labels[j] = int(move_label)
                 self.s[i].parse.n_moves += 1
 
     def write_moves(self, out_file):
@@ -188,7 +187,7 @@ cdef class Sentences:
         for i in range(self.length):
             s = self.s[i]
             for j in range(s.parse.n_moves):
-                line = u'%s\t%d\n' % (MOVE_STRS[s.parse.moves[j]], s.parse.moves[j])
+                line = u'?\t%d\t%d\n' % (s.parse.moves[j], s.parse.move_labels[j])
                 out_file.write(line)
             out_file.write(u'\n')
 
