@@ -123,12 +123,17 @@ cdef class InstanceCounter:
         self.n = 0
         self.counts_by_class = vector[dense_hash_map[long, long]]()
 
-    cdef long add(self, size_t class_, size_t sent_id, size_t n_feats,
-                  size_t* features, bint freeze_count) except 0:
+    cdef long add(self, size_t class_, size_t sent_id,
+                  size_t* history, bint freeze_count) except 0:
         cdef long hashed = 0
         cdef dense_hash_map[long, long] *counts
-        MurmurHash3_x86_32(features, n_feats * sizeof(size_t), sent_id, &hashed)
-
+        py_moves = []
+        i = 0
+        while history[i] != 0:
+            py_moves.append(history[i])
+            i += 1
+        py_moves.append(sent_id)
+        hashed = hash(tuple(py_moves))
         while class_ >= self.n:
             counts = new dense_hash_map[long, long]()
             self.counts_by_class.push_back(counts[0])

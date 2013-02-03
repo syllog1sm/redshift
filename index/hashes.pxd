@@ -91,5 +91,5 @@ cdef unsigned long encode_feat(size_t* feature, size_t length, size_t i)
 cdef class InstanceCounter:
     cdef int n
     cdef vector[dense_hash_map[long, long]] counts_by_class
-    cdef long add(self, size_t class_, size_t sent_id, size_t n_feats, size_t* features,
+    cdef long add(self, size_t class_, size_t sent_id, size_t* history,
                   bint freeze_count) except 0
