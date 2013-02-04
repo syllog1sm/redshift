@@ -97,7 +97,7 @@ cdef class Parser:
         if allow_reattach:
             print 'Reattach'
         if allow_move:
-            print 'Moves'
+            print 'Lower'
         self.model_dir = self.setup_model_dir(model_dir, clean)
         io_parse.set_labels(label_set)
         self.n_preds = features.make_predicates(add_extra, True)
@@ -204,9 +204,7 @@ cdef class Parser:
                            size_t n_feats, size_t* feats, bint only_count) except -1:
         n_moves = len(moves)
         for move, label in moves:
-            # TODO: Fix this to refer to the MAX_TRANSITIONS constant
-            freq = self.inst_counts.add(move, sent_id, 256 * 5,
-                                        history, not only_count)
+            freq = self.inst_counts.add(move, sent_id, history, not only_count)
             if freq > 0 and not only_count:
                 assert move != ERR
                 self.guide.add_instance(move, float(freq) / n_moves, n_feats, feats)
@@ -335,7 +333,7 @@ cdef class TransitionSystem:
     cdef size_t n_labels
     cdef object py_labels
     cdef size_t[N_MOVES] offsets
-    cdef int grammar[50][50]
+    cdef int grammar[50][50][50]
     cdef int default_labels[50][50][50]
     cdef object grammar_loc
 
@@ -356,21 +354,28 @@ cdef class TransitionSystem:
         lines = [line.split() for line in loc.open().read().strip().split('\n')]
         for i in range(50):
             for j in range(50):
-                self.grammar[i][j] = 0
+                for k in range(50):
+                    self.grammar[i][j][k] = 0
         for head, sib, child, freq, label in lines:
             freq = int(freq)
             head = index.hashes.encode_pos(head)
-            sib = index.hashes.encode_pos(sib)
+            if sib == 'NONE':
+                sib = 0
+            else:
+                sib = index.hashes.encode_pos(sib)
             child = index.hashes.encode_pos(child)
-            self.grammar[head][child] += freq
             if label == 'ROOT':
                 self.default_labels[head][sib][child] = 0
             else:
                 self.default_labels[head][sib][child] = io_parse.STR_TO_LABEL.get(label, 0)
+            self.grammar[head][sib][child] = freq
 
     cdef int transition(self, size_t move, size_t label, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc
-        # TODO: This might be bad; no tracing of move_labels
+        # TODO: This might be bad; no tracing of move_labels. This means the
+        # instance counts are blind to label differences in the sequence
+        # history. Probably this doesn't matter, but it could be fixed by
+        # writing a function that couples labels and moves into one ID.
         s.history[s.t] = move
         s.t += 1 
         #print lmove_to_str(move, label), 
@@ -408,6 +413,10 @@ cdef class TransitionSystem:
     cdef object oracle(self, State* s,  size_t* labels, size_t* heads, size_t* tags,
                        parse_move, size_t parse_label, bint* valid_moves):
         self.validate_moves(s, heads, valid_moves)
+        # Do not train from ties
+        if valid_moves[SHIFT] and valid_moves[REDUCE] and valid_moves[LEFT] \
+          and valid_moves[RIGHT]:
+            return []
         if parse_move == ERR:
             o_move = self.break_tie(s, tags, labels, heads, valid_moves)
             label = self.get_label(s, tags, o_move, 0, labels, heads)
@@ -429,19 +438,24 @@ cdef class TransitionSystem:
         if heads[s.top] == s.i and valid_moves[LEFT]:
             return LEFT
         if heads[s.i] == s.top:
+            if self.allow_move and s.second != 0 and s.heads[s.top] == s.second and \
+              self.grammar[tags[s.second]][tags[s.top]][tags[s.i]] > 1000:
+                return REDUCE
+
             assert valid_moves[RIGHT]
             return RIGHT
+        sib_pos = tags[get_r(s, s.top)]
         if self.allow_move and valid_moves[REDUCE] and valid_moves[SHIFT]:
             assert s.top != 0
             for buff_i in range(s.i, s.n):
                 if heads[buff_i] == s.top:
-                    if valid_moves[RIGHT] and self.grammar[tags[s.top]][tags[s.i]] > 7500:
+                    if valid_moves[RIGHT] and self.grammar[tags[s.top]][sib_pos][tags[s.i]] > 1000:
                         return RIGHT
                     else:
                         return SHIFT
             else:
                 return REDUCE
-        if self.allow_reattach and self.grammar[tags[s.top]][tags[s.i]] > 7500:
+        elif self.allow_reattach and self.grammar[tags[s.top]][sib_pos][tags[s.i]] > 1000:
             order = (REDUCE, RIGHT, SHIFT, LEFT)
         else:
             order = (REDUCE, SHIFT, RIGHT, LEFT)
@@ -489,9 +503,9 @@ cdef class TransitionSystem:
             stack_i = s.stack[i]
             if g_heads[s.i] == stack_i:
                 cost += 1
-            if g_heads[stack_i] == s.i:
+            if g_heads[stack_i] == s.i and (self.allow_reattach or s.heads[stack_i] == 0):
                 cost += 1
-            # This double-counts costs, which doesn't matter atm but could
+            # TODO: This double-counts costs, which doesn't matter atm but could
             # later
             if self.allow_move and g_heads[s.i] != 0 and g_heads[s.i] == get_r(s, stack_i):
                 cost += 1
@@ -515,7 +529,7 @@ cdef class TransitionSystem:
             stack_i = s.stack[i]
             if g_heads[s.i] == stack_i:
                 cost += 1
-            if g_heads[stack_i] == s.i:
+            if g_heads[stack_i] == s.i and (self.allow_reattach or s.heads[stack_i] == 0):
                 cost += 1
             # With Lower, if the head is an rchild of a stack item, right-arc
             # makes the head inaccessible
@@ -525,7 +539,7 @@ cdef class TransitionSystem:
                 if stack_i != s.top:
                     cost += 1
         # This is not technically correct, but it's close (the arc could be recovered
-        # via complicated repair interactions
+        # via complicated repair interactions)
         if self.allow_move and get_r(s, s.top) != 0 and get_r2(s, s.top) != 0 and g_heads[get_r(s, s.top)] == get_r2(s, s.top):
             cost += 1
         return cost
