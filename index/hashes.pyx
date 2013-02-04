@@ -1,4 +1,5 @@
 from pathlib import Path
+from libc.stdint cimport UINT32_MAX
 
 DEF VOCAB_SIZE = 1e6
 DEF TAG_SET_SIZE = 100
@@ -82,7 +83,7 @@ cdef class FeatIndex(Index):
         self.freqs.set_empty_key(0)
         self.count_features = False
     
-    cdef unsigned long encode(self, size_t* feature, size_t length, size_t i):
+    cdef unsigned long encode(self, size_t* feature, size_t length, size_t i) except UINTMAX_MAX:
         cdef int value
         cdef int hashed = 0
         MurmurHash3_x86_32(feature, length * sizeof(size_t), i, &hashed)
