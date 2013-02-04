@@ -24,8 +24,7 @@ import redshift.io_parse
 )
 def main(train_loc, model_loc, moves_loc=None, solver_alg=6, c=1.0,
          no_extra_feats=False, label_set="MALT", feat_thresh=5,
-         allow_reattach=False, allow_unshift=False, allow_move=False,
-         allow_invert=False):
+         allow_reattach=False, allow_move=False):
     train_loc = Path(train_loc)
     if allow_reattach:
         grammar_loc = train_loc.parent().join('rgrammar')
