@@ -25,7 +25,7 @@ def amend(target="."):
     deploy()
 
 
-def run_static(name, size='full', here=None, feats='all', labels="MALT", thresh=5, reattach=False,
+def run_static(name, size='full', here=True, feats='all', labels="MALT", thresh=5, reattach=False,
               lower=False):
     if here == 'True':
         here = True
@@ -59,10 +59,11 @@ def run_static(name, size='full', here=None, feats='all', labels="MALT", thresh=
     elif feats == 'zhang':
         feats_flag = '-x'
     if here is True:
-        if labels == 'Stanford':
-            data_loc = Path(LOCAL_STANFORD)
-        else:
-            data_loc = Path(LOCAL_CONLL)
+        data_loc = Path(LOCAL_STANFORD)
+        #if labels == 'Stanford':
+        #    data_loc = Path(LOCAL_STANFORD)
+        #else:
+        #    data_loc = Path(LOCAL_CONLL)
         parser_loc = Path(LOCAL_PARSERS).join(name)
         runner = local
         cder = lcd
@@ -79,7 +80,7 @@ def run_static(name, size='full', here=None, feats='all', labels="MALT", thresh=
 
     train_loc = data_loc.join(train_name)
     with cder(repo):
-        runner('make -C redshift clean')
+        #runner('make -C redshift clean')
         runner('make -C redshift')
         if here is not True:
             arg_str = 'PARSER_DIR=%s,DATA_DIR=%s,FEATS="%s,LABELS=%s,THRESH=%s,REPAIRS=%s"' % (parser_loc, data_loc, feats_flag, labels, thresh, repair_str)
@@ -97,6 +98,6 @@ def run_static(name, size='full', here=None, feats='all', labels="MALT", thresh=
             dev_loc = data_loc.join('devr.txt')
             in_loc = data_loc.join('dev_auto_pos.parse')
             out_dir = parser_loc.join('parsed_dev')
-            runner('./redshift/train.py -f %d -l %s %s %s %s' % (thresh, labels, feats_flag, train_loc, parser_loc))
-            runner('./redshift/parse.py -g %s %s %s' % (parser_loc, in_loc, out_dir))
-            runner('./redshift/evaluate.py %s %s' % (out_dir.join('parses'), dev_loc)) 
+            runner('./scripts/train.py %s -f %d -l %s %s %s %s' % (repair_str, thresh, labels, feats_flag, train_loc, parser_loc))
+            runner('./scripts/parse.py -g %s %s %s' % (parser_loc, in_loc, out_dir))
+            runner('./scripts/evaluate.py %s %s' % (out_dir.join('parses'), dev_loc)) 
