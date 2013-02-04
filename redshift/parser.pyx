@@ -470,7 +470,6 @@ cdef class TransitionSystem:
             raise StandardError
 
     cdef int validate_moves(self, State* s, size_t* heads, bint* valid_moves) except -1:
-<<<<<<< HEAD
         # Load pre-conditions that don't refer to gold heads
         valid_moves[SHIFT] = s.i != s.n
         valid_moves[RIGHT] = s.i != s.n
