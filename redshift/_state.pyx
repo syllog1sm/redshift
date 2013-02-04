@@ -113,6 +113,37 @@ cdef int get_right_edge(State *s, size_t node) except -1:
         node = s.r_children[node][s.r_valencies[node] - 1]
     return node
 
+cdef bint has_child_in_buffer(State *s, size_t word, size_t offset, size_t* heads):
+    cdef size_t buff_i
+    for buff_i in range(s.i + offset, s.n):
+        if heads[buff_i] == word:
+            return True
+    return False
+
+cdef bint has_head_in_buffer(State *s, size_t word, size_t* heads):
+    cdef size_t buff_i
+    for buff_i in range(s.i, s.n):
+        if heads[word] == buff_i:
+            return True
+    return False
+
+cdef bint has_child_in_stack(State *s, size_t word, size_t* heads, bint allow_reattach):
+    cdef size_t i, stack_i
+    for i in range(1, s.stack_len):
+        stack_i = s.stack[i]
+        if heads[stack_i] == word and (allow_reattach or s.heads[stack_i] == 0):
+            return True
+    return False
+
+cdef bint has_head_in_stack(State *s, size_t word, size_t* heads):
+    cdef size_t i, stack_i
+    for i in range(1, s.stack_len):
+        stack_i = s.stack[i]
+        if heads[word] == stack_i:
+            return True
+    return False
+
+
 DEF START_ON_STACK = False
 
 cdef State init_state(size_t n):

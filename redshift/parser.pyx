@@ -409,14 +409,15 @@ cdef class TransitionSystem:
     cdef object oracle(self, State* s,  size_t* labels, size_t* heads, size_t* tags,
                        parse_move, size_t parse_label, bint* valid_moves):
         self.validate_moves(s, heads, valid_moves)
-        # Do not train from ties
-        if valid_moves[SHIFT] and valid_moves[REDUCE] and valid_moves[LEFT] \
-          and valid_moves[RIGHT]:
-            return []
         if parse_move == ERR:
             o_move = self.break_tie(s, tags, labels, heads, valid_moves)
             label = self.get_label(s, tags, o_move, 0, labels, heads)
             return [(o_move, label)]
+        # Do not train from ties
+        elif valid_moves[SHIFT] and valid_moves[REDUCE] and valid_moves[LEFT] \
+          and valid_moves[RIGHT]:
+            return []
+
         elif valid_moves[parse_move]:
             label = self.get_label(s, tags, parse_move, parse_label, labels, heads)
             return [(parse_move, label)]
@@ -435,7 +436,7 @@ cdef class TransitionSystem:
             return LEFT
         if heads[s.i] == s.top:
             if self.allow_move and s.second != 0 and s.heads[s.top] == s.second and \
-              self.grammar[tags[s.second]][tags[s.top]][tags[s.i]] > 1000:
+              self.grammar[tags[s.second]][tags[s.top]][tags[s.i]] > 400:
                 return REDUCE
 
             assert valid_moves[RIGHT]
@@ -460,15 +461,23 @@ cdef class TransitionSystem:
                 return move
         else:
             print s.top, s.i
+            print s.heads[s.top], s.heads[s.i]
             print heads[s.top], heads[s.i]
             raise StandardError
 
     cdef int validate_moves(self, State* s, size_t* heads, bint* valid_moves) except -1:
-        valid_moves[SHIFT] = self.s_cost(s, heads) == 0
-        valid_moves[REDUCE] = self.d_cost(s, heads) == 0
-        valid_moves[LEFT] = self.l_cost(s, heads) == 0
-        valid_moves[RIGHT] = self.r_cost(s, heads) == 0
-        valid_moves[LOWER] = self.w_cost(s, heads) == 0
+        # Load pre-conditions that don't refer to gold heads
+        valid_moves[SHIFT] = s.i != s.n
+        valid_moves[RIGHT] = s.i != s.n
+        valid_moves[REDUCE] = s.top != 0 and s.heads[s.top] != 0
+        valid_moves[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
+        valid_moves[LOWER] = self.allow_move and s.r_valencies[s.top] >= 2
+        if heads != NULL:
+            valid_moves[SHIFT] = valid_moves[SHIFT] and self.s_cost(s, heads)
+            valid_moves[REDUCE] = valid_moves[REDUCE] and self.d_cost(s, heads)
+            valid_moves[LEFT] = valid_moves[LEFT] and self.l_cost(s, heads)
+            valid_moves[RIGHT] = valid_moves[RIGHT] and self.r_cost(s, heads)
+            valid_moves[LOWER] = valid_moves[LOWER] and self.w_cost(s, heads)
 
     cdef int get_label(self, State* s, size_t* tags, size_t move, size_t parse_label,
                        size_t* g_labels, size_t* g_heads) except -1:
@@ -482,120 +491,75 @@ cdef class TransitionSystem:
             return parse_label
         if move == RIGHT:
             sib = get_r(s, s.top)
-            sib_pos = tags[sib] if sib != 0 else io_parse.NONE_POS
+            sib_pos = tags[sib]
             return self.default_labels[tags[s.top]][sib_pos][tags[s.i]]
         else:
             return 0
 
-    cdef int s_cost(self, State *s, size_t* g_heads):
-        if s.i == s.n:
-            return -1
-        if g_heads == NULL:
-            return 0
+    cdef bint s_cost(self, State *s, size_t* g_heads):
         cdef size_t i, stack_i
-        cdef int cost = 0
-        for i in range(1, s.stack_len):
-            stack_i = s.stack[i]
-            if g_heads[s.i] == stack_i:
-                cost += 1
-            if g_heads[stack_i] == s.i and (self.allow_reattach or s.heads[stack_i] == 0):
-                cost += 1
-            # TODO: This double-counts costs, which doesn't matter atm but could
-            # later
-            if self.allow_move and g_heads[s.i] != 0 and g_heads[s.i] == get_r(s, stack_i):
-                cost += 1
-        return cost
+        if has_child_in_stack(s, s.i, g_heads, self.allow_reattach):
+            return False
+        if has_head_in_stack(s, s.i, g_heads):
+            return False
+        if self.allow_move:
+            for i in range(1, s.stack_len):
+                stack_i = s.stack[i]
+                if get_r(s, stack_i) != 0 and g_heads[s.i] == get_r(s, stack_i):
+                    return False
+            if s.r_valencies[s.top] >= 2 and self.w_cost(s, g_heads) \
+              and g_heads[s.i] == get_r2(s, s.top):
+                return False
+        return True
 
-    cdef int r_cost(self, State *s, size_t* g_heads):
+    cdef bint r_cost(self, State *s, size_t* g_heads):
         cdef size_t i, buff_i, stack_i
-        if s.i == s.n:
-            return -1
-        if s.top == 0:
-            return -1
-        if g_heads == NULL:
-            return 0
         if g_heads[s.i] == s.top:
-            return 0
-        cdef int cost = 0
-        for buff_i in range(s.i + 1, s.n):
-            if g_heads[s.i] == buff_i and not self.allow_reattach:
-                cost += 1
-        for i in range(1, s.stack_len):
-            stack_i = s.stack[i]
-            if g_heads[s.i] == stack_i:
-                cost += 1
-            if g_heads[stack_i] == s.i and (self.allow_reattach or s.heads[stack_i] == 0):
-                cost += 1
-            # With Lower, if the head is an rchild of a stack item, right-arc
-            # makes the head inaccessible
-            if self.allow_move and g_heads[s.i] == get_r(s, stack_i) and get_r(s, stack_i) != 0:
-                # ...Unless the stack item is the top, in which case
-                # it's just what's necessary for the Lower
-                if stack_i != s.top:
-                    cost += 1
-        # This is not technically correct, but it's close (the arc could be recovered
-        # via complicated repair interactions)
-        if self.allow_move and get_r(s, s.top) != 0 and get_r2(s, s.top) != 0 and g_heads[get_r(s, s.top)] == get_r2(s, s.top):
-            cost += 1
-        return cost
+            return True
+        if has_head_in_buffer(s, s.i, g_heads) and not self.allow_reattach:
+            return False
+        if has_child_in_stack(s, s.i, g_heads, self.allow_reattach):
+            return False
+        if has_head_in_stack(s, s.i, g_heads):
+            return False
+        if self.allow_move and s.r_valencies[s.top] >= 2 and self.w_cost(s, g_heads):
+            return False
+        return True
 
-    cdef int d_cost(self, State *s, size_t* g_heads):
-        if s.heads[s.top] == 0:
-            return -1
-        if g_heads == NULL:
-            return 0
-        cdef int cost = 0
-        for buff_i in range(s.i, s.n):
-            if g_heads[s.top] == buff_i and self.allow_reattach:
-                cost += 1
-            if g_heads[buff_i] == s.top:
-                if not self.allow_move:
-                    cost += 1
-                elif s.second == 0:
-                    cost += 1
-                elif s.heads[s.top] != s.second:
-                    cost += 1
-        if self.allow_move and g_heads[s.i] == get_r(s, s.top) and g_heads[s.i] != 0:
-            cost += 1
-        return cost
+    cdef bint d_cost(self, State *s, size_t* g_heads):
+        if has_child_in_buffer(s, s.top, 1, g_heads):
+            if not self.allow_move:
+                return False
+            elif s.second == 0 or s.heads[s.top] != s.second:
+                return False
+        if self.allow_reattach and has_head_in_buffer(s, s.top, g_heads):
+            return False
+        if self.allow_move and get_r(s, s.top) != 0:
+            for buff_i in range(s.i, s.n):
+                if g_heads[buff_i] == get_r(s, s.top):
+                    return False
+            if s.r_valencies[s.top] >= 2 and self.w_cost(s, g_heads):
+                return False
+        return True
 
-    cdef int l_cost(self, State *s, size_t* g_heads):
-        cdef int cost
+    cdef bint l_cost(self, State *s, size_t* g_heads):
         cdef size_t buff_i
-        if s.top == 0:
-            return -1
-        if s.heads[s.top] != 0 and not self.allow_reattach:
-            return -1
-        if g_heads == NULL:
-            return 0
         if g_heads[s.top] == s.i:
-            return 0
-        cost = 0
-        if self.allow_reattach and g_heads[s.top] == s.heads[s.top]:
-            cost += 1
-        for buff_i in range(s.i, s.n):
-            if g_heads[s.top] == buff_i:
-                cost += 1
-            if g_heads[buff_i] == s.top:
-                cost += 1
-        if self.allow_move and g_heads[s.i] == get_r(s, s.top) and g_heads[s.i] != 0:
-            cost += 1
-        return cost
+            return True
+        if has_head_in_buffer(s, s.top, g_heads):
+            return False
+        if has_child_in_buffer(s, s.top, 0, g_heads):
+            return False
+        if self.allow_move:
+            for buff_i in range(s.i, s.n):
+                if g_heads[buff_i] == get_r(s, s.top):
+                    return False
+            if s.r_valencies[s.top] >= 2 and self.w_cost(s, g_heads):
+                return False
+        return True
 
-    cdef int w_cost(self, State *s, size_t* g_heads):
-        if not self.allow_move:
-            return -1
-        if s.r_valencies[s.top] < 2:
-            return -1
-        if s.top < 1:
-            return -1
-        if g_heads == NULL:
-            return 0
-        gc = get_r(s, s.top)
-        c = get_r2(s, s.top)
-        if g_heads[gc] != c:
-            return -1
-        return 0
+    cdef bint w_cost(self, State *s, size_t* g_heads):
+        return g_heads[get_r(s, s.top)] == get_r2(s, s.top)
 
 
 cdef transition_to_str(State* s, size_t move, label, object tokens):
