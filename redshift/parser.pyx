@@ -359,10 +359,7 @@ cdef class TransitionSystem:
         for head, sib, child, freq, label in lines:
             freq = int(freq)
             head = index.hashes.encode_pos(head)
-            if sib == 'NONE':
-                sib = 0
-            else:
-                sib = index.hashes.encode_pos(sib)
+            sib = index.hashes.encode_pos(sib)
             child = index.hashes.encode_pos(child)
             if label == 'ROOT':
                 self.default_labels[head][sib][child] = 0
@@ -445,7 +442,7 @@ cdef class TransitionSystem:
 
             assert valid_moves[RIGHT]
             return RIGHT
-        sib_pos = tags[get_r(s, s.top)]
+        sib_pos = tags[get_r(s, s.top)] if get_r(s, s.top) != 0 else index.hashes.encode_pos('NONE')
         if self.allow_move and valid_moves[REDUCE] and valid_moves[SHIFT]:
             assert s.top != 0
             for buff_i in range(s.i, s.n):
@@ -495,7 +492,7 @@ cdef class TransitionSystem:
             return parse_label
         if move == RIGHT:
             sib = get_r(s, s.top)
-            sib_pos = tags[sib]
+            sib_pos = tags[sib] if sib != 0 else index.hashes.encode_pos('NONE')
             return self.default_labels[tags[s.top]][sib_pos][tags[s.i]]
         else:
             return 0
