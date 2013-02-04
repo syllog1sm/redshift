@@ -249,6 +249,7 @@ cdef class Parser:
             sent.parse.moves[s.t] = move
             sent.parse.move_labels[s.t] = label
             sent.parse.n_moves += 1
+            assert move != ERR
             self.moves.transition(move, label, &s)
         for i in range(1, sent.length):
             sent.parse.heads[i] = s.heads[i]
@@ -363,8 +364,11 @@ cdef class TransitionSystem:
             else:
                 sib = index.hashes.encode_pos(sib)
             child = index.hashes.encode_pos(child)
+            if label == 'ROOT':
+                self.default_labels[head][sib][child] = 0
+            else:
+                self.default_labels[head][sib][child] = io_parse.STR_TO_LABEL.get(label, 0)
             self.grammar[head][sib][child] = freq
-            self.default_labels[head][sib][child] = io_parse.STR_TO_LABEL.get(label, 0)
 
     cdef int transition(self, size_t move, size_t label, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc
@@ -466,6 +470,7 @@ cdef class TransitionSystem:
             raise StandardError
 
     cdef int validate_moves(self, State* s, size_t* heads, bint* valid_moves) except -1:
+<<<<<<< HEAD
         # Load pre-conditions that don't refer to gold heads
         valid_moves[SHIFT] = s.i != s.n
         valid_moves[RIGHT] = s.i != s.n
