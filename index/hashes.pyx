@@ -211,7 +211,7 @@ def encode_pos(object pos):
     raw_pos = py_pos
     return idx.encode(raw_pos)
 
-cdef unsigned long encode_feat(size_t* feature, size_t length, size_t i):
+cdef unsigned long encode_feat(size_t* feature, size_t length, size_t i) except UINTMAX_MAX:
     global _feat_idx
     cdef FeatIndex idx = _feat_idx
     return idx.encode(feature, length, i)
