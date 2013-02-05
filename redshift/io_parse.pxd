@@ -5,10 +5,6 @@ cimport _state
 DEF MAX_SENT_LEN = 256
 DEF MAX_TRANSITIONS = (256 * 2) - 2
 
-cdef size_t OOB_POS
-cdef size_t ROOT_POS
-cdef size_t NONE_POS
-
 
 cdef struct _Parse:
     size_t n_moves

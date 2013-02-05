@@ -17,6 +17,7 @@ STR_TO_LABEL = {}
 ROOT_LABEL = 1
 PUNCT_LABEL = 2
 
+
 def set_labels(name):
     global LABEL_STRS, STR_TO_LABEL, PUNCT_LABEL, ROOT_LABEL
     if name == 'MALT':
@@ -33,16 +34,12 @@ def set_labels(name):
     PUNCT_LABEL = STR_TO_LABEL['P']
     set_n_labels(len(LABEL_STRS))
 
-def set_special_pos(root_pos, none_pos, oob_pos):
-    global ROOT_POS, NONE_POS, OOB_POS
-    ROOT_POS = root_pos
-    NONE_POS = none_pos
-    OOB_POS = oob_pos
 
 def set_moves(moves):
     global MOVE_STRS
     for move in moves:
         MOVE_STRS.append(move)
+
 
 cdef Sentence make_sentence(size_t id_, size_t length, object py_words, object py_tags):
     cdef:
@@ -79,9 +76,6 @@ def read_conll(conll_str, moves=None):
         object words, tags, heads, labels, token_str, word, pos, head, label
         Sentences sentences
     sent_strs = conll_str.strip().split('\n\n')
-    set_special_pos(index.hashes.encode_pos('ROOT'),
-                    index.hashes.encode_pos('NONE'),
-                    index.hashes.encode_pos('OOB'))
     sentences = Sentences(max_length=len(sent_strs))
     first_sent = sent_strs[0]
     cdef size_t id_
