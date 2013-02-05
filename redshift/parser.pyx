@@ -419,24 +419,25 @@ cdef class TransitionSystem:
     cdef object oracle(self, State* s,  size_t* labels, size_t* heads, size_t* tags,
                        parse_move, size_t parse_label, bint* valid_moves):
         self.validate_moves(s, heads, valid_moves)
-        if parse_move == ERR:
+        if valid_moves[parse_move]:
+            assert parse_move != ERR
+            label = self.get_label(s, tags, parse_move, parse_label, labels, heads)
+            return [(parse_move, label)]
+        else::
             o_move = self.break_tie(s, tags, labels, heads, valid_moves)
             label = self.get_label(s, tags, o_move, 0, labels, heads)
             return [(o_move, label)]
         # Do not train from ties
-        elif valid_moves[SHIFT] and valid_moves[REDUCE] and valid_moves[LEFT] \
-          and valid_moves[RIGHT]:
-            return []
-
-        elif valid_moves[parse_move]:
-            label = self.get_label(s, tags, parse_move, parse_label, labels, heads)
-            return [(parse_move, label)]
-        omoves = []
-        for move in range(1, N_MOVES):
-            if valid_moves[move]:
-                label = self.get_label(s, tags, move, 0, labels, heads)
-                omoves.append((move, label))
-        return omoves
+        #elif valid_moves[SHIFT] and valid_moves[REDUCE] and valid_moves[LEFT] \
+        #  and valid_moves[RIGHT]:
+        #    return []
+        #
+        #omoves = []
+        #for move in range(1, N_MOVES):
+        #    if valid_moves[move]:
+        #        label = self.get_label(s, tags, move, 0, labels, heads)
+        #        omoves.append((move, label))
+        #return omoves
 
     cdef int break_tie(self, State* s, size_t* tags, size_t* labels, size_t* heads,
                        bint* valid_moves) except -1:
