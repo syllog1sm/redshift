@@ -436,12 +436,16 @@ cdef class TransitionSystem:
         cdef size_t sib_pos = tags[sib] if sib != 0 else index.hashes.encode_pos('NONE')
         r_freq = self.grammar[tags[s.top]][sib_pos][tags[s.i]]
         w_freq = self.grammar[tags[s.second]][tags[s.top]][tags[s.i]]
+        verb_noun_pos = set()
+        for pos in ['VBD', 'VBN', 'VB', 'VBZ', 'VBG', 'VBP', 'NN', 'NNS']:
+            verb_noun_pos.add(index.hashes.encode_pos(pos))
         if heads[s.i] == s.top:
-            if self.allow_move and s.second != 0 and s.heads[s.top] == s.second and \
-              w_freq > 400 and r_freq < 10000:
-                return REDUCE
+            #if self.allow_move and s.second != 0 and s.heads[s.top] == s.second and \
+            #  tags[s.top] in verb_noun_pos and tags[s.second] in verb_noun_pos and \
+            #  w_freq > 100 and random.uniform(0.0, 1.0) > 0.8:
+            #    return REDUCE
 
-            assert valid_moves[RIGHT]
+            #assert valid_moves[RIGHT]
             return RIGHT
         if self.allow_move and valid_moves[REDUCE] and valid_moves[SHIFT]:
             assert s.top != 0
