@@ -490,7 +490,6 @@ cdef class TransitionSystem:
                 return g_labels[s.top]
             else:
                 return parse_label
-
         elif move == LOWER:
             if g_heads[get_r(s, s.top)] == get_r2(s, s.top):
                 return g_labels[get_r(s, s.top)]
@@ -507,6 +506,7 @@ cdef class TransitionSystem:
                 return self.default_labels[tags[s.top]][sib_pos][tags[s.i]]
             else:
                 return 0
+        return -1
 
     cdef bint s_cost(self, State *s, size_t* g_heads):
         cdef size_t i, stack_i
