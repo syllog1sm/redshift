@@ -443,7 +443,6 @@ cdef class TransitionSystem:
 
             assert valid_moves[RIGHT]
             return RIGHT
-
         if self.allow_move and valid_moves[REDUCE] and valid_moves[SHIFT]:
             assert s.top != 0
             for buff_i in range(s.i, s.n):
