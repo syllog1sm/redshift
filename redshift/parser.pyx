@@ -441,13 +441,10 @@ cdef class TransitionSystem:
             assert parse_move != ERR
             label = self.get_label(s, tags, parse_move, parse_label, labels, heads)
             return [(parse_move, label)]
-        else:
-            use_grammar = parse_move == ERR
-            o_move = self.break_tie(s, labels, heads, tags, valid_moves, use_grammar)
-            if o_move == ERR:
-                return []
-            label = self.get_label(s, tags, o_move, ERR, labels, heads)
-            return [(o_move, label)]
+        # If we reduce incorrectly, don't confuse the decision boundary by supplying
+        # right or left
+        elif valid_moves[SHIFT] and parse_move == REDUCE:
+            return [(SHIFT, 0)]
         for move in range(1, N_MOVES):
             if valid_moves[move]:
                 label = self.get_label(s, tags, move, 0, labels, heads)
@@ -455,7 +452,7 @@ cdef class TransitionSystem:
         return omoves
 
     cdef int break_tie(self, State* s, size_t* labels, size_t* heads,
-                       size_t* tags, bint* valid_moves, bint use_grammar) except -1:
+                       size_t* tags, bint* valid_moves) except -1:
         if valid_moves[LOWER]:
             return LOWER
         if heads[s.top] == s.i and valid_moves[LEFT]:
@@ -465,7 +462,7 @@ cdef class TransitionSystem:
         r_freq = self.grammar[tags[s.top]][sib_pos][tags[s.i]]
         if heads[s.i] == s.top:
             return RIGHT
-        elif self.allow_reattach and use_grammar and r_freq > 1000:
+        elif self.allow_reattach and r_freq > 1000:
             order = (REDUCE, RIGHT, SHIFT, LEFT)
         else:
             order = (REDUCE, SHIFT, RIGHT, LEFT)
@@ -474,10 +471,6 @@ cdef class TransitionSystem:
                 return move
         else:
             return ERR
-            print s.top, s.i
-            print s.heads[s.top], s.heads[s.i]
-            print heads[s.top], heads[s.i]
-            raise StandardError
 
     cdef int get_label(self, State* s, size_t* tags, size_t move, size_t parse_label,
                        size_t* g_labels, size_t* g_heads) except -1:
