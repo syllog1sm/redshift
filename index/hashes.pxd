@@ -86,7 +86,7 @@ cdef class FeatIndex(Index):
     cpdef load_entry(self, size_t i, object key, long hashed, unsigned long value)
 
 
-cdef unsigned long encode_feat(size_t* feature, size_t length, size_t i)
+cdef unsigned long encode_feat(size_t* feature, size_t length, size_t i) except UINTMAX_MAX
 
 
 cdef class InstanceCounter:
