@@ -473,7 +473,7 @@ cdef class TransitionSystem:
     cdef int validate_moves(self, State* s, size_t* heads, bint* valid_moves) except -1:
         # Load pre-conditions that don't refer to gold heads
         valid_moves[SHIFT] = s.i != s.n
-        valid_moves[RIGHT] = s.i != s.n
+        valid_moves[RIGHT] = s.i != s.n and s.top != 0
         valid_moves[REDUCE] = s.top != 0 and s.heads[s.top] != 0
         valid_moves[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
         valid_moves[LOWER] = self.allow_move and s.r_valencies[s.top] >= 2
