@@ -1,6 +1,5 @@
 from libcpp.utility cimport pair
 from libcpp.vector cimport vector
-from libc.stdint cimport UINTMAX_MAX
 
 DEF VOCAB_SIZE = 1e6
 DEF TAG_SET_SIZE = 100
@@ -82,11 +81,11 @@ cdef class FeatIndex(Index):
     cdef vector[dense_hash_map[long, long]] tables
     cdef vector[dense_hash_map[long, long]] unpruned
     cdef dense_hash_map[long, long] freqs
-    cdef unsigned long encode(self, size_t* feature, size_t length, size_t i) except UINTMAX_MAX
+    cdef unsigned long encode(self, size_t* feature, size_t length, size_t i)
     cpdef load_entry(self, size_t i, object key, long hashed, unsigned long value)
 
 
-cdef unsigned long encode_feat(size_t* feature, size_t length, size_t i) except UINTMAX_MAX
+cdef unsigned long encode_feat(size_t* feature, size_t length, size_t i)
 
 
 cdef class InstanceCounter:

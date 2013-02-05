@@ -1,5 +1,4 @@
 from pathlib import Path
-from libc.stdint cimport UINT32_MAX
 
 DEF VOCAB_SIZE = 1e6
 DEF TAG_SET_SIZE = 100
@@ -83,7 +82,7 @@ cdef class FeatIndex(Index):
         self.freqs.set_empty_key(0)
         self.count_features = False
     
-    cdef unsigned long encode(self, size_t* feature, size_t length, size_t i) except UINTMAX_MAX:
+    cdef unsigned long encode(self, size_t* feature, size_t length, size_t i):
         cdef int value
         cdef int hashed = 0
         MurmurHash3_x86_32(feature, length * sizeof(size_t), i, &hashed)
@@ -211,7 +210,7 @@ def encode_pos(object pos):
     raw_pos = py_pos
     return idx.encode(raw_pos)
 
-cdef unsigned long encode_feat(size_t* feature, size_t length, size_t i) except UINTMAX_MAX:
+cdef unsigned long encode_feat(size_t* feature, size_t length, size_t i):
     global _feat_idx
     cdef FeatIndex idx = _feat_idx
     return idx.encode(feature, length, i)
