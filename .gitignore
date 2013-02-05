@@ -12,3 +12,6 @@ version.cc
 version.pl
 predict
 train
+*.dvi
+*.pdf
+*.aux
