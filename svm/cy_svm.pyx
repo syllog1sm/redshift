@@ -113,6 +113,7 @@ cdef class Problem:
         cdef feature_node* x
         cdef int i, j
         cdef double y
+        cdef double w
         cdef size_t idx
         path = Path(path)
         out = path.open('w')
@@ -126,8 +127,9 @@ cdef class Problem:
                 feats.add(idx)
                 j += 1
             y = self.thisptr.y[i]
+            w = self.thisptr.W[i]
             feat_line = u' '.join([u'%d:1' % f for f in sorted(feats)])
-            out.write(u'%d %s\n' % (y, feat_line))
+            out.write(u'%.2f %d %s\n' % (w, y, feat_line))
         out.close()
 
     def __dealloc__(self):
