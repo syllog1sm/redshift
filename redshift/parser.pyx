@@ -45,6 +45,15 @@ DEF N_MOVES = 6
 assert N_MOVES == _n_moves, "Set N_MOVES compile var to %d" % _n_moves
 
 
+DEF USE_COLOURS = True
+
+def red(string):
+    if USE_COLOURS:
+        return u'\033[91m%s\033[0m' % string
+    else:
+        return string
+
+
 cdef lmove_to_str(move, label):
     moves = ['E', 'S', 'D', 'L', 'R', 'W']
     label = LABEL_STRS[label]
@@ -319,8 +328,11 @@ cdef class Parser:
                 parse_move = sent.parse.moves[s.t]
                 parse_label = sent.parse.move_labels[s.t]
                 state_str = transition_to_str(&s, parse_move, parse_label, tokens)
+                parse_move_str = lmove_to_str(parse_move, parse_label)
+                if parse_move not in best_ids:
+                    parse_move_str = red(parse_move_str)
                 sent_moves.append((best_id_str, parse_move,
-                                  best_strs, lmove_to_str(parse_move, parse_label),
+                                  best_strs, parse_move_str,
                                   state_str))
                 self.moves.transition(parse_move, parse_label, &s)
             best_moves.append((u' '.join(tokens), sent_moves))
@@ -435,17 +447,7 @@ cdef class TransitionSystem:
         cdef size_t sib = get_r(s, s.top)
         cdef size_t sib_pos = tags[sib] if sib != 0 else index.hashes.encode_pos('NONE')
         r_freq = self.grammar[tags[s.top]][sib_pos][tags[s.i]]
-        w_freq = self.grammar[tags[s.second]][tags[s.top]][tags[s.i]]
-        verb_noun_pos = set()
-        for pos in ['VBD', 'VBN', 'VB', 'VBZ', 'VBG', 'VBP', 'NN', 'NNS']:
-            verb_noun_pos.add(index.hashes.encode_pos(pos))
         if heads[s.i] == s.top:
-            #if self.allow_move and s.second != 0 and s.heads[s.top] == s.second and \
-            #  tags[s.top] in verb_noun_pos and tags[s.second] in verb_noun_pos and \
-            #  w_freq > 100 and random.uniform(0.0, 1.0) > 0.8:
-            #    return REDUCE
-
-            #assert valid_moves[RIGHT]
             return RIGHT
         if self.allow_move and valid_moves[REDUCE] and valid_moves[SHIFT]:
             assert s.top != 0
