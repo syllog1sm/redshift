@@ -359,15 +359,9 @@ cdef class TransitionSystem:
         for head, sib, child, freq, label in lines:
             freq = int(freq)
             head = index.hashes.encode_pos(head)
-            if sib == 'NONE':
-                sib = 0
-            else:
-                sib = index.hashes.encode_pos(sib)
+            sib = index.hashes.encode_pos(sib)
             child = index.hashes.encode_pos(child)
-            if label == 'ROOT':
-                self.default_labels[head][sib][child] = 0
-            else:
-                self.default_labels[head][sib][child] = io_parse.STR_TO_LABEL.get(label, 0)
+            self.default_labels[head][sib][child] = io_parse.STR_TO_LABEL.get(label, 0)
             self.grammar[head][sib][child] = freq
 
     cdef int transition(self, size_t move, size_t label, State *s) except -1:
@@ -438,25 +432,29 @@ cdef class TransitionSystem:
             return LOWER
         if heads[s.top] == s.i and valid_moves[LEFT]:
             return LEFT
+        cdef size_t sib = get_r(s, s.top)
+        cdef size_t sib_pos = tags[sib] if sib != 0 else index.hashes.encode_pos('NONE')
+        r_freq = self.grammar[tags[s.top]][sib_pos][tags[s.i]]
+        w_freq = self.grammar[tags[s.second]][tags[s.top]][tags[s.i]]
         if heads[s.i] == s.top:
             if self.allow_move and s.second != 0 and s.heads[s.top] == s.second and \
-              self.grammar[tags[s.second]][tags[s.top]][tags[s.i]] > 400:
+              w_freq > 400 and r_freq < 10000:
                 return REDUCE
 
             assert valid_moves[RIGHT]
             return RIGHT
-        sib_pos = tags[get_r(s, s.top)]
+
         if self.allow_move and valid_moves[REDUCE] and valid_moves[SHIFT]:
             assert s.top != 0
             for buff_i in range(s.i, s.n):
                 if heads[buff_i] == s.top:
-                    if valid_moves[RIGHT] and self.grammar[tags[s.top]][sib_pos][tags[s.i]] > 1000:
+                    if valid_moves[RIGHT] and r_freq > 1000:
                         return RIGHT
                     else:
                         return SHIFT
             else:
                 return REDUCE
-        elif self.allow_reattach and self.grammar[tags[s.top]][sib_pos][tags[s.i]] > 1000:
+        elif self.allow_reattach and r_freq > 1000:
             order = (REDUCE, RIGHT, SHIFT, LEFT)
         else:
             order = (REDUCE, SHIFT, RIGHT, LEFT)
@@ -495,7 +493,7 @@ cdef class TransitionSystem:
             return parse_label
         if move == RIGHT:
             sib = get_r(s, s.top)
-            sib_pos = tags[sib]
+            sib_pos = tags[sib] if sib != 0 else index.hashes.encode_pos('NONE')
             return self.default_labels[tags[s.top]][sib_pos][tags[s.i]]
         else:
             return 0
@@ -553,6 +551,8 @@ cdef class TransitionSystem:
         if has_head_in_buffer(s, s.top, g_heads):
             return False
         if has_child_in_buffer(s, s.top, 0, g_heads):
+            return False
+        if self.allow_reattach and g_heads[s.top] == s.heads[s.top]:
             return False
         if self.allow_move:
             for buff_i in range(s.i, s.n):
