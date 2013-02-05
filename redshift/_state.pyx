@@ -144,7 +144,7 @@ cdef bint has_head_in_stack(State *s, size_t word, size_t* heads):
     return False
 
 
-DEF START_ON_STACK = False
+DEF START_ON_STACK = True
 
 cdef State init_state(size_t n):
     # TODO: Make this more efficient, probably by storing 0'd arrays somewhere,
