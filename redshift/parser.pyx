@@ -198,11 +198,9 @@ cdef class Parser:
                                         sent.pos, p_move, p_label,
                                         self._valid_classes)
             features.extract(self._context, self._hashed_feats, sent, &s)
-            # TODO: Understand why this hack gets better results??
-            if len(o_moves) == 1:
-                self._add_instance(sent.id, s.history, o_moves,
+            self._add_instance(sent.id, s.history, o_moves,
                                    self.n_preds, self._hashed_feats, only_count)
-            n_instances += 1
+            n_instances += len(o_moves)
             #print py_words[s.top],
             if p_move == ERR:
                 assert len(o_moves) == 1
@@ -437,6 +435,10 @@ cdef class TransitionSystem:
     cdef object oracle(self, State* s,  size_t* labels, size_t* heads, size_t* tags,
                        parse_move, size_t parse_label, bint* valid_moves):
         self.validate_moves(s, heads, valid_moves)
+        if heads[s.i] == s.top:
+            return [(RIGHT, labels[s.i])]
+        if heads[s.top] == s.i:
+            return [(LEFT, labels[s.top])]
         if valid_moves[parse_move]:
             assert parse_move != ERR
             label = self.get_label(s, tags, parse_move, parse_label, labels, heads)
@@ -445,6 +447,7 @@ cdef class TransitionSystem:
         # right or left
         elif valid_moves[SHIFT] and parse_move == REDUCE:
             return [(SHIFT, 0)]
+        omoves = []
         for move in range(1, N_MOVES):
             if valid_moves[move]:
                 label = self.get_label(s, tags, move, 0, labels, heads)
@@ -539,12 +542,11 @@ cdef class TransitionSystem:
         return True
 
     cdef bint d_cost(self, State *s, size_t* g_heads):
-        if has_child_in_buffer(s, s.top, 0, g_heads):
-            return False
-            #if not self.allow_move:
-            #    return False
-            #elif s.second == 0 or s.heads[s.top] != s.second:
-            #    return False
+        if has_child_in_buffer(s, s.top, g_heads):
+            if not self.allow_move:
+                return False
+            elif s.second == 0 or s.heads[s.top] != s.second:
+                return False
         if self.allow_reattach and has_head_in_buffer(s, s.top, g_heads):
             return False
         if self.allow_move and get_r(s, s.top) != 0:
