@@ -183,6 +183,7 @@ cdef class Parser:
         self.guide.train()
         self.l_labeller.train()
         self.r_labeller.train()
+        self.guide.problem.save(self.model_dir.parent().join('train.svm'))
 
     cdef int follow_moves(self, Sentence* sent, bint only_count, object py_words) except -1:
         cdef size_t i = 0
@@ -197,9 +198,11 @@ cdef class Parser:
                                         sent.pos, p_move, p_label,
                                         self._valid_classes)
             features.extract(self._context, self._hashed_feats, sent, &s)
-            self._add_instance(sent.id, s.history, o_moves,
-                               self.n_preds, self._hashed_feats, only_count)
-            n_instances += len(o_moves)
+            # TODO: Understand why this hack gets better results??
+            if len(o_moves) == 1:
+                self._add_instance(sent.id, s.history, o_moves,
+                                   self.n_preds, self._hashed_feats, only_count)
+            n_instances += 1
             #print py_words[s.top],
             if p_move == ERR:
                 assert len(o_moves) == 1
@@ -329,7 +332,7 @@ cdef class Parser:
                 parse_label = sent.parse.move_labels[s.t]
                 state_str = transition_to_str(&s, parse_move, parse_label, tokens)
                 parse_move_str = lmove_to_str(parse_move, parse_label)
-                if parse_move not in best_ids:
+                if parse_move not in [m for (m, l) in best_ids]:
                     parse_move_str = red(parse_move_str)
                 sent_moves.append((best_id_str, parse_move,
                                   best_strs, parse_move_str,
@@ -416,67 +419,6 @@ cdef class TransitionSystem:
         if s.i >= (s.n - 1) and s.stack_len == 1:
             s.is_finished = True
 
-    cdef object oracle(self, State* s,  size_t* labels, size_t* heads, size_t* tags,
-                       parse_move, size_t parse_label, bint* valid_moves):
-        self.validate_moves(s, heads, valid_moves)
-        if valid_moves[parse_move]:
-            assert parse_move != ERR
-            label = self.get_label(s, tags, parse_move, parse_label, labels, heads)
-            return [(parse_move, label)]
-        else:
-            o_move = self.break_tie(s, tags, labels, heads, valid_moves)
-            if o_move != ERR:
-                label = self.get_label(s, tags, o_move, 0, labels, heads)
-                return [(o_move, label)]
-            else:
-                return []
-        # Do not train from ties
-        #elif valid_moves[SHIFT] and valid_moves[REDUCE] and valid_moves[LEFT] \
-        #  and valid_moves[RIGHT]:
-        #    return []
-        #
-        #omoves = []
-        #for move in range(1, N_MOVES):
-        #    if valid_moves[move]:
-        #        label = self.get_label(s, tags, move, 0, labels, heads)
-        #        omoves.append((move, label))
-        #return omoves
-
-    cdef int break_tie(self, State* s, size_t* tags, size_t* labels, size_t* heads,
-                       bint* valid_moves) except -1:
-        if valid_moves[LOWER]:
-            return LOWER
-        if heads[s.top] == s.i and valid_moves[LEFT]:
-            return LEFT
-        cdef size_t sib = get_r(s, s.top)
-        cdef size_t sib_pos = tags[sib] if sib != 0 else index.hashes.encode_pos('NONE')
-        r_freq = self.grammar[tags[s.top]][sib_pos][tags[s.i]]
-        if heads[s.i] == s.top:
-            return RIGHT
-        #if self.allow_move and valid_moves[REDUCE] and valid_moves[SHIFT]:
-        #    assert s.top != 0
-        #    for buff_i in range(s.i, s.n):
-        #        if heads[buff_i] == s.top:
-        #            if valid_moves[RIGHT] and r_freq > 1000:
-        #                return RIGHT
-        #            else:
-        #                return SHIFT
-        #    else:
-        #        return REDUCE
-        elif self.allow_reattach and r_freq > 1000:
-            order = (REDUCE, RIGHT, SHIFT, LEFT)
-        else:
-            order = (REDUCE, SHIFT, RIGHT, LEFT)
-        for move in order:
-            if valid_moves[move]:
-                return move
-        else:
-            return ERR
-            print s.top, s.i
-            print s.heads[s.top], s.heads[s.i]
-            print heads[s.top], heads[s.i]
-            raise StandardError
-
     cdef int validate_moves(self, State* s, size_t* heads, bint* valid_moves) except -1:
         # Load pre-conditions that don't refer to gold heads
         valid_moves[ERR] = 0
@@ -491,6 +433,51 @@ cdef class TransitionSystem:
             valid_moves[LEFT] = valid_moves[LEFT] and self.l_cost(s, heads)
             valid_moves[RIGHT] = valid_moves[RIGHT] and self.r_cost(s, heads)
             valid_moves[LOWER] = valid_moves[LOWER] and self.w_cost(s, heads)
+
+    cdef object oracle(self, State* s,  size_t* labels, size_t* heads, size_t* tags,
+                       parse_move, size_t parse_label, bint* valid_moves):
+        self.validate_moves(s, heads, valid_moves)
+        if valid_moves[parse_move]:
+            assert parse_move != ERR
+            label = self.get_label(s, tags, parse_move, parse_label, labels, heads)
+            return [(parse_move, label)]
+        else:
+            use_grammar = parse_move == ERR
+            o_move = self.break_tie(s, labels, heads, tags, valid_moves, use_grammar)
+            assert o_move != ERR
+            label = self.get_label(s, tags, o_move, ERR, labels, heads)
+            return [(o_move, label)]
+               omoves = []
+        for move in range(1, N_MOVES):
+            if valid_moves[move]:
+                label = self.get_label(s, tags, move, 0, labels, heads)
+                omoves.append((move, label))
+        return omoves
+
+    cdef int break_tie(self, State* s, size_t* labels, size_t* heads,
+                       size_t* tags, bint* valid_moves) except -1:
+        if valid_moves[LOWER]:
+            return LOWER
+        if heads[s.top] == s.i and valid_moves[LEFT]:
+            return LEFT
+        cdef size_t sib = get_r(s, s.top)
+        cdef size_t sib_pos = tags[sib] if sib != 0 else index.hashes.encode_pos('NONE')
+        r_freq = self.grammar[tags[s.top]][sib_pos][tags[s.i]]
+        if heads[s.i] == s.top:
+            return RIGHT
+        elif self.allow_reattach and r_freq > 1000:
+            order = (REDUCE, RIGHT, SHIFT, LEFT)
+        else:
+            order = (REDUCE, SHIFT, RIGHT, LEFT)
+        for move in order:
+            if valid_moves[move]:
+                return move
+        else:
+            return ERR
+            print s.top, s.i
+            print s.heads[s.top], s.heads[s.i]
+            print heads[s.top], heads[s.i]
+            raise StandardError
 
     cdef int get_label(self, State* s, size_t* tags, size_t move, size_t parse_label,
                        size_t* g_labels, size_t* g_heads) except -1:
@@ -544,7 +531,6 @@ cdef class TransitionSystem:
             # bad dependency. But penalise it anyway
             if s.r_valencies[s.top] >= 2 and self.w_cost(s, g_heads):
                 return False
-
         return True
 
     cdef bint d_cost(self, State *s, size_t* g_heads):
