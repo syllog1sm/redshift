@@ -69,8 +69,6 @@ cdef Sentence make_sentence(size_t id_, size_t length, object py_words, object p
 
 
 def read_conll(conll_str, moves=None):
-    """reads a CoNLL dependency data file, returning (words,POS,governors)
-    all of which are lists beginning with a dummy head word"""
     cdef:
         size_t i
         object words, tags, heads, labels, token_str, word, pos, head, label
@@ -174,7 +172,6 @@ cdef class Sentences:
                 self.s[i].parse.n_moves += 1
 
     def write_moves(self, out_file):
-        """Write the history of moves and scores"""
         cdef Sentence s
         cdef size_t i, j, move_and_label
         cdef object move
