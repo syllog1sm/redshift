@@ -425,9 +425,11 @@ cdef class TransitionSystem:
             return [(parse_move, label)]
         else:
             o_move = self.break_tie(s, tags, labels, heads, valid_moves)
-            if omove:
+            if o_move != ERR:
                 label = self.get_label(s, tags, o_move, 0, labels, heads)
                 return [(o_move, label)]
+            else:
+                return []
         # Do not train from ties
         #elif valid_moves[SHIFT] and valid_moves[REDUCE] and valid_moves[LEFT] \
         #  and valid_moves[RIGHT]:
@@ -451,16 +453,16 @@ cdef class TransitionSystem:
         r_freq = self.grammar[tags[s.top]][sib_pos][tags[s.i]]
         if heads[s.i] == s.top:
             return RIGHT
-        if self.allow_move and valid_moves[REDUCE] and valid_moves[SHIFT]:
-            assert s.top != 0
-            for buff_i in range(s.i, s.n):
-                if heads[buff_i] == s.top:
-                    if valid_moves[RIGHT] and r_freq > 1000:
-                        return RIGHT
-                    else:
-                        return SHIFT
-            else:
-                return REDUCE
+        #if self.allow_move and valid_moves[REDUCE] and valid_moves[SHIFT]:
+        #    assert s.top != 0
+        #    for buff_i in range(s.i, s.n):
+        #        if heads[buff_i] == s.top:
+        #            if valid_moves[RIGHT] and r_freq > 1000:
+        #                return RIGHT
+        #            else:
+        #                return SHIFT
+        #    else:
+        #        return REDUCE
         elif self.allow_reattach and r_freq > 1000:
             order = (REDUCE, RIGHT, SHIFT, LEFT)
         else:
@@ -469,7 +471,7 @@ cdef class TransitionSystem:
             if valid_moves[move]:
                 return move
         else:
-            return []
+            return ERR
             print s.top, s.i
             print s.heads[s.top], s.heads[s.i]
             print heads[s.top], heads[s.i]
@@ -477,7 +479,7 @@ cdef class TransitionSystem:
 
     cdef int validate_moves(self, State* s, size_t* heads, bint* valid_moves) except -1:
         # Load pre-conditions that don't refer to gold heads
-        valid_moves[ERR] = 0:
+        valid_moves[ERR] = 0
         valid_moves[SHIFT] = s.i != s.n
         valid_moves[RIGHT] = s.i != s.n and s.top != 0
         valid_moves[REDUCE] = s.top != 0 and s.heads[s.top] != 0
@@ -533,16 +535,25 @@ cdef class TransitionSystem:
             return False
         if has_head_in_stack(s, s.i, g_heads):
             return False
-        if self.allow_move and s.r_valencies[s.top] >= 2 and self.w_cost(s, g_heads):
-            return False
+        if self.allow_move:
+            for i in range(1, s.stack_len - 1):
+                stack_i = s.stack[i]
+                if get_r(s, stack_i) != 0 and g_heads[s.i] == get_r(s, stack_i):
+                    return False
+            # This is a heuristic, because we could theoretically steal away the
+            # bad dependency. But penalise it anyway
+            if s.r_valencies[s.top] >= 2 and self.w_cost(s, g_heads):
+                return False
+
         return True
 
     cdef bint d_cost(self, State *s, size_t* g_heads):
         if has_child_in_buffer(s, s.top, 0, g_heads):
-            if not self.allow_move:
-                return False
-            elif s.second == 0 or s.heads[s.top] != s.second:
-                return False
+            return False
+            #if not self.allow_move:
+            #    return False
+            #elif s.second == 0 or s.heads[s.top] != s.second:
+            #    return False
         if self.allow_reattach and has_head_in_buffer(s, s.top, g_heads):
             return False
         if self.allow_move and get_r(s, s.top) != 0:
