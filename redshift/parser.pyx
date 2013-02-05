@@ -447,7 +447,6 @@ cdef class TransitionSystem:
             assert o_move != ERR
             label = self.get_label(s, tags, o_move, ERR, labels, heads)
             return [(o_move, label)]
-               omoves = []
         for move in range(1, N_MOVES):
             if valid_moves[move]:
                 label = self.get_label(s, tags, move, 0, labels, heads)
@@ -455,7 +454,7 @@ cdef class TransitionSystem:
         return omoves
 
     cdef int break_tie(self, State* s, size_t* labels, size_t* heads,
-                       size_t* tags, bint* valid_moves) except -1:
+                       size_t* tags, bint* valid_moves, bint use_grammar) except -1:
         if valid_moves[LOWER]:
             return LOWER
         if heads[s.top] == s.i and valid_moves[LEFT]:
@@ -465,7 +464,7 @@ cdef class TransitionSystem:
         r_freq = self.grammar[tags[s.top]][sib_pos][tags[s.i]]
         if heads[s.i] == s.top:
             return RIGHT
-        elif self.allow_reattach and r_freq > 1000:
+        elif self.allow_reattach and use_grammar and r_freq > 1000:
             order = (REDUCE, RIGHT, SHIFT, LEFT)
         else:
             order = (REDUCE, SHIFT, RIGHT, LEFT)
