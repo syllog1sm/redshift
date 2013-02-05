@@ -1,0 +1,467 @@
+
+\documentclass[11pt,letterpaper]{article}
+\usepackage{acl2013}
+\usepackage{times}
+\usepackage{latexsym}
+\usepackage{xspace}
+\usepackage{natbib}
+\usepackage{tikz-dependency}
+
+
+\setlength\titlebox{6.5cm}    % Expanding the titlebox
+
+\newcommand{\baseacc}{00.00\xspace}
+\newcommand{\sysacc}{00.00\xspace}
+\newcommand{\sysimprove}{00.00\xspace}
+\newcommand{\las}{\textsc{las}\xspace}
+\newcommand{\uas}{\textsc{uas}\xspace}
+\newcommand{\pp}{\textsc{pp}\xspace}
+\newcommand{\pos}{\textsc{pos}\xspace}
+\newcommand{\wsj}{\textsc{wsj}\xspace}
+
+\newcommand{\stacktop}{S$_0$\xspace}
+\newcommand{\buffone}{N$_0$\xspace}
+
+\title{Improving Incremental Dependency Parsing with Repair Transitions}
+
+
+\author{Author 1\\
+	    XYZ Company\\
+	    111 Anywhere Street\\
+	    Mytown, NY 10000, USA\\
+	    {\tt author1@xyz.org}
+	  \And
+	Author 2\\
+  	ABC University\\
+  	900 Main Street\\
+  	Ourcity, PQ, Canada A1A 1T2\\
+  {\tt author2@abc.ca}}
+
+\date{}
+
+\begin{document}
+\maketitle
+\begin{abstract}
+    Transition-based parsers can suffer from \emph{error propagation}: mistakes put the parser in configurations unlike any observed during training, leading to subsequent suboptimal moves.
+One solution is beam-search with global normalisation,
+which has allowed transition-based parsers to catch up to graph-based methods in
+accuracy, but has eroded much of their efficiency advantage.
+
+We instead augment a greedy parser with \emph{repair transitions} that revise
+the existing dependencies to allow it to recover from previous mistakes. We find that
+repairs improve the accuracy of an already competitive greedy parser from \baseacc to
+\sysacc \uas on English, comparable to the best beam-search accuracy
+but 100 times more efficient.
+\end{abstract}
+
+% P1
+\section{Introduction}
+
+A transition-based parser constructs a syntactic or semantic analysis by
+performing a series of moves that add edges, or push or pop
+words to or from a stack \citep{nivre:04}. Its key component
+is its \emph{guide}, a model that predicts which move to make in a given
+state. Because the guide is applied incrementally, transition-based parsers can
+operate in linear time, by maintaining limited or no ambiguity.
+
+One way of training the guide is to define a function from a gold-standard analysis
+to a move-sequence that reproduces it, and to use the moves as labelled examples.
+The problem with this strategy is \emph{error propagation}: each mistake puts
+the parser in a state less like its training data, making subsequent errors more likely.
+One solution is to use a globally normalised error-driven learner,
+so long as some ambiguity is maintained in a beam \citep{zhang:08}. The parser
+learns to penalise bad states during training, leading states unlike those along
+the gold path to receive low scores and be pruned from the beam.
+
+The error-propagation problem is related to \emph{garden pathing}.
+In Figure \ref{fig:whistling_tunes},
+the parser has erroneously attached \emph{tunes} as the object of \emph{whisting}.
+It is easy to see what features could lead a globally normalised model to penalise
+the subsequent states, but the mistake is difficult to \emph{prevent},
+because the decision looks locally sound.
+
+In this paper, we describe a solution to this problem suitable for entirely greedy
+parsing. Instead
+of maintaining ambiguity, we introduce \emph{repair transitions} that can
+transform an incorrect analysis to one that a subsequent state has made
+more likely. Our approach is built on the \citet{goldberg:12} method of training
+from sub-optimal states explicitly, which we adapt to iteratively train a 
+logistic regression model.
+
+We first constructed a baseline greedy parser, using the features described by
+\citet{zhang:11}. We then introduce training examples
+from sub-optimal states to reduce error propagation, and add novel
+features to compensate for the lack of a beam. These measures allowed us to match the
+current state-of-the-art in greedy dependency parsing. We found that
+repair transitions improved the parser's accuracy by \sysimprove to \sysacc, 
+comparable to the current state-of-the-art but with advantageous time complexity.
+
+% P2
+% 2-col Dependency parse graphic
+% Col 1
+\section{Transition-based Dependency Parsing}
+
+% Col 2
+\subsection{Dynamic Oracle}
+
+\begin{figure}
+\begin{dependency}[theme=simple]
+
+\tikzstyle{t}=[text=green,ultra thick,font=\bfseries\itshape]
+\tikzstyle{f}=[text=red,ultra thick,font=\bfseries\itshape]
+\tikzstyle{m}=[font=\bfseries\itshape]
+
+\begin{deptext}[column sep=.1cm, row sep=.1ex]
+ The \&   \& man    \&      \& whisting \&    \& tunes \&    \& pianos \& \\
+|[m]|S \& |[m]|L \& |[m]|S \& |[m]|R \& |[f]|R \& \\
+    1   \& 2 \& 3      \& 4    \& 5         \& 6 \&   7    \& 8 \&    9    \& 10 \\
+\end{deptext}
+
+\depedge{3}{1}{2}
+\depedge{3}{5}{4}
+\depedge[red, ultra thick]{5}{7}{5}
+\deproot[edge height=0.7cm, ultra thick]{9}{}
+\wordgroup{1}{3}{3}{}
+\wordgroup{1}{5}{5}{}
+\wordgroup{1}{7}{7}{}
+\end{dependency}
+\caption{
+An example of the error propagation problem.
+The correct attachment of \emph{pianos} to \emph{tunes} may be
+prevented by the incorrect attachment of \emph{tunes} to \emph{whistling},
+especially if the parser has not been trained on suboptimal states.
+Words on the stack are circled and the transition-history is shown, with arcs
+labelled by the move that introduced them. The first word of the buffer is marked
+with an arrow. Incorrect transitions and arcs are highlghted in red.
+\label{fig:whistling_tunes}}
+\end{figure}
+
+
+\clearpage
+
+% P3&4
+\section{Repair Transitions}
+
+We extend the arc-eager transition system by introducing left- and right-arc
+transitions that also change dependencies to or from the top word on the
+stack. The new transitions are motivated by English constructions that are likely
+to lead an incremental parser to make a mistake that is only revealed after a number
+of subsequent moves. We restricted our attention to repairs motivated by English
+constructions for the present study, as there are a large number of potential
+repair operations that could be explored. Constructing a set of language-independent
+repair moves would be an interesting topic for future research.
+
+Our repairs are performed jointly with a standard right- or-left arc, which introduces
+a new dependency with \buffone.
+We could instead decouple these processes, so that the repair is its own
+discrete operation. However, the repairs are all motivated by states in which
+\buffone reveals an error in the parse produced so far, which suggests
+that jointly learning the two moves will be advantageous. The other problem with
+discrete repair transitions is that they may introduce cycles, where two
+repair moves continually flip a particular dependency.
+
+\subsection{Left Reattach}
+
+The Left Clobber transition (L$_c$) is a left-arc that replaces a dependency between
+\stacktop and its head. Recall that in the arc-eager transition system, words
+pushed to the stack by the right-arc transition will be the child of the word
+immediately beneath them on the stack, while words pushed onto the stack by the
+shift transition acquire their heads from left-arcs.
+
+Figure \ref{fig:saw_fall} shows an example of the Left Clobber transition. The
+left-arc in Move 9 would be blocked in the arc-eager transition system, as
+\emph{and} already has a head. We relax this constraint so that a left-arc can
+override, or \emph{clobber}, an existing head.
+
+The dynamic oracle described by \citet{goldberg:12} already proposes such transitions.
+As we describe in Section \ref{sec:results}, we find that it is better to follow
+the proposal instead of assuming that the dependency
+structure must be monotonic.
+
+\begin{figure}
+    \centering
+    \begin{dependency}[theme=simple]
+        \tikzstyle{t}=[text=green,ultra thick,font=\bfseries\itshape]
+        \tikzstyle{f}=[text=red,ultra thick,font=\bfseries\itshape]
+        \tikzstyle{m}=[font=\bfseries\itshape]
+
+        \begin{deptext}[column sep=.1cm, row sep=.1ex]
+    I \&           \& saw \&          \& Jack       \& \& and     \&           \& Jill   \&      \& fall \\
+|[m]|S \& |[m]|L \& |[m]|S   \& |[m]|S \& |[m]|L \& |[f]|R \& |[m]|R \& |[m]|D \& |[t]|L    \\
+            1 \&     2       \& 3  \&   4      \& 5          \& 6 \& 7     \& 8 \& 9 \& 10 \& 11 \& 12 \\
+    I \&           \& saw \&          \& Jack       \& \& and     \&           \& Jill   \&      \& fall \\
+        \end{deptext}
+    \depedge{3}{1}{2}
+    \depedge{7}{5}{5}
+    \depedge[red, ultra thick]{3}{7}{6}
+    \depedge{7}{9}{7}
+    \deproot[edge height=0.7cm, ultra thick]{11}{}
+    \wordgroup{1}{3}{3}{}
+    \wordgroup{1}{7}{7}{}
+
+    \depedge[edge below]{3}{1}{2}
+    \depedge[edge below]{7}{5}{6}
+    \depedge[edge below]{7}{9}{5}
+    \depedge[edge below, green, ultra thick]{11}{7}{9}
+    \wordgroup{4}{3}{3}{}
+\end{dependency}
+\caption{Before and after for the modified Left-arc transition.
+    Left-arc (L) is modified so that it can over-ride, a previous
+    right-arc pointing to \stacktop.
+\label{fig:saw_fall}}
+\end{figure}
+
+\subsection{Right Lower}
+
+\begin{figure}
+    \begin{dependency}[theme=simple]
+\tikzstyle{t}=[text=green,ultra thick,font=\bfseries\itshape]
+\tikzstyle{f}=[text=red,ultra thick,font=\bfseries\itshape]
+\tikzstyle{m}=[font=\bfseries\itshape]
+
+
+\begin{deptext}[column sep=.1cm, row sep=.1ex]
+    She \&   \& eats \&     \& pizza \&   \& with \&   \& anchovies \&    \\
+|[m]|S  \&|[m]|L  \& |[m]|S \& |[m]|R \& |[f]|D \& |[f]|R \& |[t]|R$_L$ \& \\
+    1   \& 2 \&  3   \& 4 \&   5   \& 6 \&  7   \& 8 \&     9     \\
+    She \&   \& eats \&     \& pizza \&   \& with \&   \& anchovies \&    \\
+\end{deptext}
+\depedge{3}{1}{2}
+\depedge{3}{5}{4}
+\depedge[red, ultra thick]{3}{7}{6}
+\deproot[edge height=0.7cm, ultra thick]{11}{}
+\wordgroup{1}{3}{3}{}
+\wordgroup{1}{7}{7}{}
+\depedge[edge below]{3}{1}{2}
+\depedge[edge below]{3}{5}{4}
+\depedge[edge below, green, ultra thick]{5}{7}{6}
+\depedge[edge below, green, ultra thick]{7}{9}{6}
+\wordgroup{4}{3}{3}{}
+\wordgroup{4}{5}{5}{}
+\wordgroup{4}{7}{7}{}
+\wordgroup{4}{9}{9}{}
+\end{dependency}
+\caption{Before and after for the Right Lower (R$_L$) transition,
+         Move 6.
+    The repair allows the parser to recover
+    from the erroneous Moves 5 and 6. The Right Insert move 
+    reattaches \stacktop from its parent to its parent's rightmost child,
+    and then adds a standard right-arc.\label{fig:with_anchovies}}
+\end{figure}
+
+\subsection{Right Raise}
+
+\begin{figure}
+\begin{dependency}[theme=simple]
+\tikzstyle{t}=[text=green,ultra thick,font=\bfseries\itshape]
+\tikzstyle{f}=[text=red,ultra thick,font=\bfseries\itshape]
+\tikzstyle{m}=[font=\bfseries\itshape]
+
+\begin{deptext}[column sep=.1cm, row sep=.1ex]
+    He \&   \& eats \&     \& pizza  \&        \& with  \&       \& a \& \& fork \& \\
+|[m]|S \& |[m]|L \& |[m]|S \& |[m]|R \& |[f]|R \& |[m]|S \& |[m]|L \& |[t]|R$_R$ \& \\
+1      \& 2 \&  3   \& 4   \&   5    \& 6      \&  7    \& 8     \&     9 \& 10 \& 11 \\
+He \&   \& eats \&     \& pizza  \&        \& with  \&       \& a \& \& fork \& \\
+\end{deptext}
+\depedge{3}{1}{2}
+\depedge{3}{5}{4}
+\depedge[red, ultra thick]{5}{7}{5}
+\depedge{11}{9}{7}
+\deproot[edge height=0.7cm, ultra thick]{11}{}
+\wordgroup{4}{3}{3}{}
+\wordgroup{4}{7}{7}{}
+\wordgroup{4}{11}{11}{}
+\depedge[edge below]{3}{1}{2}
+\depedge[edge below]{3}{5}{4}
+\depedge[edge below]{11}{9}{7}
+\depedge[edge below, green, ultra thick]{7}{11}{8}
+\depedge[edge below, green, ultra thick]{3}{7}{8}
+\wordgroup{1}{3}{3}{}
+\wordgroup{1}{5}{5}{}
+\wordgroup{1}{7}{7}{}
+\end{dependency}
+\caption{Before and after for the Right Raise (R$_R$) transition,
+         Move 8. The repair allows the parser to recover from the erroneous right-arc
+         at Move 5. Right Raise replaces the dependency between \stacktop and its head,
+         moving it upwards to attach to the head of its head, and then creates 
+         a standard right-arc.
+     \label{fig:with_fork}}
+
+\subsection{Left Invert}
+
+\end{figure}
+
+
+\begin{figure}
+    \small
+    \begin{dependency}[theme=simple]
+    \tikzstyle{t}=[text=green,ultra thick,font=\bfseries\itshape]
+    \tikzstyle{f}=[text=red,ultra thick,font=\bfseries\itshape]
+    \tikzstyle{m}=[font=\bfseries\itshape]
+
+
+        \begin{deptext}[column sep=.07cm, row sep=.1ex]
+    Prices \&        \& inflated \&   \& from \&  \& speculation \&   \& crash \& \\
+|[m]|S     \& |[f]|L \& |[m]|S    \& |[m]|S \& |[m]|R  \& |[m]|D    \& |[m]|D\& |[t]|I$_L$   \\
+    1      \& 2 \&    3     \& 4 \& 5  \& 6\&  7          \& 8 \& 9 \& 10 \& \\
+    Prices \&   \& inflated \&   \& from \&  \& speculation \&   \& crash \&  \\
+\end{deptext}
+
+\depedge[red, ultra thick]{3}{1}{2}
+\depedge{3}{5}{4}
+\depedge{5}{7}{6}
+\deproot[edge height=0.7cm, ultra thick]{9}{}
+\wordgroup{1}{3}{3}{}
+
+\depedge[edge below]{3}{5}{4}
+\depedge[edge below]{5}{7}{6}
+\depedge[edge below, green, ultra thick]{1}{3}{8}
+\depedge[edge below, green, ultra thick]{9}{1}{8}
+
+\end{dependency}
+\caption{Before and after for the Left Invert transition ($L_I$), Move 8.
+         The repair allows the parser to recover from the mistake at Move 2.
+         Invert switches the dependency between \stacktop and its left-most child,
+         so that the child becomes the head. This makes the child available for
+         a left-arc from \buffone, and pops \stacktop from the stack.\label{fig:prices_crash}}
+\end{figure}
+\clearpage
+
+% P5
+\section{Experiments}
+
+\subsection{Parsing Model}
+
+In order to test repair transitions, we first implemented a baseline greedy
+deterministic parser.
+We followed \citet{zhang:11} in using arc-eager transitions, with joint
+prediction of arc labels for the left and right transitions.
+However, we use a logistic
+regression classifier, where \citet{zhang:11} and \citet{goldberg:12} use globally
+normalised averaged perceptron models. We use the logistic regression
+implementation in the
+LibLinear toolkit\footnote{http://www.csie.ntu.edu.tw/\~cjlin/liblinear/}.
+Features that occurred 5 or fewer times
+were pruned before training, and L1-regularisation with a penalty of 1.0 was
+used during training. Experiments on the development data showed that accuracies
+were not significantly higher when the regularisation penalty was tuned
+specifically for each model.
+
+We use the extended feature set from \citet{zhang:11} in our experiments, which
+is also the feature set used by \citet{goldberg:12}. However, this feature set
+lacked features we expected would be needed to learn our repair moves, so we
+experimented with additional features, and found that they substantially improved
+the performance of the baseline model as well.
+
+After some analysis, we determined that a greedy parser greatly benefits from
+features that may not be required for beam-search parsing. 
+Figure \ref{fig:pp_attach} shows the state of a parser before
+it makes a \pp attachment decision, a common source parser error. Although
+feature engineering was the
+main contribution of \citet{zhang:11}, they lack a feature that pairs the verb
+\emph{put} with the preposition \emph{on} at this state. Instead, their parser will
+score the incorrect transition highly, but subsequent states along that path should
+later score poorly and be pruned from the beam.
+
+Table \ref{tab:features} shows our additional features. 
+\begin{table}
+    \small
+    
+    \centering
+    (S1w), (S1p), (S1w, S1p),\\
+    (S1w, N0w), (S1w, N0p), (S1p, N0p),\\
+    (S1w, S0w, N0w), (S1p, S0p, N0p), (S1p, S0p, N0p),\\
+    (S2w, N0w),\\
+    (S2w, N1w),\\
+    (S2p, N0p, N1w), (S2p, N0w, N1w), (S2w, N0p, N1p), \\
+    (S3w, N0w), \\
+    (S2w, N1w),\\ 
+    (S3p, S2p, N0w),\\
+    (dist, S1w, N1w),\\
+    (dist, S1p, N0p, N1p)
+\caption{Additional features. S=Stack, N=buffer. w=Word, p=\pos. Dist=Distance
+         between S0 and N0. TODO: Prettify this.}
+\end{table}
+
+\begin{table}
+    \centering
+    \begin{tabular}{l|rr}
+        \hline 
+        Feature Set & \las  & \uas  \\
+        \hline \hline
+        Z\&N 11  & 88.20 & 89.54 \\
++Additional      & 89.10 & 90.40 \\
+    \hline
+    \end{tabular}
+    \caption{Development set accuracies for our parser trained
+             with the original oracle, which is restricted
+             to states along the path to the gold derivation.
+             Our additional features improve accuracy, while label
+         features hinder performance due to error propagation.\label{tab:feats}}
+\end{table}
+
+\subsection{Iterative Training}
+
+\subsection{Data and Evaluation}
+\clearpage
+% P6
+
+% P7
+\section{Results}
+\label{sec:results}
+
+\begin{table}
+    \small
+    \centering
+    \begin{tabular}{l|rrrrrr}
+        \hline 
+        Transition         & 0      & 1     & 2       & 3     & 4   & 5 \\
+        \hline \hline
+        Arc-eager          & 90.38  & 89.99 & 90.37 & 90.51 & 90.95 & 91.08\\
+        +Left-Reattach     & 00.00  & 00.00 & 00.00 & 90.85 & 00.00 & \\
+        +Right-Lower       & 00.00  & 00.00 & 00.00 & 00.00 & 00.00 & \\
+        +Right-Raise       & 00.00  & 00.00 & 00.00 & 00.00 & 00.00 & \\
+        +Left-Invert       & 00.00  & 00.00 & 00.00 & 00.00 & 00.00 & \\   
+        \hline
+    \end{tabular}
+    \caption{Effect of each repair transition on development-set \uas at 
+             each training iteration.\label{tab:feats}}
+\end{table}
+
+
+\begin{table}
+    \centering
+    \small
+    \begin{tabular}{l|r|rr|rr}
+        \hline 
+System  &          & \multicolumn{2}{c|}{Penn2Malt} & \multicolumn{2}{c}{Stanford} \\
+                           &          & \las  & \uas  & \las & \uas \\
+        \hline \hline
+K\&C 10  & $O(n^3)$ & ---   & 93.00 & ---  & --- \\
+Z\&N 11  & $O(nk)$  & 91.8  & 92.9  & 91.9 & 93.5\\
+G\&N 12  & $O(n)$   & ---   & ---   & 88.72 & 90.96 \\
+        \hline
+Baseline & $O(n)$   &   &  &  &  \\
++Iter    & $O(n)$   &       &       &       &       \\
++Repairs & $O(n)$   &  &  &  &  \\
+    \end{tabular}
+    \caption{Comparison with state-of-the-art systems on the test set.
+             Our baseline system matches the previous best greedy parser,
+             and the repair transitions improve it substantially, in line with
+             the best overall results on the task.\label{tab:feats}}
+\end{table}
+
+
+\clearpage
+
+% P8
+\section{Related Work}
+
+\section{Conclusion}
+
+
+\bibliography{repair}
+\bibliographystyle{aclnat}
+
+
+\end{document}
