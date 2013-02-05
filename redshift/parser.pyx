@@ -481,24 +481,36 @@ cdef class TransitionSystem:
 
     cdef int get_label(self, State* s, size_t* tags, size_t move, size_t parse_label,
                        size_t* g_labels, size_t* g_heads) except -1:
-        if move == LEFT and g_heads[s.top] == s.i:
-            return g_labels[s.top]
-        elif move == RIGHT and g_heads[s.i] == s.top:
-            return g_labels[s.i]
-        elif move == LOWER and g_heads[get_r(s, s.top)] == get_r2(s, s.top):
-            return g_labels[get_r(s, s.top)]
-        elif parse_label != 0:
-            return parse_label
-        if move == RIGHT:
-            sib = get_r(s, s.top)
-            sib_pos = tags[sib] if sib != 0 else index.hashes.encode_pos('NONE')
-            return self.default_labels[tags[s.top]][sib_pos][tags[s.i]]
-        else:
+        if move == SHIFT:
             return 0
+        if move == REDUCE:
+            return 0
+        if move == LEFT:
+            if g_heads[s.top] == s.i:
+                return g_labels[s.top]
+            else:
+                return parse_label
+
+        elif move == LOWER:
+            if g_heads[get_r(s, s.top)] == get_r2(s, s.top):
+                return g_labels[get_r(s, s.top)]
+            else:
+                return 0
+        elif move == RIGHT:
+            if g_heads[s.i] == s.top:
+                return g_labels[s.i]
+            elif parse_label != 0:
+                return parse_label
+            elif move == RIGHT:
+                sib = get_r(s, s.top)
+                sib_pos = tags[sib] if sib != 0 else index.hashes.encode_pos('NONE')
+                return self.default_labels[tags[s.top]][sib_pos][tags[s.i]]
+            else:
+                return 0
 
     cdef bint s_cost(self, State *s, size_t* g_heads):
         cdef size_t i, stack_i
-        if has_child_in_stack(s, s.i, g_heads, self.allow_reattach):
+        if has_child_in_stack(s, s.i, g_heads):
             return False
         if has_head_in_stack(s, s.i, g_heads):
             return False
@@ -518,7 +530,7 @@ cdef class TransitionSystem:
             return True
         if has_head_in_buffer(s, s.i, g_heads) and not self.allow_reattach:
             return False
-        if has_child_in_stack(s, s.i, g_heads, self.allow_reattach):
+        if has_child_in_stack(s, s.i, g_heads):
             return False
         if has_head_in_stack(s, s.i, g_heads):
             return False
@@ -556,7 +568,7 @@ cdef class TransitionSystem:
             return True
         if has_head_in_buffer(s, s.top, g_heads):
             return False
-        if has_child_in_buffer(s, s.top, 0, g_heads):
+        if has_child_in_buffer(s, s.top, g_heads):
             return False
         if self.allow_reattach and g_heads[s.top] == s.heads[s.top]:
             return False
