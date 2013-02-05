@@ -42,9 +42,9 @@ cdef int get_r2(State *s, size_t head) except -1
 cdef int get_left_edge(State *s, size_t head) except -1
 cdef int get_right_edge(State *s, size_t head) except -1
 
-cdef bint has_child_in_buffer(State *s, size_t word, size_t offset, size_t* heads)
+cdef bint has_child_in_buffer(State *s, size_t word, size_t* heads)
 cdef bint has_head_in_buffer(State *s, size_t word, size_t* heads)
-cdef bint has_child_in_stack(State *s, size_t word, size_t* heads, bint check_head)
+cdef bint has_child_in_stack(State *s, size_t word, size_t* heads)
 cdef bint has_head_in_stack(State *s, size_t word, size_t* heads)
 
 cdef State init_state(size_t n)
