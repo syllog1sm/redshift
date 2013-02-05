@@ -532,7 +532,7 @@ cdef class TransitionSystem:
         return True
 
     cdef bint d_cost(self, State *s, size_t* g_heads):
-        if has_child_in_buffer(s, s.top, 1, g_heads):
+        if has_child_in_buffer(s, s.top, 0, g_heads):
             if not self.allow_move:
                 return False
             elif s.second == 0 or s.heads[s.top] != s.second:
