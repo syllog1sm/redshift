@@ -444,7 +444,8 @@ cdef class TransitionSystem:
         else:
             use_grammar = parse_move == ERR
             o_move = self.break_tie(s, labels, heads, tags, valid_moves, use_grammar)
-            assert o_move != ERR
+            if o_move == ERR:
+                return []
             label = self.get_label(s, tags, o_move, ERR, labels, heads)
             return [(o_move, label)]
                omoves = []
