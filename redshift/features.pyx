@@ -328,6 +328,8 @@ cdef int make_predicates(bint add_extra, bint add_labels) except 0:
 
     # Extra
     stack_second = (
+        # For reattach. We need these because if we left-clobber, we need to
+        # know what will be our head
         (S1w,),
         (S1p,),
         (S1w, S1p),
@@ -370,17 +372,23 @@ cdef int make_predicates(bint add_extra, bint add_labels) except 0:
         #(S0rep, N0w),
         #(S0rew, N0p),
         # Found by accident
-        (S0w, N0lv),
-        (S0p, N0lv),
+        #(S0w, N0lv),
+        #(S0p, N0lv),
         # For new right lower
         (S0r2w, S0rw),
         (S0r2p, S0rp),
         (S0r2w, S0rp),
         (S0r2p, S0rw),
-        (S0w, S0rp, S0rew),
-        (S0r2w, S0rp, S0rew),
+        (S0w, S0rw),
+        (S0w, S0rp),
+        (S0p, S0rp),
+        (S0p, S0rw),
+        (S0p, S0rp),
         (S0p, S0r2w, S0rw),
-
+        (S0p, S0r2p, S0rp),
+        (S0p, S0rp, N0w),
+        (S0p, S0rp, N0p),
+        (S0w, S0rp, N0p),
     )
 
     feats = from_single + from_word_pairs + from_three_words + distance + valency + unigrams + third_order
