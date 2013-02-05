@@ -423,10 +423,11 @@ cdef class TransitionSystem:
             assert parse_move != ERR
             label = self.get_label(s, tags, parse_move, parse_label, labels, heads)
             return [(parse_move, label)]
-        else::
+        else:
             o_move = self.break_tie(s, tags, labels, heads, valid_moves)
-            label = self.get_label(s, tags, o_move, 0, labels, heads)
-            return [(o_move, label)]
+            if omove:
+                label = self.get_label(s, tags, o_move, 0, labels, heads)
+                return [(o_move, label)]
         # Do not train from ties
         #elif valid_moves[SHIFT] and valid_moves[REDUCE] and valid_moves[LEFT] \
         #  and valid_moves[RIGHT]:
@@ -468,6 +469,7 @@ cdef class TransitionSystem:
             if valid_moves[move]:
                 return move
         else:
+            return []
             print s.top, s.i
             print s.heads[s.top], s.heads[s.i]
             print heads[s.top], heads[s.i]
@@ -475,6 +477,7 @@ cdef class TransitionSystem:
 
     cdef int validate_moves(self, State* s, size_t* heads, bint* valid_moves) except -1:
         # Load pre-conditions that don't refer to gold heads
+        valid_moves[ERR] = 0:
         valid_moves[SHIFT] = s.i != s.n
         valid_moves[RIGHT] = s.i != s.n and s.top != 0
         valid_moves[REDUCE] = s.top != 0 and s.heads[s.top] != 0
