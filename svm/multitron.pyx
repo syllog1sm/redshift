@@ -65,9 +65,11 @@ cdef class MultitronParameters:
             except KeyError:
                 p = MulticlassParamData(self.nclasses)
                 self.W[f] = p
+            print 'upd'
             p.acc[clas]+=(self.now-p.lastUpd[clas])*p.w[clas]
             p.w[clas]+=amount
             p.lastUpd[clas]=self.now
+            print 'done' 
         
     cpdef add_r(self, list features, int clas, double amount):
         """
