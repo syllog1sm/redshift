@@ -308,12 +308,12 @@ cdef class MultitronParameters:
       # Write LibSVM compatible format
       out.write(u'solver_type L1R_LR\n')
       out.write(u'nr_class %d\n' % self.nclasses)
-      out.write(u'label %s\n' % ' '.join([self.col_to_label[i] for i in range(self.nclasses)]))
-      out.write(u'nr_feature %d\n' % len(self.W.keys()))
+      out.write(u'label %s\n' % ' '.join([str(self.labels[i]) for i in range(self.nclasses)]))
+      out.write(u'nr_feature %d\n' % max(self.W.keys()))
       out.write(u'bias -1\n')
       out.write(u'w\n')
       max_key = max(self.W.keys())
-      for f in range(max_key):
+      for f in range(1, max_key):
          if f not in self.W:
             out.write((u'0 ' * self.nclasses) + u'\n')
             continue
@@ -321,6 +321,7 @@ cdef class MultitronParameters:
          for c in xrange(self.nclasses):
             out.write(u" %s" % p.w[c])
          out.write(u"\n")
+      out.close()
 
    def load(self, in_=sys.stdin):
       cdef MulticlassParamData p
@@ -334,7 +335,8 @@ cdef class MultitronParameters:
             label_names.pop(0)
       self.set_labels([int(ln) for ln in label_names])
       for i, line in enumerate(data.strip().split('\n')):
-         pieces = line.split()
+         pieces = line.strip().split()
+         assert len(pieces) == len(label_names)
          p = MulticlassParamData(len(label_names))
          for j, w in enumerate(pieces):
             p.w[j] = float(w)

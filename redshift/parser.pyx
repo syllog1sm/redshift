@@ -156,17 +156,21 @@ cdef class Parser:
         return loc
 
     def train(self, Sentences sents, C=None, eps=None, n_iter=15):
+        self.write_cfg(self.model_dir.join('parser.cfg'))
         if self.guide.solver_type == PERCEPTRON_SOLVER:
+            index.hashes.set_feat_counting(True)
+            index.hashes.set_feat_threshold(5)
             for n in range(n_iter):
+                print "Iter #%d" % n
                 for i in range(sents.length):
-                    self.train_perceptron_one(&sents.s[i], self.n_preds, self._context,
-                                             self._hashed_feats, self._valid_classes)
+                    self.train_perceptron_one(&sents.s[i], n == 0)
+                if n == 0:
+                    index.hashes.set_feat_counting(False)
             self.guide.train()
         else:
             self.train_svm(sents, C=C, eps=eps)
 
-    cdef int train_perceptron_one(self, Sentence* sent, size_t n_feats,
-                                  size_t* context, size_t* feats, bint* valid) except -1:
+    cdef int train_perceptron_one(self, Sentence* sent, bint is_first_iter) except -1:
         cdef int move
         cdef int label
 
@@ -177,24 +181,79 @@ cdef class Parser:
         cdef State s = init_state(sent.length)
         cdef int n_instances = 0
         while not s.is_finished:
+            features.extract(self._context, self._hashed_feats, sent, &s)
             # Determine which moves are zero-cost and meet pre-conditions
-            self.moves.validate_moves(&s, g_heads, valid)
+            self.moves.validate_moves(&s, g_heads, self._valid_classes)
             # Translates the result of that into the "static oracle" move,
             # i.e. it decides which single move to take.
-            move = self.moves.break_tie(&s, g_labels, g_heads, tags, valid)
-            self.guide.add_instance(move, 1, n_feats, feats)
+            move = self.moves.break_tie(&s, g_labels, g_heads, sent.pos, self._valid_classes)
+            if not is_first_iter:
+                self.guide.add_instance(move, 1, self.n_preds, self._hashed_feats)
             if move == LEFT:
                 label = g_labels[s.top]
-                self.l_labeller.add_instance(label, 1, n_feats, feats)
+                if not is_first_iter:
+                    self.l_labeller.add_instance(label, 1, self.n_preds, self._hashed_feats)
             elif move == RIGHT:
                 label = g_labels[s.i]
-                self.r_labeller.add_instance(label, 1, n_feats, feats)
+                if not is_first_iter:
+                    self.r_labeller.add_instance(label, 1, self.n_preds, self._hashed_feats)
             else:
                 label = 0
-            features.extract(context, feats, sent, &s)
             self.moves.transition(move, label, &s)
             n_instances += 1
         return n_instances
+
+    cdef int online_train_one(self, Sentence* sent):
+        cdef:
+            int move
+            int label
+            int gold_move
+            int gold_label
+            int pred_move
+            int pred_label
+        
+        cdef size_t* g_labels = sent.parse.labels
+        cdef size_t* g_heads = sent.parse.heads
+        cdef size_t* tags = sent.pos
+
+        cdef bint* valid = self._valid_classes
+        cdef size_t* context = self._context
+        cdef size_t* feats = self._hashed_feats
+        cdef size_t n_feats = self.n_preds
+
+        cdef State s = init_state(sent.length)
+        cdef int n_instances = 0
+        while not s.is_finished:
+            features.extract(self._context, self._hashed_feats, sent, &s)
+            # Determine which moves are zero-cost and meet pre-conditions
+            self.moves.validate_moves(&s, NULL, valid)
+            pred_move = self.guide.predict_from_ints(n_feats, feats, valid)
+            self.moves.validate_moves(&s, g_heads, valid)
+
+            if valid[pred_move]:
+                gold_move = pred_move
+            else:
+                gold_move = 0
+                #TODO: Fix compile error
+                #gold_move = self.guide.add_amb_instance(valid, 1, n_feats, feats)
+            if gold_move == LEFT:
+                pred_label = self.guide.add_instance(gold_label, 1.0, n_feats, feats)
+                gold_label = g_labels[s.top]
+            elif gold_move == RIGHT:
+                gold_label = g_labels[s.i]
+                pred_label = self.guide.add_instance(gold_label, 1.0, n_feats, feats)
+            else:
+                pred_label = 0
+                gold_label = 0
+
+            if random.random() > 0.1:
+                move = pred_move
+                label = pred_label
+            else:
+                move = gold_move
+                label = gold_label
+            
+            self.moves.transition(move, label, &s)
 
     def train_svm(self, Sentences sents, C=None, eps=None):
         cdef:
@@ -208,7 +267,6 @@ cdef class Parser:
             self.guide.eps = eps
         # Build the instances without sending them to the learner, so that we
         # can use a frequency threshold on the features.
-        self.write_cfg(self.model_dir.join('parser.cfg'))
         index.hashes.set_feat_counting(True)
         index.hashes.set_feat_threshold(self.feat_thresh)
         cdef int n_instances = 0

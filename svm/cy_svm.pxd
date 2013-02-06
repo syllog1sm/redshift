@@ -87,8 +87,11 @@ cdef class Perceptron(Model):
 
     cdef object pyize_feats(self, int n, size_t* feats)
     cdef int add_instance(self, int label, double weight, int n_feats, size_t* feats) except -1
+    cdef int add_amb_instance(self, bint* valid_labels, double w, int n, size_t* feats) except -1
     cdef int predict_from_ints(self, int n_feats, size_t* feats, bint* valid_classes) except -1
     cdef int predict_single(self, int n, size_t* feat_array) except -1
+    cdef float n_corr
+    cdef float total
 
 
 cdef class LibLinear(Model):

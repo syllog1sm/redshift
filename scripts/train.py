@@ -38,29 +38,22 @@ def main(train_loc, model_loc, moves_loc=None, solver_alg=6, c=1.0,
         if not moves_loc.exists():
             print "Could not find moves; assuming none"
             moves_loc = None
-    yield "Initialising parser"
     parser = redshift.parser.Parser(model_loc, clean=True,
                                     solver_type=solver_alg, C=c, add_extra=not no_extra_feats,
                                     label_set=label_set, feat_thresh=feat_thresh,
                                     allow_reattach=allow_reattach, allow_move=allow_move,
                                     grammar_loc=grammar_loc)
-    yield "Reading training"
     if moves_loc is not None:
         moves = moves_loc.open().read().strip()
     else:
         moves = None
     train = redshift.io_parse.read_conll(train_loc.open().read(), moves=moves)
     parser.train(train)
+    print 'Train accuracy:'
+    to_parse = redshift.io_parse.read_conll(train_loc.open().read(), moves=moves)
+    print parser.add_parses(to_parse, gold=train)
     parser.save()
 
 
-args = ['train_loc', 'model_loc', 'moves_loc', 'solver_type', 'c']
 if __name__ == "__main__":
-    env_args = [os.environ.get(a) for a in args]
-    if len(sys.argv) == 1 and all(env_args):
-        
-        for line in plac.call(main, env_args):
-            print line
-    else:
-        for line in plac.call(main):
-            print line
+    plac.call(main)

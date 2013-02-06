@@ -188,12 +188,15 @@ cdef class Perceptron(Model):
         self.C = C
         self.eps = eps
         self.solver_type = solver_type
+        self.n_corr = 0.0
+        self.total = 0.0
 
     cdef object pyize_feats(self, int n, size_t* feats):
         cdef size_t i
         py_feats = []
         for i in range(n):
-            py_feats.append(feats[i])
+            if feats[i] != 0:
+                py_feats.append(feats[i])
         return py_feats
 
     def begin_adding_instances(self, n_instances):
@@ -205,14 +208,35 @@ cdef class Perceptron(Model):
         """
         label = self.model.label_to_i[label]
         py_feats = self.pyize_feats(n, feats)
-        self.model.tick()
-        pred = self.model.predict_best_class(py_feats)
+        pred = self.model.update(label, py_feats)
+        self.n_corr += label == pred
+        self.total += 1
+        return pred
 
-        if pred != label:
+    cdef int add_amb_instance(self, bint* valid_labels, double w, int n, size_t* feats) except -1:
+        py_feats = self.pyize_feats(n, feats)
+        self.model.tick()
+        scores = self.model.get_scores(py_feats)
+        best_valid = 0
+        best_score = 0
+        max_score = 0
+        pred = 0
+        for i, score in scores.items():
+            label = self.model.labels[i]
+            if valid_labels[label] and (best_score == 0 or score > best_score):
+                best_valid = label
+                best_score = score
+            if max_score == 0 or score > max_score:
+                max_score = score
+                pred = label
+        if pred != best_valid:
             self.model.add(py_feats, pred, -1.0)
-            self.model.add(py_feats, label, 1.0)
+            self.model.add(py_feats, best_valid, 1.0)
+        return int(best_valid)
+        
 
     def train(self):
+        print self.n_corr/self.total
         self.model.finalize()
 
     cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1:
