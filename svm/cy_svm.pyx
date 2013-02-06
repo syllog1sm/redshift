@@ -37,7 +37,7 @@ cdef class Problem:
             self._from_instances(instances)
         
 
-    cdef add(self, double label, double weight, feature_node* feat_seq):
+    cdef add(self, int label, double weight, feature_node* feat_seq):
         cdef size_t i = 0
         while feat_seq[i].index != -1:
             assert feat_seq[i].index < 100000000
@@ -97,7 +97,7 @@ cdef class Problem:
         
         for line in lines:
             pieces = line.split()
-            label = float(pieces.pop(0))
+            label = int(pieces.pop(0))
             feats = []
             for feat_str in pieces:
                 index, value = feat_str.split(':')
@@ -158,6 +158,28 @@ TRAIN_IN_PROCESS = True
 
 
 cdef class Model:
+    """Base class for learners"""
+    cdef int add_instance(self, int label, double weight, int n, size_t* feat_indices) except -1:
+        return -1
+
+    cdef int predict_from_ints(self, int n, size_t* feat_array, bint* valid_classes) except -1:
+        return -1
+
+    cdef int predict_single(self, int n, size_t* feat_array) except -1:
+        return -1
+
+    def begin_adding_instances(self, n_instances):
+        raise NotImplemented
+
+    def save(self, path):
+        raise NotImplemented
+
+    def load(self, path):
+        raise NotImplemented
+
+
+
+cdef class LibLinear(Model):
     def __cinit__(self, model_loc, int solver_type=L2R_L2LOSS_SVC_DUAL, float C=1, eps=None,
             clean=False):
         self.paramptr = new parameter()
@@ -188,12 +210,11 @@ cdef class Model:
     def begin_adding_instances(self, n_instances):
         """Set up instance-by-instance data addition, so that only the
         memory-efficient C++ array needs to be in memory, not the list of
-        Python objects. This is the recommended option for non-trivial
-        training tasks."""
+        Python objects."""
         self.problem = Problem(length=n_instances)
         self.max_index = 0
 
-    cdef int add_instance(self, double label, double weight, int n, size_t* feat_indices) except -1:
+    cdef int add_instance(self, int label, double weight, int n, size_t* feat_indices) except -1:
         x = ints_to_features(n, feat_indices)
         self.problem.add(label, weight, x)
         for i in range(n):
@@ -225,30 +246,28 @@ cdef class Model:
         self.modelptr = train(<problem *>p.thisptr, self.paramptr)
         self._setup()
 
-    cdef Label predict_from_ints(self, int n, size_t* feat_array, bint* valid_classes) except -1:
-        cdef Label value
+    cdef int predict_from_ints(self, int n, size_t* feat_array, bint* valid_classes) except -1:
         cdef feature_node* features = ints_to_features(n, feat_array)
         value = self.predict_from_features(features, valid_classes)
         free(features)
         return value
 
-    cdef Label predict_single(self, int n, size_t* feat_array) except -1:
-        cdef Label value
+    cdef int predict_single(self, int n, size_t* feat_array) except -1:
         cdef feature_node* features = ints_to_features(n, feat_array)
         scores_array = <double*>malloc(self.nr_class * sizeof(double))
-        value = predict_values(self.modelptr, features, self.scores_array)
+        value = <int>predict_values(self.modelptr, features, self.scores_array)
         free(scores_array)
         free(features)
         return value
 
-    cdef Label predict_from_features(self, feature_node* features, bint* valid_classes) except -1:
+    cdef int predict_from_features(self, feature_node* features, bint* valid_classes) except -1:
         cdef size_t i
-        cdef Label value, label
+        cdef int value, label
         cdef double score
-        value = predict_values(self.modelptr, features, self.scores_array)
+        value = <int>predict_values(self.modelptr, features, self.scores_array)
         if valid_classes[<int>value]:
             return value
-        cdef Label best_label = 0
+        cdef int best_label = 0
         cdef double best_score = -1000000.0
         for i in range(self.nr_class):
             label = self.modelptr.label[i]
@@ -350,7 +369,7 @@ cdef feature_node * seq_to_features(object instance) except *:
     return x
 
 cdef feature_node* ints_to_features(int n, size_t* ints) except NULL:
-    cdef Label value
+    cdef int value
     cdef int i, j
     cdef int non_zeroes = 0
     for i in range(n):

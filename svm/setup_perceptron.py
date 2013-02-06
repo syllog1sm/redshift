@@ -28,5 +28,5 @@ ext = Extension(
 setup(
   name = 'Cython bindings for liblinear/libsvm',
   cmdclass = {'build_ext': Cython.Distutils.build_ext},
-  ext_modules = [ext, Extension("multitron", ["multitron.pyx"]), Extension("cy_percep", ["cy_percep.pyx"])]
+  ext_modules = [ext, Extension("multitron", ["multitron.pyx"])]
 )

@@ -2,12 +2,54 @@ import sys
 import math
 
 from stdlib cimport *
+cimport svm.cy_svm
+
+cdef class Perceptron(svm.cy_svm.Model):
+    def __cinit__(self, path, n_classes):
+        self.path = path
+        self.model = MultitronParameters(n_classes)
+
+    cdef object pyize_feats(self, int n, size_t* feats):
+        cdef size_t i
+        py_feats = []
+        for i in range(n):
+            py_feats.append(feats[i])
+        return py_feats
+
+    def begin_adding_instances(self, n_instances):
+        pass
+
+    cdef int add_instance(self, int label, double w, int n, size_t* feats) except -1:
+        """
+        Add instance with 1 good label. Generalise to multi-label soon.
+        """
+        py_feats = self.pyize_feats(n, feats)
+        self.model.update(label, py_feats)
+
+    def train(self):
+        self.model.finalize()
+
+    cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1:
+        cdef int class_
+        py_feats = self.pyize_feats(n, feats)
+        scores = self.model.get_scores(py_feats)
+        best_score = None
+        best_class = None
+        for class_, score in scores.items():
+            if valid_classes[class_] and (best_score is None or score > best_score):
+                best_score = score
+                best_class = class_
+        assert best_class != None
+        return best_class
+
+    def save(self, model_loc):
+        self.model.dump(model_loc.open('w'))
+
+    def load(self, model_loc):
+        self.model.save(model_loc.open('w'))
+
 
 cdef class MulticlassParamData:
-   cdef:
-      double *acc
-      double *w
-      int *lastUpd
    def __cinit__(self, int nclasses):
       cdef int i
       self.lastUpd = <int *>malloc(nclasses*sizeof(int))
@@ -24,12 +66,6 @@ cdef class MulticlassParamData:
       free(self.w)
 
 cdef class MultitronParameters:
-   cdef:
-      int nclasses
-      int now
-      dict W
-
-      double* scores # (re)used in calculating prediction
    
    def __cinit__(self, nclasses):
       self.scores = <double *>malloc(nclasses*sizeof(double))
@@ -309,20 +345,40 @@ cdef class MultitronParameters:
 
    def dump(self, out=sys.stdout):
       cdef MulticlassParamData p
-      for f in self.W.keys():
-         out.write("%s" % f)
+      # Write this header for LibSVM compatibility
+      out.write(u'solver_type L1R_LR\n')
+      out.write(u'nr_class %d\n' % self.nclasses)
+      out.write(u'label %s\n' % ' '.join([str(i) for i in range(self.nclasses)]))
+      out.write(u'nr_feature %d\n' % len(self.W.keys()))
+      out.write(u'bias -1\n')
+      out.write(u'w\n')
+      for f in sorted(self.W.keys()):
          for c in xrange(self.nclasses):
             p = self.W[f]
-            out.write(" %s" % p.w[c])
-         out.write("\n")
+            out.write(u" %s" % p.w[c])
+         out.write(u"\n")
 
-   def dump_fin(self,out=sys.stdout):
+   def load(self, in_=sys.stdin):
       cdef MulticlassParamData p
-      # write the average
-      for f in self.W.keys():
-         out.write("%s" % f)
-         for c in xrange(self.nclasses):
-            p = self.W[f]
-            out.write(" %s " % ((p.acc[c]+((self.now-p.lastUpd[c])*p.w[c])) / self.now))
-         out.write("\n")
+      seen_header = False
+      for i, line in enumerate(in_):
+          if not seen_header:
+              if line == 'w\n':
+                  seen_header = True
+              continue
+          pieces = line.split()
+          p = MulticlassParamData(self.nclasses)
+          for i, w in enumerate(pieces):
+              p.w[i] = float(w)
+          self.W[i] = p  
+
+#   def dump_fin(self,out=sys.stdout):
+#      cdef MulticlassParamData p
+#      # write the average
+#      for f in self.W.keys():
+#         out.write("%s" % f)
+#         for c in xrange(self.nclasses):
+#            p = self.W[f]
+#            out.write(" %s " % ((p.acc[c]+((self.now-p.lastUpd[c])*p.w[c])) / self.now))
+#         out.write("\n")
 

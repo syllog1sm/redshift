@@ -1,58 +1,4 @@
 from libc.stdint cimport uint32_t
-from libcpp.utility cimport pair
-from libcpp.vector cimport vector
-
-
-ctypedef double Label
-
-cdef extern from "sparsehash/dense_hash_map" namespace "google":
-    cdef cppclass dense_hash_map[K, D]:
-        K& key_type
-        D& data_type
-        pair[K, D]& value_type
-        size_t size_type
-        cppclass iterator:
-            pair[K, D]& operator*() nogil
-            iterator operator++() nogil
-            iterator operator--() nogil
-            bint operator==(iterator) nogil
-            bint operator!=(iterator) nogil
-        iterator begin()
-        iterator end()
-        size_t size()
-        size_t max_size()
-        bint empty()
-        size_t bucket_count()
-        size_t bucket_size(size_t i)
-        size_t bucket(K& key)
-        double max_load_factor()
-        void max_load_vactor(double new_grow)
-        double min_load_factor()
-        double min_load_factor(double new_grow)
-        void set_resizing_parameters(double shrink, double grow)
-        void resize(size_t n)
-        void rehash(size_t n)
-        dense_hash_map()
-        dense_hash_map(size_t n)
-
-
-        void swap(dense_hash_map&)
-        pair[iterator, bint] insert(pair[K, D]) nogil
-        void set_empty_key(K&)
-        void set_deleted_key(K& key)
-        void clear_deleted_key()
-        void erase(iterator pos)
-        size_t erase(K& k)
-        void erase(iterator first, iterator last)
-        void clear()
-        void clear_no_resize()
-        pair[iterator, iterator] equal_range(K& k)
-        D& operator[](K&) nogil
-
-
-
-cdef extern from *:
-    ctypedef void* const_void "const void*"
 
 
 cdef extern from "linear.h":
@@ -108,7 +54,7 @@ cdef class Problem:
     cdef int i
     cdef int max_instances
 
-    cdef add(self, Label, double, feature_node*)
+    cdef add(self, int, double, feature_node*)
     cdef finish(self, unsigned long long, unsigned int)
     cpdef save(self, object)
     cdef void _malloc(self, int)
@@ -116,26 +62,38 @@ cdef class Problem:
     cdef void _from_path(self, object)
 
 cdef class Model:
+    cdef int nr_class
+    cdef int nr_feature
+    cdef double *scores_array
+    cdef int max_index
+    cdef object path
+    cdef bint is_trained
+
+    cdef int add_instance(self, int label, double weight, int n, size_t* feats) except -1
+    cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1
+    cdef int predict_single(self, int n, size_t* feats) except -1
+    
+    # Python interface expected
+    #def begin_adding_instances(self, int n_instances)
+    #def save(self, path=None)
+    #def load(self, path=None)
+    #def train(self)
+
+cdef class LibLinear(Model):
     cdef model *modelptr
     cdef parameter *paramptr
     cdef Problem problem
     # Model attributes
-    cdef int nr_class
-    cdef int nr_feature
     cdef double *w
     cdef int *label
     cdef double bias
-    cdef double *scores_array
     cdef bint is_probability_model
-    cdef int max_index
-    cdef object path
-    cdef bint is_trained
     cdef int* labels_by_score
     cdef double C
 
-    cdef int add_instance(self, Label, double weight, int n, size_t*) except -1
-    cdef double predict_from_features(self, feature_node*, bint* valid_classes) except -1
-    cdef double predict_from_ints(self, int n, size_t*, bint* valid_classes) except -1
-    cdef double predict_single(self, int n, size_t* feat_array) except -1
+    cdef int add_instance(self, int label, double weight, int n, size_t*) except -1
+    cdef int predict_from_features(self, feature_node*, bint* valid_classes) except -1
+    cdef int predict_from_ints(self, int n, size_t*, bint* valid_classes) except -1
+    cdef int predict_single(self, int n, size_t* feat_array) except -1
 
     cdef int _train(self, Problem p) except -1
