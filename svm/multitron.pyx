@@ -25,10 +25,9 @@ cdef class MultitronParameters:
       self.scores = <double *>malloc(nclasses*sizeof(double))
 
    cpdef set_labels(self, labels):
+      assert len(labels) == self.nclasses
       self.labels = list(labels)
       self.label_to_i = dict([(label, i) for (i, label) in enumerate(labels)])
-      free(self.scores)
-      self.scores = <double *>malloc(self.nclasses*sizeof(double))
 
    cpdef getW(self, clas): 
       d={}
@@ -59,17 +58,17 @@ cdef class MultitronParameters:
 
    cpdef add(self, list features, int clas, double amount):
       cdef MulticlassParamData p
+      assert clas <= self.nclasses
       for f in features:
          try:
             p = self.W[f]
          except KeyError:
             p = MulticlassParamData(self.nclasses)
             self.W[f] = p
-
          p.acc[clas]+=(self.now-p.lastUpd[clas])*p.w[clas]
          p.w[clas]+=amount
          p.lastUpd[clas]=self.now
-
+      
    cpdef add_r(self, list features, int clas, double amount):
       """
       like "add", but with real values features: 
