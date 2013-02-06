@@ -68,6 +68,9 @@ cdef class Model:
     cdef int max_index
     cdef object path
     cdef bint is_trained
+    cdef double C
+    cdef double eps
+    cdef int solver_type
 
     cdef int add_instance(self, int label, double weight, int n, size_t* feats) except -1
     cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1
@@ -98,7 +101,6 @@ cdef class LibLinear(Model):
     cdef double bias
     cdef bint is_probability_model
     cdef int* labels_by_score
-    cdef double C
 
     cdef int add_instance(self, int label, double weight, int n, size_t*) except -1
     cdef int predict_from_features(self, feature_node*, bint* valid_classes) except -1

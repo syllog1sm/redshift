@@ -179,9 +179,14 @@ cdef class Model:
 
 cdef class Perceptron(Model):
     def __cinit__(self, n_classes, model_loc, int solver_type=14, float C=1,
-                  eps=None, clean=False):
+                  float eps=0.01, clean=False):
         self.path = model_loc
         self.model = svm.multitron.MultitronParameters(n_classes)
+        # C is the smoothing parameter for LibLinear, and eps is the tolerance
+        # If we need these hyper-parameters in perceptron sometime, here they are
+        self.C = C
+        self.eps = eps
+        self.solver_type = solver_type
 
     cdef object pyize_feats(self, int n, size_t* feats):
         cdef size_t i
@@ -198,7 +203,11 @@ cdef class Perceptron(Model):
         Add instance with 1 good label. Generalise to multi-label soon.
         """
         py_feats = self.pyize_feats(n, feats)
-        self.model.update(label, py_feats)
+        self.model.tick()
+        pred = self.model.predict_best_class(py_feats)
+        if pred != label:
+            self.model.add(py_feats, pred, -1.0)
+            self.model.add(py_feats, label, 1.0)
 
     def train(self):
         self.model.finalize()
@@ -232,7 +241,7 @@ cdef class Perceptron(Model):
 
 cdef class LibLinear(Model):
     def __cinit__(self, n_classes, model_loc, int solver_type=L2R_L2LOSS_SVC_DUAL,
-                  float C=1, eps=None, clean=False):
+                  float C=1, float eps=0.01, clean=False):
         self.paramptr = new parameter()
 
         self.solver_type = solver_type

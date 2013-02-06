@@ -22,6 +22,8 @@ cdef class MultitronParameters:
    
    def __cinit__(self, nclasses):
       self.scores = <double *>malloc(nclasses*sizeof(double))
+      for i in range(nclasses):
+          self.scores[i] = 0
 
    cpdef getW(self, clas): 
       d={}
@@ -336,8 +338,6 @@ cdef class MultitronParameters:
          for j, w in enumerate(pieces):
             p.w[label_map[j]] = float(w)
          self.W[i + 1] = p  
-      p = self.W[20]
-      p = self.W[20000]
 
 #   def dump_fin(self,out=sys.stdout):
 #      cdef MulticlassParamData p

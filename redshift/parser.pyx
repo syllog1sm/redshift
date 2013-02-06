@@ -133,7 +133,7 @@ cdef class Parser:
         r_lab_loc = self.model_dir.join('right_label_model')
         n_labels = len(io_parse.LABEL_STRS)
         if solver_type == PERCEPTRON_SOLVER:
-            self.guide = Perceptron(N_MOVES - 1, guide_loc, C=C, eps=eps)
+            self.guide = Perceptron(N_MOVES - 1, guide_loc)
             self.l_labeller = Perceptron(n_labels, l_lab_loc)
             self.r_labeller = Perceptron(n_labels, r_lab_loc)
         else:
@@ -155,7 +155,48 @@ cdef class Parser:
         sh.git.log(n=1, _out=loc.join('version').open('wb'), _bg=True) 
         return loc
 
-    def train(self, Sentences sents, C=None, eps=None):
+    def train(self, Sentences sents, C=None, eps=None, n_iter=15):
+        if self.guide.solver_type == PERCEPTRON_SOLVER:
+            for n in range(n_iter):
+                for i in range(sents.length):
+                    self.train_perceptron_one(&sents.s[i], self.n_preds, self._context,
+                                             self._hashed_feats, self._valid_classes)
+            self.guide.train()
+        else:
+            self.train_svm(sents, C=C, eps=eps)
+
+    cdef int train_perceptron_one(self, Sentence* sent, size_t n_feats,
+                                  size_t* context, size_t* feats, bint* valid) except -1:
+        cdef int move
+        cdef int label
+
+        cdef size_t* g_labels = sent.parse.labels
+        cdef size_t* g_heads = sent.parse.heads
+        cdef size_t* tags = sent.pos
+
+        cdef State s = init_state(sent.length)
+        cdef int n_instances = 0
+        while not s.is_finished:
+            # Determine which moves are zero-cost and meet pre-conditions
+            self.moves.validate_moves(&s, g_heads, valid)
+            # Translates the result of that into the "static oracle" move,
+            # i.e. it decides which single move to take.
+            move = self.moves.break_tie(&s, g_labels, g_heads, tags, valid)
+            self.guide.add_instance(move, 1, n_feats, feats)
+            if move == LEFT:
+                label = g_labels[s.top]
+                self.l_labeller.add_instance(label, 1, n_feats, feats)
+            elif move == RIGHT:
+                label = g_labels[s.i]
+                self.r_labeller.add_instance(label, 1, n_feats, feats)
+            else:
+                label = 0
+            features.extract(context, feats, sent, &s)
+            self.moves.transition(move, label, &s)
+            n_instances += 1
+        return n_instances
+
+    def train_svm(self, Sentences sents, C=None, eps=None):
         cdef:
             int i
             Sentence* sent
@@ -212,7 +253,10 @@ cdef class Parser:
                            size_t n_feats, size_t* feats, bint only_count) except -1:
         n_moves = len(moves)
         for move, label in moves:
-            freq = self.inst_counts.add(move, sent_id, history, not only_count)
+            if self.guide.solver_type != PERCEPTRON_SOLVER:
+                freq = self.inst_counts.add(move, sent_id, history, not only_count)
+            else:
+                freq = 1
             assert move != ERR
             if freq > 0 and not only_count:
                 assert move != ERR
