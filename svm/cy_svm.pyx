@@ -177,11 +177,62 @@ cdef class Model:
     def load(self, path):
         raise NotImplemented
 
+cdef class Perceptron(Model):
+    def __cinit__(self, n_classes, model_loc, int solver_type=14, float C=1,
+                  eps=None, clean=False):
+        self.path = model_loc
+        self.model = svm.multitron.MultitronParameters(n_classes)
+
+    cdef object pyize_feats(self, int n, size_t* feats):
+        cdef size_t i
+        py_feats = []
+        for i in range(n):
+            py_feats.append(feats[i])
+        return py_feats
+
+    def begin_adding_instances(self, n_instances):
+        pass
+
+    cdef int add_instance(self, int label, double w, int n, size_t* feats) except -1:
+        """
+        Add instance with 1 good label. Generalise to multi-label soon.
+        """
+        py_feats = self.pyize_feats(n, feats)
+        self.model.update(label, py_feats)
+
+    def train(self):
+        self.model.finalize()
+
+    cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1:
+        cdef int class_
+        py_feats = self.pyize_feats(n, feats)
+        scores = self.model.get_scores(py_feats)
+        best_score = None
+        best_class = None
+        for class_, score in scores.items():
+            if valid_classes[class_] and (best_score is None or score > best_score):
+                best_score = score
+                best_class = class_
+        assert best_class != None
+        return best_class
+
+    cdef int predict_single(self, int n, size_t* feats) except -1:
+        py_feats = self.pyize_feats(n, feats)
+        return self.model.predict_best_class(py_feats)
+
+    def save(self, model_loc):
+        self.model.dump(model_loc.open('w'))
+
+    def load(self, model_loc):
+        self.model.load(model_loc.open())
+
+
+
 
 
 cdef class LibLinear(Model):
-    def __cinit__(self, model_loc, int solver_type=L2R_L2LOSS_SVC_DUAL, float C=1, eps=None,
-            clean=False):
+    def __cinit__(self, n_classes, model_loc, int solver_type=L2R_L2LOSS_SVC_DUAL,
+                  float C=1, eps=None, clean=False):
         self.paramptr = new parameter()
 
         self.solver_type = solver_type

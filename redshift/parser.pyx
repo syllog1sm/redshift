@@ -23,7 +23,7 @@ from io_parse import LABEL_STRS
 import index.hashes
 from index.hashes cimport InstanceCounter
 
-cimport svm.cy_svm
+from svm.cy_svm cimport Model, LibLinear, Perceptron
 
 
 cdef int CONTEXT_SIZE = features.CONTEXT_SIZE
@@ -31,6 +31,9 @@ cdef int CONTEXT_SIZE = features.CONTEXT_SIZE
 VOCAB_SIZE = 1e6
 TAG_SET_SIZE = 50
 FOLLOW_ERR_PC = 0.90
+# LibLinear has solvers 0-13
+PERCEPTRON_SOLVER = 14
+
 
 cdef enum:
     ERR
@@ -67,9 +70,9 @@ cdef lmove_to_str(move, label):
 
 cdef class Parser:
     cdef size_t n_features
-    cdef svm.cy_svm.Model guide
-    cdef svm.cy_svm.Model l_labeller
-    cdef svm.cy_svm.Model r_labeller
+    cdef Model guide
+    cdef Model l_labeller
+    cdef Model r_labeller
     cdef object model_dir
     cdef Sentence* sentence
     cdef int n_preds
@@ -125,17 +128,18 @@ cdef class Parser:
             self.load_idx(self.model_dir, self.n_preds)
         self.moves = TransitionSystem(io_parse.LABEL_STRS, allow_reattach=allow_reattach,
                                       allow_move=allow_move, grammar_loc=grammar_loc)
- 
-        self.guide = svm.cy_svm.Model(self.model_dir.join('model'),
-                                      solver_type=solver_type, C=C, eps=eps)
-        self.l_labeller = svm.cy_svm.Model(self.model_dir.join('left_label_model'),
-                                           solver_type=solver_type)
-        self.r_labeller = svm.cy_svm.Model(self.model_dir.join('right_label_model'),
-                                           solver_type=solver_type)
-        if eps is not None:
-            self.guide.eps = eps
-        if C is not None:
-            self.guide.C = C
+        guide_loc = self.model_dir.join('model')
+        l_lab_loc = self.model_dir.join('left_label_model')
+        r_lab_loc = self.model_dir.join('right_label_model')
+        n_labels = len(io_parse.LABEL_STRS)
+        if solver_type == PERCEPTRON_SOLVER:
+            self.guide = Perceptron(N_MOVES - 1, guide_loc, C=C, eps=eps)
+            self.l_labeller = Perceptron(n_labels, l_lab_loc)
+            self.r_labeller = Perceptron(n_labels, r_lab_loc)
+        else:
+            self.guide = LibLinear(N_MOVES - 1, guide_loc, C=C, eps=eps, solver_type=solver_type)
+            self.l_labeller = LibLinear(n_labels, l_lab_loc, solver_type=solver_type)
+            self.r_labeller = LibLinear(n_labels, r_lab_loc, solver_type=solver_type)
         self._context = features.init_context()
         self._hashed_feats = features.init_hashed_features()
         self._valid_classes = <bint*>malloc(N_MOVES * sizeof(bint))
@@ -151,39 +155,33 @@ cdef class Parser:
         sh.git.log(n=1, _out=loc.join('version').open('wb'), _bg=True) 
         return loc
 
-    def train(self, Sentences sents, C=None, solver_type=None, eps=None,
-              subparser=None):
+    def train(self, Sentences sents, C=None, eps=None):
         cdef:
-            int n_instances
             int i
             Sentence* sent
             State s
+
         if C is not None:
             self.guide.C = C
         if eps is not None:
             self.guide.eps = eps
-        if solver_type is not None:
-            self.guide.solver_type = solver_type
-        self.write_cfg(self.model_dir.join('parser.cfg'))
         # Build the instances without sending them to the learner, so that we
         # can use a frequency threshold on the features.
+        self.write_cfg(self.model_dir.join('parser.cfg'))
         index.hashes.set_feat_counting(True)
         index.hashes.set_feat_threshold(self.feat_thresh)
-        n_instances = 0
+        cdef int n_instances = 0
         for i in range(sents.length):
             n_instances += self.follow_moves(&sents.s[i], True, sents.strings[i][0])
-
+        index.hashes.set_feat_counting(False)
         self.guide.begin_adding_instances(n_instances)
         self.l_labeller.begin_adding_instances(n_instances)
         self.r_labeller.begin_adding_instances(n_instances)
-        index.hashes.set_feat_counting(False)
         for i in range(sents.length):
             self.follow_moves(&sents.s[i], False, sents.strings[i][0])
-
         self.guide.train()
         self.l_labeller.train()
         self.r_labeller.train()
-        self.guide.problem.save(self.model_dir.parent().join('train.svm'))
 
     cdef int follow_moves(self, Sentence* sent, bint only_count, object py_words) except -1:
         cdef size_t i = 0
@@ -199,7 +197,7 @@ cdef class Parser:
                                         self._valid_classes)
             features.extract(self._context, self._hashed_feats, sent, &s)
             self._add_instance(sent.id, s.history, o_moves,
-                                   self.n_preds, self._hashed_feats, only_count)
+                               self.n_preds, self._hashed_feats, only_count)
             n_instances += len(o_moves)
             #print py_words[s.top],
             if p_move == ERR:
@@ -215,6 +213,7 @@ cdef class Parser:
         n_moves = len(moves)
         for move, label in moves:
             freq = self.inst_counts.add(move, sent_id, history, not only_count)
+            assert move != ERR
             if freq > 0 and not only_count:
                 assert move != ERR
                 self.guide.add_instance(move, float(freq) / n_moves, n_feats, feats)
@@ -247,7 +246,6 @@ cdef class Parser:
             else:
                 features.extract(context, feats, sent, &s)
                 self.moves.validate_moves(&s, NULL, valid)
-
                 move = <size_t>self.guide.predict_from_ints(n_preds, feats, valid)
                 if move == LEFT:
                     label = <int>self.l_labeller.predict_single(n_preds, feats)
@@ -266,15 +264,14 @@ cdef class Parser:
             sent.parse.labels[i] = s.labels[i]
 
     def save(self):
-        # Save directory set up on init, so just make sure everything saves
-        self.guide.save()
-        self.l_labeller.save()
-        self.r_labeller.save()
+        self.guide.save(self.model_dir.join('model'))
+        self.l_labeller.save(self.model_dir.join('left_label_model'))
+        self.r_labeller.save(self.model_dir.join('right_label_model'))
 
     def load(self):
-        self.guide.load()
-        self.l_labeller.load()
-        self.r_labeller.load()
+        self.guide.load(self.model_dir.join('model'))
+        self.l_labeller.load(self.model_dir.join('left_label_model'))
+        self.r_labeller.load(self.model_dir.join('right_label_model'))
 
     def __dealloc__(self):
         free(self._context)
@@ -443,6 +440,10 @@ cdef class TransitionSystem:
             assert parse_move != ERR
             label = self.get_label(s, tags, parse_move, parse_label, labels, heads)
             return [(parse_move, label)]
+        if parse_move == ERR:
+            move = self.break_tie(s, labels, heads, tags, valid_moves)
+            label = self.get_label(s, tags, move, 0, labels, heads)
+            return [(move, label)]
         # If we reduce incorrectly, don't confuse the decision boundary by supplying
         # right or left
         elif valid_moves[SHIFT] and parse_move == REDUCE:

@@ -1,5 +1,5 @@
 from libc.stdint cimport uint32_t
-
+cimport svm.multitron
 
 cdef extern from "linear.h":
     cdef struct feature_node:
@@ -78,6 +78,15 @@ cdef class Model:
     #def save(self, path=None)
     #def load(self, path=None)
     #def train(self)
+
+cdef class Perceptron(Model):
+    cdef svm.multitron.MultitronParameters model
+
+    cdef object pyize_feats(self, int n, size_t* feats)
+    cdef int add_instance(self, int label, double weight, int n_feats, size_t* feats) except -1
+    cdef int predict_from_ints(self, int n_feats, size_t* feats, bint* valid_classes) except -1
+    cdef int predict_single(self, int n, size_t* feat_array) except -1
+
 
 cdef class LibLinear(Model):
     cdef model *modelptr
