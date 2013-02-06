@@ -85,7 +85,7 @@ cdef class Parser:
     cdef object label_set
     cdef int feat_thresh
 
-    def __cinit__(self, model_dir, clean=False, C=None, solver_type=None, eps=None,
+    def __cinit__(self, model_dir, clean=False, C=None, solver_type=6, eps=None,
                   add_extra=True, label_set='MALT', feat_thresh=5,
                   allow_reattach=False, allow_move=False,
                   reuse_idx=False, grammar_loc=None):
@@ -133,11 +133,11 @@ cdef class Parser:
         r_lab_loc = self.model_dir.join('right_label_model')
         n_labels = len(io_parse.LABEL_STRS)
         if solver_type == PERCEPTRON_SOLVER:
-            self.guide = Perceptron(N_MOVES - 1, guide_loc)
-            self.l_labeller = Perceptron(n_labels, l_lab_loc)
-            self.r_labeller = Perceptron(n_labels, r_lab_loc)
+            self.guide = Perceptron([1, 2, 3, 4], guide_loc)
+            self.l_labeller = Perceptron([0, 2, 1], l_lab_loc)
+            self.r_labeller = Perceptron([0, 2], r_lab_loc)
         else:
-            self.guide = LibLinear(N_MOVES - 1, guide_loc, C=C, eps=eps, solver_type=solver_type)
+            self.guide = LibLinear(N_MOVES - 1, guide_loc, C=C, solver_type=solver_type)
             self.l_labeller = LibLinear(n_labels, l_lab_loc, solver_type=solver_type)
             self.r_labeller = LibLinear(n_labels, r_lab_loc, solver_type=solver_type)
         self._context = features.init_context()

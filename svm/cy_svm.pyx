@@ -178,10 +178,11 @@ cdef class Model:
         raise NotImplemented
 
 cdef class Perceptron(Model):
-    def __cinit__(self, n_classes, model_loc, int solver_type=14, float C=1,
+    def __cinit__(self, classes, model_loc, int solver_type=14, float C=1,
                   float eps=0.01, clean=False):
         self.path = model_loc
-        self.model = svm.multitron.MultitronParameters(n_classes)
+        self.model = svm.multitron.MultitronParameters(len(classes))
+        self.model.set_labels(classes)
         # C is the smoothing parameter for LibLinear, and eps is the tolerance
         # If we need these hyper-parameters in perceptron sometime, here they are
         self.C = C
@@ -202,9 +203,11 @@ cdef class Perceptron(Model):
         """
         Add instance with 1 good label. Generalise to multi-label soon.
         """
+        label = self.model.label_to_i[label]
         py_feats = self.pyize_feats(n, feats)
         self.model.tick()
         pred = self.model.predict_best_class(py_feats)
+
         if pred != label:
             self.model.add(py_feats, pred, -1.0)
             self.model.add(py_feats, label, 1.0)
@@ -218,16 +221,17 @@ cdef class Perceptron(Model):
         scores = self.model.get_scores(py_feats)
         best_score = None
         best_class = None
-        for class_, score in scores.items():
-            if valid_classes[class_] and (best_score is None or score > best_score):
+        for i, score in scores.items():
+            label = self.model.labels[i]
+            if valid_classes[label] and (best_score is None or score > best_score):
                 best_score = score
-                best_class = class_
+                best_class = label
         assert best_class != None
         return best_class
 
     cdef int predict_single(self, int n, size_t* feats) except -1:
         py_feats = self.pyize_feats(n, feats)
-        return self.model.predict_best_class(py_feats)
+        return self.model.labels[self.model.predict_best_class(py_feats)]
 
     def save(self, model_loc):
         self.model.dump(model_loc.open('w'))
@@ -236,17 +240,13 @@ cdef class Perceptron(Model):
         self.model.load(model_loc.open())
 
 
-
-
-
 cdef class LibLinear(Model):
     def __cinit__(self, n_classes, model_loc, int solver_type=L2R_L2LOSS_SVC_DUAL,
-                  float C=1, float eps=0.01, clean=False):
+                  float C=1, float eps=-1, clean=False):
         self.paramptr = new parameter()
-
-        self.solver_type = solver_type
-        self.C = C
-        if eps is None:
+        self.paramptr.solver_type = solver_type
+        self.paramptr.C = C
+        if eps == -1:
             if solver_type in (0, 2):
                 eps = 0.01
             elif solver_type in (5, 6, 11):
@@ -255,7 +255,7 @@ cdef class LibLinear(Model):
                 eps = 0.1
             else:
                 raise StandardError
-        self.eps = eps
+        self.paramptr.eps = eps
         self.p = 0.1
         self.paramptr.nr_weight = 0
         self.path = Path(model_loc)
@@ -302,7 +302,8 @@ cdef class LibLinear(Model):
             self.is_trained = True
 
     cdef int _train(self, Problem p) except -1:
-        self.paramptr.C = self.C
+        # TODO: Where's this get set to zero?
+        #self.paramptr.C = self.C
         self.modelptr = train(<problem *>p.thisptr, self.paramptr)
         self._setup()
 

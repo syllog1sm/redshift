@@ -7,8 +7,12 @@ cdef class MultitronParameters:
     cdef int nclasses
     cdef int now
     cdef dict W
+    cdef list labels
+    cdef dict label_to_i
 
     cdef double* scores
+
+    cpdef set_labels(self, object labels)
 
     cpdef getW(self, object clas)
 

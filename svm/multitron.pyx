@@ -21,9 +21,14 @@ cdef class MulticlassParamData:
 cdef class MultitronParameters:
    
    def __cinit__(self, nclasses):
+      self.nclasses = nclasses
       self.scores = <double *>malloc(nclasses*sizeof(double))
-      for i in range(nclasses):
-          self.scores[i] = 0
+
+   cpdef set_labels(self, labels):
+      self.labels = list(labels)
+      self.label_to_i = dict([(label, i) for (i, label) in enumerate(labels)])
+      free(self.scores)
+      self.scores = <double *>malloc(self.nclasses*sizeof(double))
 
    cpdef getW(self, clas): 
       d={}
@@ -303,7 +308,7 @@ cdef class MultitronParameters:
       # Write LibSVM compatible format
       out.write(u'solver_type L1R_LR\n')
       out.write(u'nr_class %d\n' % self.nclasses)
-      out.write(u'label %s\n' % ' '.join([str(i) for i in range(self.nclasses)]))
+      out.write(u'label %s\n' % ' '.join([self.col_to_label[i] for i in range(self.nclasses)]))
       out.write(u'nr_feature %d\n' % len(self.W.keys()))
       out.write(u'bias -1\n')
       out.write(u'w\n')
@@ -327,16 +332,12 @@ cdef class MultitronParameters:
             label_names = line.strip().split()
             # Remove the word "label"
             label_names.pop(0)
-            # Map the column numbers to the labels
-            label_map = dict([(i, int(label)) for (i, label) in enumerate(label_names)])
-            n_labels = max(label_map.values())
-            assert n_labels < self.nclasses
-
+      self.set_labels([int(ln) for ln in label_names])
       for i, line in enumerate(data.strip().split('\n')):
          pieces = line.split()
-         p = MulticlassParamData(self.nclasses)
+         p = MulticlassParamData(len(label_names))
          for j, w in enumerate(pieces):
-            p.w[label_map[j]] = float(w)
+            p.w[j] = float(w)
          self.W[i + 1] = p  
 
 #   def dump_fin(self,out=sys.stdout):
