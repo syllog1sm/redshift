@@ -155,7 +155,7 @@ cdef class Parser:
         sh.git.log(n=1, _out=loc.join('version').open('wb'), _bg=True) 
         return loc
 
-    def train(self, Sentences sents, C=None, eps=None, n_iter=3):
+    def train(self, Sentences sents, C=None, eps=None, n_iter=15):
         self.write_cfg(self.model_dir.join('parser.cfg'))
         if self.guide.solver_type == PERCEPTRON_SOLVER:
             index.hashes.set_feat_counting(True)

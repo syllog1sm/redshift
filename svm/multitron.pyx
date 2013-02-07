@@ -1,84 +1,90 @@
 import sys
 import math
 
-from stdlib cimport *
-
-cdef class MulticlassParamData:
-    def __cinit__(self, int nclasses):
-        cdef int i
-        self.lastUpd = <int *>malloc(nclasses*sizeof(int))
-        self.acc     = <double *>malloc(nclasses*sizeof(double))
-        self.w       = <double *>malloc(nclasses*sizeof(double))
-        for i in range(nclasses):
-            self.lastUpd[i]=0
-            self.acc[i]=0
-            self.w[i]=0
-
-    def __dealloc__(self):
-        free(self.lastUpd)
-        free(self.acc)
-        free(self.w)
+from libc.stdlib cimport *
 
 cdef class MultitronParameters:
-    
-    def __cinit__(self, max_classes): 
+    def __cinit__(self, max_classes, max_params): 
         self.scores = <double *>malloc(max_classes * sizeof(double))
+        self.w = <double**>malloc(max_params * sizeof(double*))
+        self.acc = <double**>malloc(max_params * sizeof(double*))
+        self.lastUpd = <int**>malloc(max_params * sizeof(double*))
         self.max_classes = max_classes
+        self.max_params = max_params
+        self.n_params = 0
         self.n_classes = 0
         self.now = 0
-        self.W = {}
         self.labels = []
         self.label_to_i = {}
 
+    def __dealloc__(self):
+        free(self.scores)
+        for f in range(self.n_params):
+            free(self.w[f])
+            free(self.acc[f])
+            free(self.lastUpd[f])
+        free(self.w)
+        free(self.acc)
+        free(self.lastUpd)
+
     def lookup_label(self, label):
-        if label not in self.label_to_i:
+        if label in self.label_to_i:
+            return self.label_to_i[label]
+        else:
             self.label_to_i[label] = self.n_classes
             self.labels.append(label)
             self.n_classes += 1
+            assert self.n_classes < self.max_classes
             return self.n_classes - 1
-        else:
-            return self.label_to_i[label]
+
+    cdef int add_param(self, size_t f) except -1:
+        assert f < self.max_params
+        while f >= self.n_params:
+            self.w[self.n_params] = <double*>malloc(self.max_classes * sizeof(double))
+            self.acc[self.n_params] = <double*>malloc(self.max_classes * sizeof(double))
+            self.lastUpd[self.n_params] = <int*>malloc(self.max_classes * sizeof(int))
+            for i in range(self.max_classes):
+                self.lastUpd[self.n_params][i] = 0
+                self.acc[self.n_params][i] = 0
+                self.w[self.n_params][i] = 0
+            self.n_params += 1
 
     cdef tick(self):
         self.now = self.now + 1
 
-    cdef add(self, size_t n_feats, size_t* features, int label, double amount):
+    cdef int add(self, size_t n_feats, size_t* features, int label, double amount) except -1:
         cdef size_t i, f
-        cdef MulticlassParamData p
-        clas = self.lookup_label(label)
+        cdef size_t clas = self.lookup_label(label)
+        cdef double** acc = self.acc
+        cdef double** w = self.w
+        cdef int** lastUpd = self.lastUpd
         for i in range(n_feats):
             f = features[i]
-            try:
-                p = self.W[f]
-            except KeyError:
-                p = MulticlassParamData(self.max_classes)
-                self.W[f] = p
-            p.acc[clas] += (self.now - p.lastUpd[clas]) * p.w[clas]
-            p.w[clas] += amount
-            p.lastUpd[clas] = self.now
+            if f >= self.n_params:
+                self.add_param(f)
+            acc[f][clas] += (self.now - lastUpd[f][clas]) * w[f][clas]
+            w[f][clas] += amount
+            lastUpd[f][clas] = self.now
         
     cdef get_scores(self, size_t n_feats, size_t* features):
-        cdef MulticlassParamData p
-        cdef size_t i, f
-        cdef double w
+        cdef size_t i, f, c
+        cdef double* scores = self.scores
         for i in range(self.max_classes):
-            self.scores[i] = 0
+            scores[i] = 0
+        cdef double** w = self.w
+        cdef size_t n_classes = self.n_classes
         for i in range(n_feats):
             f = features[i]
-            try:
-                p = self.W[f]
-                for c in range(self.n_classes):
-                    self.scores[c] += p.w[c]
-            except KeyError:
-                pass
+            if f < self.n_params:
+                for c in range(n_classes):
+                    scores[c] += w[f][c]
 
     cdef predict_best_class(self, size_t n_feats, size_t* features):
         best_i = self._predict_best_class(n_feats, features)
         return self.labels[best_i]
 
     cdef int _predict_best_class(self, size_t n_feats, size_t* features):
-        cdef int i
-        cdef MulticlassParamData p
+        cdef size_t i
         self.get_scores(n_feats, features)
         cdef int best_i = 0
         cdef double best = self.scores[0]
@@ -89,36 +95,29 @@ cdef class MultitronParameters:
         return best_i
 
     def finalize(self):
-        cdef MulticlassParamData p
+        cdef size_t f, c
         # average
-        for f in self.W.keys():
+        for f in range(self.n_params):
             for c in range(self.n_classes):
-                p = self.W[f]
-                p.acc[c] += (self.now - p.lastUpd[c]) * p.w[c]
-                p.w[c] = p.acc[c] / self.now
+                self.acc[f][c] += (self.now - self.lastUpd[f][c]) * self.w[f][c]
+                self.w[f][c] = self.acc[f][c] / self.now
 
     def dump(self, out=sys.stdout):
-        cdef MulticlassParamData p
+        cdef size_t f, c
         # Write LibSVM compatible format
         out.write(u'solver_type L1R_LR\n')
         out.write(u'nr_class %d\n' % self.n_classes)
         out.write(u'label %s\n' % ' '.join(map(str, self.labels)))
-        out.write(u'nr_feature %d\n' % max(self.W.keys()))
+        out.write(u'nr_feature %d\n' % self.n_params)
         out.write(u'bias -1\n')
         out.write(u'w\n')
-        max_key = max(self.W.keys())
-        for f in range(1, max_key):
-            if f not in self.W:
-                out.write((u'0 ' * self.n_classes) + u'\n')
-                continue
-            p = self.W[f]
+        for f in range(1, self.n_params):
             for c in xrange(self.n_classes):
-                out.write(u" %s" % p.w[c])
+                out.write(u" %s" % self.w[f][c])
             out.write(u"\n")
         out.close()
 
     def load(self, in_=sys.stdin):
-        cdef MulticlassParamData p
         header, data = in_.read().split('w\n')
         for line in header.split('\n'):
             if line.startswith('label'):
@@ -130,201 +129,6 @@ cdef class MultitronParameters:
         for i, line in enumerate(data.strip().split('\n')):
             pieces = line.strip().split()
             assert len(pieces) == len(label_names)
-            p = MulticlassParamData(self.max_classes)
+            self.add_param(i + 1)
             for j, w in enumerate(pieces):
-                p.w[j] = float(w)
-            self.W[i + 1] = p  
-
-    #cpdef scalar_multiply(self, double scalar):
-    #    """
-    #    note: DOES NOT support averaging
-    #    """
-    #    cdef MulticlassParamData p
-    #    cdef int c
-    #    for p in self.W.values():
-    #        for c in xrange(self.nclasses):
-    #            p.w[c]*=scalar
-
-
-    #cdef _update(self, int goodClass, int badClass, list features):
-    #    cdef MulticlassParamData p
-    #    for f in features:
-    #        try:
-    #            p = self.W[f]
-    #        except KeyError:
-    #            p = MulticlassParamData(self.nclasses)
-    #            self.W[f] = p
-
-    #        p.acc[badClass]+=(self.now-p.lastUpd[badClass])*p.w[badClass]
-    #        p.acc[goodClass]+=(self.now-p.lastUpd[goodClass])*p.w[goodClass]
-    #        p.w[badClass]-=1.0
-    #        p.w[goodClass]+=1.0
-    #        p.lastUpd[badClass]=self.now
-    #        p.lastUpd[goodClass]=self.now
-
-    #cdef _update_r(self, int goodClass, int badClass, list features):
-    #    cdef MulticlassParamData p
-    #    for f,v in features:
-    #        try:
-    #            p = self.W[f]
-    #        except KeyError:
-    #            p = MulticlassParamData(self.nclasses)
-    #            self.W[f] = p
-
-    #        p.acc[badClass]+=(self.now-p.lastUpd[badClass])*p.w[badClass]
-    #        p.acc[goodClass]+=(self.now-p.lastUpd[goodClass])*p.w[goodClass]
-    #        p.w[badClass]-=v
-    #        p.w[goodClass]+=v
-    #        p.lastUpd[badClass]=self.now
-    #        p.lastUpd[goodClass]=self.now
-
-
-    #def update_r(self, correct_class, features):
-    #    self._tick()
-    #    prediction = self.predict_best_class_r(features)
-    #    if prediction != correct_class:
-    #        self._update_r(correct_class, prediction, features)
-    #    return prediction
-
-    #cpdef predict_best_class_r(self, list features):
-    #    scores = self.get_scores_r(features)
-    #    scores = [(s,c) for c,s in scores.iteritems()]
-    #    s = max(scores)[1]
-    #    return max(scores)[1]
-
-
-    #cpdef get_scores_r(self, features):
-    #    """
-    #    like get_scores but with real values features
-    #        each feature is a pair (f,v), where v is the value.
-    #    """
-    #    cdef MulticlassParamData p
-    #    cdef int i
-    #    cdef double w
-    #    cdef double v
-    #    for i in xrange(self.nclasses):
-    #        self.scores[i]=0
-    #    for f,v in features:
-    #        try:
-    #            p = self.W[f]
-    #            for c in xrange(self.nclasses):
-    #                if c in self.seen_labels:
-    #                    self.scores[c] += p.w[c] * v
-    #        except KeyError: pass
-    #    cdef double tot = 0
-    #    res={}
-    #    for i in xrange(self.nclasses):
-    #        res[i] = self.scores[i]
-    #    return res
-
-
-    #cpdef set(self, list features, int clas, double amount):
-    #    """
-    #    like "add", but replaces instead of adding
-    #    """
-    #    cdef MulticlassParamData p
-    #    cdef double v
-    #    cdef str f
-    #    for f in features:
-    #        try:
-    #            p = self.W[f]
-    #        except KeyError:
-    #            p = MulticlassParamData(self.nclasses)
-    #            self.W[f] = p
-
-    #        p.acc[clas]+=(self.now-p.lastUpd[clas])*p.w[clas]
-    #        p.w[clas]+=amount
-    #        p.lastUpd[clas]=self.now
-
-    #cpdef add_params(self, MultitronParameters other, double factor):
-    #    """
-    #    like "add", but with data from another MultitronParameters object.
-    #    they must both share the number of classes
-    #    add each value * factor
-    #    """
-    #    cdef MulticlassParamData p
-    #    cdef MulticlassParamData op
-    #    cdef double v
-    #    cdef str f
-    #    cdef int clas
-    #    assert(self.nclasses==other.nclasses),"incompatible number of classes in add_params"
-    #    for f,op in other.W.items():
-    #        try:
-    #            p = self.W[f]
-    #        except KeyError:
-    #            p = MulticlassParamData(self.nclasses)
-    #            self.W[f] = p
-
-    #        for clas in xrange(self.nclasses):
-    #            if op.w[clas]<0.0000001: continue
-    #            p.acc[clas]+=(self.now-p.lastUpd[clas])*p.w[clas]
-    #            #print p.w[clas], op.w[clas]
-    #            p.w[clas]+=(op.w[clas]*factor)
-    #            p.lastUpd[clas]=self.now
-
-    #cpdef do_pa_update(self, list feats, int gold_cls, double C=1.0):
-    #    cdef double go_scr
-    #    cdef double gu_scr
-    #    cdef double loss
-    #    cdef double norm
-    #    cdef double tau
-    #    cdef int prediction
-    #    cdef dict scores
-    #    self._tick()
-    #    prediction = self._predict_best_class(feats)
-    #    if prediction==gold_cls: return prediction
-    #    scores = self.get_scores(feats)
-    #    go_scr = scores[gold_cls]
-    #    gu_scr = scores[prediction]
-
-    #    loss = gu_scr - go_scr + 1
-    #    norm = len(feats)+len(feats)
-    #    tau = loss / norm
-    #    if tau>C: tau=C
-    #    self.add(feats,prediction,-tau)
-    #    self.add(feats,gold_cls,+tau)
-    #    return prediction
-
-    #cpdef pa_update(self, object gu_feats, object go_feats, int gu_cls, int go_cls,double C=1.0):
-    #    cdef double go_scr
-    #    cdef double gu_scr
-    #    cdef double loss
-    #    cdef double norm
-    #    cdef double tau
-    #    go_scr = self.get_scores(go_feats)[go_cls]
-    #    gu_scr = self.get_scores(gu_feats)[gu_cls]
-    #    loss = gu_scr - go_scr + 1
-    #    norm = len(go_feats)+len(gu_feats)
-    #    tau = loss / norm
-    #    if tau>C: tau=C
-    #    self.add(gu_feats,gu_cls,-tau)
-    #    self.add(go_feats,go_cls,+tau)
-
-    #cpdef add_r(self, list features, int clas, double amount):
-    #    """
-    #    like "add", but with real values features: 
-    #        each feature is a pair (f,v), where v is the value.
-    #    """
-    #    cdef MulticlassParamData p
-    #    cdef double v
-    #    cdef str f
-    #    for f,v in features:
-    #        try:
-    #            p = self.W[f]
-    #        except KeyError:
-    #            p = MulticlassParamData(self.nclasses)
-    #            self.W[f] = p
-
-    #        p.acc[clas]+=(self.now-p.lastUpd[clas])*p.w[clas]
-    #        p.w[clas]+=amount*v
-    #        p.lastUpd[clas]=self.now
-
-
-    #cpdef getW(self, clas): 
-    #    d={}
-    #    cdef MulticlassParamData p
-    #    for f,p in self.W.iteritems():
-    #        d[f] = p.w[clas]
-    #    return d
-
-
+                self.w[i + 1][j] = float(w)

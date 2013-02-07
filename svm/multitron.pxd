@@ -1,18 +1,26 @@
-cdef class MulticlassParamData:
-    cdef double *acc
-    cdef double *w
-    cdef int *lastUpd
+from libcpp.vector cimport vector
+
+#cdef class MulticlassParamData:
+#    cdef double *acc
+#    cdef double *w
+#    cdef int *lastUpd
 
 cdef class MultitronParameters:
-    cdef int n_classes
-    cdef int max_classes
-    cdef int now
-    cdef dict W
+    cdef size_t n_classes
+    cdef size_t n_params
+    cdef size_t max_classes
+    cdef size_t max_params
+    cdef size_t now
+    cdef double** acc
+    cdef double** w
+    cdef int** lastUpd
+    cdef double* scores
     cdef list labels
     cdef dict label_to_i
-    cdef double* scores
+    
     cdef tick(self)
-    cdef add(self, size_t n_feats, size_t* features, int label, double amount)
+    cdef int add_param(self, size_t f)
+    cdef int add(self, size_t n_feats, size_t* features, int label, double amount) except -1
     cdef get_scores(self, size_t n_feats, size_t* features)
     cdef predict_best_class(self, size_t n_feats, size_t* features)
     cdef int _predict_best_class(self, size_t n_feats, size_t* features)

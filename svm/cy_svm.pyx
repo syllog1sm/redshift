@@ -180,11 +180,13 @@ cdef class Model:
     def load(self, path):
         raise NotImplemented
 
+# If this is a problem we can get the client to specify it
+MAX_FEATS = 10000000
 cdef class Perceptron(Model):
     def __cinit__(self, max_classes, model_loc, int solver_type=14, float C=1,
                   float eps=0.01, clean=False):
         self.path = model_loc
-        self.model = svm.multitron.MultitronParameters(max_classes)
+        self.model = svm.multitron.MultitronParameters(max_classes, MAX_FEATS)
         # C is the smoothing parameter for LibLinear, and eps is the tolerance
         # If we need these hyper-parameters in perceptron sometime, here they are
         self.C = C
