@@ -158,12 +158,10 @@ cdef class Parser:
     def train(self, Sentences sents, C=None, eps=None, n_iter=15):
         self.write_cfg(self.model_dir.join('parser.cfg'))
         if self.guide.solver_type == PERCEPTRON_SOLVER:
+            self.guide.init_labels([1, 2, 3, 4])
             for n in range(n_iter):
-                self.guide.begin_adding_instances(10000000)
-                self.l_labeller.begin_adding_instances(10000000)
-                self.r_labeller.begin_adding_instances(10000000)
                 for i in range(sents.length):
-                    self.online_train_one(i, &sents.s[i])
+                    self.online_train_one(n, &sents.s[i])
                     #self.train_perceptron_one(&sents.s[i], n == 0)
                 acc = (float(self.guide.n_corr) / self.guide.total) * 100
                 print "Iter #%d %d/%d=%.2f" % (n, self.guide.n_corr, self.guide.total, acc)
@@ -237,11 +235,11 @@ cdef class Parser:
             self.moves.check_preconditions(&s, valid)
             pred_move = self.guide.predict_from_ints(n_feats, feats, valid)
             self.moves.check_costs(&s, g_heads, valid)
-
             if valid[pred_move]:
                 gold_move = pred_move
             else:
-                gold_move = self.guide.add_amb_instance(valid, 1, n_feats, feats)
+                gold_move = self.guide.predict_from_ints(n_feats, feats, valid)
+                self.guide.update(pred_move, gold_move, n_feats, feats)
             if gold_move == LEFT:
                 gold_label = g_labels[s.top]
                 pred_label = self.guide.add_instance(gold_label, 1.0, n_feats, feats)
@@ -252,7 +250,7 @@ cdef class Parser:
                 pred_label = 0
                 gold_label = 0
 
-            if iter_num > 2 and random.random() > 0.1:
+            if iter_num >= 2 and random.random() > 0.1:
                 move = pred_move
                 label = pred_label
             else:
@@ -271,6 +269,7 @@ cdef class Parser:
 
     cdef int parse(self, Sentence* sent) except -1:
         cdef State s
+        cdef size_t move
         cdef size_t n_preds = self.n_preds
         cdef size_t* context = self._context
         cdef size_t* feats = self._hashed_feats
@@ -279,24 +278,19 @@ cdef class Parser:
         s = init_state(sent.length)
         sent.parse.n_moves = 0
         while not s.is_finished:
-            if s.stack_len == 1:
-                move = SHIFT
-                label = 0
-            else:
+            move = self.moves.check_preconditions(&s, valid)
+            if move == ERR:
                 features.extract(context, feats, sent, &s)
-                self.moves.check_preconditions(&s, valid)
-                move = <size_t>self.guide.predict_from_ints(n_preds, feats, valid)
+                move = self.guide.predict_from_ints(n_preds, feats, valid)
                 if move == LEFT:
                     label = <int>self.l_labeller.predict_single(n_preds, feats)
                 elif move == RIGHT:
                     label = <int>self.r_labeller.predict_single(n_preds, feats)
                 else:
                     label = 0
-            assert move != ERR
             sent.parse.moves[s.t] = move
             sent.parse.move_labels[s.t] = label
             sent.parse.n_moves += 1
-            assert move != ERR
             self.moves.transition(move, label, &s)
         for i in range(1, sent.length):
             sent.parse.heads[i] = s.heads[i]
@@ -455,12 +449,17 @@ cdef class TransitionSystem:
 
     cdef int check_preconditions(self, State* s, bint* valid_moves) except -1:
         # Load pre-conditions that don't refer to gold heads
-        valid_moves[ERR] = 0
-        valid_moves[SHIFT] = s.i != s.n
-        valid_moves[RIGHT] = s.i != s.n and s.top != 0
+        valid_moves[ERR] = False
+        valid_moves[SHIFT] = s.i < s.n
+        valid_moves[RIGHT] = s.i < s.n and s.top != 0
         valid_moves[REDUCE] = s.top != 0 and s.heads[s.top] != 0
         valid_moves[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
         valid_moves[LOWER] = self.allow_move and s.r_valencies[s.top] >= 2
+        # If move is determined, output it
+        if s.top == 0:
+            return SHIFT
+        else:
+            return ERR
    
     cdef int check_costs(self, State* s, size_t* heads, bint* valid_moves) except -1:
         self.check_preconditions(s, valid_moves)
