@@ -180,11 +180,13 @@ cdef class Model:
     def load(self, path):
         raise NotImplemented
 
+# If this is a problem we can get the client to specify it
+MAX_FEATS = 10000000
 cdef class Perceptron(Model):
     def __cinit__(self, max_classes, model_loc, int solver_type=14, float C=1,
                   float eps=0.01, clean=False):
         self.path = model_loc
-        self.model = svm.multitron.MultitronParameters(max_classes)
+        self.nr_class = max_classes
         # C is the smoothing parameter for LibLinear, and eps is the tolerance
         # If we need these hyper-parameters in perceptron sometime, here they are
         self.C = C
@@ -193,53 +195,55 @@ cdef class Perceptron(Model):
         self.n_corr = 0.0
         self.total = 0.0
 
-    cdef object pyize_feats(self, int n, size_t* feats):
-        cdef size_t i
-        py_feats = []
-        for i in range(n):
-            if feats[i] != 0:
-                py_feats.append(feats[i])
-        return py_feats
-
-    def begin_adding_instances(self, n_instances):
-        pass
+    def begin_adding_instances(self, size_t n_feats):
+        self.model = svm.multitron.MultitronParameters(self.nr_class, n_feats)
 
     cdef int add_instance(self, int label, double w, int n, size_t* feats) except -1:
         """
         Add instance with 1 good label. Generalise to multi-label soon.
         """
-        py_feats = self.pyize_feats(n, feats)
         self.model.lookup_label(label)
-        pred = self.model.predict_best_class(py_feats)
+        cdef size_t pred = self.model.predict_best_class(n, feats)
         self.model.tick()
         if pred != label:
-            self.model.add(py_feats, label, 1.0)
-            self.model.add(py_feats, pred, -1.0)
-        self.n_corr += label == pred
+            self.model.add(n, feats, label, 1.0)
+            self.model.add(n, feats, pred, -1.0)
+        if label == pred:
+            self.n_corr += 1
         self.total += 1
         return pred
 
     cdef int add_amb_instance(self, bint* valid_labels, double w, int n, size_t* feats) except -1:
         cdef:
-            list scores
-            float score
-            size_t i, pred_label, best_valid
+            double* scores
+            double score, max_score, max_valid_score
+            size_t i, label, max_label, max_valid_label
+            bint seen_valid
         self.total += 1
-        py_feats = self.pyize_feats(n, feats)
         self.model.tick()
-        scores = [(score, i) for (i, score) in self.model.get_scores(py_feats).items()]
-        scores.sort()
-        scores.reverse()
-        pred_label = self.model.labels[scores[0][1]]
-        for score, i in scores:
-            best_valid = self.model.labels[i]
-            if valid_labels[best_valid]:
-                break
-        else:
-            return 0
-        if pred_label != best_valid:
-            self.model.add(py_feats, self.model.label_to_i[pred_label], -1.0)
-            self.model.add(py_feats, self.model.label_to_i[best_valid], 1.0)
+        self.model.get_scores(n, feats)
+        scores = self.model.scores
+        seen_valid = False
+        max_valid_label = 0
+        max_valid_score = 0.0
+        max_label = self.model.labels[0]
+        max_score = scores[0]
+        for i in range(self.model.n_classes):
+            label = self.model.labels[i]
+            score = scores[i]
+            if valid_labels[label] and (not seen_valid or score > best_score):
+                best_label = label
+                best_score = score
+                seen_valid = True
+            if score > max_score:
+                max_score = score
+                max_label = label
+        assert seen_valid
+        if max_label != max_valid_label:
+            max_label = self.model.lookup_label(max_label)
+            max_valid_label = self.model.lookup_label(max_valid_label)
+            self.model.add(n, feats, max_label, -1.0)
+            self.model.add(n, feats, max_valid_label, 1.0)
         else:
             self.n_corr += 1
         
@@ -247,22 +251,32 @@ cdef class Perceptron(Model):
         self.model.finalize()
 
     cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1:
-        cdef int class_
-        py_feats = self.pyize_feats(n, feats)
-        scores = self.model.get_scores(py_feats)
-        best_score = None
-        best_class = None
-        for i, score in scores.items():
-            label = self.model.labels[i]
-            if valid_classes[label] and (best_score is None or score > best_score):
+        cdef:
+            size_t i
+            size_t best_class
+            size_t label
+            double score, best_score
+            double* scores
+            size_t* labels
+        cdef bint seen_valid = False
+        self.model.get_scores(n, feats)
+        scores = self.model.scores
+        labels = self.model.labels
+        best_score = 0
+        best_class = 0
+        for i in range(self.model.n_classes):
+            score = scores[i]
+            label = labels[i]
+            if valid_classes[label] and (score > best_score or not seen_valid):
                 best_score = score
                 best_class = label
-        assert best_class != None
+                seen_valid = True
+        assert seen_valid
         return best_class
 
+
     cdef int predict_single(self, int n, size_t* feats) except -1:
-        py_feats = self.pyize_feats(n, feats)
-        return self.model.predict_best_class(py_feats)
+        return self.model.predict_best_class(n, feats)
 
     def save(self, model_loc):
         self.model.dump(model_loc.open('w'))

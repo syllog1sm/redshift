@@ -155,16 +155,18 @@ cdef class Parser:
         sh.git.log(n=1, _out=loc.join('version').open('wb'), _bg=True) 
         return loc
 
-    def train(self, Sentences sents, C=None, eps=None, n_iter=3):
+    def train(self, Sentences sents, C=None, eps=None, n_iter=15):
         self.write_cfg(self.model_dir.join('parser.cfg'))
         if self.guide.solver_type == PERCEPTRON_SOLVER:
-            index.hashes.set_feat_counting(True)
-            index.hashes.set_feat_threshold(5)
             for n in range(n_iter):
                 for i in range(sents.length):
-                    self.train_perceptron_one(&sents.s[i], n == 0)
+                    self.online_train_one(i, &sents.s[i])
+                    #self.train_perceptron_one(&sents.s[i], n == 0)
                 if n == 0:
                     index.hashes.set_feat_counting(False)
+                    self.guide.begin_adding_instances(index.hashes.get_num_feats())
+                    self.l_labeller.begin_adding_instances(index.hashes.get_num_feats())
+                    self.r_labeller.begin_adding_instances(index.hashes.get_num_feats())
                 else:
                     acc = (float(self.guide.n_corr) / self.guide.total) * 100
                     print "Iter #%d %d/%d=%.2f" % (n, self.guide.n_corr, self.guide.total, acc)
@@ -212,7 +214,7 @@ cdef class Parser:
             n_instances += 1
         return n_instances
 
-    cdef int online_train_one(self, Sentence* sent):
+    cdef int online_train_one(self, int iter_num, Sentence* sent):
         cdef:
             int move
             int label
@@ -253,7 +255,7 @@ cdef class Parser:
                 pred_label = 0
                 gold_label = 0
 
-            if random.random() > 0.1:
+            if iter_num > 2 and random.random() > 0.1:
                 move = pred_move
                 label = pred_label
             else:
