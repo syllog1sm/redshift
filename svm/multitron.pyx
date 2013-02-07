@@ -60,6 +60,8 @@ cdef class MultitronParameters:
         cdef int** lastUpd = self.lastUpd
         for i in range(n_feats):
             f = features[i]
+            if f == 0:
+                continue
             if f >= self.n_params:
                 self.add_param(f)
             acc[f][clas] += (self.now - lastUpd[f][clas]) * w[f][clas]
@@ -75,7 +77,7 @@ cdef class MultitronParameters:
         cdef size_t n_classes = self.n_classes
         for i in range(n_feats):
             f = features[i]
-            if f < self.n_params:
+            if f != 0 and f < self.n_params:
                 for c in range(n_classes):
                     scores[c] += w[f][c]
 
