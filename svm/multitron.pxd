@@ -15,16 +15,16 @@ cdef class MultitronParameters:
     cdef double** w
     cdef int** lastUpd
     cdef double* scores
-    cdef list labels
-    cdef dict label_to_i
+    cdef size_t* labels
+    cdef int* label_to_i
     
     cdef tick(self)
+    cdef int lookup_label(self, size_t label) except -1
     cdef int add_param(self, size_t f)
     cdef int add(self, size_t n_feats, size_t* features, int label, double amount) except -1
     cdef get_scores(self, size_t n_feats, size_t* features)
     cdef predict_best_class(self, size_t n_feats, size_t* features)
     cdef int _predict_best_class(self, size_t n_feats, size_t* features)
-    cdef set seen_labels
 
 
     #cpdef pa_update(self, object gu_feats, object go_feats, int gu_cls, int go_cls,double C=?)

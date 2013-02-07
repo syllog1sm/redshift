@@ -4,7 +4,14 @@ import math
 from libc.stdlib cimport *
 
 cdef class MultitronParameters:
-    def __cinit__(self, max_classes, max_params): 
+    """
+    Labels and features must be non-negative integers with max values
+    max_classes and max_params.
+    The feature value 0 is ignored.
+    """
+    
+    def __cinit__(self, max_classes, max_params):
+        cdef size_t i
         self.scores = <double *>malloc(max_classes * sizeof(double))
         self.w = <double**>malloc(max_params * sizeof(double*))
         self.acc = <double**>malloc(max_params * sizeof(double*))
@@ -14,8 +21,11 @@ cdef class MultitronParameters:
         self.n_params = 0
         self.n_classes = 0
         self.now = 0
-        self.labels = []
-        self.label_to_i = {}
+        self.labels = <size_t*>malloc(max_classes * sizeof(size_t))
+        self.label_to_i = <int*>malloc(max_classes * sizeof(int))
+        for i in range(max_classes):
+            self.label_to_i[i] = -1
+            self.labels[i] = 0
 
     def __dealloc__(self):
         free(self.scores)
@@ -26,15 +36,18 @@ cdef class MultitronParameters:
         free(self.w)
         free(self.acc)
         free(self.lastUpd)
+        free(self.labels)
+        free(self.label_to_i)
 
-    def lookup_label(self, label):
-        if label in self.label_to_i:
+    cdef int lookup_label(self, size_t label) except -1:
+        assert label < self.max_classes
+        if self.label_to_i[label] >= 0:
             return self.label_to_i[label]
         else:
-            self.label_to_i[label] = self.n_classes
-            self.labels.append(label)
-            self.n_classes += 1
             assert self.n_classes < self.max_classes
+            self.label_to_i[label] = self.n_classes
+            self.labels[self.n_classes] = label
+            self.n_classes += 1
             return self.n_classes - 1
 
     cdef int add_param(self, size_t f) except -1:
@@ -109,7 +122,8 @@ cdef class MultitronParameters:
         # Write LibSVM compatible format
         out.write(u'solver_type L1R_LR\n')
         out.write(u'nr_class %d\n' % self.n_classes)
-        out.write(u'label %s\n' % ' '.join(map(str, self.labels)))
+        out.write(u'label %s\n' % ' '.join([str(self.labels[i]) for i in
+                                            range(self.n_classes)]))
         out.write(u'nr_feature %d\n' % self.n_params)
         out.write(u'bias -1\n')
         out.write(u'w\n')
