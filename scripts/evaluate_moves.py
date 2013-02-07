@@ -12,6 +12,7 @@ def main(moves_loc):
     bad = 0
     for line in open(moves_loc):
         if line.count('\t') == 0: continue
+        line = line.replace('\033[91m', '').replace('\033[0m', '')
         try:
             gold, test, _ = line.rstrip().split('\t')
         except:
