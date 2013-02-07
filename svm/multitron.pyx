@@ -39,15 +39,15 @@ cdef class MultitronParameters:
         else:
             return self.label_to_i[label]
 
-    cdef _tick(self):
+    cdef tick(self):
         self.now = self.now + 1
 
-    def tick(self): self._tick()
-
-    cpdef add(self, list features, int label, double amount):
+    cdef add(self, size_t n_feats, size_t* features, int label, double amount):
+        cdef size_t i, f
         cdef MulticlassParamData p
         clas = self.lookup_label(label)
-        for f in features:
+        for i in range(n_feats):
+            f = features[i]
             try:
                 p = self.W[f]
             except KeyError:
@@ -57,33 +57,29 @@ cdef class MultitronParameters:
             p.w[clas] += amount
             p.lastUpd[clas] = self.now
         
-    cpdef get_scores(self, features):
+    cdef get_scores(self, size_t n_feats, size_t* features):
         cdef MulticlassParamData p
-        cdef int i
+        cdef size_t i, f
         cdef double w
-        for i in xrange(self.max_classes):
+        for i in range(self.max_classes):
             self.scores[i] = 0
-        for f in features:
+        for i in range(n_feats):
+            f = features[i]
             try:
                 p = self.W[f]
                 for c in range(self.n_classes):
                     self.scores[c] += p.w[c]
             except KeyError:
                 pass
-        cdef double tot = 0
-        res={}
-        for c in range(self.n_classes):
-            res[c] = self.scores[c]
-        return res
 
-    cpdef predict_best_class(self, list features):
-        best_i = self._predict_best_class(features)
+    cdef predict_best_class(self, size_t n_feats, size_t* features):
+        best_i = self._predict_best_class(n_feats, features)
         return self.labels[best_i]
 
-    cdef int _predict_best_class(self, list features):
+    cdef int _predict_best_class(self, size_t n_feats, size_t* features):
         cdef int i
         cdef MulticlassParamData p
-        scores = self.get_scores(features)
+        self.get_scores(n_feats, features)
         cdef int best_i = 0
         cdef double best = self.scores[0]
         for i in range(self.n_classes):

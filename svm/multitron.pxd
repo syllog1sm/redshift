@@ -11,11 +11,11 @@ cdef class MultitronParameters:
     cdef list labels
     cdef dict label_to_i
     cdef double* scores
-    cdef _tick(self)
-    cpdef add(self, list features, int clas, double amount)
-    cpdef get_scores(self, object features)
-    cpdef predict_best_class(self, list features)
-    cdef int _predict_best_class(self, list features)
+    cdef tick(self)
+    cdef add(self, size_t n_feats, size_t* features, int label, double amount)
+    cdef get_scores(self, size_t n_feats, size_t* features)
+    cdef predict_best_class(self, size_t n_feats, size_t* features)
+    cdef int _predict_best_class(self, size_t n_feats, size_t* features)
     cdef set seen_labels
 
 

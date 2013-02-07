@@ -193,14 +193,6 @@ cdef class Perceptron(Model):
         self.n_corr = 0.0
         self.total = 0.0
 
-    cdef object pyize_feats(self, int n, size_t* feats):
-        cdef size_t i
-        py_feats = []
-        for i in range(n):
-            if feats[i] != 0:
-                py_feats.append(feats[i])
-        return py_feats
-
     def begin_adding_instances(self, n_instances):
         pass
 
@@ -208,13 +200,12 @@ cdef class Perceptron(Model):
         """
         Add instance with 1 good label. Generalise to multi-label soon.
         """
-        py_feats = self.pyize_feats(n, feats)
         self.model.lookup_label(label)
-        pred = self.model.predict_best_class(py_feats)
+        pred = self.model.predict_best_class(n, feats)
         self.model.tick()
         if pred != label:
-            self.model.add(py_feats, label, 1.0)
-            self.model.add(py_feats, pred, -1.0)
+            self.model.add(n, feats, label, 1.0)
+            self.model.add(n, feats, pred, -1.0)
         self.n_corr += label == pred
         self.total += 1
         return pred
@@ -225,9 +216,9 @@ cdef class Perceptron(Model):
             float score
             size_t i, pred_label, best_valid
         self.total += 1
-        py_feats = self.pyize_feats(n, feats)
         self.model.tick()
-        scores = [(score, i) for (i, score) in self.model.get_scores(py_feats).items()]
+        self.model.get_scores(n, feats)
+        scores = [(self.model.scores[i], i) for i in range(self.model.n_classes)]
         scores.sort()
         scores.reverse()
         pred_label = self.model.labels[scores[0][1]]
@@ -238,8 +229,8 @@ cdef class Perceptron(Model):
         else:
             return 0
         if pred_label != best_valid:
-            self.model.add(py_feats, self.model.label_to_i[pred_label], -1.0)
-            self.model.add(py_feats, self.model.label_to_i[best_valid], 1.0)
+            self.model.add(n, feats, self.model.label_to_i[pred_label], -1.0)
+            self.model.add(n, feats, self.model.label_to_i[best_valid], 1.0)
         else:
             self.n_corr += 1
         
@@ -247,12 +238,13 @@ cdef class Perceptron(Model):
         self.model.finalize()
 
     cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1:
+        cdef size_t i
         cdef int class_
-        py_feats = self.pyize_feats(n, feats)
-        scores = self.model.get_scores(py_feats)
+        self.model.get_scores(n, feats)
         best_score = None
         best_class = None
-        for i, score in scores.items():
+        for i in range(self.model.n_classes):
+            score = self.model.scores[i]
             label = self.model.labels[i]
             if valid_classes[label] and (best_score is None or score > best_score):
                 best_score = score
@@ -261,8 +253,7 @@ cdef class Perceptron(Model):
         return best_class
 
     cdef int predict_single(self, int n, size_t* feats) except -1:
-        py_feats = self.pyize_feats(n, feats)
-        return self.model.predict_best_class(py_feats)
+        return self.model.predict_best_class(n, feats)
 
     def save(self, model_loc):
         self.model.dump(model_loc.open('w'))
