@@ -235,17 +235,19 @@ cdef class Parser:
             self.moves.check_preconditions(&s, valid)
             pred_move = self.guide.predict_from_ints(n_feats, feats, valid)
             self.moves.check_costs(&s, g_heads, valid)
+            self.guide.total += 1
             if valid[pred_move]:
                 gold_move = pred_move
+                self.guide.n_corr += 1
             else:
                 gold_move = self.guide.predict_from_ints(n_feats, feats, valid)
                 self.guide.update(pred_move, gold_move, n_feats, feats)
             if gold_move == LEFT:
                 gold_label = g_labels[s.top]
-                pred_label = self.guide.add_instance(gold_label, 1.0, n_feats, feats)
+                pred_label = self.l_labeller.add_instance(gold_label, 1.0, n_feats, feats)
             elif gold_move == RIGHT:
                 gold_label = g_labels[s.i]
-                pred_label = self.guide.add_instance(gold_label, 1.0, n_feats, feats)
+                pred_label = self.r_labeller.add_instance(gold_label, 1.0, n_feats, feats)
             else:
                 pred_label = 0
                 gold_label = 0
@@ -283,9 +285,9 @@ cdef class Parser:
                 features.extract(context, feats, sent, &s)
                 move = self.guide.predict_from_ints(n_preds, feats, valid)
                 if move == LEFT:
-                    label = <int>self.l_labeller.predict_single(n_preds, feats)
+                    label = self.l_labeller.predict_single(n_preds, feats)
                 elif move == RIGHT:
-                    label = <int>self.r_labeller.predict_single(n_preds, feats)
+                    label = self.r_labeller.predict_single(n_preds, feats)
                 else:
                     label = 0
             sent.parse.moves[s.t] = move
