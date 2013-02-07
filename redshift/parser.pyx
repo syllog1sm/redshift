@@ -159,19 +159,16 @@ cdef class Parser:
         self.write_cfg(self.model_dir.join('parser.cfg'))
         if self.guide.solver_type == PERCEPTRON_SOLVER:
             for n in range(n_iter):
+                self.guide.begin_adding_instances(10000000)
+                self.l_labeller.begin_adding_instances(10000000)
+                self.r_labeller.begin_adding_instances(10000000)
                 for i in range(sents.length):
                     self.online_train_one(i, &sents.s[i])
                     #self.train_perceptron_one(&sents.s[i], n == 0)
-                if n == 0:
-                    index.hashes.set_feat_counting(False)
-                    self.guide.begin_adding_instances(index.hashes.get_num_feats())
-                    self.l_labeller.begin_adding_instances(index.hashes.get_num_feats())
-                    self.r_labeller.begin_adding_instances(index.hashes.get_num_feats())
-                else:
-                    acc = (float(self.guide.n_corr) / self.guide.total) * 100
-                    print "Iter #%d %d/%d=%.2f" % (n, self.guide.n_corr, self.guide.total, acc)
-                    self.guide.n_corr = 0
-                    self.guide.total = 0
+                acc = (float(self.guide.n_corr) / self.guide.total) * 100
+                print "Iter #%d %d/%d=%.2f" % (n, self.guide.n_corr, self.guide.total, acc)
+                self.guide.n_corr = 0
+                self.guide.total = 0
             self.guide.train()
         else:
             self.train_svm(sents, C=C, eps=eps)
