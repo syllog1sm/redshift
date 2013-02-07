@@ -94,11 +94,11 @@ cdef class MultitronParameters:
                 for c in range(n_classes):
                     scores[c] += w[f][c]
 
-    cdef predict_best_class(self, size_t n_feats, size_t* features):
+    cdef size_t predict_best_class(self, size_t n_feats, size_t* features):
         best_i = self._predict_best_class(n_feats, features)
         return self.labels[best_i]
 
-    cdef int _predict_best_class(self, size_t n_feats, size_t* features):
+    cdef size_t _predict_best_class(self, size_t n_feats, size_t* features):
         cdef size_t i
         self.get_scores(n_feats, features)
         cdef int best_i = 0

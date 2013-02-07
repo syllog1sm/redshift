@@ -207,13 +207,12 @@ cdef class Perceptron(Model):
         """
         Add instance with 1 good label. Generalise to multi-label soon.
         """
-        self.model.lookup_label(label)
         cdef size_t pred = self.model.predict_best_class(n, feats)
         self.model.tick()
         if pred != label:
             self.model.add(n, feats, label, 1.0)
             self.model.add(n, feats, pred, -1.0)
-        if label == pred:
+        else:
             self.n_corr += 1
         self.total += 1
         return pred

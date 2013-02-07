@@ -23,8 +23,8 @@ cdef class MultitronParameters:
     cdef int add_param(self, size_t f)
     cdef int add(self, size_t n_feats, size_t* features, int label, double amount) except -1
     cdef get_scores(self, size_t n_feats, size_t* features)
-    cdef predict_best_class(self, size_t n_feats, size_t* features)
-    cdef int _predict_best_class(self, size_t n_feats, size_t* features)
+    cdef size_t predict_best_class(self, size_t n_feats, size_t* features)
+    cdef size_t _predict_best_class(self, size_t n_feats, size_t* features)
 
 
     #cpdef pa_update(self, object gu_feats, object go_feats, int gu_cls, int go_cls,double C=?)
