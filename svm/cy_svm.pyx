@@ -162,6 +162,9 @@ cdef class Model:
     cdef int add_instance(self, int label, double weight, int n, size_t* feat_indices) except -1:
         return -1
 
+    cdef int add_amb_instance(self, bint* valid_labels, double w, int n, size_t* feats) except -1:
+        return -1
+
     cdef int predict_from_ints(self, int n, size_t* feat_array, bint* valid_classes) except -1:
         return -1
 
@@ -208,35 +211,39 @@ cdef class Perceptron(Model):
         """
         label = self.model.label_to_i[label]
         py_feats = self.pyize_feats(n, feats)
-        pred = self.model.update(label, py_feats)
+        pred = self.model.predict_best_class(py_feats)
+        if pred != label:
+            self.model.add(py_feats, label, 1.0)
+            self.model.add(py_feats, pred, -1.0)
         self.n_corr += label == pred
         self.total += 1
         return pred
 
     cdef int add_amb_instance(self, bint* valid_labels, double w, int n, size_t* feats) except -1:
+        cdef:
+            list scores
+            float score
+            size_t i, pred_label, best_valid
+        self.total += 1
         py_feats = self.pyize_feats(n, feats)
         self.model.tick()
-        scores = self.model.get_scores(py_feats)
-        best_valid = 0
-        best_score = 0
-        max_score = 0
-        pred = 0
-        for i, score in scores.items():
-            label = self.model.labels[i]
-            if valid_labels[label] and (best_score == 0 or score > best_score):
-                best_valid = label
-                best_score = score
-            if max_score == 0 or score > max_score:
-                max_score = score
-                pred = label
-        if pred != best_valid:
-            self.model.add(py_feats, pred, -1.0)
-            self.model.add(py_feats, best_valid, 1.0)
-        return int(best_valid)
+        scores = [(score, i) for (i, score) in self.model.get_scores(py_feats).items()]
+        scores.sort()
+        scores.reverse()
+        pred_label = self.model.labels[scores[0][1]]
+        for score, i in scores:
+            best_valid = self.model.labels[i]
+            if valid_labels[best_valid]:
+                break
+        else:
+            return 0
+        if pred_label != best_valid:
+            self.model.add(py_feats, self.model.label_to_i[pred_label], -1.0)
+            self.model.add(py_feats, self.model.label_to_i[best_valid], 1.0)
+        else:
+            self.n_corr += 1
         
-
     def train(self):
-        print self.n_corr/self.total
         self.model.finalize()
 
     cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1:

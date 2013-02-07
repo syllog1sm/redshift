@@ -9,39 +9,26 @@ cdef class MultitronParameters:
     cdef dict W
     cdef list labels
     cdef dict label_to_i
-
     cdef double* scores
-
     cpdef set_labels(self, object labels)
-
-    cpdef getW(self, object clas)
-
     cdef _tick(self)
-
-    cpdef scalar_multiply(self, double scalar)
-
     cpdef add(self, list features, int clas, double amount)
-
-    cpdef add_r(self, list features, int clas, double amount)
-
-    cpdef set(self, list features, int clas, double amount)
-
-    cpdef add_params(self, MultitronParameters other, double factor)
-
-    cpdef do_pa_update(self, list feats, int gold_cls, double C=?)
-
-    cpdef pa_update(self, object gu_feats, object go_feats, int gu_cls, int go_cls,double C=?)
-    
     cpdef get_scores(self, object features)
-
-    cpdef get_scores_r(self, features)
-   
-    cpdef predict_best_class_r(self, list features)
-     
     cpdef predict_best_class(self, list features)
-
     cdef int _predict_best_class(self, list features)
 
-    cdef _update(self, int goodClass, int badClass, list features)
 
-    cdef _update_r(self, int goodClass, int badClass, list features)
+    #cpdef pa_update(self, object gu_feats, object go_feats, int gu_cls, int go_cls,double C=?)
+    #cpdef add_params(self, MultitronParameters other, double factor)
+    #cpdef set(self, list features, int clas, double amount)
+    #cpdef do_pa_update(self, list feats, int gold_cls, double C=?)
+    #cpdef get_scores_r(self, features)
+    #cpdef add_r(self, list features, int clas, double amount)
+    #cpdef scalar_multiply(self, double scalar)
+    #cdef _update(self, int goodClass, int badClass, list features)
+
+    #cdef _update_r(self, int goodClass, int badClass, list features)
+
+    #cpdef getW(self, object clas)
+
+    #cpdef predict_best_class_r(self, list features)

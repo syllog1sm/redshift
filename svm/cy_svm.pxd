@@ -71,8 +71,11 @@ cdef class Model:
     cdef double C
     cdef double eps
     cdef int solver_type
+    cdef float n_corr
+    cdef float total
 
     cdef int add_instance(self, int label, double weight, int n, size_t* feats) except -1
+    cdef int add_amb_instance(self, bint* valid_labels, double w, int n, size_t* feats) except -1
     cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1
     cdef int predict_single(self, int n, size_t* feats) except -1
     
@@ -90,8 +93,6 @@ cdef class Perceptron(Model):
     cdef int add_amb_instance(self, bint* valid_labels, double w, int n, size_t* feats) except -1
     cdef int predict_from_ints(self, int n_feats, size_t* feats, bint* valid_classes) except -1
     cdef int predict_single(self, int n, size_t* feat_array) except -1
-    cdef float n_corr
-    cdef float total
 
 
 cdef class LibLinear(Model):
