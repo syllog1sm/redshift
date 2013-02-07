@@ -132,7 +132,7 @@ cdef bint has_child_in_stack(State *s, size_t word, size_t* heads):
     for i in range(1, s.stack_len):
         stack_i = s.stack[i]
         # Should this be sensitie to whether the word has a head already?
-        if heads[stack_i] == word and s.heads[stack_i] == 0:
+        if heads[stack_i] == word:
             return True
     return False
 

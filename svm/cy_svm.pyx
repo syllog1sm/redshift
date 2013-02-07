@@ -37,7 +37,7 @@ cdef class Problem:
             self._from_instances(instances)
         
 
-    cdef add(self, double label, double weight, feature_node* feat_seq):
+    cdef add(self, int label, double weight, feature_node* feat_seq):
         cdef size_t i = 0
         while feat_seq[i].index != -1:
             assert feat_seq[i].index < 100000000
@@ -97,7 +97,7 @@ cdef class Problem:
         
         for line in lines:
             pieces = line.split()
-            label = float(pieces.pop(0))
+            label = int(pieces.pop(0))
             feats = []
             for feat_str in pieces:
                 index, value = feat_str.split(':')
@@ -158,13 +158,126 @@ TRAIN_IN_PROCESS = True
 
 
 cdef class Model:
-    def __cinit__(self, model_loc, int solver_type=L2R_L2LOSS_SVC_DUAL, float C=1, eps=None,
-            clean=False):
-        self.paramptr = new parameter()
+    """Base class for learners"""
+    cdef int add_instance(self, int label, double weight, int n, size_t* feat_indices) except -1:
+        return -1
 
-        self.solver_type = solver_type
+    cdef int add_amb_instance(self, bint* valid_labels, double w, int n, size_t* feats) except -1:
+        return -1
+
+    cdef int predict_from_ints(self, int n, size_t* feat_array, bint* valid_classes) except -1:
+        return -1
+
+    cdef int predict_single(self, int n, size_t* feat_array) except -1:
+        return -1
+
+    def begin_adding_instances(self, n_instances):
+        raise NotImplemented
+
+    def save(self, path):
+        raise NotImplemented
+
+    def load(self, path):
+        raise NotImplemented
+
+cdef class Perceptron(Model):
+    def __cinit__(self, max_classes, model_loc, int solver_type=14, float C=1,
+                  float eps=0.01, clean=False):
+        self.path = model_loc
+        self.model = svm.multitron.MultitronParameters(max_classes)
+        # C is the smoothing parameter for LibLinear, and eps is the tolerance
+        # If we need these hyper-parameters in perceptron sometime, here they are
         self.C = C
-        if eps is None:
+        self.eps = eps
+        self.solver_type = solver_type
+        self.n_corr = 0.0
+        self.total = 0.0
+
+    cdef object pyize_feats(self, int n, size_t* feats):
+        cdef size_t i
+        py_feats = []
+        for i in range(n):
+            if feats[i] != 0:
+                py_feats.append(feats[i])
+        return py_feats
+
+    def begin_adding_instances(self, n_instances):
+        pass
+
+    cdef int add_instance(self, int label, double w, int n, size_t* feats) except -1:
+        """
+        Add instance with 1 good label. Generalise to multi-label soon.
+        """
+        py_feats = self.pyize_feats(n, feats)
+        self.model.lookup_label(label)
+        pred = self.model.predict_best_class(py_feats)
+        self.model.tick()
+        if pred != label:
+            self.model.add(py_feats, label, 1.0)
+            self.model.add(py_feats, pred, -1.0)
+        self.n_corr += label == pred
+        self.total += 1
+        return pred
+
+    cdef int add_amb_instance(self, bint* valid_labels, double w, int n, size_t* feats) except -1:
+        cdef:
+            list scores
+            float score
+            size_t i, pred_label, best_valid
+        self.total += 1
+        py_feats = self.pyize_feats(n, feats)
+        self.model.tick()
+        scores = [(score, i) for (i, score) in self.model.get_scores(py_feats).items()]
+        scores.sort()
+        scores.reverse()
+        pred_label = self.model.labels[scores[0][1]]
+        for score, i in scores:
+            best_valid = self.model.labels[i]
+            if valid_labels[best_valid]:
+                break
+        else:
+            return 0
+        if pred_label != best_valid:
+            self.model.add(py_feats, self.model.label_to_i[pred_label], -1.0)
+            self.model.add(py_feats, self.model.label_to_i[best_valid], 1.0)
+        else:
+            self.n_corr += 1
+        
+    def train(self):
+        self.model.finalize()
+
+    cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1:
+        cdef int class_
+        py_feats = self.pyize_feats(n, feats)
+        scores = self.model.get_scores(py_feats)
+        best_score = None
+        best_class = None
+        for i, score in scores.items():
+            label = self.model.labels[i]
+            if valid_classes[label] and (best_score is None or score > best_score):
+                best_score = score
+                best_class = label
+        assert best_class != None
+        return best_class
+
+    cdef int predict_single(self, int n, size_t* feats) except -1:
+        py_feats = self.pyize_feats(n, feats)
+        return self.model.predict_best_class(py_feats)
+
+    def save(self, model_loc):
+        self.model.dump(model_loc.open('w'))
+
+    def load(self, model_loc):
+        self.model.load(model_loc.open())
+
+
+cdef class LibLinear(Model):
+    def __cinit__(self, n_classes, model_loc, int solver_type=L2R_L2LOSS_SVC_DUAL,
+                  float C=1, float eps=-1, clean=False):
+        self.paramptr = new parameter()
+        self.paramptr.solver_type = solver_type
+        self.paramptr.C = C
+        if eps == -1:
             if solver_type in (0, 2):
                 eps = 0.01
             elif solver_type in (5, 6, 11):
@@ -173,7 +286,7 @@ cdef class Model:
                 eps = 0.1
             else:
                 raise StandardError
-        self.eps = eps
+        self.paramptr.eps = eps
         self.p = 0.1
         self.paramptr.nr_weight = 0
         self.path = Path(model_loc)
@@ -188,12 +301,11 @@ cdef class Model:
     def begin_adding_instances(self, n_instances):
         """Set up instance-by-instance data addition, so that only the
         memory-efficient C++ array needs to be in memory, not the list of
-        Python objects. This is the recommended option for non-trivial
-        training tasks."""
+        Python objects."""
         self.problem = Problem(length=n_instances)
         self.max_index = 0
 
-    cdef int add_instance(self, double label, double weight, int n, size_t* feat_indices) except -1:
+    cdef int add_instance(self, int label, double weight, int n, size_t* feat_indices) except -1:
         x = ints_to_features(n, feat_indices)
         self.problem.add(label, weight, x)
         for i in range(n):
@@ -221,34 +333,33 @@ cdef class Model:
             self.is_trained = True
 
     cdef int _train(self, Problem p) except -1:
-        self.paramptr.C = self.C
+        # TODO: Where's this get set to zero?
+        #self.paramptr.C = self.C
         self.modelptr = train(<problem *>p.thisptr, self.paramptr)
         self._setup()
 
-    cdef Label predict_from_ints(self, int n, size_t* feat_array, bint* valid_classes) except -1:
-        cdef Label value
+    cdef int predict_from_ints(self, int n, size_t* feat_array, bint* valid_classes) except -1:
         cdef feature_node* features = ints_to_features(n, feat_array)
         value = self.predict_from_features(features, valid_classes)
         free(features)
         return value
 
-    cdef Label predict_single(self, int n, size_t* feat_array) except -1:
-        cdef Label value
+    cdef int predict_single(self, int n, size_t* feat_array) except -1:
         cdef feature_node* features = ints_to_features(n, feat_array)
         scores_array = <double*>malloc(self.nr_class * sizeof(double))
-        value = predict_values(self.modelptr, features, self.scores_array)
+        value = <int>predict_values(self.modelptr, features, self.scores_array)
         free(scores_array)
         free(features)
         return value
 
-    cdef Label predict_from_features(self, feature_node* features, bint* valid_classes) except -1:
+    cdef int predict_from_features(self, feature_node* features, bint* valid_classes) except -1:
         cdef size_t i
-        cdef Label value, label
+        cdef int value, label
         cdef double score
-        value = predict_values(self.modelptr, features, self.scores_array)
+        value = <int>predict_values(self.modelptr, features, self.scores_array)
         if valid_classes[<int>value]:
             return value
-        cdef Label best_label = 0
+        cdef int best_label = 0
         cdef double best_score = -1000000.0
         for i in range(self.nr_class):
             label = self.modelptr.label[i]
@@ -350,7 +461,7 @@ cdef feature_node * seq_to_features(object instance) except *:
     return x
 
 cdef feature_node* ints_to_features(int n, size_t* ints) except NULL:
-    cdef Label value
+    cdef int value
     cdef int i, j
     cdef int non_zeroes = 0
     for i in range(n):
