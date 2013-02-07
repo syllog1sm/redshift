@@ -211,7 +211,7 @@ cdef class Parser:
             n_instances += 1
         return n_instances
 
-    cdef int online_train_one(self, int iter_num, Sentence* sent):
+    cdef int online_train_one(self, int iter_num, Sentence* sent) except -1:
         cdef:
             int move
             int label
