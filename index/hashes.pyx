@@ -82,6 +82,15 @@ cdef class FeatIndex(Index):
             self.i += 1
         return value
 
+    def set_n_predicates(self, int n):
+        self.n = n
+        self.save_entries = False
+        for i in range(n):
+            table = new dense_hash_map[long, long]()
+            self.tables.push_back(table[0])
+            self.tables[i].set_empty_key(0)
+        self.count_features = False
+ 
     cpdef load_entry(self, size_t i, object key, long hashed, unsigned long value):
         self.tables[i][<long>hashed] = <unsigned long>value
 
