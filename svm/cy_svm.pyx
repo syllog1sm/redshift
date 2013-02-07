@@ -203,12 +203,13 @@ cdef class Perceptron(Model):
         Add instance with 1 good label. Generalise to multi-label soon.
         """
         self.model.lookup_label(label)
-        pred = self.model.predict_best_class(n, feats)
+        cdef size_t pred = self.model.predict_best_class(n, feats)
         self.model.tick()
         if pred != label:
             self.model.add(n, feats, label, 1.0)
             self.model.add(n, feats, pred, -1.0)
-        self.n_corr += label == pred
+        if label == pred:
+            self.n_corr += 1
         self.total += 1
         return pred
 
@@ -240,18 +241,27 @@ cdef class Perceptron(Model):
         self.model.finalize()
 
     cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1:
-        cdef size_t i
-        cdef int class_
+        cdef:
+            size_t i
+            size_t best_class
+            size_t label
+            double score, best_score
+            double* scores
+            list labels
+        cdef bint seen_valid = False
         self.model.get_scores(n, feats)
-        best_score = None
-        best_class = None
+        scores = self.model.scores
+        labels = self.model.labels
+        best_score = 0
+        best_class = 0
         for i in range(self.model.n_classes):
-            score = self.model.scores[i]
-            label = self.model.labels[i]
-            if valid_classes[label] and (best_score is None or score > best_score):
+            score = scores[i]
+            label = labels[i]
+            if valid_classes[label] and (score > best_score or not seen_valid):
                 best_score = score
                 best_class = label
-        assert best_class != None
+                seen_valid = True
+        assert seen_valid
         return best_class
 
     cdef int predict_single(self, int n, size_t* feats) except -1:
