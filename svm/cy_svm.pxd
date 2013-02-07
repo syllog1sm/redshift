@@ -75,9 +75,9 @@ cdef class Model:
     cdef float total
 
     cdef int add_instance(self, int label, double weight, int n, size_t* feats) except -1
-    cdef int add_amb_instance(self, bint* valid_labels, double w, int n, size_t* feats) except -1
     cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1
     cdef int predict_single(self, int n, size_t* feats) except -1
+    cdef int update(self, size_t pred, size_t gold, int n, size_t* feats) except -1
     
     # Python interface expected
     #def begin_adding_instances(self, int n_instances)
@@ -89,7 +89,6 @@ cdef class Perceptron(Model):
     cdef svm.multitron.MultitronParameters model
 
     cdef int add_instance(self, int label, double weight, int n_feats, size_t* feats) except -1
-    cdef int add_amb_instance(self, bint* valid_labels, double w, int n, size_t* feats) except -1
     cdef int predict_from_ints(self, int n_feats, size_t* feats, bint* valid_classes) except -1
     cdef int predict_single(self, int n, size_t* feat_array) except -1
 

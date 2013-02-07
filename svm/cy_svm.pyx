@@ -162,13 +162,13 @@ cdef class Model:
     cdef int add_instance(self, int label, double weight, int n, size_t* feat_indices) except -1:
         return -1
 
-    cdef int add_amb_instance(self, bint* valid_labels, double w, int n, size_t* feats) except -1:
-        return -1
-
     cdef int predict_from_ints(self, int n, size_t* feat_array, bint* valid_classes) except -1:
         return -1
 
     cdef int predict_single(self, int n, size_t* feat_array) except -1:
+        return -1
+
+    cdef int update(self, size_t pred, size_t gold, int n, size_t* feats) except -1:
         return -1
 
     def begin_adding_instances(self, n_instances):
@@ -187,6 +187,7 @@ cdef class Perceptron(Model):
                   float eps=0.01, clean=False):
         self.path = model_loc
         self.nr_class = max_classes
+        self.model = svm.multitron.MultitronParameters(self.nr_class, MAX_FEATS)
         # C is the smoothing parameter for LibLinear, and eps is the tolerance
         # If we need these hyper-parameters in perceptron sometime, here they are
         self.C = C
@@ -195,8 +196,12 @@ cdef class Perceptron(Model):
         self.n_corr = 0.0
         self.total = 0.0
 
+    def init_labels(self, labels):
+        for label in labels:
+            self.model.lookup_label(label)
+
     def begin_adding_instances(self, size_t n_feats):
-        self.model = svm.multitron.MultitronParameters(self.nr_class, n_feats)
+        pass
 
     cdef int add_instance(self, int label, double w, int n, size_t* feats) except -1:
         """
@@ -213,39 +218,10 @@ cdef class Perceptron(Model):
         self.total += 1
         return pred
 
-    cdef int add_amb_instance(self, bint* valid_labels, double w, int n, size_t* feats) except -1:
-        cdef:
-            double* scores
-            double score, max_score, max_valid_score
-            size_t i, label, max_label, max_valid_label
-            bint seen_valid
-        self.total += 1
+    cdef int update(self, size_t pred, size_t gold, int n, size_t* feats) except -1:
         self.model.tick()
-        self.model.get_scores(n, feats)
-        scores = self.model.scores
-        seen_valid = False
-        max_valid_label = 0
-        max_valid_score = 0.0
-        max_label = self.model.labels[0]
-        max_score = scores[0]
-        for i in range(self.model.n_classes):
-            label = self.model.labels[i]
-            score = scores[i]
-            if valid_labels[label] and (not seen_valid or score > best_score):
-                best_label = label
-                best_score = score
-                seen_valid = True
-            if score > max_score:
-                max_score = score
-                max_label = label
-        assert seen_valid
-        if max_label != max_valid_label:
-            max_label = self.model.lookup_label(max_label)
-            max_valid_label = self.model.lookup_label(max_valid_label)
-            self.model.add(n, feats, max_label, -1.0)
-            self.model.add(n, feats, max_valid_label, 1.0)
-        else:
-            self.n_corr += 1
+        self.model.add(n, feats, pred, -1.0)
+        self.model.add(n, feats, gold, 1.0)
         
     def train(self):
         self.model.finalize()
