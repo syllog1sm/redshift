@@ -4,18 +4,19 @@ cdef class MulticlassParamData:
     cdef int *lastUpd
 
 cdef class MultitronParameters:
-    cdef int nclasses
+    cdef int n_classes
+    cdef int max_classes
     cdef int now
     cdef dict W
     cdef list labels
     cdef dict label_to_i
     cdef double* scores
-    cpdef set_labels(self, object labels)
     cdef _tick(self)
     cpdef add(self, list features, int clas, double amount)
     cpdef get_scores(self, object features)
     cpdef predict_best_class(self, list features)
     cdef int _predict_best_class(self, list features)
+    cdef set seen_labels
 
 
     #cpdef pa_update(self, object gu_feats, object go_feats, int gu_cls, int go_cls,double C=?)

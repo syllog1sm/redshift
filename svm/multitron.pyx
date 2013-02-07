@@ -2,6 +2,7 @@ import sys
 import math
 
 from stdlib cimport *
+
 cdef class MulticlassParamData:
     def __cinit__(self, int nclasses):
         cdef int i
@@ -20,33 +21,37 @@ cdef class MulticlassParamData:
 
 cdef class MultitronParameters:
     
-    def __cinit__(self, nclasses):
-        self.nclasses = nclasses
-        self.scores = <double *>malloc(nclasses*sizeof(double))
-
-    cpdef set_labels(self, labels):
-        assert len(labels) == self.nclasses
-        self.labels = list(labels)
-        self.label_to_i = dict([(label, i) for (i, label) in enumerate(labels)])
-
-    def __init__(self, nclasses):
-        self.nclasses = nclasses
+    def __cinit__(self, max_classes): 
+        self.scores = <double *>malloc(max_classes * sizeof(double))
+        self.max_classes = max_classes
+        self.n_classes = 0
         self.now = 0
         self.W = {}
+        self.labels = []
+        self.label_to_i = {}
+
+    def lookup_label(self, label):
+        if label not in self.label_to_i:
+            self.label_to_i[label] = self.n_classes
+            self.labels.append(label)
+            self.n_classes += 1
+            return self.n_classes - 1
+        else:
+            return self.label_to_i[label]
 
     cdef _tick(self):
-        self.now=self.now+1
+        self.now = self.now + 1
 
     def tick(self): self._tick()
 
-    cpdef add(self, list features, int clas, double amount):
+    cpdef add(self, list features, int label, double amount):
         cdef MulticlassParamData p
-        assert clas <= self.nclasses
+        clas = self.lookup_label(label)
         for f in features:
             try:
                 p = self.W[f]
             except KeyError:
-                p = MulticlassParamData(self.nclasses)
+                p = MulticlassParamData(self.max_classes)
                 self.W[f] = p
             p.acc[clas] += (self.now - p.lastUpd[clas]) * p.w[clas]
             p.w[clas] += amount
@@ -56,39 +61,32 @@ cdef class MultitronParameters:
         cdef MulticlassParamData p
         cdef int i
         cdef double w
-        for i in xrange(self.nclasses):
-            self.scores[i]=0
-        for f in features:
-            try:
-                p = self.W[f]
-                for c in xrange(self.nclasses):
-                    self.scores[c] += p.w[c]
-
-            except KeyError: pass
-        cdef double tot = 0
-        res={}
-        for i in range(self.nclasses):
-            res[i] = self.scores[i]
-        return res
-
-    cpdef predict_best_class(self, list features):
-        return self._predict_best_class(features)
-
-    cdef int _predict_best_class(self, list features):
-        cdef int i
-        cdef MulticlassParamData p
-        for i in range(self.nclasses):
+        for i in xrange(self.max_classes):
             self.scores[i] = 0
         for f in features:
             try:
                 p = self.W[f]
-                for c in xrange(self.nclasses):
+                for c in range(self.n_classes):
                     self.scores[c] += p.w[c]
-            except KeyError: 
+            except KeyError:
                 pass
+        cdef double tot = 0
+        res={}
+        for c in range(self.n_classes):
+            res[c] = self.scores[c]
+        return res
+
+    cpdef predict_best_class(self, list features):
+        best_i = self._predict_best_class(features)
+        return self.labels[best_i]
+
+    cdef int _predict_best_class(self, list features):
+        cdef int i
+        cdef MulticlassParamData p
+        scores = self.get_scores(features)
         cdef int best_i = 0
         cdef double best = self.scores[0]
-        for i in xrange(1,self.nclasses):
+        for i in range(self.n_classes):
             if best < self.scores[i]:
                 best_i = i
                 best = self.scores[i]
@@ -98,46 +96,45 @@ cdef class MultitronParameters:
         cdef MulticlassParamData p
         # average
         for f in self.W.keys():
-            for c in xrange(self.nclasses):
+            for c in range(self.n_classes):
                 p = self.W[f]
-                p.acc[c]+=(self.now-p.lastUpd[c])*p.w[c]
+                p.acc[c] += (self.now - p.lastUpd[c]) * p.w[c]
                 p.w[c] = p.acc[c] / self.now
 
     def dump(self, out=sys.stdout):
         cdef MulticlassParamData p
         # Write LibSVM compatible format
         out.write(u'solver_type L1R_LR\n')
-        out.write(u'nr_class %d\n' % self.nclasses)
-        out.write(u'label %s\n' % ' '.join([str(self.labels[i]) for i in range(self.nclasses)]))
+        out.write(u'nr_class %d\n' % self.n_classes)
+        out.write(u'label %s\n' % ' '.join(map(str, self.labels)))
         out.write(u'nr_feature %d\n' % max(self.W.keys()))
         out.write(u'bias -1\n')
         out.write(u'w\n')
         max_key = max(self.W.keys())
         for f in range(1, max_key):
             if f not in self.W:
-                out.write((u'0 ' * self.nclasses) + u'\n')
+                out.write((u'0 ' * self.n_classes) + u'\n')
                 continue
             p = self.W[f]
-            for c in xrange(self.nclasses):
+            for c in xrange(self.n_classes):
                 out.write(u" %s" % p.w[c])
             out.write(u"\n")
         out.close()
 
     def load(self, in_=sys.stdin):
         cdef MulticlassParamData p
-        n_labels = -1
-        label_map = None
         header, data = in_.read().split('w\n')
         for line in header.split('\n'):
             if line.startswith('label'):
                 label_names = line.strip().split()
                 # Remove the word "label"
                 label_names.pop(0)
-        self.set_labels([int(ln) for ln in label_names])
+        for label in label_names:
+            self.lookup_label(int(label))
         for i, line in enumerate(data.strip().split('\n')):
             pieces = line.strip().split()
             assert len(pieces) == len(label_names)
-            p = MulticlassParamData(len(label_names))
+            p = MulticlassParamData(self.max_classes)
             for j, w in enumerate(pieces):
                 p.w[j] = float(w)
             self.W[i + 1] = p  
