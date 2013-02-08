@@ -146,21 +146,26 @@ cdef class Parser:
     def train(self, Sentences sents, C=None, eps=None, n_iter=15):
         self.write_cfg(self.model_dir.join('parser.cfg'))
         self.guide.init_labels([1, 2, 3, 4])
+        index.hashes.set_feat_counting(True)
+        index.hashes.set_feat_threshold(5)
         for n in range(n_iter):
             for i in range(sents.length):
                 if self.train_alg == 'online':
                     self.online_train_one(n, &sents.s[i])
                 else:
-                    self.static_train_one(&sents.s[i])
-            acc = (float(self.guide.n_corr) / self.guide.total) * 100
-            print "Iter #%d %d/%d=%.2f" % (n, self.guide.n_corr, self.guide.total, acc)
-            self.guide.n_corr = 0
-            self.guide.total = 0
+                    self.static_train_one(n, &sents.s[i])
+            if n == 0:
+                index.hashes.set_feat_counting(False)
+            else:
+                acc = (float(self.guide.n_corr) / self.guide.total) * 100
+                print "Iter #%d %d/%d=%.2f" % (n, self.guide.n_corr, self.guide.total, acc)
+                self.guide.n_corr = 0
+                self.guide.total = 0
         self.guide.train()
         self.l_labeller.train()
         self.r_labeller.train()
 
-    cdef int static_train_one(self, Sentence* sent) except -1:
+    cdef int static_train_one(self, size_t iter_num, Sentence* sent) except -1:
         cdef int move
         cdef int label
 
@@ -181,13 +186,16 @@ cdef class Parser:
             # Translates the result of that into the "static oracle" move,
             # i.e. it decides which single move to take.
             move = self.moves.break_tie(&s, g_labels, g_heads, tags, valid)
-            self.guide.add_instance(move, 1, n_feats, feats)
+            if iter_num != 0:
+                self.guide.add_instance(move, 1, n_feats, feats)
             if move == LEFT:
                 label = g_labels[s.top]
-                self.l_labeller.add_instance(label, 1, n_feats, feats)
+                if iter_num != 0:
+                    self.l_labeller.add_instance(label, 1, n_feats, feats)
             elif move == RIGHT:
                 label = g_labels[s.i]
-                self.r_labeller.add_instance(label, 1, n_feats, feats)
+                if iter_num != 0:
+                    self.r_labeller.add_instance(label, 1, n_feats, feats)
             else:
                 label = 0
             self.moves.transition(move, label, &s)

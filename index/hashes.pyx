@@ -58,47 +58,7 @@ cdef class StrIndex(Index):
         if self.save_entries:
             self.out_file.close()
 
-
-cdef class FeatIndex(Index): 
-    def __cinit__(self):
-        cdef size_t i
-        cdef dense_hash_map[long, long] *table
-        self.tables = vector[dense_hash_map[long, long]]()
-        self.i = 1
-
-    cdef unsigned long encode(self, size_t* feature, size_t length, size_t i):
-        cdef int value
-        cdef int hashed = 0
-        MurmurHash3_x86_32(feature, length * sizeof(size_t), i, &hashed)
-        value = self.tables[i][hashed]
-        if value == 0:
-            self.tables[i][hashed] = self.i
-            if self.save_entries:
-                py_feat = []
-                for j in range(length):
-                    py_feat.append(str(feature[j]))
-                self.save_entry(i, '_'.join(py_feat), hashed, self.i)
-            value = self.i
-            self.i += 1
-        return value
-
-    def set_n_predicates(self, int n):
-        self.n = n
-        self.save_entries = False
-        for i in range(n):
-            table = new dense_hash_map[long, long]()
-            self.tables.push_back(table[0])
-            self.tables[i].set_empty_key(0)
-        self.count_features = False
- 
-    cpdef load_entry(self, size_t i, object key, long hashed, unsigned long value):
-        self.tables[i][<long>hashed] = <unsigned long>value
-
-    def __dealloc__(self):
-        if self.save_entries:
-            self.out_file.close()
-
-cdef class PruningFeatIndex(Index):
+cdef class FeatIndex(Index):
     def __cinit__(self):
         cdef size_t i
         cdef dense_hash_map[long, long] *table
@@ -191,9 +151,11 @@ cdef class InstanceCounter:
         return freq
 
 
+
+
 _pos_idx = StrIndex(TAG_SET_SIZE)
 _word_idx = StrIndex(VOCAB_SIZE, i=TAG_SET_SIZE)
-_feat_idx = PruningFeatIndex()
+_feat_idx = FeatIndex()
 
 def init_feat_idx(int n, path):
     global _feat_idx
