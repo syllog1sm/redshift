@@ -53,6 +53,10 @@ cdef extern from "MurmurHash3.h":
     void MurmurHash3_x86_32(void * key, int len, int seed, void* out)
     void MurmurHash3_x86_128(void * key, int len, int seed, void* out)
 
+cdef extern from "MurmurHash2.h":
+    unsigned long long MurmurHash64A(void * key, int len, int seed)
+    unsigned long long MurmurHash64B(void * key, int len, int seed)
+
 
 
 cdef class Index:
@@ -62,15 +66,15 @@ cdef class Index:
     cdef unsigned long i
 
     cpdef set_path(self, path)
-    cpdef save_entry(self, int i, object feat_str, int hashed, int value)
+    cpdef save_entry(self, int i, object feat_str, size_t hashed, size_t value)
     cpdef save(self)
     cpdef load(self, path)
 
 
 cdef class StrIndex(Index):
-    cdef dense_hash_map[int, int] table
+    cdef dense_hash_map[size_t, int] table
     cdef unsigned long encode(self, char* feature) except 0
-    cpdef load_entry(self, size_t i, object key, long hashed, long value)
+    cpdef load_entry(self, size_t i, object key, size_t hashed, size_t value)
 
 
 cdef class FeatIndex(Index):
@@ -78,11 +82,11 @@ cdef class FeatIndex(Index):
     cdef int p_i
     cdef int threshold
     cdef bint count_features
-    cdef vector[dense_hash_map[long, long]] tables
-    cdef vector[dense_hash_map[long, long]] unpruned
-    cdef dense_hash_map[long, long] freqs
+    cdef vector[dense_hash_map[size_t, long]] tables
+    cdef vector[dense_hash_map[size_t, long]] unpruned
+    cdef dense_hash_map[size_t, long] freqs
     cdef unsigned long encode(self, size_t* feature, size_t length, size_t i)
-    cpdef load_entry(self, size_t i, object key, long hashed, unsigned long value)
+    cpdef load_entry(self, size_t i, object key, size_t hashed, size_t value)
 
 
 cdef unsigned long encode_feat(size_t* feature, size_t length, size_t i)
