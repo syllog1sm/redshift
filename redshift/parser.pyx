@@ -232,7 +232,8 @@ cdef class Parser:
                 gold_move = pred_move
             else:
                 gold_move = self.guide.predict_from_ints(n_feats, feats, valid)
-                self.guide.update(pred_move, gold_move, n_feats, feats)
+            # This ticks the model over, but won't change weights if the labels are equal
+            self.guide.update(pred_move, gold_move, n_feats, feats)
             if gold_move == LEFT:
                 gold_label = g_labels[s.top]
                 pred_label = self.l_labeller.add_instance(gold_label, 1.0, n_feats, feats)
@@ -281,6 +282,8 @@ cdef class Parser:
                     label = self.r_labeller.predict_single(n_preds, feats)
                 else:
                     label = 0
+            else:
+                label = 0
             sent.parse.moves[s.t] = move
             sent.parse.move_labels[s.t] = label
             sent.parse.n_moves += 1
