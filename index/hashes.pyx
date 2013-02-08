@@ -98,7 +98,6 @@ cdef class FeatIndex(Index):
         if self.save_entries:
             self.out_file.close()
 
-"""
 cdef class PruningFeatIndex(Index):
     def __cinit__(self):
         cdef size_t i
@@ -157,7 +156,6 @@ cdef class PruningFeatIndex(Index):
 
     def set_threshold(self, int threshold):
         self.threshold = threshold
-"""
 
 
 cdef class InstanceCounter:
@@ -195,7 +193,7 @@ cdef class InstanceCounter:
 
 _pos_idx = StrIndex(TAG_SET_SIZE)
 _word_idx = StrIndex(VOCAB_SIZE, i=TAG_SET_SIZE)
-_feat_idx = FeatIndex()
+_feat_idx = PruningFeatIndex()
 
 def init_feat_idx(int n, path):
     global _feat_idx
