@@ -31,9 +31,6 @@ cdef int CONTEXT_SIZE = features.CONTEXT_SIZE
 VOCAB_SIZE = 1e6
 TAG_SET_SIZE = 50
 FOLLOW_ERR_PC = 0.90
-# LibLinear has solvers 0-13
-PERCEPTRON_SOLVER = 14
-
 
 cdef enum:
     ERR
@@ -83,9 +80,10 @@ cdef class Parser:
     cdef InstanceCounter inst_counts
     cdef object add_extra
     cdef object label_set
+    cdef object train_alg
     cdef int feat_thresh
 
-    def __cinit__(self, model_dir, clean=False, C=None, solver_type=6, eps=None,
+    def __cinit__(self, model_dir, clean=False, C=None, train_alg='static', eps=None,
                   add_extra=True, label_set='MALT', feat_thresh=5,
                   allow_reattach=False, allow_move=False,
                   reuse_idx=False, grammar_loc=None):
@@ -94,7 +92,7 @@ cdef class Parser:
             print "Reading settings from config"
             params = dict([line.split() for line in model_dir.join('parser.cfg').open()])
             C = float(params['C'])
-            solver_type = int(params['solver_type'])
+            train_alg = params['train_alg']
             eps = float(params['eps'])
             add_extra = True if params['add_extra'] == 'True' else False
             label_set = params['label_set']
@@ -116,13 +114,8 @@ cdef class Parser:
         self.add_extra = add_extra
         self.label_set = label_set
         self.feat_thresh = feat_thresh
-        if solver_type is None:
-            solver_type = 6
-        if C is None:
-            C = 1.0
-        if reuse_idx:
-            print "Using pre-loaded idx"
-        elif clean == True:
+        self.train_alg = train_alg
+        if clean == True:
             self.new_idx(self.model_dir, self.n_preds)
         else:
             self.load_idx(self.model_dir, self.n_preds)
@@ -132,14 +125,9 @@ cdef class Parser:
         l_lab_loc = self.model_dir.join('left_label_model')
         r_lab_loc = self.model_dir.join('right_label_model')
         n_labels = len(io_parse.LABEL_STRS)
-        if solver_type == PERCEPTRON_SOLVER:
-            self.guide = Perceptron(N_MOVES, guide_loc)
-            self.l_labeller = Perceptron(n_labels, l_lab_loc)
-            self.r_labeller = Perceptron(n_labels, r_lab_loc)
-        else:
-            self.guide = LibLinear(N_MOVES - 1, guide_loc, C=C, solver_type=solver_type)
-            self.l_labeller = LibLinear(n_labels, l_lab_loc, solver_type=solver_type)
-            self.r_labeller = LibLinear(n_labels, r_lab_loc, solver_type=solver_type)
+        self.guide = Perceptron(N_MOVES, guide_loc)
+        self.l_labeller = Perceptron(n_labels, l_lab_loc)
+        self.r_labeller = Perceptron(n_labels, r_lab_loc)
         self._context = features.init_context()
         self._hashed_feats = features.init_hashed_features()
         self._valid_classes = <bint*>malloc(N_MOVES * sizeof(bint))
@@ -157,21 +145,22 @@ cdef class Parser:
 
     def train(self, Sentences sents, C=None, eps=None, n_iter=15):
         self.write_cfg(self.model_dir.join('parser.cfg'))
-        if self.guide.solver_type == PERCEPTRON_SOLVER:
-            self.guide.init_labels([1, 2, 3, 4])
-            for n in range(n_iter):
-                for i in range(sents.length):
+        self.guide.init_labels([1, 2, 3, 4])
+        for n in range(n_iter):
+            for i in range(sents.length):
+                if self.train_alg == 'online':
                     self.online_train_one(n, &sents.s[i])
-                    #self.train_perceptron_one(&sents.s[i], n == 0)
-                acc = (float(self.guide.n_corr) / self.guide.total) * 100
-                print "Iter #%d %d/%d=%.2f" % (n, self.guide.n_corr, self.guide.total, acc)
-                self.guide.n_corr = 0
-                self.guide.total = 0
-            self.guide.train()
-        else:
-            self.train_svm(sents, C=C, eps=eps)
+                else:
+                    self.static_train_one(&sents.s[i])
+            acc = (float(self.guide.n_corr) / self.guide.total) * 100
+            print "Iter #%d %d/%d=%.2f" % (n, self.guide.n_corr, self.guide.total, acc)
+            self.guide.n_corr = 0
+            self.guide.total = 0
+        self.guide.train()
+        self.l_labeller.train()
+        self.r_labeller.train()
 
-    cdef int train_perceptron_one(self, Sentence* sent, bint is_first_iter) except -1:
+    cdef int static_train_one(self, Sentence* sent) except -1:
         cdef int move
         cdef int label
 
@@ -192,17 +181,13 @@ cdef class Parser:
             # Translates the result of that into the "static oracle" move,
             # i.e. it decides which single move to take.
             move = self.moves.break_tie(&s, g_labels, g_heads, tags, valid)
-            if not is_first_iter:
-                self.guide.add_instance(move, 1, n_feats, feats)
-                #self.guide.add_amb_instance(valid, 1, n_feats, feats)
+            self.guide.add_instance(move, 1, n_feats, feats)
             if move == LEFT:
                 label = g_labels[s.top]
-                if not is_first_iter:
-                    self.l_labeller.add_instance(label, 1, n_feats, feats)
+                self.l_labeller.add_instance(label, 1, n_feats, feats)
             elif move == RIGHT:
                 label = g_labels[s.i]
-                if not is_first_iter:
-                    self.r_labeller.add_instance(label, 1, n_feats, feats)
+                self.r_labeller.add_instance(label, 1, n_feats, feats)
             else:
                 label = 0
             self.moves.transition(move, label, &s)
@@ -235,10 +220,8 @@ cdef class Parser:
             self.moves.check_preconditions(&s, valid)
             pred_move = self.guide.predict_from_ints(n_feats, feats, valid)
             self.moves.check_costs(&s, g_heads, valid)
-            self.guide.total += 1
             if valid[pred_move]:
                 gold_move = pred_move
-                self.guide.n_corr += 1
             else:
                 gold_move = self.guide.predict_from_ints(n_feats, feats, valid)
                 self.guide.update(pred_move, gold_move, n_feats, feats)
@@ -328,7 +311,7 @@ cdef class Parser:
             cfg.write(u'model_dir\t%s\n' % self.model_dir)
             cfg.write(u'C\t%s\n' % self.guide.C)
             cfg.write(u'eps\t%s\n' % self.guide.eps)
-            cfg.write(u'solver_type\t%s\n' % self.guide.solver_type)
+            cfg.write(u'train_alg\t%s\n' % self.train_alg)
             cfg.write(u'add_extra\t%s\n' % self.add_extra)
             cfg.write(u'label_set\t%s\n' % self.label_set)
             cfg.write(u'grammar_loc\t%s\n' % self.moves.grammar_loc)
@@ -482,7 +465,8 @@ cdef class TransitionSystem:
         r_freq = self.grammar[tags[s.top]][sib_pos][tags[s.i]]
         if heads[s.i] == s.top:
             return RIGHT
-        elif self.allow_reattach and r_freq > 1000:
+        #elif self.allow_reattach and r_freq > 1000:
+        elif self.allow_reattach:
             order = (REDUCE, RIGHT, SHIFT, LEFT)
         else:
             order = (REDUCE, SHIFT, RIGHT, LEFT)
