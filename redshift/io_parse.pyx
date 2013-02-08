@@ -77,7 +77,7 @@ def read_conll(conll_str, moves=None):
     sentences = Sentences(max_length=len(sent_strs))
     first_sent = sent_strs[0]
     cdef size_t id_
-    for i, sent_str in enumerate(sent_strs):
+    for id_, sent_str in enumerate(sent_strs):
         if sent_str == first_sent:
             id_ = 0
         else:
