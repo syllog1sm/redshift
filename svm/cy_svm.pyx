@@ -208,20 +208,15 @@ cdef class Perceptron(Model):
         Add instance with 1 good label. Generalise to multi-label soon.
         """
         cdef size_t pred = self.model.predict_best_class(n, feats)
-        self.model.tick()
-        if pred != label:
-            self.model.add(n, feats, label, 1.0)
-            self.model.add(n, feats, pred, -1.0)
-        else:
-            self.n_corr += 1
-        self.total += 1
+        self.update(pred, label, n, feats)
         return pred
 
     cdef int update(self, size_t pred, size_t gold, int n, size_t* feats) except -1:
-        self.model.tick()
-        self.model.add(n, feats, pred, -1.0)
-        self.model.add(n, feats, gold, 1.0)
-        
+        self.model.update(pred, gold, n, feats)
+        if gold == pred:
+            self.n_corr += 1
+        self.total += 1
+
     def train(self):
         self.model.finalize()
 

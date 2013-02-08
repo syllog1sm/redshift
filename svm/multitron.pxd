@@ -60,6 +60,8 @@ cdef struct ParamData:
 cdef class MultitronParameters:
     cdef size_t n_classes
     cdef size_t n_params
+    cdef size_t feat_thresh
+    cdef bint count_freqs
     cdef size_t max_classes
     cdef size_t max_param
     cdef size_t now
@@ -72,7 +74,7 @@ cdef class MultitronParameters:
     cdef tick(self)
     cdef int lookup_label(self, size_t label) except -1
     cdef int add_param(self, size_t f)
-    cdef int add(self, size_t n_feats, size_t* features, int label, double amount) except -1
+    cdef int update(self, size_t gold_label, size_t pred_label, size_t n_feats, size_t* features) except -1
     cdef double* get_scores(self, size_t n_feats, size_t* features)
     cdef size_t predict_best_class(self, size_t n_feats, size_t* features)
     cdef int finalize(self) except -1

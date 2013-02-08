@@ -13,13 +13,15 @@ cdef class MultitronParameters:
     The feature value 0 is ignored.
     """
     
-    def __cinit__(self, max_classes):
+    def __cinit__(self, max_classes, feat_thresh=0):
         cdef size_t i
         self.scores = <double *>malloc(max_classes * sizeof(double))
         self.W = dense_hash_map[size_t, ParamData]()
         self.param_freqs = dense_hash_map[size_t, size_t]()
         self.W.set_empty_key(0)
         self.param_freqs.set_empty_key(0)
+        self.feat_thresh = 0
+        self.count_freqs = False
         self.max_param = 0
         self.max_classes = max_classes
         self.n_classes = 0
@@ -65,9 +67,14 @@ cdef class MultitronParameters:
     cdef tick(self):
         self.now = self.now + 1
 
-    cdef int add(self, size_t n_feats, size_t* features, int label, double amount) except -1:
+    cdef int update(self, size_t pred_label, size_t gold_label,
+                    size_t n_feats, size_t* features) except -1:
         cdef size_t i, f
-        cdef size_t clas = self.lookup_label(label)
+        self.tick()
+        cdef size_t gold_i = self.lookup_label(gold_label)
+        cdef size_t pred_i = self.lookup_label(pred_label)
+        if gold_i == pred_i:
+            return 0
         cdef ParamData* p
         for i in range(n_feats):
             f = features[i]
@@ -75,10 +82,18 @@ cdef class MultitronParameters:
                 continue
             if self.param_freqs[f] == 0:
                 self.add_param(f)
+            elif self.count_freqs:
+                self.param_freqs[f] += 1
+                continue
+            if self.param_freqs[f] < self.feat_thresh:
+                continue
             p = &self.W[f]
-            p.acc[clas] += (self.now - p.lastUpd[clas]) * p.w[clas]
-            p.w[clas] += amount
-            p.lastUpd[clas] = self.now
+            p.acc[pred_i] += (self.now - p.lastUpd[pred_i]) * p.w[pred_i]
+            p.acc[gold_i] += (self.now - p.lastUpd[gold_i]) * p.w[gold_i]
+            p.w[pred_i] -= 1
+            p.w[gold_i] += 1
+            p.lastUpd[pred_i] = self.now
+            p.lastUpd[gold_i] = self.now
         
     cdef double* get_scores(self, size_t n_feats, size_t* features):
         cdef size_t i, f, c
@@ -88,20 +103,20 @@ cdef class MultitronParameters:
         cdef size_t n_classes = self.n_classes
         for i in range(n_feats):
             f = features[i]
-            if f != 0 and self.param_freqs[f] != 0:
+            if f != 0 and self.param_freqs[f] > self.feat_thresh:
                 for c in range(n_classes):
                     self.scores[c] += self.W[f].w[c]
         return scores
 
     cdef size_t predict_best_class(self, size_t n_feats, size_t* features):
         cdef size_t i
-        self.get_scores(n_feats, features)
+        cdef double* scores = self.get_scores(n_feats, features)
         cdef int best_i = 0
-        cdef double best = self.scores[0]
+        cdef double best = scores[0]
         for i in range(self.n_classes):
-            if best < self.scores[i]:
+            if best < scores[i]:
                 best_i = i
-                best = self.scores[i]
+                best = scores[i]
         return self.labels[best_i]
 
     cdef int finalize(self) except -1:
