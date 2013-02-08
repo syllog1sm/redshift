@@ -2,6 +2,9 @@ import sys
 import math
 
 from libc.stdlib cimport *
+from libcpp.vector cimport vector
+from libcpp.utility cimport pair
+
 
 cdef class MultitronParameters:
     """
@@ -10,15 +13,15 @@ cdef class MultitronParameters:
     The feature value 0 is ignored.
     """
     
-    def __cinit__(self, max_classes, max_params):
+    def __cinit__(self, max_classes):
         cdef size_t i
         self.scores = <double *>malloc(max_classes * sizeof(double))
-        self.w = <double**>malloc(max_params * sizeof(double*))
-        self.acc = <double**>malloc(max_params * sizeof(double*))
-        self.lastUpd = <int**>malloc(max_params * sizeof(double*))
+        self.W = dense_hash_map[size_t, ParamData]()
+        self.param_freqs = dense_hash_map[size_t, size_t]()
+        self.W.set_empty_key(0)
+        self.param_freqs.set_empty_key(0)
+        self.max_param = 0
         self.max_classes = max_classes
-        self.max_params = max_params
-        self.n_params = 0
         self.n_classes = 0
         self.now = 0
         self.labels = <size_t*>malloc(max_classes * sizeof(size_t))
@@ -29,13 +32,6 @@ cdef class MultitronParameters:
 
     def __dealloc__(self):
         free(self.scores)
-        for f in range(self.n_params):
-            free(self.w[f])
-            free(self.acc[f])
-            free(self.lastUpd[f])
-        free(self.w)
-        free(self.acc)
-        free(self.lastUpd)
         free(self.labels)
         free(self.label_to_i)
 
@@ -51,16 +47,20 @@ cdef class MultitronParameters:
             return self.n_classes - 1
 
     cdef int add_param(self, size_t f) except -1:
-        assert f < self.max_params
-        while f >= self.n_params:
-            self.w[self.n_params] = <double*>malloc(self.max_classes * sizeof(double))
-            self.acc[self.n_params] = <double*>malloc(self.max_classes * sizeof(double))
-            self.lastUpd[self.n_params] = <int*>malloc(self.max_classes * sizeof(int))
-            for i in range(self.max_classes):
-                self.lastUpd[self.n_params][i] = 0
-                self.acc[self.n_params][i] = 0
-                self.w[self.n_params][i] = 0
-            self.n_params += 1
+        cdef size_t i
+        cdef ParamData* p
+        if f > self.max_param:
+            self.max_param = f
+        self.param_freqs[f] = 1
+        p = <ParamData*>malloc(sizeof(ParamData))
+        p.acc = <double*>malloc(self.max_classes * sizeof(double))
+        p.w = <double*>malloc(self.max_classes * sizeof(double))
+        p.lastUpd = <int*>malloc(self.max_classes  * sizeof(int))
+        for i in range(self.max_classes):
+            p.lastUpd[i] = 0
+            p.acc[i] = 0
+            p.w[i] = 0
+        self.W[f] = p[0]
 
     cdef tick(self):
         self.now = self.now + 1
@@ -68,54 +68,52 @@ cdef class MultitronParameters:
     cdef int add(self, size_t n_feats, size_t* features, int label, double amount) except -1:
         cdef size_t i, f
         cdef size_t clas = self.lookup_label(label)
-        cdef double** acc = self.acc
-        cdef double** w = self.w
-        cdef int** lastUpd = self.lastUpd
+        cdef ParamData* p
         for i in range(n_feats):
             f = features[i]
             if f == 0:
                 continue
-            if f >= self.n_params:
+            if self.param_freqs[f] == 0:
                 self.add_param(f)
-            acc[f][clas] += (self.now - lastUpd[f][clas]) * w[f][clas]
-            w[f][clas] += amount
-            lastUpd[f][clas] = self.now
+            p = &self.W[f]
+            p.acc[clas] += (self.now - p.lastUpd[clas]) * p.w[clas]
+            p.w[clas] += amount
+            p.lastUpd[clas] = self.now
         
-    cdef get_scores(self, size_t n_feats, size_t* features):
+    cdef double* get_scores(self, size_t n_feats, size_t* features):
         cdef size_t i, f, c
         cdef double* scores = self.scores
-        for i in range(self.max_classes):
-            scores[i] = 0
-        cdef double** w = self.w
         cdef size_t n_classes = self.n_classes
+        for i in range(n_classes):
+            scores[i] = 0
         for i in range(n_feats):
             f = features[i]
-            if f != 0 and f < self.n_params:
+            if f != 0 and self.param_freqs[f] != 0:
                 for c in range(n_classes):
-                    scores[c] += w[f][c]
+                    scores[c] += self.W[f].w[c]
+        return scores
 
     cdef size_t predict_best_class(self, size_t n_feats, size_t* features):
-        best_i = self._predict_best_class(n_feats, features)
+        cdef size_t i
+        cdef double* scores = self.get_scores(n_feats, features)
+        cdef size_t best_i = 0
+        cdef double best = scores[0]
+        for i in range(self.n_classes):
+            score = scores[i]
+            if best < score:
+                best_i = i
+                best = score
         return self.labels[best_i]
 
-    cdef size_t _predict_best_class(self, size_t n_feats, size_t* features):
-        cdef size_t i
-        self.get_scores(n_feats, features)
-        cdef int best_i = 0
-        cdef double best = self.scores[0]
-        for i in range(self.n_classes):
-            if best < self.scores[i]:
-                best_i = i
-                best = self.scores[i]
-        return best_i
-
-    def finalize(self):
+    cdef int finalize(self) except -1:
         cdef size_t f, c
         # average
-        for f in range(self.n_params):
+        for f in range(1, self.max_param):
+            if self.param_freqs[f] == 0:
+                continue
             for c in range(self.n_classes):
-                self.acc[f][c] += (self.now - self.lastUpd[f][c]) * self.w[f][c]
-                self.w[f][c] = self.acc[f][c] / self.now
+                self.W[f].acc[c] += (self.now - self.W[f].lastUpd[c]) * self.W[f].w[c]
+                self.W[f].w[c] = self.W[f].acc[c] / self.now
 
     def dump(self, out=sys.stdout):
         cdef size_t f, c
@@ -124,16 +122,21 @@ cdef class MultitronParameters:
         out.write(u'nr_class %d\n' % self.n_classes)
         out.write(u'label %s\n' % ' '.join([str(self.labels[i]) for i in
                                             range(self.n_classes)]))
-        out.write(u'nr_feature %d\n' % self.n_params)
+        out.write(u'nr_feature %d\n' % self.max_param)
         out.write(u'bias -1\n')
         out.write(u'w\n')
-        for f in range(1, self.n_params):
+        zeroes = '0 ' * self.n_classes
+        for f in range(1, self.max_param):
+            if self.param_freqs[f] == 0:
+                out.write(zeroes + u'\n')
+                continue
             for c in xrange(self.n_classes):
-                out.write(u" %s" % self.w[f][c])
+                out.write(u" %s" % self.W[f].w[c])
             out.write(u"\n")
         out.close()
 
     def load(self, in_=sys.stdin):
+        cdef size_t f, clas
         header, data = in_.read().split('w\n')
         for line in header.split('\n'):
             if line.startswith('label'):
@@ -142,9 +145,9 @@ cdef class MultitronParameters:
                 label_names.pop(0)
         for label in label_names:
             self.lookup_label(int(label))
-        for i, line in enumerate(data.strip().split('\n')):
+        for f, line in enumerate(data.strip().split('\n')):
             pieces = line.strip().split()
             assert len(pieces) == len(label_names)
-            self.add_param(i + 1)
-            for j, w in enumerate(pieces):
-                self.w[i + 1][j] = float(w)
+            self.add_param(f + 1)
+            for clas, w in enumerate(pieces):
+                self.W[f + 1].w[clas] = float(w)

@@ -187,7 +187,7 @@ cdef class Perceptron(Model):
                   float eps=0.01, clean=False):
         self.path = model_loc
         self.nr_class = max_classes
-        self.model = svm.multitron.MultitronParameters(self.nr_class, MAX_FEATS)
+        self.model = svm.multitron.MultitronParameters(self.nr_class)
         # C is the smoothing parameter for LibLinear, and eps is the tolerance
         # If we need these hyper-parameters in perceptron sometime, here they are
         self.C = C

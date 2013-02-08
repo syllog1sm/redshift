@@ -1,19 +1,70 @@
 from libcpp.vector cimport vector
+from libcpp.utility cimport pair
 
 #cdef class MulticlassParamData:
 #    cdef double *acc
 #    cdef double *w
 #    cdef int *lastUpd
 
+cdef extern from "sparsehash/dense_hash_map" namespace "google":
+    cdef cppclass dense_hash_map[K, D]:
+        K& key_type
+        D& data_type
+        pair[K, D]& value_type
+        size_t size_type
+        cppclass iterator:
+            pair[K, D]& operator*() nogil
+            iterator operator++() nogil
+            iterator operator--() nogil
+            bint operator==(iterator) nogil
+            bint operator!=(iterator) nogil
+        iterator begin()
+        iterator end()
+        size_t size()
+        size_t max_size()
+        bint empty()
+        size_t bucket_count()
+        size_t bucket_size(size_t i)
+        size_t bucket(K& key)
+        double max_load_factor()
+        void max_load_vactor(double new_grow)
+        double min_load_factor()
+        double min_load_factor(double new_grow)
+        void set_resizing_parameters(double shrink, double grow)
+        void resize(size_t n)
+        void rehash(size_t n)
+        dense_hash_map()
+        dense_hash_map(size_t n)
+
+
+        void swap(dense_hash_map&)
+        pair[iterator, bint] insert(pair[K, D]) nogil
+        void set_empty_key(K&)
+        void set_deleted_key(K& key)
+        void clear_deleted_key()
+        void erase(iterator pos)
+        size_t erase(K& k)
+        void erase(iterator first, iterator last)
+        void clear()
+        void clear_no_resize()
+        pair[iterator, iterator] equal_range(K& k)
+        D& operator[](K&) nogil
+
+
+
+cdef struct ParamData:
+    double* w
+    double* acc
+    int* lastUpd
+
 cdef class MultitronParameters:
     cdef size_t n_classes
     cdef size_t n_params
     cdef size_t max_classes
-    cdef size_t max_params
+    cdef size_t max_param
     cdef size_t now
-    cdef double** acc
-    cdef double** w
-    cdef int** lastUpd
+    cdef dense_hash_map[size_t, ParamData] W
+    cdef dense_hash_map[size_t, size_t] param_freqs
     cdef double* scores
     cdef size_t* labels
     cdef int* label_to_i
@@ -22,9 +73,9 @@ cdef class MultitronParameters:
     cdef int lookup_label(self, size_t label) except -1
     cdef int add_param(self, size_t f)
     cdef int add(self, size_t n_feats, size_t* features, int label, double amount) except -1
-    cdef get_scores(self, size_t n_feats, size_t* features)
+    cdef double* get_scores(self, size_t n_feats, size_t* features)
     cdef size_t predict_best_class(self, size_t n_feats, size_t* features)
-    cdef size_t _predict_best_class(self, size_t n_feats, size_t* features)
+    cdef int finalize(self) except -1
 
 
     #cpdef pa_update(self, object gu_feats, object go_feats, int gu_cls, int go_cls,double C=?)
