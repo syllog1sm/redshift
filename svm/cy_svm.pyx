@@ -1,3 +1,4 @@
+# cython: profile=True
 from cython.view cimport array as cvarray
 from libc.stdlib cimport malloc, free
 from libc.stdlib cimport qsort

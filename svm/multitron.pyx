@@ -1,3 +1,4 @@
+# cython: profile=True
 import sys
 import math
 
@@ -97,6 +98,7 @@ cdef class MultitronParameters:
         
     cdef double* get_scores(self, size_t n_feats, size_t* features):
         cdef size_t i, f, c
+        cdef double* w
         cdef double* scores = self.scores
         for i in range(self.max_classes):
             scores[i] = 0
@@ -104,8 +106,9 @@ cdef class MultitronParameters:
         for i in range(n_feats):
             f = features[i]
             if f != 0 and self.param_freqs[f] > self.feat_thresh:
+                w = self.W[f].w
                 for c in range(n_classes):
-                    self.scores[c] += self.W[f].w[c]
+                    scores[c] += w[c]
         return scores
 
     cdef size_t predict_best_class(self, size_t n_feats, size_t* features):
