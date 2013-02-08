@@ -14,7 +14,7 @@ import redshift.io_parse
 @plac.annotations(
     train_loc=("Training location", "positional"),
     moves_loc=("Training moves location", "positional"),
-    solver_alg=("LibLinear solver algorithm (0 for L2, 6 for L1)", "option", "a", int),
+    train_alg=("Learning algorithm [static, online]", "option", "a", str),
     c=("Regularisation penalty", "option", "c", float),
     label_set=("Name of label set to use.", "option", "l", str),
     no_extra_feats=("Remove extra features (never good)", "flag", "x", bool),
@@ -22,7 +22,7 @@ import redshift.io_parse
     allow_reattach=("Allow left-clobber", "flag", "r", bool),
     allow_move=("Allow raise/lower", "flag", "m", bool),
 )
-def main(train_loc, model_loc, moves_loc=None, solver_alg=6, c=1.0,
+def main(train_loc, model_loc, moves_loc=None, train_alg="static", c=1.0,
          no_extra_feats=False, label_set="MALT", feat_thresh=5,
          allow_reattach=False, allow_move=False):
     train_loc = Path(train_loc)
@@ -39,7 +39,7 @@ def main(train_loc, model_loc, moves_loc=None, solver_alg=6, c=1.0,
             print "Could not find moves; assuming none"
             moves_loc = None
     parser = redshift.parser.Parser(model_loc, clean=True,
-                                    solver_type=solver_alg, C=c, add_extra=not no_extra_feats,
+                                    train_alg=train_alg, C=c, add_extra=not no_extra_feats,
                                     label_set=label_set, feat_thresh=feat_thresh,
                                     allow_reattach=allow_reattach, allow_move=allow_move,
                                     grammar_loc=grammar_loc)
