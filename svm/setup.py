@@ -31,6 +31,7 @@ setup(
         Extension(
             "multitron",
             ["multitron.pyx"],
+            include_dirs=[numpy.get_include(), os.path.join(virtual_env, 'include')],
             language="c++")
         ]
 )
