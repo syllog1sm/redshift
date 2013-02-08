@@ -147,8 +147,8 @@ cdef class Parser:
         self.write_cfg(self.model_dir.join('parser.cfg'))
         self.guide.init_labels([1, 2, 3, 4])
         index.hashes.set_feat_counting(True)
-        index.hashes.set_feat_threshold(5)
-        for n in range(n_iter):
+        index.hashes.set_feat_threshold(self.feat_thresh)
+        for n in range(n_iter + 1):
             for i in range(sents.length):
                 if self.train_alg == 'online':
                     self.online_train_one(n, &sents.s[i])
