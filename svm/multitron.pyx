@@ -83,26 +83,25 @@ cdef class MultitronParameters:
     cdef double* get_scores(self, size_t n_feats, size_t* features):
         cdef size_t i, f, c
         cdef double* scores = self.scores
-        cdef size_t n_classes = self.n_classes
-        for i in range(n_classes):
+        for i in range(self.max_classes):
             scores[i] = 0
+        cdef size_t n_classes = self.n_classes
         for i in range(n_feats):
             f = features[i]
             if f != 0 and self.param_freqs[f] != 0:
                 for c in range(n_classes):
-                    scores[c] += self.W[f].w[c]
+                    self.scores[c] += self.W[f].w[c]
         return scores
 
     cdef size_t predict_best_class(self, size_t n_feats, size_t* features):
         cdef size_t i
-        cdef double* scores = self.get_scores(n_feats, features)
-        cdef size_t best_i = 0
-        cdef double best = scores[0]
+        self.get_scores(n_feats, features)
+        cdef int best_i = 0
+        cdef double best = self.scores[0]
         for i in range(self.n_classes):
-            score = scores[i]
-            if best < score:
+            if best < self.scores[i]:
                 best_i = i
-                best = score
+                best = self.scores[i]
         return self.labels[best_i]
 
     cdef int finalize(self) except -1:
