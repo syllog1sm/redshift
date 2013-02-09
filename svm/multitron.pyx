@@ -163,8 +163,9 @@ cdef class MultitronParameters:
         for label in label_names:
             self.lookup_label(int(label))
         for f, line in enumerate(data.strip().split('\n')):
-            pieces = line.strip().split()
-            assert len(pieces) == len(label_names)
-            self.add_param(f + 1)
-            for clas, w in enumerate(pieces):
-                self.W[f + 1].w[clas] = float(w)
+            weights = [float(w) for w in line.strip().split()]
+            assert len(weights) == len(label_names)
+            if any([w != 0 for w in weights]):
+                self.add_param(f + 1)
+                for clas, w in enumerate(weights):
+                    self.W[f + 1].w[clas] = w
