@@ -23,7 +23,7 @@ import redshift.io_parse
     allow_move=("Allow raise/lower", "flag", "m", bool),
 )
 def main(train_loc, model_loc, moves_loc=None, train_alg="static", c=1.0,
-         no_extra_feats=False, label_set="Stanford", feat_thresh=1,
+         add_extra_feats=False, label_set="Stanford", feat_thresh=1,
          allow_reattach=False, allow_move=False):
     train_loc = Path(train_loc)
     if allow_reattach:
@@ -39,7 +39,7 @@ def main(train_loc, model_loc, moves_loc=None, train_alg="static", c=1.0,
             print "Could not find moves; assuming none"
             moves_loc = None
     parser = redshift.parser.Parser(model_loc, clean=True,
-                                    train_alg=train_alg, C=c, add_extra=not no_extra_feats,
+                                    train_alg=train_alg, C=c, add_extra=add_extra_feats,
                                     label_set=label_set, feat_thresh=feat_thresh,
                                     allow_reattach=allow_reattach, allow_move=allow_move,
                                     grammar_loc=grammar_loc)
