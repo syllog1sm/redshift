@@ -3,6 +3,7 @@ from pathlib import Path
 DEF VOCAB_SIZE = 1e6
 DEF TAG_SET_SIZE = 100
 
+from numpy cimport uint64_t
 
 cdef class Index:
     cpdef set_path(self, path):
@@ -15,12 +16,12 @@ cdef class Index:
             self.out_file.close()
         self.save_entries = False
 
-    cpdef save_entry(self, int i, object feat_str, size_t hashed, size_t value):
+    cpdef save_entry(self, int i, object feat_str, object hashed, object value):
         self.out_file.write(u'%d\t%s\t%d\t%d\n' % (i, feat_str, hashed, value))
 
     cpdef load(self, path):
-        cdef size_t hashed
-        cdef size_t value
+        cdef object hashed
+        cdef uint64_t value
         for line in path.open():
             fields = line.strip().split()
             i = int(fields[0])
@@ -31,15 +32,15 @@ cdef class Index:
 
 
 cdef class StrIndex(Index):
-    def __cinit__(self, expected_size, int i=1):
+    def __cinit__(self, expected_size, uint64_t i=1):
         self.table.set_empty_key(0)
         self.table.resize(expected_size)
-        self.i = <int>i
+        self.i = i
         self.save_entries = False
     
-    cdef unsigned long encode(self, char* feature) except 0:
-        cdef int value
-        cdef unsigned long long hashed = MurmurHash64A(<char*>feature, len(feature), 0)
+    cdef uint64_t encode(self, char* feature) except 0:
+        cdef uint64_t value
+        cdef uint64_t hashed = MurmurHash64A(<char*>feature, len(feature), 0)
         value = self.table[hashed]
         if value == 0:
             value = self.i
@@ -50,7 +51,7 @@ cdef class StrIndex(Index):
         assert value < 1000000
         return value
 
-    cpdef load_entry(self, size_t i, object key, size_t hashed, size_t value):
+    cpdef load_entry(self, size_t i, object key, uint64_t hashed, uint64_t value):
         self.table[hashed] = value
 
     def __dealloc__(self):
@@ -59,31 +60,30 @@ cdef class StrIndex(Index):
 
 cdef class FeatIndex(Index):
     def __cinit__(self):
-        cdef size_t i
-        cdef dense_hash_map[size_t, long] *table
-        cdef dense_hash_map[size_t, long] *pruned
-        self.unpruned = vector[dense_hash_map[size_t, long]]()
-        self.tables = vector[dense_hash_map[size_t, long]]()
-        self.freqs = dense_hash_map[size_t, long]()
+        cdef dense_hash_map[uint64_t, uint64_t] *table
+        cdef dense_hash_map[uint64_t, uint64_t] *pruned
+        self.unpruned = vector[dense_hash_map[uint64_t, uint64_t]]()
+        self.tables = vector[dense_hash_map[uint64_t, uint64_t]]()
+        self.freqs = dense_hash_map[uint64_t, uint64_t]()
         self.i = 1
         self.p_i = 1
 
-    def set_n_predicates(self, int n):
+    def set_n_predicates(self, uint64_t n):
         self.n = n
         self.save_entries = False
         for i in range(n):
-            table = new dense_hash_map[size_t, long]()
+            table = new dense_hash_map[uint64_t, uint64_t]()
             self.unpruned.push_back(table[0])
             self.unpruned[i].set_empty_key(0)
-            pruned = new dense_hash_map[size_t, long]()
+            pruned = new dense_hash_map[uint64_t, uint64_t]()
             self.tables.push_back(pruned[0])
             self.tables[i].set_empty_key(0)
         self.freqs.set_empty_key(0)
         self.count_features = False
     
-    cdef unsigned long encode(self, size_t* feature, size_t length, size_t i):
-        cdef int value
-        cdef unsigned long long hashed
+    cdef uint64_t encode(self, size_t* feature, size_t length, size_t i):
+        cdef uint64_t value
+        cdef uint64_t hashed
         hashed = MurmurHash64A(feature, length * sizeof(size_t), i)
         if not self.count_features:
             return self.tables[i][hashed]
@@ -103,8 +103,8 @@ cdef class FeatIndex(Index):
             self.p_i += 1
         return value
 
-    cpdef load_entry(self, size_t i, object key, size_t hashed, size_t value):
-        self.tables[i][<size_t>hashed] = <size_t>value
+    cpdef load_entry(self, size_t i, object key, uint64_t hashed, uint64_t value):
+        self.tables[i][hashed] = value
 
     def __dealloc__(self):
         if self.save_entries:
@@ -209,7 +209,7 @@ def encode_pos(object pos):
     raw_pos = py_pos
     return idx.encode(raw_pos)
 
-cdef unsigned long encode_feat(size_t* feature, size_t length, size_t i):
+cdef uint64_t encode_feat(size_t* feature, size_t length, size_t i):
     global _feat_idx
     cdef FeatIndex idx = _feat_idx
     return idx.encode(feature, length, i)

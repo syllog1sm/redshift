@@ -11,7 +11,6 @@ import cProfile
 import redshift.parser
 import redshift.io_parse
 
-PROFILE = False
 
 def get_pos(conll_str):
     pos_sents = []
@@ -30,8 +29,9 @@ def get_pos(conll_str):
 
 @plac.annotations(
     use_gold=("Gold-formatted test data", "flag", "g", bool),
+    profile=("Do profiling", "flag", "p", bool)
 )
-def main(parser_dir, text_loc, out_dir, use_gold=False):
+def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False):
     parser_dir = Path(parser_dir)
     text_loc = Path(text_loc)
     out_dir = Path(out_dir)
@@ -47,7 +47,7 @@ def main(parser_dir, text_loc, out_dir, use_gold=False):
     else:
         sentences = redshift.io_parse.read_pos(text_loc.open().read())
         gold_sents = None
-    if PROFILE:
+    if profile:
         cProfile.runctx("parser.add_parses(sentences,gold=gold_sents)", globals(), locals(), "Profile.prof")
 
         s = pstats.Stats("Profile.prof")
