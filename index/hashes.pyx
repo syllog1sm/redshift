@@ -15,12 +15,12 @@ cdef class Index:
             self.out_file.close()
         self.save_entries = False
 
-    cpdef save_entry(self, int i, object feat_str, int hashed, int value):
+    cpdef save_entry(self, int i, object feat_str, size_t hashed, size_t value):
         self.out_file.write(u'%d\t%s\t%d\t%d\n' % (i, feat_str, hashed, value))
 
     cpdef load(self, path):
-        cdef long hashed
-        cdef long value
+        cdef size_t hashed
+        cdef size_t value
         for line in path.open():
             fields = line.strip().split()
             i = int(fields[0])
@@ -39,8 +39,7 @@ cdef class StrIndex(Index):
     
     cdef unsigned long encode(self, char* feature) except 0:
         cdef int value
-        cdef int hashed = 0
-        MurmurHash3_x86_32(<char*>feature, len(feature), 0, &hashed)
+        cdef unsigned long long hashed = MurmurHash64A(<char*>feature, len(feature), 0)
         value = self.table[hashed]
         if value == 0:
             value = self.i
@@ -51,7 +50,7 @@ cdef class StrIndex(Index):
         assert value < 1000000
         return value
 
-    cpdef load_entry(self, size_t i, object key, long hashed, long value):
+    cpdef load_entry(self, size_t i, object key, size_t hashed, size_t value):
         self.table[hashed] = value
 
     def __dealloc__(self):
@@ -61,11 +60,11 @@ cdef class StrIndex(Index):
 cdef class FeatIndex(Index):
     def __cinit__(self):
         cdef size_t i
-        cdef dense_hash_map[long, long] *table
-        cdef dense_hash_map[long, long] *pruned
-        self.unpruned = vector[dense_hash_map[long, long]]()
-        self.tables = vector[dense_hash_map[long, long]]()
-        self.freqs = dense_hash_map[long, long]()
+        cdef dense_hash_map[size_t, long] *table
+        cdef dense_hash_map[size_t, long] *pruned
+        self.unpruned = vector[dense_hash_map[size_t, long]]()
+        self.tables = vector[dense_hash_map[size_t, long]]()
+        self.freqs = dense_hash_map[size_t, long]()
         self.i = 1
         self.p_i = 1
 
@@ -73,10 +72,10 @@ cdef class FeatIndex(Index):
         self.n = n
         self.save_entries = False
         for i in range(n):
-            table = new dense_hash_map[long, long]()
+            table = new dense_hash_map[size_t, long]()
             self.unpruned.push_back(table[0])
             self.unpruned[i].set_empty_key(0)
-            pruned = new dense_hash_map[long, long]()
+            pruned = new dense_hash_map[size_t, long]()
             self.tables.push_back(pruned[0])
             self.tables[i].set_empty_key(0)
         self.freqs.set_empty_key(0)
@@ -84,8 +83,8 @@ cdef class FeatIndex(Index):
     
     cdef unsigned long encode(self, size_t* feature, size_t length, size_t i):
         cdef int value
-        cdef int hashed = 0
-        MurmurHash3_x86_32(feature, length * sizeof(size_t), i, &hashed)
+        cdef unsigned long long hashed
+        hashed = MurmurHash64A(feature, length * sizeof(size_t), i)
         if not self.count_features:
             return self.tables[i][hashed]
         value = self.unpruned[i][hashed]
@@ -104,8 +103,8 @@ cdef class FeatIndex(Index):
             self.p_i += 1
         return value
 
-    cpdef load_entry(self, size_t i, object key, long hashed, unsigned long value):
-        self.tables[i][<long>hashed] = <unsigned long>value
+    cpdef load_entry(self, size_t i, object key, size_t hashed, size_t value):
+        self.tables[i][<size_t>hashed] = <size_t>value
 
     def __dealloc__(self):
         if self.save_entries:

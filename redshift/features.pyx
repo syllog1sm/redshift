@@ -209,14 +209,7 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, n2,
         context[N0llabs] += (n0_llabels[(N_LABELS - 1) - j] << j)
 
     d = n0 - s0
-    # This makes sense as 0, not 1, because we do want to know how far away
-    # we are from the OOB token. 
-    if s0 == 0:
-        context[dist] = 0
-    elif d >= 5:
-        context[dist] = 5
-    else:
-        context[dist] = d
+    context[dist] = d
     if stack_len >= 5:
         context[depth] = 5
     else:

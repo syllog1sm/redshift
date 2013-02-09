@@ -14,4 +14,4 @@ lib/liblinear.so: $(LL)/linear.cpp $(LL)/tron.cpp
 
 clean:
 	make -C $(LL) clean
-	rm -rf *~ lib/* cy_svm.cpp *.o *.html build
+	rm -rf *~ lib/* multitron.cpp cy_svm.cpp *.o *.html build
