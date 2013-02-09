@@ -30,7 +30,9 @@ cdef int CONTEXT_SIZE = features.CONTEXT_SIZE
 
 VOCAB_SIZE = 1e6
 TAG_SET_SIZE = 50
-FOLLOW_ERR_PC = 0.90
+cdef double FOLLOW_ERR_PC = 0.90
+
+SHIFTLESS = False
 
 cdef enum:
     ERR
@@ -145,11 +147,16 @@ cdef class Parser:
 
     def train(self, Sentences sents, C=None, eps=None, n_iter=15):
         self.write_cfg(self.model_dir.join('parser.cfg'))
-        self.guide.init_labels([1, 2, 3, 4])
+        if SHIFTLESS:
+            self.guide.init_labels((REDUCE, LEFT, RIGHT))
+        else:
+            self.guide.init_labels((SHIFT, REDUCE, LEFT, RIGHT))
         index.hashes.set_feat_counting(True)
         index.hashes.set_feat_threshold(self.feat_thresh)
+        indices = range(sents.length)
         for n in range(n_iter + 1):
-            for i in range(sents.length):
+            random.shuffle(indices)
+            for i in indices:
                 if self.train_alg == 'online':
                     self.online_train_one(n, &sents.s[i])
                 else:
@@ -219,6 +226,7 @@ cdef class Parser:
         cdef size_t* context = self._context
         cdef size_t* feats = self._hashed_feats
         cdef size_t n_feats = self.n_preds
+        cdef Model labeller
 
         cdef State s = init_state(sent.length)
         cdef int n_instances = 0
@@ -236,15 +244,18 @@ cdef class Parser:
             self.guide.update(pred_move, gold_move, n_feats, feats)
             if gold_move == LEFT:
                 gold_label = g_labels[s.top]
-                pred_label = self.l_labeller.add_instance(gold_label, 1.0, n_feats, feats)
+                labeller = self.l_labeller
             elif gold_move == RIGHT:
                 gold_label = g_labels[s.i]
-                pred_label = self.r_labeller.add_instance(gold_label, 1.0, n_feats, feats)
+                labeller = self.r_labeller
             else:
-                pred_label = 0
                 gold_label = 0
+            if gold_move in (LEFT, RIGHT) and gold_move == pred_move:
+                pred_label = labeller.add_instance(gold_label, 1.0, n_feats, feats)
+            else:
+                pred_label = gold_label
 
-            if iter_num >= 2 and random.random() > 0.1:
+            if iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
                 move = pred_move
                 label = pred_label
             else:
@@ -446,19 +457,22 @@ cdef class TransitionSystem:
     cdef int check_preconditions(self, State* s, bint* valid_moves) except -1:
         # Load pre-conditions that don't refer to gold heads
         valid_moves[ERR] = False
-        valid_moves[SHIFT] = s.i < s.n
+        valid_moves[SHIFT] = s.i < s.n and not SHIFTLESS
         valid_moves[RIGHT] = s.i < s.n and s.top != 0
         valid_moves[REDUCE] = s.top != 0 and s.heads[s.top] != 0
         valid_moves[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
         valid_moves[LOWER] = self.allow_move and s.r_valencies[s.top] >= 2
         # If move is determined, output it
         if s.top == 0:
+            valid_moves[SHIFT] = True
             return SHIFT
         else:
             return ERR
    
     cdef int check_costs(self, State* s, size_t* heads, bint* valid_moves) except -1:
-        self.check_preconditions(s, valid_moves)
+        move = self.check_preconditions(s, valid_moves)
+        if move != ERR:
+            return move
         valid_moves[SHIFT] = valid_moves[SHIFT] and self.s_cost(s, heads)
         valid_moves[REDUCE] = valid_moves[REDUCE] and self.d_cost(s, heads)
         valid_moves[LEFT] = valid_moves[LEFT] and self.l_cost(s, heads)
