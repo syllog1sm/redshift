@@ -149,7 +149,9 @@ cdef class Parser:
         index.hashes.set_feat_counting(True)
         index.hashes.set_feat_threshold(self.feat_thresh)
         for n in range(n_iter + 1):
-            for i in range(sents.length):
+            indices = range(sents.length)
+            random.shuffle(indices)
+            for i in indices:
                 if self.train_alg == 'online':
                     self.online_train_one(n, &sents.s[i])
                 else:
