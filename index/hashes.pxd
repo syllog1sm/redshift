@@ -1,5 +1,6 @@
 from libcpp.utility cimport pair
 from libcpp.vector cimport vector
+from numpy cimport uint64_t
 
 DEF VOCAB_SIZE = 1e6
 DEF TAG_SET_SIZE = 100
@@ -34,8 +35,6 @@ cdef extern from "sparsehash/dense_hash_map" namespace "google":
         void rehash(size_t n)
         dense_hash_map()
         dense_hash_map(size_t n)
-
-
         void swap(dense_hash_map&)
         pair[iterator, bint] insert(pair[K, D]) nogil
         void set_empty_key(K&)
@@ -58,39 +57,42 @@ cdef extern from "MurmurHash2.h":
     unsigned long long MurmurHash64B(void * key, int len, int seed)
 
 
+cdef extern from "MurmurHash2.h":
+    unsigned long long MurmurHash64A(void * key, int len, int seed)
+    unsigned long long MurmurHash64B(void * key, int len, int seed)
+
 
 cdef class Index:
     cdef object path
     cdef bint save_entries
     cdef object out_file
-    cdef unsigned long i
+    cdef uint64_t i
 
     cpdef set_path(self, path)
-    cpdef save_entry(self, int i, object feat_str, size_t hashed, size_t value)
+    cpdef save_entry(self, int i, object feat_str, object hashed, object value)
     cpdef save(self)
     cpdef load(self, path)
 
 
 cdef class StrIndex(Index):
-    cdef dense_hash_map[size_t, int] table
-    cdef unsigned long encode(self, char* feature) except 0
-    cpdef load_entry(self, size_t i, object key, size_t hashed, size_t value)
+    cdef dense_hash_map[uint64_t, uint64_t] table
+    cdef uint64_t encode(self, char* feature) except 0
+    cpdef load_entry(self, size_t i, object key, uint64_t hashed, uint64_t value)
 
 
 cdef class FeatIndex(Index):
-    cdef int n
-    cdef int p_i
+    cdef uint64_t n
+    cdef uint64_t p_i
     cdef int threshold
     cdef bint count_features
-    cdef vector[dense_hash_map[size_t, long]] tables
-    cdef vector[dense_hash_map[size_t, long]] unpruned
-    cdef dense_hash_map[size_t, long] freqs
-    cdef unsigned long encode(self, size_t* feature, size_t length, size_t i)
-    cpdef load_entry(self, size_t i, object key, size_t hashed, size_t value)
+    cdef vector[dense_hash_map[uint64_t, uint64_t]] tables
+    cdef vector[dense_hash_map[uint64_t, uint64_t]] unpruned
+    cdef dense_hash_map[uint64_t, uint64_t] freqs
+    cdef uint64_t encode(self, size_t* feature, size_t length, size_t i)
+    cpdef load_entry(self, size_t i, object key, uint64_t hashed, uint64_t value)
 
 
-cdef unsigned long encode_feat(size_t* feature, size_t length, size_t i)
-
+cdef uint64_t encode_feat(size_t* feature, size_t length, size_t i)
 
 cdef class InstanceCounter:
     cdef int n

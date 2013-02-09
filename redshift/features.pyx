@@ -89,7 +89,7 @@ cdef enum:
     _context_size
 assert CONTEXT_SIZE == _context_size, "Set CONTEXT_SIZE to %d in features.pyx" % _context_size
 
-cdef int fill_context(size_t* context, size_t n0, size_t n1, n2,
+cdef int fill_context(size_t* context, size_t n0, size_t n1, size_t n2,
                       size_t s0, size_t s1,
                       size_t s0_re, size_t s1_re,
                       size_t stack_len,
@@ -204,12 +204,18 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, n2,
     context[N0llabs] = 0
     for j in range(N_LABELS):
         # Decode the binary arrays representing the label sets into integers
+        # Iterate in reverse, incrementing by the bit shifted by the idx
         context[S0llabs] += (s0_llabels[(N_LABELS - 1) - j] << j)
         context[S0rlabs] += (s0_rlabels[(N_LABELS - 1) - j] << j)
         context[N0llabs] += (n0_llabels[(N_LABELS - 1) - j] << j)
 
     d = n0 - s0
-    context[dist] = d
+    # TODO: Seems hard to believe we want to keep d non-zero when there's no
+    # stack top. Experiment with this futrther.
+    if s0 != 0:
+        context[dist] = d
+    else:
+        context[dist] = 0
     if stack_len >= 5:
         context[depth] = 5
     else:
