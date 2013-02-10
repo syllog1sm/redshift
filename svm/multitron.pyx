@@ -43,7 +43,6 @@ cdef class MultitronParameters:
         if self.label_to_i[label] >= 0:
             return self.label_to_i[label]
         else:
-            assert self.n_classes < self.max_classes
             self.label_to_i[label] = self.n_classes
             self.labels[self.n_classes] = label
             self.n_classes += 1

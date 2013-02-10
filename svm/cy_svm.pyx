@@ -1,7 +1,5 @@
 # cython: profile=True
-from cython.view cimport array as cvarray
 from libc.stdlib cimport malloc, free
-from libc.stdlib cimport qsort
 import os
 import sys
 import numpy as np
@@ -188,7 +186,7 @@ cdef class Perceptron(Model):
                   float eps=0.01, clean=False):
         self.path = model_loc
         self.nr_class = max_classes
-        self.model = svm.multitron.MultitronParameters(self.nr_class)
+        self.model = svm.multitron.MultitronParameters(max_classes)
         # C is the smoothing parameter for LibLinear, and eps is the tolerance
         # If we need these hyper-parameters in perceptron sometime, here they are
         self.C = C
@@ -227,11 +225,9 @@ cdef class Perceptron(Model):
             size_t best_class
             size_t label
             double score, best_score
-            double* scores
             size_t* labels
         cdef bint seen_valid = False
-        self.model.get_scores(n, feats)
-        scores = self.model.scores
+        cdef double* scores = self.model.get_scores(n, feats)
         labels = self.model.labels
         best_score = 0
         best_class = 0
@@ -242,7 +238,15 @@ cdef class Perceptron(Model):
                 best_score = score
                 best_class = label
                 seen_valid = True
-        assert seen_valid
+        # If can't find a valid label, add a previously unseen valid label
+        if not seen_valid:
+            for i in range(self.model.max_classes):
+                if valid_classes[i]:
+                    print "Adding class %d" % i
+                    self.model.lookup_label(i)
+                    return i
+            else:
+                raise StandardError
         return best_class
 
 
