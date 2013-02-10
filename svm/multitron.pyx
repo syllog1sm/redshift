@@ -1,11 +1,9 @@
 # cython: profile=True
-import sys
-import math
-
 from libc.stdlib cimport *
-from libcpp.vector cimport vector
-from libcpp.utility cimport pair
+from libc.string cimport memcpy
+cimport cython
 
+PRUNE_THRESH = 1e-5
 
 cdef class MultitronParameters:
     """
@@ -18,25 +16,24 @@ cdef class MultitronParameters:
         cdef size_t i
         self.scores = <double *>malloc(max_classes * sizeof(double))
         self.W = dense_hash_map[size_t, ParamData]()
-        self.param_freqs = dense_hash_map[size_t, size_t]()
         self.W.set_empty_key(0)
-        self.param_freqs.set_empty_key(0)
-        self.feat_thresh = 0
-        self.count_freqs = False
         self.max_param = 0
         self.max_classes = max_classes
         self.n_classes = 0
         self.now = 0
         self.labels = <size_t*>malloc(max_classes * sizeof(size_t))
         self.label_to_i = <int*>malloc(max_classes * sizeof(int))
+        self._double_zeroes = <double*>malloc(max_classes * sizeof(double))
         for i in range(max_classes):
             self.label_to_i[i] = -1
             self.labels[i] = 0
+            self._double_zeroes[i] = 0
 
     def __dealloc__(self):
         free(self.scores)
         free(self.labels)
         free(self.label_to_i)
+        free(self._double_zeroes)
 
     cdef int lookup_label(self, size_t label) except -1:
         assert label < self.max_classes
@@ -63,8 +60,8 @@ cdef class MultitronParameters:
         cdef ParamData* p
         if f > self.max_param:
             self.max_param = f
-        self.param_freqs[f] = 1
         p = <ParamData*>malloc(sizeof(ParamData))
+        p.n_non_zeroes = 0
         p.acc = <double*>malloc(self.max_classes * sizeof(double))
         p.w = <double*>malloc(self.max_classes * sizeof(double))
         p.lastUpd = <int*>malloc(self.max_classes  * sizeof(int))
@@ -76,18 +73,18 @@ cdef class MultitronParameters:
             p.w[i] = 0
             p.class_to_i[i] = -1
             p.non_zeroes[i] = 0
-            p.n_non_zeroes = 0
         self.W[f] = p[0]
 
-    cdef tick(self):
+    cdef int tick(self):
         self.now = self.now + 1
 
     cdef int update(self, size_t pred_label, size_t gold_label,
                     size_t n_feats, size_t* features) except -1:
         cdef size_t i, f
-        self.tick()
+        
         cdef size_t gold_i = self.lookup_label(gold_label)
         cdef size_t pred_i = self.lookup_label(pred_label)
+        self.tick()
         if gold_i == pred_i:
             return 0
         cdef ParamData* p
@@ -95,13 +92,8 @@ cdef class MultitronParameters:
             f = features[i]
             if f == 0:
                 continue
-            if self.param_freqs[f] == 0:
+            if self.W.count(f) == 0:
                 self.add_param(f)
-            elif self.count_freqs:
-                self.param_freqs[f] += 1
-                continue
-            if self.param_freqs[f] < self.feat_thresh:
-                continue
             p = &self.W[f]
             pred_i = self.lookup_class(p, pred_i)
             gold_i = self.lookup_class(p, gold_i)
@@ -111,21 +103,28 @@ cdef class MultitronParameters:
             p.w[gold_i] += 1
             p.lastUpd[pred_i] = self.now
             p.lastUpd[gold_i] = self.now
-        
+
+    @cython.boundscheck(False) 
+    @cython.wraparound(False) 
     cdef double* get_scores(self, size_t n_feats, size_t* features):
         cdef size_t i, f, c, j, clas
         cdef ParamData* p
+        cdef double* w
+        cdef size_t* non_zeroes
+        cdef size_t dummy
         cdef double* scores = self.scores
+        memcpy(scores, self._double_zeroes, self.max_classes * sizeof(double))
         for i in range(self.max_classes):
             scores[i] = 0
-        cdef size_t n_classes = self.n_classes
         for i in range(n_feats):
             f = features[i]
-            if f != 0 and self.param_freqs[f] > self.feat_thresh:
+            if f != 0 and self.W.count(f) != 0:
                 p = &self.W[f]
+                non_zeroes = p.non_zeroes
+                w = p.w
                 for j in range(p.n_non_zeroes):
-                    clas = p.non_zeroes[j]
-                    scores[clas] += p.w[j]
+                    clas = non_zeroes[j]
+                    scores[clas] += w[j]
         return scores
 
     cdef size_t predict_best_class(self, size_t n_feats, size_t* features):
@@ -144,14 +143,14 @@ cdef class MultitronParameters:
         cdef ParamData* p
         # average
         for f in range(1, self.max_param):
-            if self.param_freqs[f] == 0:
+            if self.W.count(f) == 0:
                 continue
             p = &self.W[f]
             for i in range(p.n_non_zeroes):
                 p.acc[i] += (self.now - p.lastUpd[i]) * p.w[i]
                 p.w[i] = p.acc[i] / self.now
 
-    def dump(self, out=sys.stdout):
+    def dump(self, out):
         cdef size_t f, c
         # Write LibSVM compatible format
         out.write(u'solver_type L1R_LR\n')
@@ -171,9 +170,9 @@ cdef class MultitronParameters:
             out.write(u"\n")
         out.close()
 
-    def load(self, in_=sys.stdin):
+    def load(self, in_):
         cdef ParamData* p
-        cdef size_t f, clas
+        cdef size_t f, i, clas
         header, data = in_.read().split('w\n')
         for line in header.split('\n'):
             if line.startswith('label'):
@@ -182,13 +181,18 @@ cdef class MultitronParameters:
                 label_names.pop(0)
         for label in label_names:
             self.lookup_label(int(label))
+        total_feats = 0
+        unpruned = 0
         for f, line in enumerate(data.strip().split('\n')):
+            total_feats += 1
             weights = [float(w) for w in line.strip().split()]
             assert len(weights) == len(label_names)
-            if any([w != 0 for w in weights]):
+            if any([abs(w) > PRUNE_THRESH for w in weights]):
                 self.add_param(f + 1)
                 p = &self.W[f + 1]
                 for clas, w in enumerate(weights):
                     if w != 0:
-                        clas = self.lookup_class(p, clas)
-                        p.w[clas] = w
+                        i = self.lookup_class(p, clas)
+                        p.w[i] = w
+                unpruned += 1
+        print "%d/%d features kept" % (unpruned, total_feats)

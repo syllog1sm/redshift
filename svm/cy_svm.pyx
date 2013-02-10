@@ -221,10 +221,9 @@ cdef class Perceptron(Model):
             size_t best_class
             size_t label
             double score, best_score
-            size_t* labels
         cdef bint seen_valid = False
         cdef double* scores = self.model.get_scores(n, feats)
-        labels = self.model.labels
+        cdef size_t* labels = self.model.labels
         best_score = 0
         best_class = 0
         for i in range(self.model.n_classes):
