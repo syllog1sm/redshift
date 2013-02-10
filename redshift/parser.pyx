@@ -141,7 +141,9 @@ cdef class Parser:
         index.hashes.set_feat_counting(True)
         index.hashes.set_feat_threshold(self.feat_thresh)
         indices = range(sents.length)
-        for n in range(n_iter + 1):
+        # First iteration of static is used to collect feature frequencies, so
+        # we need an extra iteration
+        for n in range(n_iter + (1 if self.train_alg == 'static' else 0)):
             random.shuffle(indices)
             for i in indices:
                 if self.train_alg == 'online':
@@ -150,7 +152,7 @@ cdef class Parser:
                     self.static_train_one(n, &sents.s[i])
             if n == 0:
                 index.hashes.set_feat_counting(False)
-            else:
+            if n > 0 or self.train_alg == "online":
                 acc = (float(self.guide.n_corr) / self.guide.total) * 100
                 print "Iter #%d %d/%d=%.2f" % (n, self.guide.n_corr, self.guide.total, acc)
                 self.guide.n_corr = 0
