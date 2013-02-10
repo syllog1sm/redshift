@@ -56,6 +56,10 @@ cdef struct ParamData:
     double* w
     double* acc
     int* lastUpd
+    int* class_to_i
+    size_t* non_zeroes
+    size_t n_non_zeroes
+
 
 cdef class MultitronParameters:
     cdef size_t n_classes
@@ -73,6 +77,7 @@ cdef class MultitronParameters:
     
     cdef tick(self)
     cdef int lookup_label(self, size_t label) except -1
+    cdef int lookup_class(self, ParamData* p, size_t clas) except -1
     cdef int add_param(self, size_t f)
     cdef int update(self, size_t gold_label, size_t pred_label, size_t n_feats, size_t* features) except -1
     cdef double* get_scores(self, size_t n_feats, size_t* features)

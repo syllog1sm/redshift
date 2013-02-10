@@ -48,6 +48,16 @@ cdef class MultitronParameters:
             self.n_classes += 1
             return self.n_classes - 1
 
+    cdef int lookup_class(self, ParamData* p, size_t clas) except -1:
+        cdef int i
+        i = p.class_to_i[clas]
+        if i == -1:
+            i = p.n_non_zeroes
+            p.non_zeroes[i] = clas
+            p.class_to_i[clas] = i
+            p.n_non_zeroes += 1
+        return i
+
     cdef int add_param(self, size_t f) except -1:
         cdef size_t i
         cdef ParamData* p
@@ -58,10 +68,15 @@ cdef class MultitronParameters:
         p.acc = <double*>malloc(self.max_classes * sizeof(double))
         p.w = <double*>malloc(self.max_classes * sizeof(double))
         p.lastUpd = <int*>malloc(self.max_classes  * sizeof(int))
+        p.class_to_i = <int*>malloc(self.max_classes * sizeof(int))
+        p.non_zeroes = <size_t*>malloc(self.max_classes * sizeof(size_t))
         for i in range(self.max_classes):
             p.lastUpd[i] = 0
             p.acc[i] = 0
             p.w[i] = 0
+            p.class_to_i[i] = -1
+            p.non_zeroes[i] = 0
+            p.n_non_zeroes = 0
         self.W[f] = p[0]
 
     cdef tick(self):
@@ -88,6 +103,8 @@ cdef class MultitronParameters:
             if self.param_freqs[f] < self.feat_thresh:
                 continue
             p = &self.W[f]
+            pred_i = self.lookup_class(p, pred_i)
+            gold_i = self.lookup_class(p, gold_i)
             p.acc[pred_i] += (self.now - p.lastUpd[pred_i]) * p.w[pred_i]
             p.acc[gold_i] += (self.now - p.lastUpd[gold_i]) * p.w[gold_i]
             p.w[pred_i] -= 1
@@ -96,8 +113,8 @@ cdef class MultitronParameters:
             p.lastUpd[gold_i] = self.now
         
     cdef double* get_scores(self, size_t n_feats, size_t* features):
-        cdef size_t i, f, c
-        cdef double* w
+        cdef size_t i, f, c, j, clas
+        cdef ParamData* p
         cdef double* scores = self.scores
         for i in range(self.max_classes):
             scores[i] = 0
@@ -105,9 +122,10 @@ cdef class MultitronParameters:
         for i in range(n_feats):
             f = features[i]
             if f != 0 and self.param_freqs[f] > self.feat_thresh:
-                w = self.W[f].w
-                for c in range(n_classes):
-                    scores[c] += w[c]
+                p = &self.W[f]
+                for j in range(p.n_non_zeroes):
+                    clas = p.non_zeroes[j]
+                    scores[clas] += p.w[j]
         return scores
 
     cdef size_t predict_best_class(self, size_t n_feats, size_t* features):
@@ -122,14 +140,16 @@ cdef class MultitronParameters:
         return self.labels[best_i]
 
     cdef int finalize(self) except -1:
-        cdef size_t f, c
+        cdef size_t f, i
+        cdef ParamData* p
         # average
         for f in range(1, self.max_param):
             if self.param_freqs[f] == 0:
                 continue
-            for c in range(self.n_classes):
-                self.W[f].acc[c] += (self.now - self.W[f].lastUpd[c]) * self.W[f].w[c]
-                self.W[f].w[c] = self.W[f].acc[c] / self.now
+            p = &self.W[f]
+            for i in range(p.n_non_zeroes):
+                p.acc[i] += (self.now - p.lastUpd[i]) * p.w[i]
+                p.w[i] = p.acc[i] / self.now
 
     def dump(self, out=sys.stdout):
         cdef size_t f, c
@@ -152,6 +172,7 @@ cdef class MultitronParameters:
         out.close()
 
     def load(self, in_=sys.stdin):
+        cdef ParamData* p
         cdef size_t f, clas
         header, data = in_.read().split('w\n')
         for line in header.split('\n'):
@@ -166,5 +187,8 @@ cdef class MultitronParameters:
             assert len(weights) == len(label_names)
             if any([w != 0 for w in weights]):
                 self.add_param(f + 1)
+                p = &self.W[f + 1]
                 for clas, w in enumerate(weights):
-                    self.W[f + 1].w[clas] = w
+                    if w != 0:
+                        clas = self.lookup_class(p, clas)
+                        p.w[clas] = w
