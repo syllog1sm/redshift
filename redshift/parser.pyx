@@ -25,6 +25,8 @@ from index.hashes cimport InstanceCounter
 
 from svm.cy_svm cimport Model, LibLinear, Perceptron
 
+random.seed(0)
+
 
 cdef int CONTEXT_SIZE = features.CONTEXT_SIZE
 
