@@ -443,7 +443,7 @@ cdef class TransitionSystem:
             s.is_finished = True
 
     cdef bint* check_preconditions(self, State* s) except NULL:
-        cdef suze_t i, l_id, r_id, w_id
+        cdef size_t i, l_id, r_id, w_id
         cdef bint* unpaired = self._move_validity
         # Load pre-conditions that don't refer to gold heads
         unpaired[ERR] = False
