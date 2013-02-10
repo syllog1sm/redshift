@@ -22,7 +22,7 @@ import redshift.io_parse
     allow_move=("Allow raise/lower", "flag", "m", bool),
     shiftless=("Use no shift transition (requires reattach)", "flag", "s", bool),
     repair_only=("Penalise incorrect moves in the oracle even when they can be repaired",
-                 "flag", "o", bool)
+                 "flag", "o", bool),
 )
 def main(train_loc, model_loc, moves_loc=None, train_alg="static",
          add_extra_feats=False, label_set="Stanford", feat_thresh=1,
@@ -48,7 +48,7 @@ def main(train_loc, model_loc, moves_loc=None, train_alg="static",
                                     label_set=label_set, feat_thresh=feat_thresh,
                                     allow_reattach=allow_reattach, allow_move=allow_move,
                                     grammar_loc=grammar_loc, shiftless=shiftless,
-                                    repair_only=False)
+                                    repair_only=repair_only)
     if moves_loc is not None:
         moves = moves_loc.open().read().strip()
     else:
