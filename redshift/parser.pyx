@@ -32,6 +32,7 @@ cdef int CONTEXT_SIZE = features.CONTEXT_SIZE
 
 VOCAB_SIZE = 1e6
 TAG_SET_SIZE = 50
+REPAIR_ONLY = True
 cdef double FOLLOW_ERR_PC = 0.90
 
 
@@ -84,7 +85,7 @@ cdef class Parser:
     cdef int feat_thresh
 
     def __cinit__(self, model_dir, clean=False, train_alg='static',
-                  shiftless=False, n_iters=15,
+                  shiftless=False, repair_only=False, n_iters=15,
                   add_extra=True, label_set='MALT', feat_thresh=5,
                   allow_reattach=False, allow_move=False,
                   reuse_idx=False, grammar_loc=None):
@@ -101,6 +102,7 @@ cdef class Parser:
             allow_move = params['allow_move'] == 'True'
             grammar_loc = params['grammar_loc']
             shiftless = params['shiftless'] == 'True'
+            repair_only = params['repair_only'] == 'True'
             if grammar_loc == 'None':
                 grammar_loc = None
             else:
@@ -111,6 +113,8 @@ cdef class Parser:
             print 'Lower'
         if shiftless:
             print 'Shiftless'
+        if repair_only:
+            print 'Repair only'
         self.model_dir = self.setup_model_dir(model_dir, clean)
         io_parse.set_labels(label_set)
         self.n_preds = features.make_predicates(add_extra, True)
@@ -122,9 +126,11 @@ cdef class Parser:
             self.new_idx(self.model_dir, self.n_preds)
         else:
             self.load_idx(self.model_dir, self.n_preds)
+        if shiftless:
+            assert not repair_only
         self.moves = TransitionSystem(io_parse.LABEL_STRS, allow_reattach=allow_reattach,
                                       allow_move=allow_move, grammar_loc=grammar_loc,
-                                      shiftless=shiftless)
+                                      shiftless=shiftless, repair_only=repair_only)
         guide_loc = self.model_dir.join('model')
         n_labels = len(io_parse.LABEL_STRS)
         self.guide = Perceptron(self.moves.n_paired, guide_loc)
@@ -300,6 +306,7 @@ cdef class Parser:
             cfg.write(u'allow_reattach\t%s\n' % self.moves.allow_reattach)
             cfg.write(u'allow_move\t%s\n' % self.moves.allow_move)
             cfg.write(u'shiftless\t%s\n' % self.moves.shiftless)
+            cfg.write(u'repair_only\t%s\n' % self.moves.repair_only)
         
     def get_best_moves(self, Sentences sents, Sentences gold):
         """Get a list of move taken/oracle move pairs for output"""
@@ -351,6 +358,7 @@ cdef class TransitionSystem:
     cdef bint allow_reattach
     cdef bint allow_move
     cdef bint shiftless
+    cdef bint repair_only
     cdef size_t n_labels
     cdef object py_labels
     cdef size_t[N_MOVES] offsets
@@ -373,12 +381,13 @@ cdef class TransitionSystem:
 
     def __cinit__(self, object labels, allow_reattach=False,
                   allow_move=False, grammar_loc=None,
-                  shiftless=False):
+                  shiftless=False, repair_only=False):
         self.n_labels = len(labels)
         self.py_labels = labels
         self.allow_reattach = allow_reattach
         self.allow_move = allow_move
         self.shiftless = shiftless
+        self.repair_only = repair_only
         if grammar_loc is not None:
             self.read_grammar(grammar_loc)
         self.grammar_loc = grammar_loc
@@ -551,7 +560,7 @@ cdef class TransitionSystem:
         cdef size_t i, buff_i, stack_i
         if g_heads[s.i] == s.top:
             return True
-        if has_head_in_buffer(s, s.i, g_heads) and not self.allow_reattach:
+        if has_head_in_buffer(s, s.i, g_heads) and (not self.allow_reattach or self.repair_only):
             return False
         if has_child_in_stack(s, s.i, g_heads):
             return False
