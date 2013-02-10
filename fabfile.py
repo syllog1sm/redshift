@@ -11,6 +11,15 @@ from _paths import HOSTS, GATEWAY
 env.hosts = HOSTS
 env.gateway = GATEWAY
 
+def recompile():
+    local("make -C redshift clean")
+    local("make -C index clean")
+    local("make -C svm clean")
+    local("make -C svm")
+    local("make -C index")
+    local("make -C redshift")
+
+
 def deploy():
     local("make -C redshift")
     local("git push")
