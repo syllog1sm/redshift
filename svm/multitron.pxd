@@ -26,7 +26,6 @@ cdef extern from "sparsehash/dense_hash_map" namespace "google":
         size_t bucket_count()
         size_t bucket_size(size_t i)
         size_t bucket(K& key)
-        size_t count(K& count)
         double max_load_factor()
         void max_load_vactor(double new_grow)
         double min_load_factor()
@@ -57,27 +56,41 @@ cdef struct ParamData:
     double* w
     double* acc
     int* lastUpd
-    int* class_to_i
-    size_t* non_zeroes
-    size_t n_non_zeroes
-
 
 cdef class MultitronParameters:
     cdef size_t n_classes
+    cdef size_t n_params
+    cdef size_t feat_thresh
+    cdef bint count_freqs
     cdef size_t max_classes
     cdef size_t max_param
     cdef size_t now
-    cdef int tick(self)
     cdef dense_hash_map[size_t, ParamData] W
+    cdef dense_hash_map[size_t, size_t] param_freqs
     cdef double* scores
     cdef size_t* labels
     cdef int* label_to_i
-    cdef double* _double_zeroes
     
+    cdef tick(self)
     cdef int lookup_label(self, size_t label) except -1
-    cdef int lookup_class(self, ParamData* p, size_t clas) except -1
     cdef int add_param(self, size_t f)
     cdef int update(self, size_t gold_label, size_t pred_label, size_t n_feats, size_t* features) except -1
     cdef double* get_scores(self, size_t n_feats, size_t* features)
     cdef size_t predict_best_class(self, size_t n_feats, size_t* features)
     cdef int finalize(self) except -1
+
+
+    #cpdef pa_update(self, object gu_feats, object go_feats, int gu_cls, int go_cls,double C=?)
+    #cpdef add_params(self, MultitronParameters other, double factor)
+    #cpdef set(self, list features, int clas, double amount)
+    #cpdef do_pa_update(self, list feats, int gold_cls, double C=?)
+    #cpdef get_scores_r(self, features)
+    #cpdef add_r(self, list features, int clas, double amount)
+    #cpdef scalar_multiply(self, double scalar)
+    #cdef _update(self, int goodClass, int badClass, list features)
+
+    #cdef _update_r(self, int goodClass, int badClass, list features)
+
+    #cpdef getW(self, object clas)
+
+    #cpdef predict_best_class_r(self, list features)
