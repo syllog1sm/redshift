@@ -63,6 +63,7 @@ cdef class MultitronParameters:
     cdef size_t feat_thresh
     cdef bint count_freqs
     cdef size_t max_classes
+    cdef size_t true_nr_class
     cdef size_t max_param
     cdef size_t now
     cdef dense_hash_map[size_t, ParamData] W

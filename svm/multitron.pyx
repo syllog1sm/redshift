@@ -25,6 +25,7 @@ cdef class MultitronParameters:
         self.count_freqs = False
         self.max_param = 0
         self.max_classes = max_classes
+        self.true_nr_class = max_classes
         self.n_classes = 0
         self.now = 0
         self.labels = <size_t*>malloc(max_classes * sizeof(size_t))
@@ -55,10 +56,10 @@ cdef class MultitronParameters:
             self.max_param = f
         self.param_freqs[f] = 1
         p = <ParamData*>malloc(sizeof(ParamData))
-        p.acc = <double*>malloc(self.max_classes * sizeof(double))
-        p.w = <double*>malloc(self.max_classes * sizeof(double))
-        p.lastUpd = <int*>malloc(self.max_classes  * sizeof(int))
-        for i in range(self.max_classes):
+        p.acc = <double*>malloc(self.true_nr_class * sizeof(double))
+        p.w = <double*>malloc(self.true_nr_class * sizeof(double))
+        p.lastUpd = <int*>malloc(self.true_nr_class  * sizeof(int))
+        for i in range(self.true_nr_class):
             p.lastUpd[i] = 0
             p.acc[i] = 0
             p.w[i] = 0
@@ -161,6 +162,7 @@ cdef class MultitronParameters:
                 label_names.pop(0)
         for label in label_names:
             self.lookup_label(int(label))
+        self.true_nr_class = len(label_names)
         for f, line in enumerate(data.strip().split('\n')):
             weights = [float(w) for w in line.strip().split()]
             assert len(weights) == len(label_names)

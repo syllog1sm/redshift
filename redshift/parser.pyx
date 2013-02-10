@@ -149,6 +149,22 @@ cdef class Parser:
         return loc
 
     def train(self, Sentences sents, C=None, eps=None, n_iter=15):
+        cdef size_t i, j, n
+        cdef Sentence* sent
+        # Count classes
+        seen_classes = set([self.moves.s_id, self.moves.d_id])
+        for i in range(sents.length):
+            sent = &sents.s[i]
+            for j in range(sent.length):
+                label = sent.parse.labels[j]
+                if sent.parse.heads[j] > j:
+                    seen_classes.add(self.moves.pair_label_move(label, LEFT))
+                else:
+                    seen_classes.add(self.moves.pair_label_move(label, RIGHT))
+                    if self.moves.allow_lower:
+                        seen_classes.add(self.moves.pair_label_move(label, LOWER))
+        print "%d classes seen (max value %d)" % (len(seen_classes), max(seen_classes))
+        self.guide.set_nr_class(len(seen_classes))
         self.write_cfg(self.model_dir.join('parser.cfg'))
         index.hashes.set_feat_counting(True)
         index.hashes.set_feat_threshold(self.feat_thresh)
@@ -582,6 +598,8 @@ cdef class TransitionSystem:
 
     cdef bint d_cost(self, State *s, size_t* g_heads):
         if has_child_in_buffer(s, s.top, g_heads):
+            if self.repair_only:
+                return False
             if not self.allow_lower:
                 return False
             elif s.second == 0 or s.heads[s.top] != s.second:

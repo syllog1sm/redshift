@@ -195,6 +195,10 @@ cdef class Perceptron(Model):
         self.n_corr = 0.0
         self.total = 0.0
 
+    def set_nr_class(self, nr_class):
+        self.nr_class = nr_class
+        self.model.true_nr_class = nr_class
+
     def begin_adding_instances(self, size_t n_feats):
         pass
 
