@@ -157,7 +157,6 @@ cdef class Parser:
                 print "Iter #%d %d/%d=%.2f" % (n, self.guide.n_corr, self.guide.total, acc)
                 self.guide.n_corr = 0
                 self.guide.total = 0
-
         self.guide.train()
 
     cdef int static_train_one(self, size_t iter_num, Sentence* sent) except -1:
@@ -506,25 +505,22 @@ cdef class TransitionSystem:
 
     cdef int break_tie(self, State* s, size_t* labels, size_t* heads,
                        size_t* tags, bint* valid_moves) except -1:
-        if valid_moves[self.w_start]:
-            return LOWER
-        if heads[s.top] == s.i and valid_moves[LEFT]:
-            return LEFT
-        cdef size_t sib = get_r(s, s.top)
-        cdef size_t sib_pos = tags[sib] if sib != 0 else index.hashes.encode_pos('NONE')
-        r_freq = self.grammar[tags[s.top]][sib_pos][tags[s.i]]
-        if heads[s.i] == s.top:
+        cdef size_t w_id, l_id
+        self.check_costs(s, labels, heads)
+        if self._move_validity[RIGHT] and heads[s.i] == s.top:
             return RIGHT
-        #elif self.allow_reattach and r_freq > 1000:
-        elif self.allow_reattach:
-            order = (REDUCE, RIGHT, LEFT)
+        elif self._move_validity[LEFT] and heads[s.top] == s.i:
+            return LEFT
+        elif self._move_validity[REDUCE]:
+            return REDUCE
+        elif self._move_validity[RIGHT]:
+            return RIGHT
+        elif self._move_validity[LEFT]:
+            return LEFT
+        elif self._move_validity[SHIFT]:
+            return SHIFT
         else:
-            order = (REDUCE, SHIFT, RIGHT, LEFT)
-        for move in order:
-            if valid_moves[self.pair_label_move(0, move)]:
-                return move
-        else:
-            return ERR
+            raise StandardError
 
     cdef bint s_cost(self, State *s, size_t* g_heads):
         cdef size_t i, stack_i
