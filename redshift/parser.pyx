@@ -70,14 +70,11 @@ cdef lmove_to_str(move, label):
 cdef class Parser:
     cdef size_t n_features
     cdef Model guide
-    cdef Model l_labeller
-    cdef Model r_labeller
     cdef object model_dir
     cdef Sentence* sentence
     cdef int n_preds
     cdef size_t* _context
     cdef size_t* _hashed_feats
-    cdef bint* _valid_classes
     cdef TransitionSystem moves
     cdef InstanceCounter inst_counts
     cdef object add_extra
@@ -124,15 +121,12 @@ cdef class Parser:
         self.moves = TransitionSystem(io_parse.LABEL_STRS, allow_reattach=allow_reattach,
                                       allow_move=allow_move, grammar_loc=grammar_loc)
         guide_loc = self.model_dir.join('model')
-        l_lab_loc = self.model_dir.join('left_label_model')
-        r_lab_loc = self.model_dir.join('right_label_model')
         n_labels = len(io_parse.LABEL_STRS)
-        self.guide = Perceptron(N_MOVES, guide_loc)
-        self.l_labeller = Perceptron(n_labels, l_lab_loc)
-        self.r_labeller = Perceptron(n_labels, r_lab_loc)
+        self.guide = Perceptron(self.moves.n_paired, guide_loc)
+        self.guide.init_labels([self.moves.s_id, self.moves.l_start,
+                                self.moves.r_start, self.moves.d_id])
         self._context = features.init_context()
         self._hashed_feats = features.init_hashed_features()
-        self._valid_classes = <bint*>malloc(N_MOVES * sizeof(bint))
         self.inst_counts = InstanceCounter()
 
     def setup_model_dir(self, loc, clean):
@@ -147,10 +141,6 @@ cdef class Parser:
 
     def train(self, Sentences sents, C=None, eps=None, n_iter=15):
         self.write_cfg(self.model_dir.join('parser.cfg'))
-        if SHIFTLESS:
-            self.guide.init_labels((REDUCE, LEFT, RIGHT))
-        else:
-            self.guide.init_labels((SHIFT, REDUCE, LEFT, RIGHT))
         index.hashes.set_feat_counting(True)
         index.hashes.set_feat_threshold(self.feat_thresh)
         indices = range(sents.length)
@@ -168,17 +158,16 @@ cdef class Parser:
                 print "Iter #%d %d/%d=%.2f" % (n, self.guide.n_corr, self.guide.total, acc)
                 self.guide.n_corr = 0
                 self.guide.total = 0
+
         self.guide.train()
-        self.l_labeller.train()
-        self.r_labeller.train()
 
     cdef int static_train_one(self, size_t iter_num, Sentence* sent) except -1:
-        cdef int move
-        cdef int label
+        cdef size_t move
+        cdef size_t label
 
         cdef size_t* g_labels = sent.parse.labels
         cdef size_t* g_heads = sent.parse.heads
-        cdef bint* valid = self._valid_classes
+        cdef bint* valid
         cdef size_t* tags = sent.pos
         cdef size_t* feats = self._hashed_feats
         cdef size_t* context = self._context
@@ -189,40 +178,31 @@ cdef class Parser:
         while not s.is_finished:
             features.extract(self._context, self._hashed_feats, sent, &s)
             # Determine which moves are zero-cost and meet pre-conditions
-            self.moves.check_costs(&s, g_heads, valid)
+            valid = self.moves.check_costs(&s, g_heads)
             # Translates the result of that into the "static oracle" move,
             # i.e. it decides which single move to take.
             move = self.moves.break_tie(&s, g_labels, g_heads, tags, valid)
-            if iter_num != 0:
-                self.guide.add_instance(move, 1, n_feats, feats)
             if move == LEFT:
                 label = g_labels[s.top]
-                if iter_num != 0:
-                    self.l_labeller.add_instance(label, 1, n_feats, feats)
             elif move == RIGHT:
                 label = g_labels[s.i]
-                if iter_num != 0:
-                    self.r_labeller.add_instance(label, 1, n_feats, feats)
             else:
                 label = 0
+            paired = self.moves.pair_label_move(label, move)
+            if iter_num != 0:
+                self.guide.add_instance(paired, 1.0, n_feats, feats)
             self.moves.transition(move, label, &s)
             n_instances += 1
         return n_instances
 
     cdef int online_train_one(self, int iter_num, Sentence* sent) except -1:
-        cdef:
-            int move
-            int label
-            int gold_move
-            int gold_label
-            int pred_move
-            int pred_label
+        cdef size_t move, label, gold_move, gold_label, pred_move, pred_label
+        cdef bint* valid
         
         cdef size_t* g_labels = sent.parse.labels
         cdef size_t* g_heads = sent.parse.heads
         cdef size_t* tags = sent.pos
 
-        cdef bint* valid = self._valid_classes
         cdef size_t* context = self._context
         cdef size_t* feats = self._hashed_feats
         cdef size_t n_feats = self.n_preds
@@ -233,27 +213,21 @@ cdef class Parser:
         while not s.is_finished:
             features.extract(self._context, self._hashed_feats, sent, &s)
             # Determine which moves are zero-cost and meet pre-conditions
-            self.moves.check_preconditions(&s, valid)
-            pred_move = self.guide.predict_from_ints(n_feats, feats, valid)
-            self.moves.check_costs(&s, g_heads, valid)
-            if valid[pred_move]:
-                gold_move = pred_move
+            valid = self.moves.check_preconditions(&s)
+            pred_paired = self.guide.predict_from_ints(n_feats, feats, valid)
+            valid = self.moves.check_costs(&s, g_heads)
+            if valid[pred_paired]:
+                gold_paired = pred_paired
             else:
-                gold_move = self.guide.predict_from_ints(n_feats, feats, valid)
-            # This ticks the model over, but won't change weights if the labels are equal
-            self.guide.update(pred_move, gold_move, n_feats, feats)
+                gold_paired = self.guide.predict_from_ints(n_feats, feats, valid)
+            self.moves.unpair_label_move(pred_paired, &pred_label, &pred_move)
+            self.moves.unpair_label_move(gold_paired, &gold_label, &gold_move)
             if gold_move == LEFT:
                 gold_label = g_labels[s.top]
-                labeller = self.l_labeller
             elif gold_move == RIGHT:
                 gold_label = g_labels[s.i]
-                labeller = self.r_labeller
             else:
                 gold_label = 0
-            if gold_move in (LEFT, RIGHT) and gold_move == pred_move:
-                pred_label = labeller.add_instance(gold_label, 1.0, n_feats, feats)
-            else:
-                pred_label = gold_label
 
             if iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
                 move = pred_move
@@ -274,29 +248,24 @@ cdef class Parser:
 
     cdef int parse(self, Sentence* sent) except -1:
         cdef State s
-        cdef size_t move
+        cdef size_t move, label
         cdef size_t n_preds = self.n_preds
         cdef size_t* context = self._context
         cdef size_t* feats = self._hashed_feats
-        cdef bint* valid = self._valid_classes
+        cdef bint* valid
         cdef size_t n = sent.length
         s = init_state(sent.length)
         sent.parse.n_moves = 0
         while not s.is_finished:
-            move = self.moves.check_preconditions(&s, valid)
-            if move == ERR:
-                features.extract(context, feats, sent, &s)
-                move = self.guide.predict_from_ints(n_preds, feats, valid)
-                if move == LEFT:
-                    label = self.l_labeller.predict_single(n_preds, feats)
-                elif move == RIGHT:
-                    label = self.r_labeller.predict_single(n_preds, feats)
-                else:
-                    label = 0
-            else:
+            if s.top == 0:
+                move = SHIFT
                 label = 0
-            sent.parse.moves[s.t] = move
-            sent.parse.move_labels[s.t] = label
+            else:
+                valid = self.moves.check_preconditions(&s)
+                features.extract(context, feats, sent, &s)
+                paired = self.guide.predict_from_ints(n_preds, feats, valid)
+                self.moves.unpair_label_move(paired, &label, &move)
+            sent.parse.moves[s.t] = paired
             sent.parse.n_moves += 1
             self.moves.transition(move, label, &s)
         for i in range(1, sent.length):
@@ -305,13 +274,9 @@ cdef class Parser:
 
     def save(self):
         self.guide.save(self.model_dir.join('model'))
-        self.l_labeller.save(self.model_dir.join('left_label_model'))
-        self.r_labeller.save(self.model_dir.join('right_label_model'))
 
     def load(self):
         self.guide.load(self.model_dir.join('model'))
-        self.l_labeller.load(self.model_dir.join('left_label_model'))
-        self.r_labeller.load(self.model_dir.join('right_label_model'))
 
     def __dealloc__(self):
         free(self._context)
@@ -359,8 +324,9 @@ cdef class Parser:
             sent_moves = []
             tokens = sents.strings[i][0]
             while not s.is_finished:
-                self.moves.check_costs(&s, g_heads, self._valid_classes)
-                best_ids = [(m, 0) for m in range(1, N_MOVES) if self._valid_classes[m]]
+                valid = self.moves.check_costs(&s, g_heads)
+                # TODO: This is broken with label/move pairing
+                best_ids = [(m, 0) for m in range(1, N_MOVES) if valid[m]]
                 best_id_str = ','.join(["%d-%d" % ml for ml in best_ids])
                 best_strs = ','.join([lmove_to_str(m, l) for (m, l) in best_ids])
                 parse_move = sent.parse.moves[s.t]
@@ -386,6 +352,17 @@ cdef class TransitionSystem:
     cdef int grammar[50][50][50]
     cdef int default_labels[50][50][50]
     cdef object grammar_loc
+    cdef bint* _move_validity
+    cdef bint* _pair_validity
+    cdef size_t n_paired
+    cdef size_t s_id
+    cdef size_t d_id
+    cdef size_t l_start
+    cdef size_t l_end
+    cdef size_t r_start
+    cdef size_t r_end
+    cdef size_t w_start
+    cdef size_t w_end
 
     cdef int n_lmoves
 
@@ -398,6 +375,24 @@ cdef class TransitionSystem:
         if grammar_loc is not None:
             self.read_grammar(grammar_loc)
         self.grammar_loc = grammar_loc
+        self._move_validity = <bint*>malloc(N_MOVES * sizeof(bint))
+        self._pair_validity = <bint*>malloc(N_MOVES * self.n_labels * sizeof(bint))
+        self.n_paired = N_MOVES * self.n_labels
+        self.s_id = SHIFT * self.n_labels
+        self.d_id = REDUCE * self.n_labels
+        self.l_start = LEFT * self.n_labels
+        self.l_end = (LEFT + 1) * self.n_labels
+        self.r_start = RIGHT * self.n_labels
+        self.r_end = (RIGHT + 1) * self.n_labels
+        self.w_start = LOWER * self.n_labels
+        self.w_end = (LOWER + 1) * self.n_labels
+
+    cdef size_t pair_label_move(self, size_t label, size_t move):
+        return move * self.n_labels + label
+
+    cdef int unpair_label_move(self, size_t paired, size_t* label, size_t* move):
+        move[0] = paired / self.n_labels
+        label[0] = paired % self.n_labels
 
     cdef int read_grammar(self, loc) except -1:
         cdef size_t i, j, k
@@ -416,13 +411,8 @@ cdef class TransitionSystem:
 
     cdef int transition(self, size_t move, size_t label, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc
-        # TODO: This might be bad; no tracing of move_labels. This means the
-        # instance counts are blind to label differences in the sequence
-        # history. Probably this doesn't matter, but it could be fixed by
-        # writing a function that couples labels and moves into one ID.
-        s.history[s.t] = move
+        s.history[s.t] = self.pair_label_move(label, move)
         s.t += 1 
-        #print lmove_to_str(move, label), 
         assert s.t < 500
         if move == SHIFT:
             push_stack(s)
@@ -454,7 +444,8 @@ cdef class TransitionSystem:
         if s.i >= (s.n - 1) and s.stack_len == 1:
             s.is_finished = True
 
-    cdef int check_preconditions(self, State* s, bint* valid_moves) except -1:
+    cdef bint* check_preconditions(self, State* s) except NULL:
+        cdef bint* valid_moves = self._move_validity
         # Load pre-conditions that don't refer to gold heads
         valid_moves[ERR] = False
         valid_moves[SHIFT] = s.i < s.n and not SHIFTLESS
@@ -462,26 +453,40 @@ cdef class TransitionSystem:
         valid_moves[REDUCE] = s.top != 0 and s.heads[s.top] != 0
         valid_moves[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
         valid_moves[LOWER] = self.allow_move and s.r_valencies[s.top] >= 2
-        # If move is determined, output it
-        if s.top == 0:
-            valid_moves[SHIFT] = True
-            return SHIFT
-        else:
-            return ERR
+        cdef bint* paired = self._fill_paired(valid_moves)
+        return paired
    
-    cdef int check_costs(self, State* s, size_t* heads, bint* valid_moves) except -1:
-        move = self.check_preconditions(s, valid_moves)
-        if move != ERR:
-            return move
-        valid_moves[SHIFT] = valid_moves[SHIFT] and self.s_cost(s, heads)
-        valid_moves[REDUCE] = valid_moves[REDUCE] and self.d_cost(s, heads)
-        valid_moves[LEFT] = valid_moves[LEFT] and self.l_cost(s, heads)
-        valid_moves[RIGHT] = valid_moves[RIGHT] and self.r_cost(s, heads)
-        valid_moves[LOWER] = valid_moves[LOWER] and self.w_cost(s, heads)
+    cdef bint* check_costs(self, State* s, size_t* heads) except NULL:
+        cdef bint* valid_moves = self._move_validity
+        paired_validity = self.check_preconditions(s)
+        valid_moves[SHIFT] = paired_validity[self.s_id] and self.s_cost(s, heads)
+        valid_moves[REDUCE] = paired_validity[self.d_id] and self.d_cost(s, heads)
+        valid_moves[LEFT] = paired_validity[self.l_start] and self.l_cost(s, heads)
+        valid_moves[RIGHT] = paired_validity[self.r_start] and self.r_cost(s, heads)
+        valid_moves[LOWER] = paired_validity[self.w_start] and self.w_cost(s, heads)
+        return self._fill_paired(valid_moves)
+
+
+    cdef bint* _fill_paired(self, bint* unpaired) except NULL:
+        cdef size_t i, l_id, r_id, w_id
+        cdef bint* paired = self._pair_validity
+        for i in range(self.n_paired):
+            paired[i] = False
+        paired[self.s_id] = unpaired[SHIFT]
+        paired[self.d_id] = unpaired[REDUCE]
+        for l_id in range(self.l_start, self.l_end):
+            paired[l_id] = unpaired[LEFT]
+        for r_id in range(self.r_start, self.r_end):
+            paired[r_id] = unpaired[RIGHT]
+        for w_id in range(self.w_start, self.w_end):
+            paired[w_id] = unpaired[LOWER]
+        return paired
+
+
 
     cdef int break_tie(self, State* s, size_t* labels, size_t* heads,
                        size_t* tags, bint* valid_moves) except -1:
-        if valid_moves[LOWER]:
+        if valid_moves[self.w_start]:
             return LOWER
         if heads[s.top] == s.i and valid_moves[LEFT]:
             return LEFT
@@ -496,7 +501,7 @@ cdef class TransitionSystem:
         else:
             order = (REDUCE, SHIFT, RIGHT, LEFT)
         for move in order:
-            if valid_moves[move]:
+            if valid_moves[self.pair_label_move(0, move)]:
                 return move
         else:
             return ERR
