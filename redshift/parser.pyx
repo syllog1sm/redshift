@@ -32,7 +32,7 @@ VOCAB_SIZE = 1e6
 TAG_SET_SIZE = 50
 cdef double FOLLOW_ERR_PC = 0.90
 
-SHIFTLESS = False
+SHIFTLESS = True
 
 cdef enum:
     ERR
@@ -225,7 +225,6 @@ cdef class Parser:
                 self.moves.unpair_label_move(pred_paired, &label, &move)
             else:
                 self.moves.unpair_label_move(gold_paired, &label, &move)
-            
             self.moves.transition(move, label, &s)
 
     def add_parses(self, Sentences sents, Sentences gold=None):
@@ -247,14 +246,14 @@ cdef class Parser:
         s = init_state(sent.length)
         sent.parse.n_moves = 0
         while not s.is_finished:
-            if s.top == 0:
-                move = SHIFT
-                label = 0
-            else:
-                valid = self.moves.check_preconditions(&s)
-                features.extract(context, feats, sent, &s)
-                paired = self.guide.predict_from_ints(n_preds, feats, valid)
-                self.moves.unpair_label_move(paired, &label, &move)
+            #if s.top == 0:
+            #    move = SHIFT
+            #    label = 0
+            #else:
+            valid = self.moves.check_preconditions(&s)
+            features.extract(context, feats, sent, &s)
+            paired = self.guide.predict_from_ints(n_preds, feats, valid)
+            self.moves.unpair_label_move(paired, &label, &move)
             sent.parse.moves[s.t] = paired
             sent.parse.n_moves += 1
             self.moves.transition(move, label, &s)
@@ -300,10 +299,13 @@ cdef class Parser:
         """Get a list of move taken/oracle move pairs for output"""
         cdef State s
         cdef size_t n
+        cdef size_t move = 0
+        cdef size_t label = 0
         cdef object best_moves
         cdef size_t i
         cdef size_t* g_labels
         cdef size_t* g_heads
+        cdef size_t paired, parse_paired
         best_moves = []
         for i in range(sents.length):
             sent = &sents.s[i]
@@ -315,20 +317,26 @@ cdef class Parser:
             tokens = sents.strings[i][0]
             while not s.is_finished:
                 valid = self.moves.check_costs(&s, g_labels, g_heads)
-                # TODO: This is broken with label/move pairing
-                best_ids = [(m, 0) for m in range(1, N_MOVES) if valid[m]]
-                best_id_str = ','.join(["%d-%d" % ml for ml in best_ids])
-                best_strs = ','.join([lmove_to_str(m, l) for (m, l) in best_ids])
-                parse_move = sent.parse.moves[s.t]
-                parse_label = sent.parse.move_labels[s.t]
-                state_str = transition_to_str(&s, parse_move, parse_label, tokens)
-                parse_move_str = lmove_to_str(parse_move, parse_label)
-                if parse_move not in [m for (m, l) in best_ids]:
+                best_strs = []
+                best_ids = set()
+                for paired in range(self.moves.n_paired):
+                    if valid[paired]:
+                        self.moves.unpair_label_move(paired, &label, &move)
+                        if move not in best_ids:
+                            best_strs.append(lmove_to_str(move, label))
+                        best_ids.add(move)
+                best_strs = ','.join(best_strs)
+                best_id_str = ','.join(map(str, sorted(best_ids)))
+                parse_paired = sent.parse.moves[s.t]
+                self.moves.unpair_label_move(parse_paired, &label, &move)
+                state_str = transition_to_str(&s, move, label, tokens)
+                parse_move_str = lmove_to_str(move, label)
+                if move not in best_ids:
                     parse_move_str = red(parse_move_str)
-                sent_moves.append((best_id_str, parse_move,
+                sent_moves.append((best_id_str, int(move),
                                   best_strs, parse_move_str,
                                   state_str))
-                self.moves.transition(parse_move, parse_label, &s)
+                self.moves.transition(move, label, &s)
             best_moves.append((u' '.join(tokens), sent_moves))
         return best_moves
 
@@ -403,8 +411,8 @@ cdef class TransitionSystem:
         cdef size_t head, child, new_parent, new_child, c, gc
         s.history[s.t] = self.pair_label_move(label, move)
         s.t += 1 
-        assert s.t < 500
         if move == SHIFT:
+            raise StandardError
             push_stack(s)
         elif move == REDUCE:
             pop_stack(s)
@@ -435,11 +443,13 @@ cdef class TransitionSystem:
             s.is_finished = True
 
     cdef bint* check_preconditions(self, State* s) except NULL:
+        cdef suze_t i, l_id, r_id, w_id
         cdef bint* unpaired = self._move_validity
         # Load pre-conditions that don't refer to gold heads
         unpaired[ERR] = False
         unpaired[SHIFT] = s.i < s.n and not SHIFTLESS
-        unpaired[RIGHT] = s.i < s.n and s.top != 0
+        #unpaired[RIGHT] = s.i < s.n and s.top != 0
+        unpaired[RIGHT] = s.i < s.n
         unpaired[REDUCE] = s.top != 0 and s.heads[s.top] != 0
         unpaired[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
         unpaired[LOWER] = self.allow_move and s.r_valencies[s.top] >= 2
@@ -507,7 +517,7 @@ cdef class TransitionSystem:
             return RIGHT
         #elif self.allow_reattach and r_freq > 1000:
         elif self.allow_reattach:
-            order = (REDUCE, RIGHT, SHIFT, LEFT)
+            order = (REDUCE, RIGHT, LEFT)
         else:
             order = (REDUCE, SHIFT, RIGHT, LEFT)
         for move in order:
