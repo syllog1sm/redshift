@@ -61,14 +61,14 @@ def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False):
     
     sentences.write_moves(out_dir.join('moves').open('w'))
     sentences.write_parses(out_dir.join('parses').open('w'))
-    if gold_sents:
-        best_moves = parser.get_best_moves(sentences, gold_sents)
-        with out_dir.join('best_moves').open('w') as out:
-            for sent_str, moves in best_moves:
-                out.write(sent_str + u'\n')
-                for o_id, p_id, o_str, p_str, s_str in moves:
-                    out.write(u'%s\t%s\t%s\n' % (o_str, p_str, s_str))
-                out.write(u'\n')
+    #if gold_sents:
+    #    best_moves = parser.get_best_moves(sentences, gold_sents)
+    #    with out_dir.join('best_moves').open('w') as out:
+    #        for sent_str, moves in best_moves:
+    #            out.write(sent_str + u'\n')
+    #            for o_id, p_id, o_str, p_str, s_str in moves:
+    #                out.write(u'%s\t%s\t%s\n' % (o_str, p_str, s_str))
+    #            out.write(u'\n')
                 
 
 
