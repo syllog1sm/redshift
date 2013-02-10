@@ -15,21 +15,23 @@ import redshift.io_parse
     train_loc=("Training location", "positional"),
     moves_loc=("Training moves location", "positional"),
     train_alg=("Learning algorithm [static, online]", "option", "a", str),
-    c=("Regularisation penalty", "option", "c", float),
     label_set=("Name of label set to use.", "option", "l", str),
     add_extra_feats=("Add extra features", "flag", "x", bool),
     feat_thresh=("Feature pruning threshold", "option", "f", int),
     allow_reattach=("Allow left-clobber", "flag", "r", bool),
     allow_move=("Allow raise/lower", "flag", "m", bool),
+    shiftless=("Use no shift transition (requires reattach)", "flag", "s", bool)
 )
-def main(train_loc, model_loc, moves_loc=None, train_alg="static", c=1.0,
+def main(train_loc, model_loc, moves_loc=None, train_alg="static",
          add_extra_feats=False, label_set="Stanford", feat_thresh=1,
-         allow_reattach=False, allow_move=False):
+         allow_reattach=False, allow_move=False, shiftless=False):
     train_loc = Path(train_loc)
     if allow_reattach:
         grammar_loc = train_loc.parent().join('rgrammar')
     else:
     	grammar_loc = None
+    if shiftless:
+        assert allow_reattach
     model_loc = Path(model_loc)
     if label_set == 'None':
         label_set = None
@@ -39,10 +41,10 @@ def main(train_loc, model_loc, moves_loc=None, train_alg="static", c=1.0,
             print "Could not find moves; assuming none"
             moves_loc = None
     parser = redshift.parser.Parser(model_loc, clean=True,
-                                    train_alg=train_alg, C=c, add_extra=add_extra_feats,
+                                    train_alg=train_alg, add_extra=add_extra_feats,
                                     label_set=label_set, feat_thresh=feat_thresh,
                                     allow_reattach=allow_reattach, allow_move=allow_move,
-                                    grammar_loc=grammar_loc)
+                                    grammar_loc=grammar_loc, shiftless=shiftless)
     if moves_loc is not None:
         moves = moves_loc.open().read().strip()
     else:

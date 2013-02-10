@@ -32,7 +32,6 @@ VOCAB_SIZE = 1e6
 TAG_SET_SIZE = 50
 cdef double FOLLOW_ERR_PC = 0.90
 
-SHIFTLESS = True
 
 cdef enum:
     ERR
@@ -82,7 +81,8 @@ cdef class Parser:
     cdef object train_alg
     cdef int feat_thresh
 
-    def __cinit__(self, model_dir, clean=False, C=None, train_alg='static', eps=None,
+    def __cinit__(self, model_dir, clean=False, train_alg='static',
+                  shiftless=False, n_iters=15,
                   add_extra=True, label_set='MALT', feat_thresh=5,
                   allow_reattach=False, allow_move=False,
                   reuse_idx=False, grammar_loc=None):
@@ -98,6 +98,7 @@ cdef class Parser:
             allow_reattach = params['allow_reattach'] == 'True'
             allow_move = params['allow_move'] == 'True'
             grammar_loc = params['grammar_loc']
+            shiftless = params['shiftless'] == 'True'
             if grammar_loc == 'None':
                 grammar_loc = None
             else:
@@ -106,6 +107,9 @@ cdef class Parser:
             print 'Reattach'
         if allow_move:
             print 'Lower'
+        if shiftless:
+            print 'Shiftless'
+        print train_alg
         self.model_dir = self.setup_model_dir(model_dir, clean)
         io_parse.set_labels(label_set)
         self.n_preds = features.make_predicates(add_extra, True)
@@ -118,7 +122,8 @@ cdef class Parser:
         else:
             self.load_idx(self.model_dir, self.n_preds)
         self.moves = TransitionSystem(io_parse.LABEL_STRS, allow_reattach=allow_reattach,
-                                      allow_move=allow_move, grammar_loc=grammar_loc)
+                                      allow_move=allow_move, grammar_loc=grammar_loc,
+                                      shiftless=shiftless)
         guide_loc = self.model_dir.join('model')
         n_labels = len(io_parse.LABEL_STRS)
         self.guide = Perceptron(self.moves.n_paired, guide_loc)
@@ -293,6 +298,7 @@ cdef class Parser:
             cfg.write(u'feat_thresh\t%d\n' % self.feat_thresh)
             cfg.write(u'allow_reattach\t%s\n' % self.moves.allow_reattach)
             cfg.write(u'allow_move\t%s\n' % self.moves.allow_move)
+            cfg.write(u'shiftless\t%s\n' % self.moves.shiftless)
         
     def get_best_moves(self, Sentences sents, Sentences gold):
         """Get a list of move taken/oracle move pairs for output"""
@@ -343,6 +349,7 @@ cdef class Parser:
 cdef class TransitionSystem:
     cdef bint allow_reattach
     cdef bint allow_move
+    cdef bint shiftless
     cdef size_t n_labels
     cdef object py_labels
     cdef size_t[N_MOVES] offsets
@@ -364,11 +371,13 @@ cdef class TransitionSystem:
     cdef int n_lmoves
 
     def __cinit__(self, object labels, allow_reattach=False,
-                  allow_move=False, grammar_loc=None):
+                  allow_move=False, grammar_loc=None,
+                  shiftless=False):
         self.n_labels = len(labels)
         self.py_labels = labels
         self.allow_reattach = allow_reattach
         self.allow_move = allow_move
+        self.shiftless = shiftless
         if grammar_loc is not None:
             self.read_grammar(grammar_loc)
         self.grammar_loc = grammar_loc
@@ -411,7 +420,7 @@ cdef class TransitionSystem:
         s.history[s.t] = self.pair_label_move(label, move)
         s.t += 1 
         if move == SHIFT:
-            raise StandardError
+            assert not self.shiftless
             push_stack(s)
         elif move == REDUCE:
             pop_stack(s)
@@ -446,9 +455,8 @@ cdef class TransitionSystem:
         cdef bint* unpaired = self._move_validity
         # Load pre-conditions that don't refer to gold heads
         unpaired[ERR] = False
-        unpaired[SHIFT] = s.i < s.n and not SHIFTLESS
-        #unpaired[RIGHT] = s.i < s.n and s.top != 0
-        unpaired[RIGHT] = s.i < s.n
+        unpaired[SHIFT] = s.i < s.n and not self.shiftless
+        unpaired[RIGHT] = s.i < s.n and (s.top != 0 or self.shiftless)
         unpaired[REDUCE] = s.top != 0 and s.heads[s.top] != 0
         unpaired[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
         unpaired[LOWER] = self.allow_move and s.r_valencies[s.top] >= 2
