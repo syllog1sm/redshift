@@ -392,7 +392,6 @@ cdef int make_predicates(bint add_extra, bint add_labels) except 0:
 
     feats = from_single + from_word_pairs + from_three_words + distance + valency + unigrams + third_order
     if add_labels:
-        print "Using label features"
         feats += labels
         feats += label_sets
     if add_extra:

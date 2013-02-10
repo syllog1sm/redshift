@@ -88,7 +88,6 @@ cdef class Parser:
                   reuse_idx=False, grammar_loc=None):
         model_dir = Path(model_dir)
         if not clean:
-            print "Reading settings from config"
             params = dict([line.split() for line in model_dir.join('parser.cfg').open()])
             C = float(params['C'])
             train_alg = params['train_alg']
