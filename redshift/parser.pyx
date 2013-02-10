@@ -109,7 +109,6 @@ cdef class Parser:
             print 'Lower'
         if shiftless:
             print 'Shiftless'
-        print train_alg
         self.model_dir = self.setup_model_dir(model_dir, clean)
         io_parse.set_labels(label_set)
         self.n_preds = features.make_predicates(add_extra, True)
@@ -521,12 +520,12 @@ cdef class TransitionSystem:
             return LEFT
         elif self._move_validity[REDUCE]:
             return REDUCE
+        elif self._move_validity[SHIFT]:
+            return SHIFT
         elif self._move_validity[RIGHT]:
             return RIGHT
         elif self._move_validity[LEFT]:
             return LEFT
-        elif self._move_validity[SHIFT]:
-            return SHIFT
         else:
             raise StandardError
 
