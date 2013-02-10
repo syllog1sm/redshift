@@ -533,6 +533,9 @@ cdef class TransitionSystem:
             return REDUCE
         elif self._move_validity[SHIFT]:
             return SHIFT
+        if self._move_validity[LOWER]:
+            return LOWER
+
         elif self._move_validity[RIGHT]:
             return RIGHT
         elif self._move_validity[LEFT]:
