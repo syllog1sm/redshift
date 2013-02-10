@@ -17,13 +17,13 @@ import redshift.io_parse
     train_alg=("Learning algorithm [static, online]", "option", "a", str),
     c=("Regularisation penalty", "option", "c", float),
     label_set=("Name of label set to use.", "option", "l", str),
-    no_extra_feats=("Remove extra features (never good)", "flag", "x", bool),
+    add_extra_feats=("Add extra features", "flag", "x", bool),
     feat_thresh=("Feature pruning threshold", "option", "f", int),
     allow_reattach=("Allow left-clobber", "flag", "r", bool),
     allow_move=("Allow raise/lower", "flag", "m", bool),
 )
 def main(train_loc, model_loc, moves_loc=None, train_alg="static", c=1.0,
-         no_extra_feats=False, label_set="MALT", feat_thresh=5,
+         add_extra_feats=False, label_set="Stanford", feat_thresh=1,
          allow_reattach=False, allow_move=False):
     train_loc = Path(train_loc)
     if allow_reattach:
@@ -39,7 +39,7 @@ def main(train_loc, model_loc, moves_loc=None, train_alg="static", c=1.0,
             print "Could not find moves; assuming none"
             moves_loc = None
     parser = redshift.parser.Parser(model_loc, clean=True,
-                                    train_alg=train_alg, C=c, add_extra=not no_extra_feats,
+                                    train_alg=train_alg, C=c, add_extra=add_extra_feats,
                                     label_set=label_set, feat_thresh=feat_thresh,
                                     allow_reattach=allow_reattach, allow_move=allow_move,
                                     grammar_loc=grammar_loc)
