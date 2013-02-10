@@ -195,10 +195,6 @@ cdef class Perceptron(Model):
         self.n_corr = 0.0
         self.total = 0.0
 
-    def init_labels(self, labels):
-        for label in labels:
-            self.model.lookup_label(label)
-
     def begin_adding_instances(self, size_t n_feats):
         pass
 
@@ -242,7 +238,6 @@ cdef class Perceptron(Model):
         if not seen_valid:
             for i in range(self.model.max_classes):
                 if valid_classes[i]:
-                    print "Adding class %d" % i
                     self.model.lookup_label(i)
                     return i
             else:
