@@ -160,6 +160,8 @@ cdef class Sentences:
         self.strings.append((words, tags))
 
     def add_moves(self, object all_moves):
+        # TODO: Update this for new format
+        raise StandardError
         all_moves = all_moves.strip().split('\n\n')
         assert len(all_moves) == self.length
         for i, sent_moves in enumerate(all_moves):
@@ -175,10 +177,16 @@ cdef class Sentences:
         cdef Sentence s
         cdef size_t i, j, move_and_label
         cdef object move
+        move_strs = ['E', 'S', 'D', 'R', 'L', 'W']
         for i in range(self.length):
             s = self.s[i]
             for j in range(s.parse.n_moves):
-                line = u'?\t%d\t%d\n' % (s.parse.moves[j], s.parse.move_labels[j])
+                # TODO: THis is quite a hack, because we shouldn't need the details
+                # of how the move/labels are coupled here. But, shrug.
+                paired = s.parse.moves[j]
+                move = paired / len(LABEL_STRS)
+                label = paired % len(LABEL_STRS)
+                line = u'%d\t%s\t%s\n' % (paired, move_strs[move], LABEL_STRS[label])
                 out_file.write(line)
             out_file.write(u'\n')
 
