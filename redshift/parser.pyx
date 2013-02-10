@@ -87,7 +87,7 @@ cdef class Parser:
     def __cinit__(self, model_dir, clean=False, train_alg='static',
                   shiftless=False, repair_only=False, n_iters=15,
                   add_extra=True, label_set='MALT', feat_thresh=5,
-                  allow_reattach=False, allow_move=False,
+                  allow_reattach=False, allow_lower=False,
                   reuse_idx=False, grammar_loc=None):
         model_dir = Path(model_dir)
         if not clean:
@@ -99,7 +99,7 @@ cdef class Parser:
             label_set = params['label_set']
             feat_thresh = int(params['feat_thresh'])
             allow_reattach = params['allow_reattach'] == 'True'
-            allow_move = params['allow_move'] == 'True'
+            allow_lower = params['allow_lower'] == 'True'
             grammar_loc = params['grammar_loc']
             shiftless = params['shiftless'] == 'True'
             repair_only = params['repair_only'] == 'True'
@@ -109,7 +109,7 @@ cdef class Parser:
                 grammar_loc = Path(str(grammar_loc))
         if allow_reattach:
             print 'Reattach'
-        if allow_move:
+        if allow_lower:
             print 'Lower'
         if shiftless:
             print 'Shiftless'
@@ -129,7 +129,7 @@ cdef class Parser:
         if shiftless:
             assert not repair_only
         self.moves = TransitionSystem(io_parse.LABEL_STRS, allow_reattach=allow_reattach,
-                                      allow_move=allow_move, grammar_loc=grammar_loc,
+                                      allow_lower=allow_lower, grammar_loc=grammar_loc,
                                       shiftless=shiftless, repair_only=repair_only)
         guide_loc = self.model_dir.join('model')
         n_labels = len(io_parse.LABEL_STRS)
@@ -304,7 +304,7 @@ cdef class Parser:
             cfg.write(u'grammar_loc\t%s\n' % self.moves.grammar_loc)
             cfg.write(u'feat_thresh\t%d\n' % self.feat_thresh)
             cfg.write(u'allow_reattach\t%s\n' % self.moves.allow_reattach)
-            cfg.write(u'allow_move\t%s\n' % self.moves.allow_move)
+            cfg.write(u'allow_lower\t%s\n' % self.moves.allow_lower)
             cfg.write(u'shiftless\t%s\n' % self.moves.shiftless)
             cfg.write(u'repair_only\t%s\n' % self.moves.repair_only)
         
@@ -356,7 +356,7 @@ cdef class Parser:
 
 cdef class TransitionSystem:
     cdef bint allow_reattach
-    cdef bint allow_move
+    cdef bint allow_lower
     cdef bint shiftless
     cdef bint repair_only
     cdef size_t n_labels
@@ -380,12 +380,12 @@ cdef class TransitionSystem:
     cdef int n_lmoves
 
     def __cinit__(self, object labels, allow_reattach=False,
-                  allow_move=False, grammar_loc=None,
+                  allow_lower=False, grammar_loc=None,
                   shiftless=False, repair_only=False):
         self.n_labels = len(labels)
         self.py_labels = labels
         self.allow_reattach = allow_reattach
-        self.allow_move = allow_move
+        self.allow_lower = allow_lower
         self.shiftless = shiftless
         self.repair_only = repair_only
         if grammar_loc is not None:
@@ -469,7 +469,7 @@ cdef class TransitionSystem:
         unpaired[RIGHT] = s.i < s.n and (s.top != 0 or self.shiftless)
         unpaired[REDUCE] = s.top != 0 and s.heads[s.top] != 0
         unpaired[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
-        unpaired[LOWER] = self.allow_move and s.r_valencies[s.top] >= 2
+        unpaired[LOWER] = self.allow_lower and s.r_valencies[s.top] >= 2
         cdef bint* paired = self._pair_validity
         for i in range(self.n_paired):
             paired[i] = False
@@ -546,7 +546,7 @@ cdef class TransitionSystem:
             return False
         if has_head_in_stack(s, s.i, g_heads):
             return False
-        if self.allow_move:
+        if self.allow_lower:
             for i in range(1, s.stack_len):
                 stack_i = s.stack[i]
                 if get_r(s, stack_i) != 0 and g_heads[s.i] == get_r(s, stack_i):
@@ -566,7 +566,7 @@ cdef class TransitionSystem:
             return False
         if has_head_in_stack(s, s.i, g_heads):
             return False
-        if self.allow_move:
+        if self.allow_lower:
             for i in range(1, s.stack_len - 1):
                 stack_i = s.stack[i]
                 if get_r(s, stack_i) != 0 and g_heads[s.i] == get_r(s, stack_i):
@@ -579,13 +579,13 @@ cdef class TransitionSystem:
 
     cdef bint d_cost(self, State *s, size_t* g_heads):
         if has_child_in_buffer(s, s.top, g_heads):
-            if not self.allow_move:
+            if not self.allow_lower:
                 return False
             elif s.second == 0 or s.heads[s.top] != s.second:
                 return False
         if self.allow_reattach and has_head_in_buffer(s, s.top, g_heads):
             return False
-        if self.allow_move and get_r(s, s.top) != 0:
+        if self.allow_lower and get_r(s, s.top) != 0:
             for buff_i in range(s.i, s.n):
                 if g_heads[buff_i] == get_r(s, s.top):
                     return False
@@ -603,7 +603,7 @@ cdef class TransitionSystem:
             return False
         if self.allow_reattach and g_heads[s.top] == s.heads[s.top]:
             return False
-        if self.allow_move:
+        if self.allow_lower:
             for buff_i in range(s.i, s.n):
                 if g_heads[buff_i] == get_r(s, s.top):
                     return False

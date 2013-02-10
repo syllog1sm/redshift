@@ -19,14 +19,14 @@ import redshift.io_parse
     add_extra_feats=("Add extra features", "flag", "x", bool),
     feat_thresh=("Feature pruning threshold", "option", "f", int),
     allow_reattach=("Allow left-clobber", "flag", "r", bool),
-    allow_move=("Allow raise/lower", "flag", "m", bool),
+    allow_lower=("Allow raise/lower", "flag", "w", bool),
     shiftless=("Use no shift transition (requires reattach)", "flag", "s", bool),
     repair_only=("Penalise incorrect moves in the oracle even when they can be repaired",
                  "flag", "o", bool),
 )
 def main(train_loc, model_loc, moves_loc=None, train_alg="static",
          add_extra_feats=False, label_set="Stanford", feat_thresh=1,
-         allow_reattach=False, allow_move=False, shiftless=False,
+         allow_reattach=False, allow_lower=False, shiftless=False,
          repair_only=False):
     train_loc = Path(train_loc)
     if allow_reattach:
@@ -46,7 +46,7 @@ def main(train_loc, model_loc, moves_loc=None, train_alg="static",
     parser = redshift.parser.Parser(model_loc, clean=True,
                                     train_alg=train_alg, add_extra=add_extra_feats,
                                     label_set=label_set, feat_thresh=feat_thresh,
-                                    allow_reattach=allow_reattach, allow_move=allow_move,
+                                    allow_reattach=allow_reattach, allow_lower=allow_lower,
                                     grammar_loc=grammar_loc, shiftless=shiftless,
                                     repair_only=repair_only)
     if moves_loc is not None:
