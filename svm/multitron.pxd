@@ -1,6 +1,8 @@
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 
+from numpy cimport int64_t
+
 #cdef class MulticlassParamData:
 #    cdef double *acc
 #    cdef double *w
@@ -18,6 +20,7 @@ cdef extern from "sparsehash/dense_hash_map" namespace "google":
             iterator operator--() nogil
             bint operator==(iterator) nogil
             bint operator!=(iterator) nogil
+        size_t count(K&)
         iterator begin()
         iterator end()
         size_t size()
@@ -57,17 +60,18 @@ cdef struct ParamData:
     double* acc
     int* lastUpd
 
+
 cdef class MultitronParameters:
     cdef size_t n_classes
     cdef size_t n_params
-    cdef size_t feat_thresh
-    cdef bint count_freqs
     cdef size_t max_classes
-    cdef size_t true_nr_class
     cdef size_t max_param
+    cdef size_t true_nr_class
     cdef size_t now
-    cdef dense_hash_map[size_t, ParamData] W
-    cdef dense_hash_map[size_t, size_t] param_freqs
+    #cdef dense_hash_map[size_t, ParamData] W
+    cdef vector[ParamData] W
+    cdef vector[vector[double]] weights
+    cdef vector[int64_t] feat_idx
     cdef double* scores
     cdef size_t* labels
     cdef int* label_to_i
