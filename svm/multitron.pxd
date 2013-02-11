@@ -1,11 +1,14 @@
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 
-from numpy cimport int64_t, uint64_t
+from libc.stdint cimport int64_t, uint64_t
+
 
 cdef struct ParamData:
+    double* w
     double* acc
-    uint64_t* lastUpd
+    size_t* last_upd
+    size_t n_upd
 
 
 cdef class MultitronParameters:
@@ -15,9 +18,7 @@ cdef class MultitronParameters:
     cdef uint64_t max_param
     cdef uint64_t true_nr_class
     cdef uint64_t now
-    #cdef dense_hash_map[size_t, ParamData] W
     cdef vector[ParamData] W
-    cdef vector[vector[double]] weights
     cdef vector[int64_t] feat_idx
     cdef double* scores
     cdef uint64_t* labels
