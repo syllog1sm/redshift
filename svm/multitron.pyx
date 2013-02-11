@@ -6,6 +6,7 @@ from libc.stdlib cimport *
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 
+PRUNE_THRESH = 1e-10
 
 cdef class MultitronParameters:
     """
@@ -163,10 +164,15 @@ cdef class MultitronParameters:
         for label in label_names:
             self.lookup_label(int(label))
         self.true_nr_class = len(label_names)
+        n_feats = 0
+        n_unpruned = 0
         for f, line in enumerate(data.strip().split('\n')):
             weights = [float(w) for w in line.strip().split()]
             assert len(weights) == len(label_names)
-            if any([w != 0 for w in weights]):
+            n_feats += 1
+            if any([(abs(w) >= PRUNE_THRESH and w != 0) for w in weights]):
                 self.add_param(f + 1)
                 for clas, w in enumerate(weights):
                     self.W[f + 1].w[clas] = w
+                n_unpruned += 1
+        print "%d/%d feats >= %f" % (n_unpruned, n_feats, PRUNE_THRESH)
