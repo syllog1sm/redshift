@@ -56,7 +56,6 @@ cdef extern from "sparsehash/dense_hash_map" namespace "google":
 
 
 cdef struct ParamData:
-    double* w
     double* acc
     int* lastUpd
 

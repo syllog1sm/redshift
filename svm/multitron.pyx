@@ -63,14 +63,14 @@ cdef class MultitronParameters:
             self.max_param += 1
         self.feat_idx[f] = self.n_params
         p.acc = <double*>malloc(self.true_nr_class * sizeof(double))
-        p.w = <double*>malloc(self.true_nr_class * sizeof(double))
         p.lastUpd = <int*>malloc(self.true_nr_class  * sizeof(int))
+        w = new vector[double]()
         for i in range(self.true_nr_class):
             p.lastUpd[i] = 0
             p.acc[i] = 0
-            p.w[i] = 0
+            w.push_back(0)
         self.W.push_back(p[0])
-        self.weights.push_back(vector[double]())
+        self.weights.push_back(w[0])
         self.n_params += 1
 
     cdef tick(self):
@@ -78,7 +78,9 @@ cdef class MultitronParameters:
 
     cdef int update(self, size_t pred_label, size_t gold_label,
                     size_t n_feats, size_t* features) except -1:
-        cdef size_t i, f
+        cdef size_t t
+        cdef size_t f
+        cdef int64_t idx
         self.tick()
         cdef size_t gold_i = self.lookup_label(gold_label)
         cdef size_t pred_i = self.lookup_label(pred_label)
@@ -91,18 +93,18 @@ cdef class MultitronParameters:
                 continue
             if f > self.max_param or self.feat_idx[f] == -1:
                 self.add_param(f)
-            p = &self.W[self.feat_idx[f]]
-            p.acc[pred_i] += (self.now - p.lastUpd[pred_i]) * p.w[pred_i]
-            p.acc[gold_i] += (self.now - p.lastUpd[gold_i]) * p.w[gold_i]
-            p.w[pred_i] -= 1
-            p.w[gold_i] += 1
+            idx = self.feat_idx[f]
+            p = &self.W[idx]
+            p.acc[pred_i] += (self.now - p.lastUpd[pred_i]) * self.weights[idx][pred_i]
+            p.acc[gold_i] += (self.now - p.lastUpd[gold_i]) * self.weights[idx][gold_i]
+            self.weights[idx][pred_i] -= 1
+            self.weights[idx][gold_i] += 1
             p.lastUpd[pred_i] = self.now
             p.lastUpd[gold_i] = self.now
         
     cdef double* get_scores(self, size_t n_feats, size_t* features):
         #cdef vector[double] weights
         cdef size_t i, f, c
-        cdef double* w
         cdef size_t n_classes = self.n_classes
         cdef double* scores = self.scores
         for i in range(self.max_classes):
@@ -112,9 +114,8 @@ cdef class MultitronParameters:
             if f < self.max_param:
                 idx = self.feat_idx[f]
                 if f != 0 and idx != -1:
-                    w = self.W[idx].w
                     for c in range(n_classes):
-                        scores[c] = scores[c] + w[c]
+                        scores[c] = scores[c] + self.weights[idx][c]
         return scores
 
     cdef size_t predict_best_class(self, size_t n_feats, size_t* features):
@@ -134,8 +135,8 @@ cdef class MultitronParameters:
         # average
         for f in range(self.n_params):
             for c in range(self.n_classes):
-                self.W[f].acc[c] += (self.now - self.W[f].lastUpd[c]) * self.W[f].w[c]
-                self.W[f].w[c] = self.W[f].acc[c] / self.now
+                self.W[f].acc[c] += (self.now - self.W[f].lastUpd[c]) * self.weights[f][c]
+                self.weights[f][c] = self.W[f].acc[c] / self.now
 
     def dump(self, out=sys.stdout):
         cdef size_t c
@@ -155,7 +156,7 @@ cdef class MultitronParameters:
                 out.write(zeroes + u'\n')
                 continue
             for c in xrange(self.n_classes):
-                out.write(u" %s" % self.W[f].w[c])
+                out.write(u" %s" % self.weights[f][c])
             out.write(u"\n")
         out.close()
 
@@ -177,5 +178,5 @@ cdef class MultitronParameters:
                 self.add_param(f + 1)
                 idx = self.feat_idx[f + 1]
                 for clas, w in enumerate(weights):
-                    self.W[idx].w[clas] = w
+                    self.weights[idx][clas] = w
         print 'loaded'
