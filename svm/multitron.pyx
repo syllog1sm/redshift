@@ -8,7 +8,6 @@ from libcpp.utility cimport pair
 
 cdef size_t MIN_UPD = 5
 
-
 cdef class MultitronParameters:
     """
     Labels and features must be non-negative integers with max values
