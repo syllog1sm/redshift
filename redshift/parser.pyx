@@ -85,7 +85,7 @@ cdef class Parser:
     cdef int feat_thresh
 
     def __cinit__(self, model_dir, clean=False, train_alg='static',
-                  shiftless=False, repair_only=False, n_iters=15,
+                  shiftless=False, repair_only=False,
                   add_extra=True, label_set='MALT', feat_thresh=5,
                   allow_reattach=False, allow_lower=False,
                   reuse_idx=False, grammar_loc=None):
@@ -148,9 +148,11 @@ cdef class Parser:
         sh.git.log(n=1, _out=loc.join('version').open('wb'), _bg=True) 
         return loc
 
-    def train(self, Sentences sents, C=None, eps=None, n_iter=15):
+    def train(self, Sentences sents, C=None, eps=None, n_iter=15, held_out=None):
         cdef size_t i, j, n
         cdef Sentence* sent
+        cdef Sentences held_out_gold
+        cdef Sentences held_out_parse
         # Count classes
         seen_classes = set([self.moves.s_id, self.moves.d_id])
         for i in range(sents.length):
@@ -161,14 +163,17 @@ cdef class Parser:
                     seen_classes.add(self.moves.pair_label_move(label, LEFT))
                 else:
                     seen_classes.add(self.moves.pair_label_move(label, RIGHT))
-                    if self.moves.allow_lower:
-                        seen_classes.add(self.moves.pair_label_move(label, LOWER))
+        #seen_classes.add(self.moves.pair_label_move(label, LOWER))
+        if self.moves.allow_lower:
+            seen_classes.add(self.moves.l_start)
         print "%d classes seen (max value %d)" % (len(seen_classes), max(seen_classes))
         self.guide.set_nr_class(len(seen_classes))
         self.write_cfg(self.model_dir.join('parser.cfg'))
         index.hashes.set_feat_counting(True)
         index.hashes.set_feat_threshold(self.feat_thresh)
         indices = range(sents.length)
+        if held_out is not None:
+            held_out_gold = io_parse.read_conll(held_out)
         # First iteration of static is used to collect feature frequencies, so
         # we need an extra iteration
         for n in range(n_iter + (1 if self.train_alg == 'static' else 0)):
@@ -178,11 +183,17 @@ cdef class Parser:
                     self.online_train_one(n, &sents.s[i])
                 else:
                     self.static_train_one(n, &sents.s[i])
-            if n == 0:
+            if n == 0 and self.train_alg == 'static':
+                index.hashes.set_feat_counting(False)
                 index.hashes.set_feat_counting(False)
             if n > 0 or self.train_alg == "online":
-                acc = (float(self.guide.n_corr) / self.guide.total) * 100
-                print "Iter #%d %d/%d=%.2f" % (n, self.guide.n_corr, self.guide.total, acc)
+                if held_out is not None:
+                    held_out_parse = io_parse.read_conll(held_out)
+                    ho_acc = self.add_parses(held_out_parse, gold=held_out_gold) * 100
+                else:
+                    ho_acc = 0.0
+                move_acc = (float(self.guide.n_corr) / self.guide.total) * 100
+                print "#%d: Moves %d/%d=%.2f %.2f" % (n, self.guide.n_corr, self.guide.total, move_acc, ho_acc)
                 self.guide.n_corr = 0
                 self.guide.total = 0
         self.guide.train()
@@ -525,12 +536,7 @@ cdef class TransitionSystem:
             for r_id in range(self.r_start, self.r_end):
                 paired_validity[r_id] = valid_moves[RIGHT]
         if valid_moves[LOWER] and heads[get_r(s, s.top)] == get_r2(s, s.top):
-            for w_id in range(self.w_start, self.w_end):
-                paired_validity[w_id] = False
-            paired_validity[self.pair_label_move(labels[get_r(s, s.top)], LOWER)] = True
-        else:
-            for w_id in range(self.w_start, self.w_end):
-                paired_validity[w_id] = valid_moves[LOWER]
+            paired_validity[self.l_start] = True
         return paired_validity
 
     cdef bint* _fill_paired(self, bint* unpaired) except NULL:
@@ -551,7 +557,6 @@ cdef class TransitionSystem:
             return SHIFT
         if self._move_validity[LOWER]:
             return LOWER
-
         elif self._move_validity[RIGHT]:
             return RIGHT
         elif self._move_validity[LEFT]:
