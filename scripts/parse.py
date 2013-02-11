@@ -55,7 +55,7 @@ def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False):
     else:
 
         t1 = time.time()
-        yield parser.add_parses(sentences, gold=gold_sents)
+        print parser.add_parses(sentences, gold=gold_sents)
         t2 = time.time()
         print '%d sents took %0.3f ms' % (sentences.length, (t2-t1)*1000.0)
     
@@ -73,11 +73,4 @@ def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False):
 
 
 if __name__ == '__main__':
-    args = ['parser_dir', 'text_loc', 'out_dir', 'use_gold']
-    env_args = [os.environ.get(arg) for arg in args]
-    if len(sys.argv) == 1 and all(env_args):
-        for line in plac.call(main, env_args):
-            print line
-    else:
-        for line in plac.call(main):
-            print line
+    plac.call(main)
