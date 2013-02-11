@@ -1,6 +1,6 @@
 from libcpp.utility cimport pair
 from libcpp.vector cimport vector
-from numpy cimport uint64_t
+from libc.stdint cimport uint64_t, int64_t
 
 DEF VOCAB_SIZE = 1e6
 DEF TAG_SET_SIZE = 100
@@ -11,7 +11,7 @@ cdef extern from "sparsehash/dense_hash_map" namespace "google":
         K& key_type
         D& data_type
         pair[K, D]& value_type
-        size_t size_type
+        uint64_t size_type
         cppclass iterator:
             pair[K, D]& operator*() nogil
             iterator operator++() nogil
@@ -20,28 +20,28 @@ cdef extern from "sparsehash/dense_hash_map" namespace "google":
             bint operator!=(iterator) nogil
         iterator begin()
         iterator end()
-        size_t size()
-        size_t max_size()
+        uint64_t size()
+        uint64_t max_size()
         bint empty()
-        size_t bucket_count()
-        size_t bucket_size(size_t i)
-        size_t bucket(K& key)
+        uint64_t bucket_count()
+        uint64_t bucket_size(uint64_t i)
+        uint64_t bucket(K& key)
         double max_load_factor()
         void max_load_vactor(double new_grow)
         double min_load_factor()
         double min_load_factor(double new_grow)
         void set_resizing_parameters(double shrink, double grow)
-        void resize(size_t n)
-        void rehash(size_t n)
+        void resize(uint64_t n)
+        void rehash(uint64_t n)
         dense_hash_map()
-        dense_hash_map(size_t n)
+        dense_hash_map(uint64_t n)
         void swap(dense_hash_map&)
         pair[iterator, bint] insert(pair[K, D]) nogil
         void set_empty_key(K&)
         void set_deleted_key(K& key)
         void clear_deleted_key()
         void erase(iterator pos)
-        size_t erase(K& k)
+        uint64_t erase(K& k)
         void erase(iterator first, iterator last)
         void clear()
         void clear_no_resize()
@@ -49,17 +49,12 @@ cdef extern from "sparsehash/dense_hash_map" namespace "google":
         D& operator[](K&) nogil
 
 cdef extern from "MurmurHash3.h":
-    void MurmurHash3_x86_32(void * key, int len, int seed, void* out)
-    void MurmurHash3_x86_128(void * key, int len, int seed, void* out)
+    void MurmurHash3_x86_32(void * key, uint64_t len, uint64_t seed, void* out)
+    void MurmurHash3_x86_128(void * key, uint64_t len, uint64_t seed, void* out)
 
 cdef extern from "MurmurHash2.h":
-    unsigned long long MurmurHash64A(void * key, int len, int seed)
-    unsigned long long MurmurHash64B(void * key, int len, int seed)
-
-
-cdef extern from "MurmurHash2.h":
-    unsigned long long MurmurHash64A(void * key, int len, int seed)
-    unsigned long long MurmurHash64B(void * key, int len, int seed)
+    uint64_t MurmurHash64A(void * key, uint64_t len, int64_t seed)
+    uint64_t MurmurHash64B(void * key, uint64_t len, int64_t seed)
 
 
 cdef class Index:
@@ -77,25 +72,25 @@ cdef class Index:
 cdef class StrIndex(Index):
     cdef dense_hash_map[uint64_t, uint64_t] table
     cdef uint64_t encode(self, char* feature) except 0
-    cpdef load_entry(self, size_t i, object key, uint64_t hashed, uint64_t value)
+    cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value)
 
 
 cdef class FeatIndex(Index):
     cdef uint64_t n
     cdef uint64_t p_i
-    cdef int threshold
+    cdef uint64_t threshold
     cdef bint count_features
     cdef vector[dense_hash_map[uint64_t, uint64_t]] tables
     cdef vector[dense_hash_map[uint64_t, uint64_t]] unpruned
     cdef dense_hash_map[uint64_t, uint64_t] freqs
-    cdef uint64_t encode(self, size_t* feature, size_t length, size_t i)
-    cpdef load_entry(self, size_t i, object key, uint64_t hashed, uint64_t value)
+    cdef uint64_t encode(self, uint64_t* feature, uint64_t length, uint64_t i)
+    cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value)
 
 
-cdef uint64_t encode_feat(size_t* feature, size_t length, size_t i)
+cdef uint64_t encode_feat(uint64_t* feature, uint64_t length, uint64_t i)
 
 cdef class InstanceCounter:
-    cdef int n
+    cdef uint64_t n
     cdef vector[dense_hash_map[long, long]] counts_by_class
-    cdef long add(self, size_t class_, size_t sent_id, size_t* history,
+    cdef uint64_t add(self, uint64_t class_, uint64_t sent_id, uint64_t* history,
                   bint freeze_count) except 0

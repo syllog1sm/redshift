@@ -3,7 +3,7 @@ from pathlib import Path
 DEF VOCAB_SIZE = 1e6
 DEF TAG_SET_SIZE = 100
 
-from numpy cimport uint64_t
+from libc.stdint cimport uint64_t
 
 cdef class Index:
     cpdef set_path(self, path):
@@ -51,7 +51,7 @@ cdef class StrIndex(Index):
         assert value < 1000000
         return value
 
-    cpdef load_entry(self, size_t i, object key, uint64_t hashed, uint64_t value):
+    cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value):
         self.table[hashed] = value
 
     def __dealloc__(self):
@@ -69,22 +69,24 @@ cdef class FeatIndex(Index):
         self.p_i = 1
 
     def set_n_predicates(self, uint64_t n):
+        cdef uint64_t i
         self.n = n
         self.save_entries = False
+        cdef uint64_t zero = 0
         for i in range(n):
             table = new dense_hash_map[uint64_t, uint64_t]()
             self.unpruned.push_back(table[0])
-            self.unpruned[i].set_empty_key(0)
+            self.unpruned[i].set_empty_key(zero)
             pruned = new dense_hash_map[uint64_t, uint64_t]()
             self.tables.push_back(pruned[0])
-            self.tables[i].set_empty_key(0)
-        self.freqs.set_empty_key(0)
+            self.tables[i].set_empty_key(zero)
+        self.freqs.set_empty_key(zero)
         self.count_features = False
     
-    cdef uint64_t encode(self, size_t* feature, size_t length, size_t i):
+    cdef uint64_t encode(self, uint64_t* feature, uint64_t length, uint64_t i):
         cdef uint64_t value
         cdef uint64_t hashed
-        hashed = MurmurHash64A(feature, length * sizeof(size_t), i)
+        hashed = MurmurHash64A(feature, length * sizeof(uint64_t), i)
         if not self.count_features:
             return self.tables[i][hashed]
         value = self.unpruned[i][hashed]
@@ -103,7 +105,7 @@ cdef class FeatIndex(Index):
             self.p_i += 1
         return value
 
-    cpdef load_entry(self, size_t i, object key, uint64_t hashed, uint64_t value):
+    cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value):
         self.tables[i][hashed] = value
 
     def __dealloc__(self):
@@ -113,7 +115,7 @@ cdef class FeatIndex(Index):
     def set_feat_counting(self, count_feats):
         self.count_features = count_feats
 
-    def set_threshold(self, int threshold):
+    def set_threshold(self, uint64_t threshold):
         self.threshold = threshold
 
 
@@ -122,8 +124,8 @@ cdef class InstanceCounter:
         self.n = 0
         self.counts_by_class = vector[dense_hash_map[long, long]]()
 
-    cdef long add(self, size_t class_, size_t sent_id,
-                  size_t* history, bint freeze_count) except 0:
+    cdef uint64_t add(self, uint64_t class_, uint64_t sent_id,
+                  uint64_t* history, bint freeze_count) except 0:
         cdef long hashed = 0
         cdef dense_hash_map[long, long] *counts
         py_moves = []
@@ -209,7 +211,7 @@ def encode_pos(object pos):
     raw_pos = py_pos
     return idx.encode(raw_pos)
 
-cdef uint64_t encode_feat(size_t* feature, size_t length, size_t i):
+cdef uint64_t encode_feat(uint64_t* feature, uint64_t length, uint64_t i):
     global _feat_idx
     cdef FeatIndex idx = _feat_idx
     return idx.encode(feature, length, i)
