@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """Process a best_moves file to give move P/R/F values"""
 import plac
 from collections import defaultdict 
