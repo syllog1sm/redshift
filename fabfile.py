@@ -34,30 +34,14 @@ def amend(target="."):
     deploy()
 
 
+def online(name, size="full", feats='all', thresh=5, reattach=False, lower=False,
+           repair_only=False):
+    pass
+
+
 def run_static(name, size='full', here=True, feats='all', labels="MALT", thresh=5, reattach=False,
               lower=False):
-    if here == 'True':
-        here = True
-    elif here == 'False':
-        here = False
-    if size == 'full':
-        train_name = 'train.txt'
-        if here is None:
-            here = False
-    elif size == '1k':
-        train_name = '1k_train.txt'
-        if here is None:
-            here = True
-    elif size == '5k':
-        train_name = '5k_train.txt'
-        if here is None:
-            here = True
-    elif size == '10k':
-        train_name = '10k_train.txt'
-        if here is None:
-            here = False
-    else:
-        raise StandardError(size)
+    train_name = _get_train_name(size)
     repair_str = ''
     if reattach:
         repair_str += '-r '
@@ -110,3 +94,17 @@ def run_static(name, size='full', here=True, feats='all', labels="MALT", thresh=
             runner('./scripts/train.py %s -f %d -l %s %s %s %s' % (repair_str, thresh, labels, feats_flag, train_loc, parser_loc))
             runner('./scripts/parse.py -g %s %s %s' % (parser_loc, in_loc, out_dir))
             runner('./scripts/evaluate.py %s %s' % (out_dir.join('parses'), dev_loc)) 
+
+
+def _get_train_name(size):
+    if size == 'full':
+        train_name = 'train.txt'
+    elif size == '1k':
+        train_name = '1k_train.txt'
+    elif size == '5k':
+        train_name = '5k_train.txt'
+    elif size == '10k':
+        train_name = '10k_train.txt'
+    else:
+        raise StandardError(size)
+    return train_name

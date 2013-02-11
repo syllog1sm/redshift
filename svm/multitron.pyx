@@ -92,7 +92,7 @@ cdef class MultitronParameters:
             f = features[i]
             if f == 0:
                 continue
-            if f > self.max_param or self.feat_idx[f] == -1:
+            if f >= self.max_param or self.feat_idx[f] == -1:
                 self.add_param(f)
             idx = self.feat_idx[f]
             self.W[idx].n_upd += 1

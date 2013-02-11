@@ -1,12 +1,10 @@
 from libc.stdlib cimport malloc, free
 import os
 import sys
-import numpy as np
 from libc.stdint cimport uint64_t, int64_t
 
 from pathlib import Path
 
-cimport numpy as np
 cimport cython.operator
 
 
@@ -14,7 +12,6 @@ cdef extern from *:
     ctypedef void* const_void "const void*"
 
 
-ctypedef np.int_t DTYPE_t
 
 cdef class Problem:
     def __cinit__(self, *non_kw_args, instances=None, path=None, length=None):
@@ -393,10 +390,9 @@ cdef class LibLinear(Model):
 
     property scores:
         def __get__(self):
-            cdef np.npy_intp dims = 1
-            py_array = np.empty(self.nr_class, dtype=np.double)
+            py_array = []
             for i in range(self.nr_class):
-                py_array[i] = self.scores_array[i]
+                py_array.append(self.scores_array[i])
             return py_array
 
     property labels:
