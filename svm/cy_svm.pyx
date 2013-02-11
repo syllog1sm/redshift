@@ -1,9 +1,8 @@
-# cython: profile=True
 from libc.stdlib cimport malloc, free
 import os
 import sys
 import numpy as np
-from numpy cimport uint64_t
+from libc.stdint cimport uint64_t, int64_t
 
 from pathlib import Path
 
@@ -27,7 +26,7 @@ cdef class Problem:
             raise TypeError("Problem takes exactly 1 named argument "
                             "(instances, path or length)")
         if length is not None:
-           self._malloc(<int>length)
+           self._malloc(length)
         elif path is not None:
             if not isinstance(path, Path):
                 path = Path(path)
@@ -36,8 +35,8 @@ cdef class Problem:
             self._from_instances(instances)
         
 
-    cdef add(self, int label, double weight, feature_node* feat_seq):
-        cdef size_t i = 0
+    cdef add(self, int64_t label, double weight, feature_node* feat_seq):
+        cdef uint64_t i = 0
         while feat_seq[i].index != -1:
             assert feat_seq[i].index < 100000000
             i += 1
@@ -47,12 +46,12 @@ cdef class Problem:
         assert self.i < self.max_instances, self.max_instances
         self.i += 1
 
-    cdef finish(self, unsigned long long max_index, unsigned int n_instances):
-        cdef size_t i, j
+    cdef finish(self, uint64_t max_index, uint64_t n_instances):
+        cdef uint64_t i, j
         cdef feature_node *x
-        cdef size_t new_idx
-        cdef size_t n_kept = 0
-        cdef size_t total = 0
+        cdef uint64_t new_idx
+        cdef uint64_t n_kept = 0
+        cdef uint64_t total = 0
         self.thisptr.l = n_instances
         self.thisptr.bias = -1
         self.thisptr.n = max_index
@@ -62,7 +61,7 @@ cdef class Problem:
         n_classes = len(classes)
         print("%d classes, %d instances, %d features" % (n_classes, n_instances, max_index))
 
-    cdef void _malloc(self, int n):
+    cdef void _malloc(self, uint64_t n):
         self.thisptr.x = <feature_node **>malloc((n) * sizeof(feature_node*))
         self.thisptr.y = <double *>malloc(n * sizeof(double))
         self.thisptr.W = <double *>malloc(n * sizeof(double))
@@ -71,10 +70,10 @@ cdef class Problem:
     cdef void _from_instances(self, object instances):
         # Ignore efficiency in preparing the data, in favour of accepting pure
         # python iterables for the instances object, and being more memory safe
-        cdef int j
-        cdef size_t max_index = 0
+        cdef int64_t j
+        cdef uint64_t max_index = 0
         cdef feature_node* c_feats
-        cdef int n_instances = len(instances)
+        cdef int64_t n_instances = len(instances)
         
         self._malloc(n_instances)
         
@@ -87,10 +86,10 @@ cdef class Problem:
         self.finish(max_index, n_instances)
         
     cdef void _from_path(self, object train_path):
-        cdef int max_index = 0
+        cdef int64_t max_index = 0
         cdef feature_node* c_feats
         lines = list(train_path.open().read().strip().split('\n'))
-        cdef int n_instances = len(lines)
+        cdef int64_t n_instances = len(lines)
         
         self._malloc(n_instances)
         
@@ -110,10 +109,10 @@ cdef class Problem:
 
     cpdef save(self, path):
         cdef feature_node* x
-        cdef int i, j
+        cdef int64_t i, j
         cdef double y
         cdef double w
-        cdef size_t idx
+        cdef uint64_t idx
         path = Path(path)
         out = path.open('w')
         for i in range(<int>self.thisptr.l):
@@ -140,13 +139,13 @@ cdef class Problem:
         free(self.thisptr)
 
     # For testing
-    def get_feature(self, int i, int j):
+    def get_feature(self, int64_t i, int64_t j):
         if i >= self.i:
             raise IndexError
         else:
             return self.thisptr.x[i][j].index
 
-    def get_label(self, int i):
+    def get_label(self, int64_t i):
         if i >= self.i:
             raise IndexError
         else:
@@ -158,16 +157,16 @@ TRAIN_IN_PROCESS = True
 
 cdef class Model:
     """Base class for learners"""
-    cdef int add_instance(self, int label, double weight, int n, size_t* feat_indices) except -1:
+    cdef int add_instance(self, int64_t label, double weight, int n, uint64_t* feats) except -1:
         return -1
 
-    cdef int predict_from_ints(self, int n, size_t* feat_array, bint* valid_classes) except -1:
+    cdef int predict_from_ints(self, int n, uint64_t* feats, bint* valid_classes) except -1:
         return -1
 
-    cdef int predict_single(self, int n, size_t* feat_array) except -1:
+    cdef int predict_single(self, int n, uint64_t* feats) except -1:
         return -1
 
-    cdef int update(self, size_t pred, size_t gold, int n, size_t* feats) except -1:
+    cdef int update(self, uint64_t pred, uint64_t gold, int n, uint64_t* feats) except -1:
         return -1
 
     def begin_adding_instances(self, n_instances):
@@ -182,7 +181,7 @@ cdef class Model:
 # If this is a problem we can get the client to specify it
 MAX_FEATS = 10000000
 cdef class Perceptron(Model):
-    def __cinit__(self, max_classes, model_loc, int solver_type=14, float C=1,
+    def __cinit__(self, max_classes, model_loc, int64_t solver_type=14, float C=1,
                   float eps=0.01, clean=False):
         self.path = model_loc
         self.nr_class = max_classes
@@ -199,18 +198,18 @@ cdef class Perceptron(Model):
         self.nr_class = nr_class
         self.model.true_nr_class = nr_class
 
-    def begin_adding_instances(self, size_t n_feats):
+    def begin_adding_instances(self, uint64_t n_feats):
         pass
 
-    cdef int add_instance(self, int label, double w, int n, size_t* feats) except -1:
+    cdef int add_instance(self, int64_t label, double weight, int n, uint64_t* feats) except -1:
         """
         Add instance with 1 good label. Generalise to multi-label soon.
         """
-        cdef size_t pred = self.model.predict_best_class(n, feats)
+        cdef uint64_t pred = self.model.predict_best_class(n, feats)
         self.update(pred, label, n, feats)
         return pred
 
-    cdef int update(self, size_t pred, size_t gold, int n, size_t* feats) except -1:
+    cdef int update(self, uint64_t pred, uint64_t gold, int n, uint64_t* feats) except -1:
         self.model.update(pred, gold, n, feats)
         if gold == pred:
             self.n_corr += 1
@@ -219,13 +218,13 @@ cdef class Perceptron(Model):
     def train(self):
         self.model.finalize()
 
-    cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1:
+    cdef int predict_from_ints(self, int n, uint64_t* feats, bint* valid_classes) except -1:
         cdef:
-            size_t i
-            size_t best_class
-            size_t label
+            uint64_t i
+            uint64_t best_class
+            uint64_t label
             double score, best_score
-            size_t* labels
+            uint64_t* labels
         cdef bint seen_valid = False
         cdef double* scores = self.model.get_scores(n, feats)
         labels = self.model.labels
@@ -249,7 +248,7 @@ cdef class Perceptron(Model):
         return best_class
 
 
-    cdef int predict_single(self, int n, size_t* feats) except -1:
+    cdef int predict_single(self, int n, uint64_t* feats) except -1:
         return self.model.predict_best_class(n, feats)
 
     def save(self, model_loc):
@@ -260,7 +259,7 @@ cdef class Perceptron(Model):
 
 
 cdef class LibLinear(Model):
-    def __cinit__(self, n_classes, model_loc, int solver_type=L2R_L2LOSS_SVC_DUAL,
+    def __cinit__(self, n_classes, model_loc, int64_t solver_type=L2R_L2LOSS_SVC_DUAL,
                   float C=1, float eps=-1, clean=False):
         self.paramptr = new parameter()
         self.paramptr.solver_type = solver_type
@@ -293,12 +292,12 @@ cdef class LibLinear(Model):
         self.problem = Problem(length=n_instances)
         self.max_index = 0
 
-    cdef int add_instance(self, int label, double weight, int n, size_t* feat_indices) except -1:
-        x = ints_to_features(n, feat_indices)
+    cdef int add_instance(self, int64_t label, double weight, int n, uint64_t* feats) except -1:
+        x = ints_to_features(n, feats)
         self.problem.add(label, weight, x)
         for i in range(n):
-            if feat_indices[i] > self.max_index:
-                self.max_index = feat_indices[i]
+            if feats[i] > self.max_index:
+                self.max_index = feats[i]
 
     def train(self, *non_kw_args, instances=None, path=None):
         if non_kw_args or len([a for a in [instances, path] if a is not None]) > 1:
@@ -326,14 +325,14 @@ cdef class LibLinear(Model):
         self.modelptr = train(<problem *>p.thisptr, self.paramptr)
         self._setup()
 
-    cdef int predict_from_ints(self, int n, size_t* feat_array, bint* valid_classes) except -1:
-        cdef feature_node* features = ints_to_features(n, feat_array)
+    cdef int predict_from_ints(self, int n, uint64_t* feats, bint* valid_classes) except -1:
+        cdef feature_node* features = ints_to_features(n, feats)
         value = self.predict_from_features(features, valid_classes)
         free(features)
         return value
 
-    cdef int predict_single(self, int n, size_t* feat_array) except -1:
-        cdef feature_node* features = ints_to_features(n, feat_array)
+    cdef int predict_single(self, int n, uint64_t* feats) except -1:
+        cdef feature_node* features = ints_to_features(n, feats)
         scores_array = <double*>malloc(self.nr_class * sizeof(double))
         value = <int>predict_values(self.modelptr, features, self.scores_array)
         free(scores_array)
@@ -341,13 +340,13 @@ cdef class LibLinear(Model):
         return value
 
     cdef int predict_from_features(self, feature_node* features, bint* valid_classes) except -1:
-        cdef size_t i
-        cdef int value, label
+        cdef uint64_t i
+        cdef int64_t value, label
         cdef double score
         value = <int>predict_values(self.modelptr, features, self.scores_array)
         if valid_classes[<int>value]:
             return value
-        cdef int best_label = 0
+        cdef int64_t best_label = 0
         cdef double best_score = -1000000.0
         for i in range(self.nr_class):
             label = self.modelptr.label[i]
@@ -377,7 +376,7 @@ cdef class LibLinear(Model):
         self._setup()
 
     def _setup(self):
-        cdef int i
+        cdef int64_t i
         self.is_trained = True
         self.scores_array = <double *>malloc(self.modelptr.nr_class * sizeof(double))
         self.is_probability_model = check_probability_model(self.modelptr)
@@ -414,11 +413,11 @@ cdef class LibLinear(Model):
     # Parameter handling
     property solver_type:
         def __get__(self): return self.paramptr.solver_type
-        def __set__(self, int value): self.paramptr.solver_type = value
+        def __set__(self, int64_t value): self.paramptr.solver_type = value
  
     property C:
         def __get__(self): return self.paramptr.C
-        def __set__(self, int value): self.paramptr.C = value
+        def __set__(self, int64_t value): self.paramptr.C = value
  
     property eps:
         def __get__(self): return self.paramptr.eps
@@ -437,7 +436,7 @@ cdef feature_node* err
 cdef feature_node * seq_to_features(object instance) except *:
     cdef feature_node feature, term_feat
     cdef feature_node* x
-    cdef int i
+    cdef int64_t i
     instance.sort()
     x = <feature_node *>malloc((len(instance) + 1) * sizeof(feature_node))
     for i, feat_idx in enumerate(instance):
@@ -448,10 +447,10 @@ cdef feature_node * seq_to_features(object instance) except *:
     x[i + 1] = feature_node(index=-1, value=1.0)
     return x
 
-cdef feature_node* ints_to_features(int n, size_t* ints) except NULL:
-    cdef int value
-    cdef int i, j
-    cdef int non_zeroes = 0
+cdef feature_node* ints_to_features(int64_t n, uint64_t* ints) except NULL:
+    cdef int64_t value
+    cdef int64_t i, j
+    cdef int64_t non_zeroes = 0
     for i in range(n):
         if ints[i] != 0:
             non_zeroes += 1

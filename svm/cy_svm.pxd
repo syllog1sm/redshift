@@ -1,4 +1,4 @@
-from libc.stdint cimport uint32_t
+from libc.stdint cimport uint64_t, int64_t
 cimport svm.multitron
 
 cdef extern from "linear.h":
@@ -31,7 +31,7 @@ cdef extern from "linear.h":
     cdef cppclass model:
         parameter param
         int nr_class
-        size_t nr_feature
+        uint64_t nr_feature
         double *w
         int *label
         double bias
@@ -54,10 +54,10 @@ cdef class Problem:
     cdef int i
     cdef int max_instances
 
-    cdef add(self, int, double, feature_node*)
-    cdef finish(self, unsigned long long, unsigned int)
+    cdef add(self, int64_t label, double, feature_node*)
+    cdef finish(self, uint64_t, uint64_t)
     cpdef save(self, object)
-    cdef void _malloc(self, int)
+    cdef void _malloc(self, uint64_t)
     cdef void _from_instances(self, object)
     cdef void _from_path(self, object)
 
@@ -74,10 +74,10 @@ cdef class Model:
     cdef float n_corr
     cdef float total
 
-    cdef int add_instance(self, int label, double weight, int n, size_t* feats) except -1
-    cdef int predict_from_ints(self, int n, size_t* feats, bint* valid_classes) except -1
-    cdef int predict_single(self, int n, size_t* feats) except -1
-    cdef int update(self, size_t pred, size_t gold, int n, size_t* feats) except -1
+    cdef int add_instance(self, int64_t label, double weight, int n, uint64_t* feats) except -1
+    cdef int predict_from_ints(self, int n, uint64_t* feats, bint* valid_classes) except -1
+    cdef int predict_single(self, int n, uint64_t* feats) except -1
+    cdef int update(self, uint64_t pred, uint64_t gold, int n, uint64_t* feats) except -1
     
     # Python interface expected
     #def begin_adding_instances(self, int n_instances)
@@ -88,9 +88,9 @@ cdef class Model:
 cdef class Perceptron(Model):
     cdef svm.multitron.MultitronParameters model
 
-    cdef int add_instance(self, int label, double weight, int n_feats, size_t* feats) except -1
-    cdef int predict_from_ints(self, int n_feats, size_t* feats, bint* valid_classes) except -1
-    cdef int predict_single(self, int n, size_t* feat_array) except -1
+    cdef int add_instance(self, int64_t label, double weight, int n_feats, uint64_t* feats) except -1
+    cdef int predict_from_ints(self, int n, uint64_t* feats, bint* valid_classes) except -1
+    cdef int predict_single(self, int n, uint64_t* feats) except -1
 
 
 cdef class LibLinear(Model):
@@ -104,9 +104,9 @@ cdef class LibLinear(Model):
     cdef bint is_probability_model
     cdef int* labels_by_score
 
-    cdef int add_instance(self, int label, double weight, int n, size_t*) except -1
+    cdef int add_instance(self, int64_t label, double weight, int n, uint64_t*) except -1
     cdef int predict_from_features(self, feature_node*, bint* valid_classes) except -1
-    cdef int predict_from_ints(self, int n, size_t*, bint* valid_classes) except -1
-    cdef int predict_single(self, int n, size_t* feat_array) except -1
+    cdef int predict_from_ints(self, int n, uint64_t*, bint* valid_classes) except -1
+    cdef int predict_single(self, int n, uint64_t* feats) except -1
 
     cdef int _train(self, Problem p) except -1

@@ -15,9 +15,9 @@ cdef class MultitronParameters:
     """
     
     def __cinit__(self, max_classes, feat_thresh=0):
-        cdef size_t i
+        cdef uint64_t i
         self.scores = <double *>malloc(max_classes * sizeof(double))
-        #self.W = dense_hash_map[size_t, ParamData]()
+        #self.W = dense_hash_map[uint64_t, ParamData]()
         #self.W.set_empty_key(0)
         self.W = vector[ParamData]()
         self.weights = vector[vector[double]]()
@@ -28,8 +28,8 @@ cdef class MultitronParameters:
         self.true_nr_class = max_classes
         self.n_classes = 0
         self.now = 0
-        self.labels = <size_t*>malloc(max_classes * sizeof(size_t))
-        self.label_to_i = <int*>malloc(max_classes * sizeof(int))
+        self.labels = <uint64_t*>malloc(max_classes * sizeof(uint64_t))
+        self.label_to_i = <int64_t*>malloc(max_classes * sizeof(int64_t))
         for i in range(max_classes):
             self.label_to_i[i] = -1
             self.labels[i] = 0
@@ -45,7 +45,7 @@ cdef class MultitronParameters:
         #    free(self.W[f].acc)
         #    free(self.W[f].lastUpd)
 
-    cdef int lookup_label(self, size_t label) except -1:
+    cdef int64_t lookup_label(self, uint64_t label) except -1:
         assert label < self.max_classes
         if self.label_to_i[label] >= 0:
             return self.label_to_i[label]
@@ -55,15 +55,15 @@ cdef class MultitronParameters:
             self.n_classes += 1
             return self.n_classes - 1
 
-    cdef int add_param(self, size_t f) except -1:
-        cdef size_t i
+    cdef int64_t add_param(self, uint64_t f) except -1:
+        cdef uint64_t i
         cdef ParamData* p = <ParamData*>malloc(sizeof(ParamData))
         while self.max_param <= f:
             self.feat_idx.push_back(-1)
             self.max_param += 1
         self.feat_idx[f] = self.n_params
         p.acc = <double*>malloc(self.true_nr_class * sizeof(double))
-        p.lastUpd = <int*>malloc(self.true_nr_class  * sizeof(int))
+        p.lastUpd = <uint64_t*>malloc(self.true_nr_class  * sizeof(uint64_t))
         w = new vector[double]()
         for i in range(self.true_nr_class):
             p.lastUpd[i] = 0
@@ -76,20 +76,22 @@ cdef class MultitronParameters:
     cdef tick(self):
         self.now = self.now + 1
 
-    cdef int update(self, size_t pred_label, size_t gold_label,
-                    size_t n_feats, size_t* features) except -1:
-        cdef size_t t
-        cdef size_t f
+    cdef int64_t update(self, uint64_t pred_label, uint64_t gold_label,
+                    uint64_t n_feats, uint64_t* features) except -1:
+        cdef uint64_t f
         cdef int64_t idx
         self.tick()
-        cdef size_t gold_i = self.lookup_label(gold_label)
-        cdef size_t pred_i = self.lookup_label(pred_label)
+        cdef uint64_t gold_i = self.lookup_label(gold_label)
+        cdef uint64_t pred_i = self.lookup_label(pred_label)
         if gold_i == pred_i:
             return 0
         cdef ParamData* p
         for i in range(n_feats):
             f = features[i]
             if f == 0:
+                continue
+            # TODO: int over flow errors on laptop :(
+            if f > 10000000:
                 continue
             if f > self.max_param or self.feat_idx[f] == -1:
                 self.add_param(f)
@@ -102,10 +104,10 @@ cdef class MultitronParameters:
             p.lastUpd[pred_i] = self.now
             p.lastUpd[gold_i] = self.now
         
-    cdef double* get_scores(self, size_t n_feats, size_t* features):
+    cdef double* get_scores(self, uint64_t n_feats, uint64_t* features):
         #cdef vector[double] weights
-        cdef size_t i, f, c
-        cdef size_t n_classes = self.n_classes
+        cdef uint64_t i, f, c
+        cdef uint64_t n_classes = self.n_classes
         cdef double* scores = self.scores
         for i in range(self.max_classes):
             scores[i] = 0
@@ -118,8 +120,8 @@ cdef class MultitronParameters:
                         scores[c] = scores[c] + self.weights[idx][c]
         return scores
 
-    cdef size_t predict_best_class(self, size_t n_feats, size_t* features):
-        cdef size_t i
+    cdef uint64_t predict_best_class(self, uint64_t n_feats, uint64_t* features):
+        cdef uint64_t i
         cdef double* scores = self.get_scores(n_feats, features)
         cdef int best_i = 0
         cdef double best = scores[0]
@@ -129,9 +131,9 @@ cdef class MultitronParameters:
                 best = scores[i]
         return self.labels[best_i]
 
-    cdef int finalize(self) except -1:
-        cdef int64_t f
-        cdef size_t c
+    cdef int64_t finalize(self) except -1:
+        cdef uint64_t f
+        cdef uint64_t c
         # average
         for f in range(self.n_params):
             for c in range(self.n_classes):
@@ -139,7 +141,7 @@ cdef class MultitronParameters:
                 self.weights[f][c] = self.W[f].acc[c] / self.now
 
     def dump(self, out=sys.stdout):
-        cdef size_t c
+        cdef uint64_t c
         cdef int64_t f
         # Write LibSVM compatible format
         out.write(u'solver_type L1R_LR\n')
@@ -161,7 +163,7 @@ cdef class MultitronParameters:
         out.close()
 
     def load(self, in_=sys.stdin):
-        cdef size_t f, clas
+        cdef uint64_t f, clas
         header, data = in_.read().split('w\n')
         for line in header.split('\n'):
             if line.startswith('label'):
@@ -179,4 +181,3 @@ cdef class MultitronParameters:
                 idx = self.feat_idx[f + 1]
                 for clas, w in enumerate(weights):
                     self.weights[idx][clas] = w
-        print 'loaded'
