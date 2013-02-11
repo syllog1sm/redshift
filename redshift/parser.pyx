@@ -10,7 +10,6 @@ from collections import defaultdict
 import sh
 import sys
 
-from libc.stdint cimport uint64_t
 from _state cimport *
 cimport io_parse
 import io_parse
@@ -26,7 +25,7 @@ from index.hashes cimport InstanceCounter
 
 from svm.cy_svm cimport Model, LibLinear, Perceptron
 
-from numpy cimport uint64_t, int64_t
+from libc.stdint cimport uint64_t, int64_t
 
 random.seed(0)
 
@@ -186,8 +185,7 @@ cdef class Parser:
                     self.online_train_one(n, &sents.s[i])
                 else:
                     self.static_train_one(n, &sents.s[i])
-            if n == 0 and self.train_alg == 'static':
-                index.hashes.set_feat_counting(False)
+            if n == 0:
                 index.hashes.set_feat_counting(False)
             if n > 0 or self.train_alg == "online":
                 if held_out is not None:
