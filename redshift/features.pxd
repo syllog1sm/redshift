@@ -1,10 +1,10 @@
-
+from libc.stdint cimport uint64_t
 from _state cimport State
 from io_parse cimport Sentence
 
 cdef struct Predicate:
     int id, n, expected_size
-    size_t* raws
+    uint64_t* raws
     int* args
 
 cdef int PAD_SIZE
@@ -21,10 +21,10 @@ cdef Predicate* predicates
 
 cdef size_t* init_context()
 
-cdef size_t* init_hashed_features()
+cdef uint64_t* init_hashed_features()
 
 cdef int fill_context(size_t* context, size_t n0, size_t n1, size_t n2,
-                      size_t s0, size_t s1,
+                      size_t, size_t s1,
                       size_t s0_re, size_t s1_re,
                       size_t stack_len,
                       size_t* words, size_t* pos, size_t* browns,
@@ -33,7 +33,7 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, size_t n2,
                       size_t* n0_lkids,
                       bint* s0_llabels, bint* s0_rlabels, bint* n0_llabels) except -1
 
-cdef int extract(size_t* context, size_t* hashed, Sentence* sent,
+cdef int extract(size_t* context, uint64_t* hashed, Sentence* sent,
         State* state) except -1
 
 cdef set_n_labels(int n)

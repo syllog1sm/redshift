@@ -3,7 +3,7 @@
 Handle parser features
 """
 from libc.stdlib cimport malloc, free
-from libc.stdint cimport uint32_t
+from libc.stdint cimport uint64_t
 
 from io_parse cimport Sentence
 from index.hashes cimport encode_feat
@@ -98,7 +98,7 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, size_t n2,
                       size_t* s0_lkids, size_t* s0_rkids, size_t* s1_lkids, size_t* s1_rkids,
                       size_t* n0_lkids,
                       bint* s0_llabels, bint* s0_rlabels, bint* n0_llabels) except -1:
-    cdef size_t t, d, j
+    cdef uint64_t t, d, j
 
     context[N0w] = words[n0]
     context[N0p] = pos[n0]
@@ -407,7 +407,7 @@ cdef int make_predicates(bint add_extra, bint add_labels) except 0:
 cdef Predicate make_predicate(int id, object args):
     cdef int element
     cdef Predicate pred = Predicate(id=id, n=len(args))
-    pred.raws = <size_t*>malloc(len(args) * sizeof(size_t))
+    pred.raws = <uint64_t*>malloc(len(args) * sizeof(uint64_t))
     pred.args = <int*>malloc(len(args) * sizeof(int))
     for i, element in enumerate(args):
         pred.args[i] = element
@@ -420,10 +420,10 @@ cdef size_t* init_context():
     return <size_t*>malloc(CONTEXT_SIZE * sizeof(size_t))
 
 
-cdef size_t* init_hashed_features():
-    return <size_t*>malloc(N_PREDICATES * sizeof(size_t))
+cdef uint64_t* init_hashed_features():
+    return <uint64_t*>malloc(N_PREDICATES * sizeof(uint64_t))
 
-cdef int extract(size_t* context, size_t* hashed,
+cdef int extract(size_t* context, uint64_t* hashed,
         Sentence* sent, State* s) except -1:
     cdef int i, j
     cdef size_t out

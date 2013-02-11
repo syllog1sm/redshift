@@ -10,6 +10,7 @@ from collections import defaultdict
 import sh
 import sys
 
+from libc.stdint cimport uint64_t
 from _state cimport *
 cimport io_parse
 import io_parse
@@ -24,6 +25,8 @@ import index.hashes
 from index.hashes cimport InstanceCounter
 
 from svm.cy_svm cimport Model, LibLinear, Perceptron
+
+from numpy cimport uint64_t, int64_t
 
 random.seed(0)
 
@@ -76,7 +79,7 @@ cdef class Parser:
     cdef Sentence* sentence
     cdef int n_preds
     cdef size_t* _context
-    cdef size_t* _hashed_feats
+    cdef uint64_t* _hashed_feats
     cdef TransitionSystem moves
     cdef InstanceCounter inst_counts
     cdef object add_extra
@@ -206,7 +209,7 @@ cdef class Parser:
         cdef size_t* g_heads = sent.parse.heads
         cdef bint* valid
         cdef size_t* tags = sent.pos
-        cdef size_t* feats = self._hashed_feats
+        cdef uint64_t* feats = self._hashed_feats
         cdef size_t* context = self._context
         cdef int n_feats = self.n_preds
 
@@ -241,7 +244,7 @@ cdef class Parser:
         cdef size_t* tags = sent.pos
 
         cdef size_t* context = self._context
-        cdef size_t* feats = self._hashed_feats
+        cdef uint64_t* feats = self._hashed_feats
         cdef size_t n_feats = self.n_preds
         cdef Model labeller
 
@@ -278,7 +281,7 @@ cdef class Parser:
         cdef size_t move, label
         cdef size_t n_preds = self.n_preds
         cdef size_t* context = self._context
-        cdef size_t* feats = self._hashed_feats
+        cdef uint64_t* feats = self._hashed_feats
         cdef bint* valid
         cdef size_t n = sent.length
         s = init_state(sent.length)
