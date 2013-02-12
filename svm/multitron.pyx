@@ -6,7 +6,7 @@ from libc.stdlib cimport *
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 
-cdef size_t MIN_UPD = 5
+cdef size_t MIN_UPD = 2
 
 cdef class MultitronParameters:
     """
