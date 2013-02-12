@@ -285,18 +285,17 @@ cdef class Parser:
         s = init_state(sent.length)
         sent.parse.n_moves = 0
         while not s.is_finished:
-            #if s.top == 0:
-            #    move = SHIFT
-            #    label = 0
-            #else:
             valid = self.moves.check_preconditions(&s)
             features.extract(context, feats, sent, &s)
             paired = self.guide.predict_from_ints(n_preds, feats, valid)
             self.moves.unpair_label_move(paired, &label, &move)
             sent.parse.moves[s.t] = paired
             sent.parse.n_moves += 1
+            top = s.top
             self.moves.transition(move, label, &s)
-        for i in range(1, sent.length):
+        # No need to copy heads for root and start symbols
+        for i in range(1, sent.length - 1):
+            assert s.heads[i] != 0
             sent.parse.heads[i] = s.heads[i]
             sent.parse.labels[i] = s.labels[i]
 
@@ -485,7 +484,7 @@ cdef class TransitionSystem:
             s.stack_len += 1
         else:
             raise StandardError(lmove_to_str(move, label))
-        if s.i >= (s.n - 1) and s.stack_len == 1:
+        if s.i == s.n and s.stack_len == 1:
             s.is_finished = True
 
     cdef bint* check_preconditions(self, State* s) except NULL:
