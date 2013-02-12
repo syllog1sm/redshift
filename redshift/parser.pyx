@@ -156,7 +156,7 @@ cdef class Parser:
         cdef Sentences held_out_gold
         cdef Sentences held_out_parse
         # Count classes
-        if self.moves.shiftless:
+        if not self.moves.shiftless:
             seen_classes = set([self.moves.s_id, self.moves.d_id])
         else:
             seen_classes = set([self.moves.d_id])
