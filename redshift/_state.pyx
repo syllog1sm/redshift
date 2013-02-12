@@ -122,7 +122,7 @@ cdef bint has_child_in_buffer(State *s, size_t word, size_t* heads):
 
 cdef bint has_head_in_buffer(State *s, size_t word, size_t* heads):
     cdef size_t buff_i
-    for buff_i in range(s.i, s.n):
+    for buff_i in range(s.i, s.n + 1):
         if heads[word] == buff_i:
             return True
     return False
