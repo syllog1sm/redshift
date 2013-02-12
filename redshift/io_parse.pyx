@@ -213,7 +213,7 @@ cdef class Sentences:
         for i in range(self.length):
             t = self.s[i]
             g = gold.s[i]
-            for j in range(1, t.length):
+            for j in range(1, t.length - 1):
                 if g.parse.labels[j] == PUNCT_LABEL:
                     continue
                 nc += t.parse.heads[j] == g.parse.heads[j]
