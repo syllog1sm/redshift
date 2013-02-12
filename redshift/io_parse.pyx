@@ -207,13 +207,13 @@ cdef class Sentences:
             out_file.write(u'\n')
 
     cdef evaluate(self, Sentences gold):
-        cdef float nc = 0
-        cdef float n = 1e-6
+        cdef double nc = 0
+        cdef double n = 0
         assert self.length == gold.length
         for i in range(self.length):
             t = self.s[i]
             g = gold.s[i]
-            for j in range(1, t.length - 1):
+            for j in range(1, t.length):
                 if g.parse.labels[j] == PUNCT_LABEL:
                     continue
                 nc += t.parse.heads[j] == g.parse.heads[j]
