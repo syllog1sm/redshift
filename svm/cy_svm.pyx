@@ -202,7 +202,7 @@ cdef class Perceptron(Model):
         """
         Add instance with 1 good label. Generalise to multi-label soon.
         """
-        cdef uint64_t pred = self.model.predict_best_class(n, feats)
+        cdef int64_t pred = self.model.predict_best_class(n, feats)
         self.update(pred, label, n, feats)
         return pred
 
