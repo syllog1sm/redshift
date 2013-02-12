@@ -6,7 +6,7 @@ from libc.stdlib cimport *
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 
-cdef size_t MIN_UPD = 5
+cdef size_t MIN_UPD = 2
 
 cdef class MultitronParameters:
     """
@@ -120,7 +120,7 @@ cdef class MultitronParameters:
             f = features[i]
             if f != 0 and f < max_param:
                 idx = self.feat_idx[f]
-                if idx != -1:
+                if idx != -1 and self.W[idx].n_upd >= MIN_UPD:
                     score = 0
                     w = self.W[idx].w
                     for c in range(n_classes):
