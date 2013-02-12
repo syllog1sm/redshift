@@ -68,7 +68,7 @@ cdef lmove_to_str(move, label):
     elif move == REDUCE:
         return 'D'
     else:
-        return '%s' % (moves[move])
+        return '%s-%s' % (moves[move], label)
 
 
 cdef class Parser:
@@ -160,6 +160,9 @@ cdef class Parser:
             seen_classes = set([self.moves.s_id, self.moves.d_id])
         else:
             seen_classes = set([self.moves.d_id])
+        if self.moves.allow_reattach:
+            seen_classes.add(self.moves.l_start)
+            seen_classes.add(self.moves.r_start)
         for i in range(sents.length):
             sent = &sents.s[i]
             for j in range(sent.length):
@@ -249,8 +252,6 @@ cdef class Parser:
         cdef size_t* context = self._context
         cdef uint64_t* feats = self._hashed_feats
         cdef size_t n_feats = self.n_preds
-        cdef Model labeller
-
         cdef State s = init_state(sent.length)
         cdef int n_instances = 0
         while not s.is_finished:
