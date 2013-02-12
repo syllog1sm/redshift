@@ -120,7 +120,7 @@ cdef class MultitronParameters:
             f = features[i]
             if f != 0 and f < max_param:
                 idx = self.feat_idx[f]
-                if idx != -1 and self.W[idx].n_upd >= MIN_UPD:
+                if idx != -1:
                     score = 0
                     w = self.W[idx].w
                     for c in range(n_classes):
