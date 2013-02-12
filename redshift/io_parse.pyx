@@ -213,6 +213,8 @@ cdef class Sentences:
         for i in range(self.length):
             t = self.s[i]
             g = gold.s[i]
+            assert t.length == g.length
+            # Don't evaluate the start or root symbols
             for j in range(1, t.length - 1):
                 if g.parse.labels[j] == PUNCT_LABEL:
                     continue
