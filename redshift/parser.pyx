@@ -156,7 +156,10 @@ cdef class Parser:
         cdef Sentences held_out_gold
         cdef Sentences held_out_parse
         # Count classes
-        seen_classes = set([self.moves.s_id, self.moves.d_id])
+        if self.moves.shiftless:
+            seen_classes = set([self.moves.s_id, self.moves.d_id])
+        else:
+            seen_classes = set([self.moves.d_id])
         for i in range(sents.length):
             sent = &sents.s[i]
             for j in range(sent.length):
@@ -213,6 +216,8 @@ cdef class Parser:
 
         cdef State s = init_state(sent.length)
         cdef int n_instances = 0
+        cdef size_t p_move
+        cdef size_t p_label
         while not s.is_finished:
             features.extract(self._context, self._hashed_feats, sent, &s)
             # Determine which moves are zero-cost and meet pre-conditions
@@ -222,7 +227,7 @@ cdef class Parser:
             move = self.moves.break_tie(&s, g_labels, g_heads, tags, valid)
             if move == LEFT:
                 label = g_labels[s.top]
-            elif move == RIGHT:
+            elif move == RIGHT and g_heads[s.i] == s.top:
                 label = g_labels[s.i]
             else:
                 label = 0
@@ -415,6 +420,8 @@ cdef class TransitionSystem:
         self.allow_lower = allow_lower
         self.shiftless = shiftless
         self.repair_only = repair_only
+        if self.shiftless:
+            assert not self.repair_only
         if grammar_loc is not None:
             self.read_grammar(grammar_loc)
         self.grammar_loc = grammar_loc
@@ -520,6 +527,9 @@ cdef class TransitionSystem:
         valid_moves[RIGHT] = paired_validity[self.r_start] and self.r_cost(s, heads)
         valid_moves[LOWER] = paired_validity[self.w_start] and self.w_cost(s, heads)
         paired_validity[self.s_id] = valid_moves[SHIFT]
+        if self.shiftless:
+            assert not paired_validity[self.s_id] 
+
         paired_validity[self.d_id] = valid_moves[REDUCE]
         if valid_moves[LEFT] and heads[s.top] == s.i:
             for l_id in range(self.l_start, self.l_end):
@@ -554,6 +564,7 @@ cdef class TransitionSystem:
         elif self._move_validity[REDUCE]:
             return REDUCE
         elif self._move_validity[SHIFT]:
+            assert not self.shiftless
             return SHIFT
         if self._move_validity[LOWER]:
             return LOWER
@@ -584,8 +595,11 @@ cdef class TransitionSystem:
         cdef size_t i, buff_i, stack_i
         if g_heads[s.i] == s.top:
             return True
-        if has_head_in_buffer(s, s.i, g_heads) and (not self.allow_reattach or self.repair_only):
-            return False
+        if has_head_in_buffer(s, s.i, g_heads):
+            if self.repair_only:
+                return False
+            elif not self.allow_reattach:
+                return False
         if has_child_in_stack(s, s.i, g_heads):
             return False
         if has_head_in_stack(s, s.i, g_heads):
