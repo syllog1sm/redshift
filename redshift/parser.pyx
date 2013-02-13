@@ -72,7 +72,7 @@ cdef lmove_to_str(move, label):
 
 
 def _parse_labels_str(labels_str):
-    return [STR_TO_LABELS[l] for l in labels_str.split(',')]
+    return [STR_TO_LABEL[l] for l in labels_str.split(',')]
 
 
 cdef class Parser:
@@ -109,8 +109,8 @@ cdef class Parser:
             grammar_loc = params['grammar_loc']
             shiftless = params['shiftless'] == 'True'
             repair_only = params['repair_only'] == 'True'
-            l_labels = _parse_label_str(params['left_labels'])
-            r_labels = _parse_label_str(params['right_labels'])
+            l_labels = _parse_labels_str(params['left_labels'])
+            r_labels = _parse_labels_str(params['right_labels'])
             if grammar_loc == 'None':
                 grammar_loc = None
             else:
@@ -175,7 +175,7 @@ cdef class Parser:
                 else:
                     seen_r_labels.add(label)
         classes = self.moves.set_labels(seen_l_labels, seen_r_labels)
-        print "%d classes seen" % (nr_class)
+        print "%d classes seen" % (len(classes))
         self.guide.set_nr_class(len(classes))
         self.write_cfg(self.model_dir.join('parser.cfg'))
         index.hashes.set_feat_counting(True)
@@ -341,8 +341,8 @@ cdef class Parser:
             cfg.write(u'allow_lower\t%s\n' % self.moves.allow_lower)
             cfg.write(u'shiftless\t%s\n' % self.moves.shiftless)
             cfg.write(u'repair_only\t%s\n' % self.moves.repair_only)
-            cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.l_labels)))
-            cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.r_labels)))
+            cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.l_labels))
+            cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.r_labels))
         
     def get_best_moves(self, Sentences sents, Sentences gold):
         """Get a list of move taken/oracle move pairs for output"""
@@ -549,7 +549,7 @@ cdef class TransitionSystem:
         for i in range(self.n_l_classes):
             paired[self.l_classes[l_id]] = unpaired[LEFT]
         for i in range(self.n_r_classes):
-            paired[self.r_classes[i] = unpaired[RIGHT]
+            paired[self.r_classes[i]] = unpaired[RIGHT]
         for i in range(self.n_w_classes):
             paired[self.w_classes[w_id]] = unpaired[LOWER]
         return paired
