@@ -256,6 +256,7 @@ cdef class Parser:
         cdef size_t n_feats = self.n_preds
         cdef State s = init_state(sent.length)
         cdef int n_instances = 0
+        weight = 1
         while not s.is_finished:
             features.extract(self._context, self._hashed_feats, sent, &s)
             # Determine which moves are zero-cost and meet pre-conditions
@@ -269,15 +270,15 @@ cdef class Parser:
             gold_paired = self.guide.predict_from_ints(n_feats, feats, valid)
             self.moves.unpair_label_move(gold_paired, &gold_move, &gold_label)
             self.moves.unpair_label_move(pred_paired, &pred_move, &pred_label)
-            if gold_move == pred_move:
-                weight = 1
-            else:
-                weight = 1
+            #if gold_move != pred_move:
+            #    weight = 1
+            #elif g_heads[s.top] == s.i or g_heads[s.i] == s.top:
+            #    weight = 1
+            #else:
+            #    weight = 0.5
             self.guide.update(pred_paired, gold_paired, n_feats, feats, weight)
             if valid[pred_paired]:
                 gold_paired = pred_paired
-            else:
-                gold_paired = self.guide.predict_from_ints(n_feats, feats, valid)
             if iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
                 self.moves.unpair_label_move(pred_paired, &label, &move)
             else:
