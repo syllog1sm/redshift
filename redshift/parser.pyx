@@ -553,7 +553,7 @@ cdef class TransitionSystem:
         # Load pre-conditions that don't refer to gold heads
         unpaired[ERR] = False
         unpaired[SHIFT] = (not s.at_end_of_buffer) and not self.shiftless
-        unpaired[RIGHT] = (not s.at_end_of_buffer) and (s.top != 0 or self.shiftless)
+        unpaired[RIGHT] = (not s.at_end_of_buffer) and s.top != 0
         unpaired[REDUCE] = s.heads[s.top] != 0
         if self.shiftless and s.stack_len == 2:
             unpaired[REDUCE] = False
@@ -583,24 +583,29 @@ cdef class TransitionSystem:
         valid_moves[LEFT] = valid_moves[LEFT] and self.l_cost(s, heads)
         valid_moves[RIGHT] = valid_moves[RIGHT] and self.r_cost(s, heads)
         valid_moves[LOWER] = valid_moves[LOWER] and self.w_cost(s, heads)
+        for i in range(self.n_paired):
+            paired_validity[i] = False
         paired_validity[self.s_id] = valid_moves[SHIFT]
         if self.shiftless:
             assert not paired_validity[self.s_id] 
         paired_validity[self.d_id] = valid_moves[REDUCE]
-        for i in range(self.n_l_classes):
-            paired_validity[self.l_classes[i]] = False
         if valid_moves[LEFT] and heads[s.top] == s.i:
             paired_validity[self.pair_label_move(labels[s.top], LEFT)] = True
-        elif valid_moves[LEFT]:
-            paired_validity[self.pair_label_move(0, LEFT)] = True
-        for i in range(self.n_r_classes):
-            paired_validity[self.r_classes[i]] = False
+        else:
+            for i in range(self.n_l_classes):
+                paired_validity[self.l_classes[i]] = valid_moves[LEFT]
         if valid_moves[RIGHT] and heads[s.i] == s.top:
             paired_validity[self.pair_label_move(labels[s.i], RIGHT)] = True
-        elif valid_moves[RIGHT]:
-            paired_validity[self.pair_label_move(0, RIGHT)] = True
+        else:
+            for i in range(self.n_r_classes):
+                paired_validity[self.r_classes[i]] = valid_moves[RIGHT]
         if valid_moves[LOWER] and heads[get_r(s, s.top)] == get_r2(s, s.top):
             paired_validity[self.w_start] = True
+        if heads[s.top] == s.i and not \
+          paired_validity[self.pair_label_move(labels[s.top], LEFT)] and self.allow_reattach:
+            print self.l_cost(s, heads)
+            print s.top
+            raise StandardError
         return paired_validity
 
     cdef int break_tie(self, State* s, size_t* labels, size_t* heads,
