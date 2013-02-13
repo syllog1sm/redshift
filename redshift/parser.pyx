@@ -18,7 +18,7 @@ from io_parse cimport Sentences
 from io_parse cimport make_sentence
 cimport features
 
-from io_parse import LABEL_STRS
+from io_parse import LABEL_STRS, STR_TO_LABEL
 
 import index.hashes
 from index.hashes cimport InstanceCounter
@@ -71,6 +71,10 @@ cdef lmove_to_str(move, label):
         return '%s-%s' % (moves[move], label)
 
 
+def _parse_labels_str(labels_str):
+    return [STR_TO_LABELS[l] for l in labels_str.split(',')]
+
+
 cdef class Parser:
     cdef size_t n_features
     cdef Model guide
@@ -105,6 +109,8 @@ cdef class Parser:
             grammar_loc = params['grammar_loc']
             shiftless = params['shiftless'] == 'True'
             repair_only = params['repair_only'] == 'True'
+            l_labels = _parse_label_str(params['left_labels'])
+            r_labels = _parse_label_str(params['right_labels'])
             if grammar_loc == 'None':
                 grammar_loc = None
             else:
@@ -133,6 +139,8 @@ cdef class Parser:
         self.moves = TransitionSystem(io_parse.LABEL_STRS, allow_reattach=allow_reattach,
                                       allow_lower=allow_lower, grammar_loc=grammar_loc,
                                       shiftless=shiftless, repair_only=repair_only)
+        if not clean:
+            self.moves.set_labels(l_labels, r_labels)
         guide_loc = self.model_dir.join('model')
         n_labels = len(io_parse.LABEL_STRS)
         self.guide = Perceptron(self.moves.n_paired, guide_loc)
@@ -156,26 +164,19 @@ cdef class Parser:
         cdef Sentences held_out_gold
         cdef Sentences held_out_parse
         # Count classes
-        if not self.moves.shiftless:
-            seen_classes = set([self.moves.s_id, self.moves.d_id])
-        else:
-            seen_classes = set([self.moves.d_id])
-        if self.moves.allow_reattach:
-            seen_classes.add(self.moves.l_start)
-            seen_classes.add(self.moves.r_start)
+        seen_l_labels = set()
+        seen_r_labels = set()
         for i in range(sents.length):
             sent = &sents.s[i]
             for j in range(sent.length):
                 label = sent.parse.labels[j]
                 if sent.parse.heads[j] > j:
-                    seen_classes.add(self.moves.pair_label_move(label, LEFT))
+                    seen_l_labels.add(label)
                 else:
-                    seen_classes.add(self.moves.pair_label_move(label, RIGHT))
-        #seen_classes.add(self.moves.pair_label_move(label, LOWER))
-        if self.moves.allow_lower:
-            seen_classes.add(self.moves.l_start)
-        print "%d classes seen (max value %d)" % (len(seen_classes), max(seen_classes))
-        self.guide.set_nr_class(len(seen_classes))
+                    seen_r_labels.add(label)
+        classes = self.moves.set_labels(seen_l_labels, seen_r_labels)
+        print "%d classes seen" % (nr_class)
+        self.guide.set_nr_class(len(classes))
         self.write_cfg(self.model_dir.join('parser.cfg'))
         index.hashes.set_feat_counting(True)
         index.hashes.set_feat_threshold(self.feat_thresh)
@@ -340,6 +341,8 @@ cdef class Parser:
             cfg.write(u'allow_lower\t%s\n' % self.moves.allow_lower)
             cfg.write(u'shiftless\t%s\n' % self.moves.shiftless)
             cfg.write(u'repair_only\t%s\n' % self.moves.repair_only)
+            cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.l_labels)))
+            cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.r_labels)))
         
     def get_best_moves(self, Sentences sents, Sentences gold):
         """Get a list of move taken/oracle move pairs for output"""
@@ -400,6 +403,14 @@ cdef class TransitionSystem:
     cdef object grammar_loc
     cdef bint* _move_validity
     cdef bint* _pair_validity
+    cdef list left_labels
+    cdef list right_labels
+    cdef size_t n_l_moves
+    cdef size_t n_r_moves
+    cdef size_t n_w_moves
+    cdef size_t* l_classes
+    cdef size_t* r_classes
+    cdef size_t* w_classes
     cdef size_t n_paired
     cdef size_t s_id
     cdef size_t d_id
@@ -437,6 +448,29 @@ cdef class TransitionSystem:
         self.r_end = (RIGHT + 1) * self.n_labels
         self.w_start = LOWER * self.n_labels
         self.w_end = (LOWER + 1) * self.n_labels
+
+    def set_labels(self, left_labels, right_labels):
+        self.left_labels = [self.py_labels[l] for l in sorted(left_labels)]
+        self.right_labels = [self.py_labels[l] for l in sorted(right_labels)]
+        self.l_classes = <size_t*>malloc(len(left_labels) * sizeof(size_t))
+        self.r_classes = <size_t*>malloc(len(right_labels) * sizeof(size_t))
+        self.w_classes = <size_t*>malloc(len(right_labels) * sizeof(size_t))
+        valid_labels = [self.d_id]
+        if not self.shiftless:
+            valid_labels.append(self.s_id)
+        for i, label in enumerate(left_labels):
+            paired = self.pair_label_move(label, LEFT)
+            valid_labels.append(paired)
+            self.l_classes[i] = paired
+        for i, label in enumerate(right_labels):
+            paired = self.pair_label_move(label, RIGHT)
+            valid_labels.append(paired)
+            self.r_classes[i] = paired
+            if self.allow_lower:
+                paired = self.pair_label_move(label, LOWER)
+                valid_labels.append(paired)
+                self.w_classes[i] = paired
+        return valid_labels
 
     cdef size_t pair_label_move(self, size_t label, size_t move):
         return move * self.n_labels + label
@@ -512,12 +546,12 @@ cdef class TransitionSystem:
             paired[i] = False
         paired[self.s_id] = unpaired[SHIFT]
         paired[self.d_id] = unpaired[REDUCE]
-        for l_id in range(self.l_start, self.l_end):
-            paired[l_id] = unpaired[LEFT]
-        for r_id in range(self.r_start, self.r_end):
-            paired[r_id] = unpaired[RIGHT]
-        for w_id in range(self.w_start, self.w_end):
-            paired[w_id] = unpaired[LOWER]
+        for i in range(self.n_l_classes):
+            paired[self.l_classes[l_id]] = unpaired[LEFT]
+        for i in range(self.n_r_classes):
+            paired[self.r_classes[i] = unpaired[RIGHT]
+        for i in range(self.n_w_classes):
+            paired[self.w_classes[w_id]] = unpaired[LOWER]
         return paired
    
     cdef bint* check_costs(self, State* s, size_t* labels, size_t* heads) except NULL:
@@ -535,26 +569,22 @@ cdef class TransitionSystem:
 
         paired_validity[self.d_id] = valid_moves[REDUCE]
         if valid_moves[LEFT] and heads[s.top] == s.i:
-            for l_id in range(self.l_start, self.l_end):
-                paired_validity[l_id] = False
+            for i in range(self.n_l_classes):
+                paired_validity[self.l_classes[i]] = False
             paired_validity[self.pair_label_move(labels[s.top], LEFT)] = True
         else:
-            for l_id in range(self.l_start, self.l_end):
-                paired_validity[l_id] = valid_moves[LEFT]
+            for i in range(self.n_l_classes):
+                paired_validity[self.l_classes[i]] = valid_moves[LEFT]
         if valid_moves[RIGHT] and heads[s.i] == s.top:
-            for r_id in range(self.r_start, self.r_end):
-                paired_validity[r_id] = False
+            for i in range(self.n_r_classes):
+                paired_validity[self.r_classes[i]] = False
             paired_validity[self.pair_label_move(labels[s.i], RIGHT)] = True
         else:
-            for r_id in range(self.r_start, self.r_end):
-                paired_validity[r_id] = valid_moves[RIGHT]
+            for i in range(self.n_r_classes):
+                paired_validity[self.r_classes[i]] = valid_moves[RIGHT]
         if valid_moves[LOWER] and heads[get_r(s, s.top)] == get_r2(s, s.top):
             paired_validity[self.l_start] = True
         return paired_validity
-
-    cdef bint* _fill_paired(self, bint* unpaired) except NULL:
-        cdef size_t i, l_id, r_id, w_id
-
 
     cdef int break_tie(self, State* s, size_t* labels, size_t* heads,
                        size_t* tags, bint* valid_moves) except -1:
