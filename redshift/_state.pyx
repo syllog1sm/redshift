@@ -40,7 +40,7 @@ cdef int del_l_child(State *s, size_t head) except -1:
     cdef:
         size_t i
         size_t child
-        int old_label
+        size_t old_label
     assert s.l_valencies[head] >= 1
     child = get_l(s, head)
     old_label = s.labels[child]
