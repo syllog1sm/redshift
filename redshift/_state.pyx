@@ -158,12 +158,13 @@ cdef State init_state(size_t n):
     cdef State s
     cdef int n_labels = len(io_parse.LABEL_STRS)
     # Initialise with first word on top of stack
+    assert n >= 3
     if START_ON_STACK:
         s = State(n=n, t=0, i=2, top=1, second=0, stack_len=2, is_finished=False,
-                  at_end_of_buffer=False)
+                  at_end_of_buffer=n == 3)
     else:
         s = State(n=n, t=0, i=1, top=0, second=0, stack_len=1, is_finished=False,
-                  at_end_of_buffer=False)
+                  at_end_of_buffer=n == 3)
     for i in range(n):
         s.stack[i] = 0
         s.l_valencies[i] = 0
