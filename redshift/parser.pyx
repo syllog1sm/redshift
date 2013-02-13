@@ -188,7 +188,7 @@ cdef class Parser:
             random.shuffle(indices)
             for i in indices:
                 if self.train_alg == 'online':
-                    self.online_train_one(n, &sents.s[i])
+                    self.online_train_one(n, &sents.s[i], sents.strings[i])
                 else:
                     self.static_train_one(n, &sents.s[i])
             if n == 0:
@@ -241,7 +241,7 @@ cdef class Parser:
             n_instances += 1
         return n_instances
 
-    cdef int online_train_one(self, int iter_num, Sentence* sent) except -1:
+    cdef int online_train_one(self, int iter_num, Sentence* sent, py_words) except -1:
         cdef size_t move, label, gold_move, gold_label, pred_move, pred_label
         cdef bint* valid
         
@@ -492,7 +492,9 @@ cdef class TransitionSystem:
             s.stack_len += 1
         else:
             raise StandardError(lmove_to_str(move, label))
-        if s.i == s.n and s.stack_len == 1:
+        if s.i == (s.n - 1):
+            s.at_end_of_buffer = True
+        if s.at_end_of_buffer and s.stack_len == 1:
             s.is_finished = True
 
     cdef bint* check_preconditions(self, State* s) except NULL:
@@ -500,8 +502,8 @@ cdef class TransitionSystem:
         cdef bint* unpaired = self._move_validity
         # Load pre-conditions that don't refer to gold heads
         unpaired[ERR] = False
-        unpaired[SHIFT] = s.i < s.n and not self.shiftless
-        unpaired[RIGHT] = s.i < s.n and (s.top != 0 or self.shiftless)
+        unpaired[SHIFT] = not s.at_end_of_buffer and not self.shiftless
+        unpaired[RIGHT] = not s.at_end_of_buffer and (s.top != 0 or self.shiftless)
         unpaired[REDUCE] = s.top != 0 and s.heads[s.top] != 0
         unpaired[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
         unpaired[LOWER] = self.allow_lower and s.r_valencies[s.top] >= 2
@@ -595,6 +597,8 @@ cdef class TransitionSystem:
     cdef bint r_cost(self, State *s, size_t* g_heads):
         cdef size_t i, buff_i, stack_i
         if g_heads[s.i] == s.top:
+            return True
+        if self.shiftless and s.top == 0:
             return True
         if has_head_in_buffer(s, s.i, g_heads):
             if self.repair_only:

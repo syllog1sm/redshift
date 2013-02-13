@@ -114,6 +114,7 @@ cdef int get_right_edge(State *s, size_t node) except -1:
     return node
 
 cdef bint has_child_in_buffer(State *s, size_t word, size_t* heads):
+    assert word != 0
     cdef size_t buff_i
     for buff_i in range(s.i, s.n):
         if heads[buff_i] == word:
@@ -121,6 +122,7 @@ cdef bint has_child_in_buffer(State *s, size_t word, size_t* heads):
     return False
 
 cdef bint has_head_in_buffer(State *s, size_t word, size_t* heads):
+    assert word != 0
     cdef size_t buff_i
     for buff_i in range(s.i, s.n):
         if heads[word] == buff_i:
@@ -128,6 +130,7 @@ cdef bint has_head_in_buffer(State *s, size_t word, size_t* heads):
     return False
 
 cdef bint has_child_in_stack(State *s, size_t word, size_t* heads):
+    assert word != 0
     cdef size_t i, stack_i
     for i in range(1, s.stack_len):
         stack_i = s.stack[i]
@@ -137,6 +140,7 @@ cdef bint has_child_in_stack(State *s, size_t word, size_t* heads):
     return False
 
 cdef bint has_head_in_stack(State *s, size_t word, size_t* heads):
+    assert word != 0
     cdef size_t i, stack_i
     for i in range(1, s.stack_len):
         stack_i = s.stack[i]
@@ -155,9 +159,11 @@ cdef State init_state(size_t n):
     cdef int n_labels = len(io_parse.LABEL_STRS)
     # Initialise with first word on top of stack
     if START_ON_STACK:
-        s = State(n=n - 1, t=0, i=2, top=1, second=0, stack_len=2, is_finished=False)
+        s = State(n=n, t=0, i=2, top=1, second=0, stack_len=2, is_finished=False,
+                  at_end_of_buffer=False)
     else:
-        s = State(n=n - 1, t=0, i=1, top=0, second=0, stack_len=1, is_finished=False)
+        s = State(n=n, t=0, i=1, top=0, second=0, stack_len=1, is_finished=False,
+                  at_end_of_buffer=False)
     for i in range(n):
         s.stack[i] = 0
         s.l_valencies[i] = 0

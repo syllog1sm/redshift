@@ -25,6 +25,7 @@ cdef struct State:
     bint rlabel_set[MAX_SENT_LEN][MAX_LABELS]
     size_t[MAX_TRANSITIONS] history
     bint is_finished
+    bint at_end_of_buffer
 
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1
