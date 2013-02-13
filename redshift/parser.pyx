@@ -270,7 +270,7 @@ cdef class Parser:
             self.moves.unpair_label_move(gold_paired, &gold_move, &gold_label)
             self.moves.unpair_label_move(pred_paired, &pred_move, &pred_label)
             if gold_move == pred_move:
-                weight = 0.5
+                weight = 1
             else:
                 weight = 1
             self.guide.update(pred_paired, gold_paired, n_feats, feats, weight)
