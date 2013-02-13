@@ -163,7 +163,8 @@ cdef class Model:
     cdef int predict_single(self, int n, uint64_t* feats) except -1:
         return -1
 
-    cdef int update(self, uint64_t pred, uint64_t gold, int n, uint64_t* feats) except -1:
+    cdef int update(self, uint64_t pred, uint64_t gold, int n, uint64_t* feats,
+                    double weight) except -1:
         return -1
 
     def begin_adding_instances(self, n_instances):
@@ -203,11 +204,12 @@ cdef class Perceptron(Model):
         Add instance with 1 good label. Generalise to multi-label soon.
         """
         cdef int64_t pred = self.model.predict_best_class(n, feats)
-        self.update(pred, label, n, feats)
+        self.update(pred, label, n, feats, 1)
         return pred
 
-    cdef int update(self, uint64_t pred, uint64_t gold, int n, uint64_t* feats) except -1:
-        self.model.update(pred, gold, n, feats)
+    cdef int update(self, uint64_t pred, uint64_t gold, int n, uint64_t* feats,
+                    double weight) except -1:
+        self.model.update(pred, gold, n, feats, weight)
         if gold == pred:
             self.n_corr += 1
         self.total += 1

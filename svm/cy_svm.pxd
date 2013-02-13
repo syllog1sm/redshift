@@ -77,7 +77,8 @@ cdef class Model:
     cdef int add_instance(self, int64_t label, double weight, int n, uint64_t* feats) except -1
     cdef int predict_from_ints(self, int n, uint64_t* feats, bint* valid_classes) except -1
     cdef int predict_single(self, int n, uint64_t* feats) except -1
-    cdef int update(self, uint64_t pred, uint64_t gold, int n, uint64_t* feats) except -1
+    cdef int update(self, uint64_t pred, uint64_t gold, int n, uint64_t* feats,
+                    double weight) except -1
     
     # Python interface expected
     #def begin_adding_instances(self, int n_instances)

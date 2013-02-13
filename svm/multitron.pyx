@@ -77,7 +77,7 @@ cdef class MultitronParameters:
         self.now = self.now + 1
 
     cdef int64_t update(self, uint64_t pred_label, uint64_t gold_label,
-                    uint64_t n_feats, uint64_t* features) except -1:
+                    uint64_t n_feats, uint64_t* features, double weight) except -1:
         cdef double* w
         cdef double* acc
         cdef size_t* last_upd
@@ -101,8 +101,8 @@ cdef class MultitronParameters:
             last_upd = self.W[idx].last_upd
             acc[pred_i] += (self.now - last_upd[pred_i]) * w[pred_i]
             acc[gold_i] += (self.now - last_upd[gold_i]) * w[gold_i]
-            w[pred_i] -= 1
-            w[gold_i] += 1
+            w[pred_i] -= weight
+            w[gold_i] += weight
             last_upd[pred_i] = self.now
             last_upd[gold_i] = self.now
         

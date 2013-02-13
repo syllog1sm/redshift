@@ -27,7 +27,8 @@ cdef class MultitronParameters:
     cdef tick(self)
     cdef int64_t lookup_label(self, uint64_t label) except -1
     cdef int64_t add_param(self, uint64_t f)
-    cdef int64_t update(self, uint64_t gold_label, uint64_t pred_label, uint64_t n_feats, uint64_t* features) except -1
+    cdef int64_t update(self, uint64_t gold_label, uint64_t pred_label,
+                        uint64_t n_feats, uint64_t* features, double weight) except -1
     cdef double* get_scores(self, uint64_t n_feats, uint64_t* features)
     cdef uint64_t predict_best_class(self, uint64_t n_feats, uint64_t* features)
     cdef int64_t finalize(self) except -1
