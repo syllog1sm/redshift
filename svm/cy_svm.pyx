@@ -195,6 +195,9 @@ cdef class Perceptron(Model):
     def set_nr_class(self, nr_class):
         self.nr_class = nr_class
         self.model.true_nr_class = nr_class
+    
+    def set_classes(self, labels):
+        for label in labels: self.model.lookup_label(label)
 
     def begin_adding_instances(self, uint64_t n_feats):
         pass
@@ -236,15 +239,19 @@ cdef class Perceptron(Model):
                 best_score = score
                 best_class = label
                 seen_valid = True
+        if seen_valid:
+            return best_class
+        else:
+            raise StandardError, ','.join([str(i) for i in range(self.nr_class) if valid_classes[i]])
         # If can't find a valid label, add a previously unseen valid label
-        if not seen_valid:
-            for i in range(self.model.max_classes):
-                if valid_classes[i]:
-                    self.model.lookup_label(i)
-                    return i
-            else:
-                raise StandardError
-        return best_class
+        #if not seen_valid:
+        #    for i in range(self.model.max_classes):
+        #        if valid_classes[i]:
+        #            self.model.lookup_label(i)
+        #            return i
+        #    else:
+        #        raise StandardError
+        #return best_class
 
 
     cdef int predict_single(self, int n, uint64_t* feats) except -1:
