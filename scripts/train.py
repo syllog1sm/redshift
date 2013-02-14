@@ -26,7 +26,7 @@ USE_HELD_OUT = False
     repair_only=("Penalise incorrect moves in the oracle even when they can be repaired",
                  "flag", "o", bool),
 )
-def main(train_loc, model_loc, train_alg="static", n_iter=15,
+def main(train_loc, model_loc, train_alg="online", n_iter=15,
          add_extra_feats=False, label_set="Stanford", feat_thresh=1,
          allow_reattach=False, allow_lower=False, shiftless=False,
          repair_only=False):
