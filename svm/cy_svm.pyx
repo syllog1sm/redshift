@@ -239,10 +239,8 @@ cdef class Perceptron(Model):
                 best_score = score
                 best_class = label
                 seen_valid = True
-        if seen_valid:
-            return best_class
-        else:
-            raise StandardError, ','.join([str(i) for i in range(self.nr_class) if valid_classes[i]])
+        assert seen_valid    
+        return best_class
         # If can't find a valid label, add a previously unseen valid label
         #if not seen_valid:
         #    for i in range(self.model.max_classes):
