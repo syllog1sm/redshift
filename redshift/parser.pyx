@@ -36,7 +36,11 @@ VOCAB_SIZE = 1e6
 TAG_SET_SIZE = 50
 cdef double FOLLOW_ERR_PC = 0.90
 
+
 DEBUG = False
+def set_debug(val):
+    global DEBUG
+    DEBUG = val
 
 cdef enum:
     ERR
@@ -170,7 +174,7 @@ cdef class Parser:
         if not self.moves.shiftless:
             seen_classes.add(self.moves.s_id)
         if self.moves.allow_lower:
-            seen_classes.add(self.moves.w_id)
+            seen_classes.add(self.moves.w_start)
         for i in range(sents.length):
             sent = &sents.s[i]
             for j in range(1, sent.length - 1):
@@ -181,7 +185,6 @@ cdef class Parser:
                 else:
                     seen_r_labels.add(label)
                     seen_classes.add(self.moves.pair_label_move(label, RIGHT))
-        print 'getting move classes'
         move_classes = self.moves.set_labels(seen_l_labels, seen_r_labels)
         print "%d vs %d classes seen" % (len(seen_classes), len(move_classes))
         self.guide.set_classes(move_classes)
@@ -202,6 +205,7 @@ cdef class Parser:
                     self.static_train_one(n, &sents.s[i])
             if n == 0:
                 index.hashes.set_feat_counting(False)
+            #self.guide.prune(2)
             if n > 0 or self.train_alg == "online":
                 if held_out is not None:
                     held_out_parse = io_parse.read_conll(held_out)
@@ -280,7 +284,16 @@ cdef class Parser:
                 assert zero_cost_moves[self.moves.pair_label_move(g_labels[s.top], LEFT)]
             if g_heads[s.i] == s.top:
                 assert zero_cost_moves[self.moves.pair_label_move(g_labels[s.i], RIGHT)]
-            gold_paired = self.guide.predict_from_ints(n_feats, feats, zero_cost_moves)
+            try:
+                gold_paired = self.guide.predict_from_ints(n_feats, feats, zero_cost_moves)
+            except:
+                print s.stack_len
+                print s.n
+                print s.i
+                print s.top
+                print g_heads[s.top]
+                print self.moves.l_cost(&s, g_heads)
+                raise
             self.guide.update(pred_paired, gold_paired, n_feats, feats, weight)
             if zero_cost_moves[pred_paired]:
                 gold_paired = pred_paired
@@ -325,7 +338,7 @@ cdef class Parser:
             sent.parse.n_moves += 1
             top = s.top
             self.moves.unpair_label_move(paired, &label, &move)
-            if move == SHIFT:
+            if move == SHIFT or move == REDUCE:
                 best_right = self.guide.predict_from_ints(n_preds, feats, right_arcs)
                 self.moves.unpair_label_move(best_right, &s.guess_labels[s.i], &_)
             self.moves.transition(move, label, &s)
@@ -562,7 +575,7 @@ cdef class TransitionSystem:
             gc = get_r(s, s.top)
             c = get_r2(s, s.top)
             del_r_child(s, s.top)
-            add_dep(s, c, gc, label)
+            add_dep(s, c, gc, s.guess_labels[gc])
             s.second = s.top
             s.top = c
             s.stack[s.stack_len] = c
@@ -625,7 +638,7 @@ cdef class TransitionSystem:
         else:
             for i in range(self.n_r_classes):
                 paired_validity[self.r_classes[i]] = valid_moves[RIGHT]
-        if valid_moves[LOWER] and heads[get_r(s, s.top)] == get_r2(s, s.top):
+        if valid_moves[LOWER]:
             paired_validity[self.w_start] = True
         return paired_validity
 
@@ -670,8 +683,6 @@ cdef class TransitionSystem:
     cdef bint r_cost(self, State *s, size_t* g_heads):
         cdef size_t i, buff_i, stack_i
         if g_heads[s.i] == s.top:
-            return True
-        if self.shiftless and s.top == 0:
             return True
         if has_head_in_buffer(s, s.i, g_heads):
             if self.repair_only:
@@ -727,7 +738,7 @@ cdef class TransitionSystem:
         if self.repair_only and g_heads[s.top] == s.second:
             return False
         if self.allow_lower:
-            for buff_i in range(s.i, s.n):
+            for buff_i in range(s.i, s.n - 1):
                 if g_heads[buff_i] == get_r(s, s.top):
                     return False
             if s.r_valencies[s.top] >= 2 and self.w_cost(s, g_heads):
