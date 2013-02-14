@@ -166,9 +166,9 @@ cdef class Parser:
         # Count classes and labels
         seen_l_labels = set([])
         seen_r_labels = set([])
-        seen_classes = set([self.moves.s_id])
+        seen_classes = set([self.moves.d_id])
         if not self.moves.shiftless:
-            seen_classes.add([self.moves.d_id])
+            seen_classes.add(self.moves.s_id)
         for i in range(sents.length):
             sent = &sents.s[i]
             for j in range(1, sent.length - 1):
