@@ -166,7 +166,9 @@ cdef class Parser:
         # Count classes and labels
         seen_l_labels = set([])
         seen_r_labels = set([])
-        seen_classes = set([self.moves.s_id, self.moves.d_id])
+        seen_classes = set([self.moves.s_id])
+        if not self.moves.shiftless:
+            seen_classes.add([self.moves.d_id])
         for i in range(sents.length):
             sent = &sents.s[i]
             for j in range(1, sent.length - 1):
@@ -553,7 +555,7 @@ cdef class TransitionSystem:
         unpaired[RIGHT] = (not s.at_end_of_buffer) and s.top != 0
         unpaired[REDUCE] = s.heads[s.top] != 0
         if self.shiftless and unpaired[REDUCE]:
-            assert s.stack_len >= 2:
+            assert s.stack_len >= 2
         unpaired[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
         unpaired[LOWER] = self.allow_lower and s.r_valencies[s.top] >= 2
         cdef bint* paired = self._pair_validity
@@ -561,16 +563,12 @@ cdef class TransitionSystem:
             paired[i] = False
         paired[self.s_id] = unpaired[SHIFT]
         paired[self.d_id] = unpaired[REDUCE]
-        for i in range(self.l_start, self.l_end):
-            paired[i] = unpaired[LEFT]
-        for i in range(self.r_start, self.r_end):
-            paired[i] = unpaired[RIGHT]
-        #for i in range(self.n_l_classes):
-        #    paired[self.l_classes[i]] = unpaired[LEFT]
-        #for i in range(self.n_r_classes):
-        #    paired[self.r_classes[i]] = unpaired[RIGHT]
-        #for i in range(self.n_w_classes):
-        #    paired[self.w_classes[i]] = unpaired[LOWER]
+        for i in range(self.n_l_classes):
+            paired[self.l_classes[i]] = unpaired[LEFT]
+        for i in range(self.n_r_classes):
+            paired[self.r_classes[i]] = unpaired[RIGHT]
+        for i in range(self.n_w_classes):
+            paired[self.w_classes[i]] = unpaired[LOWER]
         return paired
    
     cdef bint* check_costs(self, State* s, size_t* labels, size_t* heads) except NULL:
@@ -591,19 +589,15 @@ cdef class TransitionSystem:
         if valid_moves[LEFT] and heads[s.top] == s.i:
             paired_validity[self.pair_label_move(labels[s.top], LEFT)] = True
         else:
-            for i in range(self.l_start, self.l_end):
-                paired_validity[i] = valid_moves[LEFT]
+            for i in range(self.n_r_classes):
+                paired_validity[self.l_classes[i]] = valid_moves[LEFT]
         if valid_moves[RIGHT] and heads[s.i] == s.top:
             paired_validity[self.pair_label_move(labels[s.i], RIGHT)] = True
-        elif valid_moves[RIGHT] and self.shiftless:
-            paired_validity[self.pair_label_move(0, RIGHT)] = True
         else:
             for i in range(self.n_r_classes):
                 paired_validity[self.r_classes[i]] = valid_moves[RIGHT]
         if valid_moves[LOWER] and heads[get_r(s, s.top)] == get_r2(s, s.top):
             paired_validity[self.w_start] = True
-        if heads[s.top] == s.i and not \
-          paired_validity[self.pair_label_move(labels[s.top], LEFT)] and self.allow_reattach:
         return paired_validity
 
     cdef int break_tie(self, State* s, size_t* labels, size_t* heads,
