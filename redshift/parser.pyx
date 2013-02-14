@@ -216,6 +216,7 @@ cdef class Parser:
                 print "#%d: Moves %d/%d=%.2f %.2f" % (n, self.guide.n_corr, self.guide.total, move_acc, ho_acc)
                 self.guide.n_corr = 0
                 self.guide.total = 0
+        print 'finalising'
         self.guide.train()
 
     cdef int static_train_one(self, size_t iter_num, Sentence* sent) except -1:
@@ -294,6 +295,9 @@ cdef class Parser:
                 print g_heads[s.top]
                 print self.moves.l_cost(&s, g_heads)
                 raise
+            if gold_paired == pred_paired and gold_paired == self.moves.w_start:
+                if DEBUG:
+                    print "LOWER"
             self.guide.update(pred_paired, gold_paired, n_feats, feats, weight)
             if zero_cost_moves[pred_paired]:
                 gold_paired = pred_paired
@@ -611,6 +615,7 @@ cdef class TransitionSystem:
             paired[self.l_classes[i]] = unpaired[LEFT]
         for i in range(self.n_r_classes):
             paired[self.r_classes[i]] = unpaired[RIGHT]
+        paired[self.w_start] = unpaired[LOWER]
         return paired
    
     cdef bint* check_costs(self, State* s, size_t* labels, size_t* heads) except NULL:
@@ -639,6 +644,7 @@ cdef class TransitionSystem:
             for i in range(self.n_r_classes):
                 paired_validity[self.r_classes[i]] = valid_moves[RIGHT]
         if valid_moves[LOWER]:
+            assert s.r_valencies[s.top] >= 2
             paired_validity[self.w_start] = True
         return paired_validity
 
