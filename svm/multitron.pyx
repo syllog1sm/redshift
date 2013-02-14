@@ -8,6 +8,8 @@ from libcpp.utility cimport pair
 
 cdef size_t MIN_UPD = 2
 
+DEF MAX_PARAM = 20000000
+
 cdef class MultitronParameters:
     """
     Labels and features must be non-negative integers with max values
@@ -20,8 +22,10 @@ cdef class MultitronParameters:
         self.scores = <double *>malloc(max_classes * sizeof(double))
         #self.W = dense_hash_map[uint64_t, ParamData]()
         #self.W.set_empty_key(0)
-        self.W = vector[ParamData]()
-        self.feat_idx = vector[int64_t]()
+        self.W = <ParamData**>malloc(MAX_PARAM * sizeof(ParamData*))
+        self.feat_idx = <int64_t*>malloc(MAX_PARAM * sizeof(int64_t))
+        for i in range(MAX_PARAM):
+            self.feat_idx[i] = -1
         self.max_param = 0
         self.n_params = 0
         self.max_classes = max_classes
@@ -57,9 +61,8 @@ cdef class MultitronParameters:
 
     cdef int64_t add_param(self, uint64_t f) except -1:
         cdef uint64_t i
-        while self.max_param <= (f + 1):
-            self.feat_idx.push_back(-1)
-            self.max_param += 1
+        if self.max_param < f:
+            self.max_param = f + 1
         cdef ParamData* p = <ParamData*>malloc(sizeof(ParamData))
         p.w = <double*>malloc(self.true_nr_class * sizeof(double))
         p.acc = <double*>malloc(self.true_nr_class * sizeof(double))
@@ -69,9 +72,24 @@ cdef class MultitronParameters:
             p.acc[i] = 0
             p.last_upd[i] = 0
         p.n_upd = 0
-        self.feat_idx[f] = self.n_params
         self.n_params += 1
-        self.W.push_back(p[0])
+        self.W[f] = p
+        self.feat_idx[f] = f
+
+    cdef int64_t prune_rares(self, size_t thresh) except -1:
+        n_pruned = 0
+        self.n_params = 0
+        for f in range(1, self.max_param):
+            idx = self.feat_idx[f]
+            if idx == -1:
+                continue
+            if self.W[idx].n_upd < thresh:
+                free(self.W[idx])
+                self.feat_idx[f] = -1
+                n_pruned += 1
+            else:
+                self.n_params += 1
+        print "%d pruned, leaving %d" % (n_pruned, self.n_params)
 
     cdef tick(self):
         self.now = self.now + 1
@@ -142,7 +160,9 @@ cdef class MultitronParameters:
         cdef uint64_t f
         cdef uint64_t c
         # average
-        for f in range(self.n_params):
+        for f in range(self.max_param):
+            if self.feat_idx[f] == -1:
+                continue
             for c in range(self.n_classes):
                 self.W[f].acc[c] += (self.now - self.W[f].last_upd[c]) * self.W[f].w[c]
                 self.W[f].w[c] = self.W[f].acc[c] / self.now

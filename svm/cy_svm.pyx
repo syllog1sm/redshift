@@ -220,6 +220,9 @@ cdef class Perceptron(Model):
     def train(self):
         self.model.finalize()
 
+    def prune(self, thresh):
+        self.model.prune(thresh)
+
     cdef int predict_from_ints(self, int n, uint64_t* feats, bint* valid_classes) except -1:
         cdef:
             uint64_t i
@@ -239,7 +242,7 @@ cdef class Perceptron(Model):
                 best_score = score
                 best_class = label
                 seen_valid = True
-        assert seen_valid    
+        assert seen_valid
         return best_class
         # If can't find a valid label, add a previously unseen valid label
         #if not seen_valid:
