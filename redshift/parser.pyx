@@ -36,6 +36,7 @@ VOCAB_SIZE = 1e6
 TAG_SET_SIZE = 50
 cdef double FOLLOW_ERR_PC = 0.90
 
+DEBUG = False
 
 cdef enum:
     ERR
@@ -267,13 +268,14 @@ cdef class Parser:
         cdef int n_instances = 0
         cdef size_t _ = 0
         weight = 1
+        if DEBUG:
+            print ' '.join(py_words)
         while not s.is_finished:
             features.extract(self._context, self._hashed_feats, sent, &s)
             # Determine which moves are zero-cost and meet pre-conditions
             preconditions = self.moves.check_preconditions(&s)
             pred_paired = self.guide.predict_from_ints(n_feats, feats, preconditions)
             zero_cost_moves = self.moves.check_costs(&s, g_labels, g_heads)
-
             if g_heads[s.top] == s.i and self.moves.allow_reattach:
                 assert zero_cost_moves[self.moves.pair_label_move(g_labels[s.top], LEFT)]
             if g_heads[s.i] == s.top:
@@ -291,6 +293,8 @@ cdef class Parser:
                 best_right_guess = self.guide.predict_from_ints(n_feats, feats, right_arcs)
                 self.moves.unpair_label_move(best_right_guess, &s.guess_labels[s.i], &_)
                 assert s.guess_labels[s.i] != 0, best_right_guess
+            if DEBUG:
+                print s.i, lmove_to_str(move, label), transition_to_str(&s, move, label, py_words)
             self.moves.transition(move, label, &s)
 
     def add_parses(self, Sentences sents, Sentences gold=None):
@@ -433,10 +437,8 @@ cdef class TransitionSystem:
     cdef list right_labels
     cdef size_t n_l_classes
     cdef size_t n_r_classes
-    cdef size_t n_w_classes
     cdef size_t* l_classes
     cdef size_t* r_classes
-    cdef size_t* w_classes
     cdef size_t n_paired
     cdef size_t s_id
     cdef size_t d_id
@@ -485,10 +487,8 @@ cdef class TransitionSystem:
         self.right_labels = [self.py_labels[l] for l in sorted(right_labels)]
         self.l_classes = <size_t*>malloc(len(left_labels) * sizeof(size_t))
         self.r_classes = <size_t*>malloc(len(right_labels) * sizeof(size_t))
-        self.w_classes = <size_t*>malloc(len(right_labels) * sizeof(size_t))
         self.n_l_classes = len(left_labels)
         self.n_r_classes = len(right_labels)
-        self.n_w_classes = len(right_labels)
         valid_classes = [self.d_id]
         if not self.shiftless:
             valid_classes.append(self.s_id)
@@ -598,8 +598,6 @@ cdef class TransitionSystem:
             paired[self.l_classes[i]] = unpaired[LEFT]
         for i in range(self.n_r_classes):
             paired[self.r_classes[i]] = unpaired[RIGHT]
-        for i in range(self.n_w_classes):
-            paired[self.w_classes[i]] = unpaired[LOWER]
         return paired
    
     cdef bint* check_costs(self, State* s, size_t* labels, size_t* heads) except NULL:
