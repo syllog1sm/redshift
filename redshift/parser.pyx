@@ -163,20 +163,26 @@ cdef class Parser:
         cdef Sentence* sent
         cdef Sentences held_out_gold
         cdef Sentences held_out_parse
-        # Count classes
-        seen_l_labels = set([0])
-        seen_r_labels = set([0])
+        # Count classes and labels
+        seen_l_labels = set([])
+        seen_r_labels = set([])
+        seen_classes = set([self.moves.d_id])
+        if not self.moves.shiftless:
+            seen_classes.add(self.moves.s_id)
         for i in range(sents.length):
             sent = &sents.s[i]
             for j in range(1, sent.length - 1):
                 label = sent.parse.labels[j]
                 if sent.parse.heads[j] > j:
+                    seen_classes.add(self.moves.pair_label_move(label, LEFT))
                     seen_l_labels.add(label)
                 else:
                     seen_r_labels.add(label)
-        classes = self.moves.set_labels(seen_l_labels, seen_r_labels)
-        print "%d classes seen" % (len(classes))
-        self.guide.set_nr_class(len(classes))
+                    seen_classes.add(self.moves.pair_label_move(label, RIGHT))
+        print 'getting move classes'
+        move_classes = self.moves.set_labels(seen_l_labels, seen_r_labels)
+        print "%d vs %d classes seen" % (len(seen_classes), len(move_classes))
+        self.guide.set_classes(move_classes)
         self.write_cfg(self.model_dir.join('parser.cfg'))
         index.hashes.set_feat_counting(True)
         index.hashes.set_feat_threshold(self.feat_thresh)
@@ -245,7 +251,7 @@ cdef class Parser:
     cdef int online_train_one(self, int iter_num, Sentence* sent, py_words) except -1:
         cdef size_t move, label, gold_move, gold_label, pred_move, pred_label
         cdef bint* valid
-        cdef double weight
+        cdef double weight = 1
         
         cdef size_t* g_labels = sent.parse.labels
         cdef size_t* g_heads = sent.parse.heads
@@ -268,14 +274,6 @@ cdef class Parser:
             if g_heads[s.i] == s.top:
                 assert valid[self.moves.pair_label_move(g_labels[s.i], RIGHT)]
             gold_paired = self.guide.predict_from_ints(n_feats, feats, valid)
-            self.moves.unpair_label_move(gold_paired, &gold_move, &gold_label)
-            self.moves.unpair_label_move(pred_paired, &pred_move, &pred_label)
-            #if gold_move != pred_move:
-            #    weight = 1
-            #elif g_heads[s.top] == s.i or g_heads[s.i] == s.top:
-            #    weight = 1
-            #else:
-            #    weight = 0.5
             self.guide.update(pred_paired, gold_paired, n_feats, feats, weight)
             if valid[pred_paired]:
                 gold_paired = pred_paired
@@ -556,10 +554,8 @@ cdef class TransitionSystem:
         unpaired[SHIFT] = (not s.at_end_of_buffer) and not self.shiftless
         unpaired[RIGHT] = (not s.at_end_of_buffer) and s.top != 0
         unpaired[REDUCE] = s.heads[s.top] != 0
-        if self.shiftless and s.stack_len == 2:
-            unpaired[REDUCE] = False
-        elif s.stack_len == 1:
-            unpaired[REDUCE] = False
+        if self.shiftless and unpaired[REDUCE]:
+            assert s.stack_len >= 2
         unpaired[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
         unpaired[LOWER] = self.allow_lower and s.r_valencies[s.top] >= 2
         cdef bint* paired = self._pair_validity
@@ -593,22 +589,15 @@ cdef class TransitionSystem:
         if valid_moves[LEFT] and heads[s.top] == s.i:
             paired_validity[self.pair_label_move(labels[s.top], LEFT)] = True
         else:
-            for i in range(self.n_l_classes):
+            for i in range(self.n_r_classes):
                 paired_validity[self.l_classes[i]] = valid_moves[LEFT]
         if valid_moves[RIGHT] and heads[s.i] == s.top:
             paired_validity[self.pair_label_move(labels[s.i], RIGHT)] = True
-        elif valid_moves[RIGHT] and self.shiftless:
-            paired_validity[self.pair_label_move(0, RIGHT)] = True
         else:
             for i in range(self.n_r_classes):
                 paired_validity[self.r_classes[i]] = valid_moves[RIGHT]
         if valid_moves[LOWER] and heads[get_r(s, s.top)] == get_r2(s, s.top):
             paired_validity[self.w_start] = True
-        if heads[s.top] == s.i and not \
-          paired_validity[self.pair_label_move(labels[s.top], LEFT)] and self.allow_reattach:
-            print self.l_cost(s, heads)
-            print s.top
-            raise StandardError
         return paired_validity
 
     cdef int break_tie(self, State* s, size_t* labels, size_t* heads,
@@ -685,6 +674,8 @@ cdef class TransitionSystem:
                 return False
         if self.allow_reattach and has_head_in_buffer(s, s.top, g_heads):
             return False
+        if self.allow_reattach:
+            assert g_heads[s.top] != s.n and g_heads[s.top] != (s.n - 1)
         if self.allow_lower and get_r(s, s.top) != 0:
             for buff_i in range(s.i, s.n):
                 if g_heads[buff_i] == get_r(s, s.top):
@@ -699,6 +690,7 @@ cdef class TransitionSystem:
             return True
         if has_head_in_buffer(s, s.top, g_heads):
             return False
+        assert g_heads[s.top] != s.n and g_heads[s.top] != (s.n - 1)
         if has_child_in_buffer(s, s.top, g_heads):
             return False
         if self.allow_reattach and g_heads[s.top] == s.heads[s.top]:
