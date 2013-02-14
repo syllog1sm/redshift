@@ -34,7 +34,6 @@ cdef int CONTEXT_SIZE = features.CONTEXT_SIZE
 
 VOCAB_SIZE = 1e6
 TAG_SET_SIZE = 50
-REPAIR_ONLY = True
 cdef double FOLLOW_ERR_PC = 0.90
 
 
@@ -169,6 +168,8 @@ cdef class Parser:
         seen_classes = set([self.moves.d_id])
         if not self.moves.shiftless:
             seen_classes.add(self.moves.s_id)
+        if self.moves.allow_lower:
+            seen_classes.add(self.moves.w_id)
         for i in range(sents.length):
             sent = &sents.s[i]
             for j in range(1, sent.length - 1):
@@ -285,7 +286,8 @@ cdef class Parser:
                 self.moves.unpair_label_move(pred_paired, &label, &move)
             else:
                 self.moves.unpair_label_move(gold_paired, &label, &move)
-            if move == SHIFT:
+            # Save on reduce as well so we can use the guess label for Lower
+            if move == SHIFT or move == REDUCE:
                 best_right_guess = self.guide.predict_from_ints(n_feats, feats, right_arcs)
                 self.moves.unpair_label_move(best_right_guess, &s.guess_labels[s.i], &_)
                 assert s.guess_labels[s.i] != 0, best_right_guess
@@ -502,9 +504,8 @@ cdef class TransitionSystem:
             self.right_arcs[paired] = True
             self.r_classes[i] = paired
             paired = self.pair_label_move(label, LOWER)
-            self.w_classes[i] = paired
-            if self.allow_lower:
-                valid_classes.append(paired)
+        if self.allow_lower:
+            valid_classes.append(self.w_start)
 
         return valid_classes
 
@@ -580,7 +581,10 @@ cdef class TransitionSystem:
         unpaired[ERR] = False
         unpaired[SHIFT] = (not s.at_end_of_buffer) and not self.shiftless
         unpaired[RIGHT] = (not s.at_end_of_buffer) and s.top != 0
-        unpaired[REDUCE] = s.heads[s.top] != 0 or (self.repair_only and s.second != 0)
+        if self.repair_only:
+            unpaired[REDUCE] = s.heads[s.top] != 0 or s.second != 0
+        else:
+            unpaired[REDUCE] = s.heads[s.top] != 0
         if self.shiftless and unpaired[REDUCE]:
             assert s.stack_len >= 2
         unpaired[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
