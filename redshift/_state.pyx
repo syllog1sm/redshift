@@ -171,6 +171,7 @@ cdef State init_state(size_t n):
         s.r_valencies[i] = 0
         s.heads[i] = 0 
         s.labels[i] = 0
+        s.guess_labels[i] = 0
         # Ideally this shouldn't matter, if we use valencies intelligently?
         for j in range(n):
             s.l_children[i][j] = 0

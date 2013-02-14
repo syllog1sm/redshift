@@ -17,6 +17,7 @@ cdef struct State:
     size_t[MAX_SENT_LEN] stack
     size_t[MAX_SENT_LEN] heads
     size_t[MAX_SENT_LEN] labels
+    size_t[MAX_SENT_LEN] guess_labels
     size_t[MAX_SENT_LEN] l_valencies
     size_t[MAX_SENT_LEN] r_valencies
     size_t l_children[MAX_SENT_LEN][MAX_VALENCY]

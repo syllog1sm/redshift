@@ -250,7 +250,9 @@ cdef class Parser:
 
     cdef int online_train_one(self, int iter_num, Sentence* sent, py_words) except -1:
         cdef size_t move, label, gold_move, gold_label, pred_move, pred_label
-        cdef bint* valid
+        cdef bint* preconditions
+        cdef bint* zero_cost_moves
+        cdef bint* right_arcs = self.moves.right_arcs
         cdef double weight = 1
         
         cdef size_t* g_labels = sent.parse.labels
@@ -262,25 +264,31 @@ cdef class Parser:
         cdef size_t n_feats = self.n_preds
         cdef State s = init_state(sent.length)
         cdef int n_instances = 0
+        cdef size_t _ = 0
         weight = 1
         while not s.is_finished:
             features.extract(self._context, self._hashed_feats, sent, &s)
             # Determine which moves are zero-cost and meet pre-conditions
-            valid = self.moves.check_preconditions(&s)
-            pred_paired = self.guide.predict_from_ints(n_feats, feats, valid)
-            valid = self.moves.check_costs(&s, g_labels, g_heads)
+            preconditions = self.moves.check_preconditions(&s)
+            pred_paired = self.guide.predict_from_ints(n_feats, feats, preconditions)
+            zero_cost_moves = self.moves.check_costs(&s, g_labels, g_heads)
+
             if g_heads[s.top] == s.i and self.moves.allow_reattach:
-                assert valid[self.moves.pair_label_move(g_labels[s.top], LEFT)]
+                assert zero_cost_moves[self.moves.pair_label_move(g_labels[s.top], LEFT)]
             if g_heads[s.i] == s.top:
-                assert valid[self.moves.pair_label_move(g_labels[s.i], RIGHT)]
-            gold_paired = self.guide.predict_from_ints(n_feats, feats, valid)
+                assert zero_cost_moves[self.moves.pair_label_move(g_labels[s.i], RIGHT)]
+            gold_paired = self.guide.predict_from_ints(n_feats, feats, zero_cost_moves)
             self.guide.update(pred_paired, gold_paired, n_feats, feats, weight)
-            if valid[pred_paired]:
+            if zero_cost_moves[pred_paired]:
                 gold_paired = pred_paired
             if iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
                 self.moves.unpair_label_move(pred_paired, &label, &move)
             else:
                 self.moves.unpair_label_move(gold_paired, &label, &move)
+            if move == SHIFT:
+                best_right_guess = self.guide.predict_from_ints(n_feats, feats, right_arcs)
+                self.moves.unpair_label_move(best_right_guess, &s.guess_labels[s.i], &_)
+                assert s.guess_labels[s.i] != 0, best_right_guess
             self.moves.transition(move, label, &s)
 
     def add_parses(self, Sentences sents, Sentences gold=None):
@@ -298,6 +306,8 @@ cdef class Parser:
         cdef size_t* context = self._context
         cdef uint64_t* feats = self._hashed_feats
         cdef bint* valid
+        cdef bint* right_arcs = self.moves.right_arcs
+        cdef size_t _
         cdef size_t n = sent.length
         s = init_state(sent.length)
         sent.parse.n_moves = 0
@@ -305,10 +315,13 @@ cdef class Parser:
             valid = self.moves.check_preconditions(&s)
             features.extract(context, feats, sent, &s)
             paired = self.guide.predict_from_ints(n_preds, feats, valid)
-            self.moves.unpair_label_move(paired, &label, &move)
             sent.parse.moves[s.t] = paired
             sent.parse.n_moves += 1
             top = s.top
+            self.moves.unpair_label_move(paired, &label, &move)
+            if move == SHIFT:
+                best_right = self.guide.predict_from_ints(n_preds, feats, right_arcs)
+                self.moves.unpair_label_move(best_right, &s.guess_labels[s.i], &_)
             self.moves.transition(move, label, &s)
         # No need to copy heads for root and start symbols
         for i in range(1, sent.length - 1):
@@ -413,6 +426,7 @@ cdef class TransitionSystem:
     cdef object grammar_loc
     cdef bint* _move_validity
     cdef bint* _pair_validity
+    cdef bint* right_arcs
     cdef list left_labels
     cdef list right_labels
     cdef size_t n_l_classes
@@ -447,9 +461,10 @@ cdef class TransitionSystem:
         if grammar_loc is not None:
             self.read_grammar(grammar_loc)
         self.grammar_loc = grammar_loc
-        self._move_validity = <bint*>malloc(N_MOVES * sizeof(bint))
-        self._pair_validity = <bint*>malloc(N_MOVES * self.n_labels * sizeof(bint))
         self.n_paired = N_MOVES * self.n_labels
+        self._move_validity = <bint*>malloc(N_MOVES * sizeof(bint))
+        self._pair_validity = <bint*>malloc(self.n_paired * sizeof(bint))
+        self.right_arcs = <bint*>malloc(self.n_paired * sizeof(bint))
         self.s_id = SHIFT * self.n_labels
         self.d_id = REDUCE * self.n_labels
         self.l_start = LEFT * self.n_labels
@@ -458,6 +473,10 @@ cdef class TransitionSystem:
         self.r_end = (RIGHT + 1) * self.n_labels
         self.w_start = LOWER * self.n_labels
         self.w_end = (LOWER + 1) * self.n_labels
+        for i in range(self.n_paired):
+            self.right_arcs[i] = False
+        for i in range(self.r_start, self.r_end):
+            self.right_arcs[i] = True
 
     def set_labels(self, left_labels, right_labels):
         self.left_labels = [self.py_labels[l] for l in sorted(left_labels)]
@@ -475,14 +494,18 @@ cdef class TransitionSystem:
             paired = self.pair_label_move(label, LEFT)
             valid_classes.append(paired)
             self.l_classes[i] = paired
+        for i in range(self.n_paired):
+            self.right_arcs[i] = False
         for i, label in enumerate(right_labels):
             paired = self.pair_label_move(label, RIGHT)
             valid_classes.append(paired)
+            self.right_arcs[paired] = True
             self.r_classes[i] = paired
             paired = self.pair_label_move(label, LOWER)
             self.w_classes[i] = paired
             if self.allow_lower:
                 valid_classes.append(paired)
+
         return valid_classes
 
     cdef size_t pair_label_move(self, size_t label, size_t move):
@@ -515,6 +538,10 @@ cdef class TransitionSystem:
             assert not self.shiftless
             push_stack(s)
         elif move == REDUCE:
+            if s.heads[s.top] == 0:
+                assert self.repair_only
+                assert s.second != 0
+                add_dep(s, s.second, s.top, s.guess_labels[s.top])
             pop_stack(s)
         elif move == LEFT:
             child = pop_stack(s)
@@ -553,7 +580,7 @@ cdef class TransitionSystem:
         unpaired[ERR] = False
         unpaired[SHIFT] = (not s.at_end_of_buffer) and not self.shiftless
         unpaired[RIGHT] = (not s.at_end_of_buffer) and s.top != 0
-        unpaired[REDUCE] = s.heads[s.top] != 0
+        unpaired[REDUCE] = s.heads[s.top] != 0 or (self.repair_only and s.second != 0)
         if self.shiftless and unpaired[REDUCE]:
             assert s.stack_len >= 2
         unpaired[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
@@ -695,6 +722,8 @@ cdef class TransitionSystem:
             return False
         if self.allow_reattach and g_heads[s.top] == s.heads[s.top]:
             return False
+        if self.repair_only and g_heads[s.top] == s.second:
+            return False
         if self.allow_lower:
             for buff_i in range(s.i, s.n):
                 if g_heads[buff_i] == get_r(s, s.top):
@@ -832,19 +861,15 @@ cdef class TransitionSystem:
         self.guide.train()
         self.l_labeller.train()
         self.r_labeller.train()
-
-
-        """
-
-
-
-
+"""
 
 cdef transition_to_str(State* s, size_t move, label, object tokens):
     tokens = tokens + ['<end>']
     if move == SHIFT:
         return u'%s-->%s' % (tokens[s.i], tokens[s.top])
     elif move == REDUCE:
+        if s.heads[s.top] == 0:
+            return u'%s(%s)' % (tokens[s.second], tokens[s.top])
         return u'%s/%s' % (tokens[s.top], tokens[s.second])
     elif move == LOWER:
         child = tokens[get_r(s, s.top)]
@@ -859,3 +884,6 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
             head = s.top
             child = s.i if s.i < len(tokens) else 0
         return u'%s(%s)' % (tokens[head], tokens[child])
+
+
+
