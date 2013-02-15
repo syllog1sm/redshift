@@ -170,8 +170,6 @@ cdef bint has_grandchild_via_lower(State *s, size_t word, size_t* heads):
             return True
     return False
 
- 
-
 DEF START_ON_STACK = True
 
 cdef State init_state(size_t n):
