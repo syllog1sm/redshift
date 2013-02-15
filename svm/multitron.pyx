@@ -61,7 +61,7 @@ cdef class MultitronParameters:
 
     cdef int64_t add_param(self, uint64_t f) except -1:
         cdef uint64_t i
-        if self.max_param < f:
+        if self.max_param <= f:
             self.max_param = f + 1
         cdef ParamData* p = <ParamData*>malloc(sizeof(ParamData))
         p.w = <double*>malloc(self.true_nr_class * sizeof(double))
@@ -96,7 +96,7 @@ cdef class MultitronParameters:
                 n_pruned += 1
             else:
                 self.n_params += 1
-        print "%d pruned, leaving %d" % (n_pruned, self.n_params)
+        print "Kept %d/%d" % (self.n_params, self.n_params + n_pruned)
 
     cdef tick(self):
         self.now = self.now + 1

@@ -189,34 +189,21 @@ cdef class Parser:
         print "%d vs %d classes seen" % (len(seen_classes), len(move_classes))
         self.guide.set_classes(move_classes)
         self.write_cfg(self.model_dir.join('parser.cfg'))
-        index.hashes.set_feat_counting(True)
-        index.hashes.set_feat_threshold(self.feat_thresh)
         indices = range(sents.length)
-        if held_out is not None:
-            held_out_gold = io_parse.read_conll(held_out)
-        # First iteration of static is used to collect feature frequencies, so
-        # we need an extra iteration
-        for n in range(n_iter + (1 if self.train_alg == 'static' else 0)):
+        for n in range(n_iter):
             random.shuffle(indices)
             for i in indices:
                 if self.train_alg == 'online':
                     self.online_train_one(n, &sents.s[i], sents.strings[i][0])
                 else:
                     self.static_train_one(n, &sents.s[i])
-            if n == 0:
-                index.hashes.set_feat_counting(False)
-            #self.guide.prune(2)
-            if n > 0 or self.train_alg == "online":
-                if held_out is not None:
-                    held_out_parse = io_parse.read_conll(held_out)
-                    ho_acc = self.add_parses(held_out_parse, gold=held_out_gold) * 100
-                else:
-                    ho_acc = 0.0
-                move_acc = (float(self.guide.n_corr) / self.guide.total) * 100
-                print "#%d: Moves %d/%d=%.2f %.2f" % (n, self.guide.n_corr, self.guide.total, move_acc, ho_acc)
-                self.guide.n_corr = 0
-                self.guide.total = 0
-        print 'finalising'
+            move_acc = (float(self.guide.n_corr) / self.guide.total) * 100
+            print "#%d: Moves %d/%d=%.2f" % (n, self.guide.n_corr,
+                                             self.guide.total, move_acc)
+            self.guide.n_corr = 0
+            self.guide.total = 0
+            if n % 2:
+                self.guide.prune(2)
         self.guide.train()
 
     cdef int static_train_one(self, size_t iter_num, Sentence* sent) except -1:
@@ -888,7 +875,7 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
         return u'%s-->%s' % (tokens[s.i], tokens[s.top])
     elif move == REDUCE:
         if s.heads[s.top] == 0:
-            return u'%s(%s)' % (tokens[s.second], tokens[s.top])
+            return u'%s(%s)!!' % (tokens[s.second], tokens[s.top])
         return u'%s/%s' % (tokens[s.top], tokens[s.second])
     elif move == LOWER:
         child = tokens[get_r(s, s.top)]
