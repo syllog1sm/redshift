@@ -8,7 +8,7 @@ from libcpp.utility cimport pair
 
 cdef size_t MIN_UPD = 2
 
-DEF MAX_PARAM = 10000000
+DEF MAX_PARAM = 15000000
 
 cdef class MultitronParameters:
     """
