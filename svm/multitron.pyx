@@ -8,7 +8,7 @@ from libcpp.utility cimport pair
 
 cdef size_t MIN_UPD = 2
 
-DEF MAX_PARAM = 20000000
+DEF MAX_PARAM = 10000000
 
 cdef class MultitronParameters:
     """
@@ -61,6 +61,7 @@ cdef class MultitronParameters:
 
     cdef int64_t add_param(self, uint64_t f) except -1:
         cdef uint64_t i
+        assert f < MAX_PARAM
         if self.max_param <= f:
             self.max_param = f + 1
         cdef ParamData* p = <ParamData*>malloc(sizeof(ParamData))
@@ -77,25 +78,31 @@ cdef class MultitronParameters:
         self.feat_idx[f] = f
 
     cdef int64_t prune_rares(self, size_t thresh) except -1:
-        cdef ParamData* p
         cdef uint64_t f
         cdef int64_t idx
         cdef uint64_t n_pruned = 0
+        cdef ParamData** W = self.W
+        cdef int64_t* feat_idx = self.feat_idx
+        cdef ParamData* p
+        cdef uint64_t new_max = 0
         self.n_params = 0
         for f in range(1, self.max_param):
-            idx = self.feat_idx[f]
+            idx = feat_idx[f]
             if idx == -1:
                 continue
-            if self.W[idx].n_upd < thresh:
-                p = self.W[idx]
+            p = W[idx]
+            if p.n_upd < thresh:
                 free(p.w)
                 free(p.acc)
                 free(p.last_upd)
                 free(p)
-                self.feat_idx[f] = -1
+                feat_idx[f] = -1
                 n_pruned += 1
             else:
                 self.n_params += 1
+                if f > new_max:
+                    new_max = f
+        self.max_param = new_max
         print "Kept %d/%d" % (self.n_params, self.n_params + n_pruned)
 
     cdef tick(self):
@@ -137,17 +144,18 @@ cdef class MultitronParameters:
         cdef double* scores = self.scores
         cdef int64_t idx
         cdef uint64_t max_param = self.max_param
-        cdef double* w
+        cdef ParamData** W = self.W
+        cdef int64_t* feat_idx = self.feat_idx
         cdef double score
         for c in range(n_classes):
             scores[c] = 0
         for i in range(n_feats):
             f = features[i]
             if f != 0 and f < max_param:
-                idx = self.feat_idx[f]
+                idx = feat_idx[f]
                 if idx != -1:
                     score = 0
-                    w = self.W[idx].w
+                    w = W[idx].w
                     for c in range(n_classes):
                         scores[c] += w[c]
         return scores
