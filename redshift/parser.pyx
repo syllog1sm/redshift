@@ -37,7 +37,7 @@ TAG_SET_SIZE = 50
 cdef double FOLLOW_ERR_PC = 0.90
 
 
-DEBUG = False
+DEBUG = False 
 def set_debug(val):
     global DEBUG
     DEBUG = val
@@ -192,7 +192,6 @@ cdef class Parser:
         for n in range(n_iter):
             self.guide.prune(5)
             random.shuffle(indices)
-            self.guide.prune(5)
             for i in indices:
                 if self.train_alg == 'online':
                     self.online_train_one(n, &sents.s[i], sents.strings[i][0])
@@ -724,11 +723,10 @@ cdef class TransitionSystem:
         if self.allow_lower and get_r(s, s.top) != 0:
             if has_grandchild_via_lower(s, s.i, g_heads):
                 return False
-            #for buff_i in range(s.i, s.n):
-            #    if g_heads[buff_i] == get_r(s, s.top):
-            #        return False
             if s.r_valencies[s.top] >= 2 and g_heads[get_r(s, s.top)] == get_r2(s, s.top):
                 return False
+        if self.allow_invert and s.top != 0 and g_heads[s.top] == get_l(s, s.top):
+            return False
         return True
 
     cdef bint l_cost(self, State *s, size_t* g_heads):
@@ -750,6 +748,8 @@ cdef class TransitionSystem:
                     return False
             if s.r_valencies[s.top] >= 2 and g_heads[get_r(s, s.top)] == get_r2(s, s.top):
                 return False
+        if self.allow_invert and s.top != 0 and g_heads[s.top] == get_l(s, s.top):
+            return False
         return True
 
     cdef bint w_cost(self, State *s, size_t* g_heads):
