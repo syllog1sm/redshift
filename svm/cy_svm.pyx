@@ -221,7 +221,7 @@ cdef class Perceptron(Model):
         self.model.finalize()
 
     def prune(self, thresh):
-        self.model.prune(thresh)
+        self.model.prune_rares(thresh)
 
     cdef int predict_from_ints(self, int n, uint64_t* feats, bint* valid_classes) except -1:
         cdef:

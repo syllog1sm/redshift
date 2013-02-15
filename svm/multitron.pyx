@@ -77,14 +77,21 @@ cdef class MultitronParameters:
         self.feat_idx[f] = f
 
     cdef int64_t prune_rares(self, size_t thresh) except -1:
-        n_pruned = 0
+        cdef ParamData* p
+        cdef uint64_t f
+        cdef int64_t idx
+        cdef uint64_t n_pruned = 0
         self.n_params = 0
         for f in range(1, self.max_param):
             idx = self.feat_idx[f]
             if idx == -1:
                 continue
             if self.W[idx].n_upd < thresh:
-                free(self.W[idx])
+                p = self.W[idx]
+                free(p.w)
+                free(p.acc)
+                free(p.last_upd)
+                free(p)
                 self.feat_idx[f] = -1
                 n_pruned += 1
             else:
