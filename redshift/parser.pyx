@@ -192,6 +192,7 @@ cdef class Parser:
         for n in range(n_iter):
             self.guide.prune(5)
             random.shuffle(indices)
+            self.guide.prune(5)
             for i in indices:
                 if self.train_alg == 'online':
                     self.online_train_one(n, &sents.s[i], sents.strings[i][0])

@@ -3,7 +3,7 @@ from libcpp.utility cimport pair
 
 from libc.stdint cimport int64_t, uint64_t
 
-DEF MAX_PARAMS = 20000000
+DEF MAX_PARAMS = 15000000
 
 cdef struct ParamData:
     double* w
