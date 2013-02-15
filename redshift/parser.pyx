@@ -664,10 +664,17 @@ cdef class TransitionSystem:
         if has_head_in_stack(s, s.i, g_heads):
             return False
         if self.allow_lower:
-            for i in range(1, s.stack_len):
-                stack_i = s.stack[i]
-                if get_r(s, stack_i) != 0 and g_heads[s.i] == get_r(s, stack_i):
-                    return False
+            # If right-arcing the word provides a path to the correct head via Lower,
+            # don't shift.
+            if has_head_via_lower(s, s.i, g_heads):
+                return False
+            #for i in range(1, s.stack_len):
+            #    stack_i = s.stack[i]
+            #    if get_r(s, stack_i) != 0 and g_heads[s.i] == get_r(s, stack_i):
+            #        return False
+
+            # Why's this only apply to top again? I think there was a good
+            # reason, I remember fixing this.
             if s.r_valencies[s.top] >= 2 and self.w_cost(s, g_heads) \
               and g_heads[s.i] == get_r2(s, s.top):
                 return False
