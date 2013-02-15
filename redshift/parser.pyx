@@ -27,9 +27,6 @@ from svm.cy_svm cimport Model, LibLinear, Perceptron
 
 from libc.stdint cimport uint64_t, int64_t
 
-random.seed(0)
-
-
 cdef int CONTEXT_SIZE = features.CONTEXT_SIZE
 
 VOCAB_SIZE = 1e6

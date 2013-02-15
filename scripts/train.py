@@ -28,11 +28,15 @@ USE_HELD_OUT = False
     repair_only=("Penalise incorrect moves in the oracle even when they can be repaired",
                  "flag", "o", bool),
     profile=("Run profiler (slow)", "flag", None, bool),
+    debug=("Set debug flag to True.", "flag", None, bool),
+    seed=("Set random seed", "option", int)
 )
 def main(train_loc, model_loc, train_alg="online", n_iter=15,
          add_extra_feats=False, label_set="Stanford", feat_thresh=1,
          allow_reattach=False, allow_lower=False, allow_invert=False,
-         shiftless=False, repair_only=False, profile=False):
+         shiftless=False, repair_only=False,
+         profile=False, debug=False, seed=0):
+    random.seed(seed)
     train_loc = Path(train_loc)
     if shiftless:
         assert allow_reattach
@@ -43,6 +47,8 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
     model_loc = Path(model_loc)
     if label_set == 'None':
         label_set = None
+    if debug:
+        redshift.parser.set_debug(True)
     parser = redshift.parser.Parser(model_loc, clean=True,
                                     train_alg=train_alg, add_extra=add_extra_feats,
                                     label_set=label_set, feat_thresh=feat_thresh,
