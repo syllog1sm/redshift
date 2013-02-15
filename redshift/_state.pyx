@@ -148,6 +148,29 @@ cdef bint has_head_in_stack(State *s, size_t word, size_t* heads):
             return True
     return False
 
+cdef bint has_head_via_lower(State *s, size_t word, size_t* heads):
+    # Check whether the head is recoverable via the Lower transition
+    # Assumes the transition's enabled.
+    for i in range(1, s.stack_len):
+        stack_i = s.stack[i]
+        if get_r(s, stack_i) != 0 and heads[word] == get_r(s, stack_i):
+            return True
+        # TODO: Should this be updated for r2 being a head?
+    return False
+
+cdef bint has_grandchild_via_lower(State *s, size_t word, size_t* heads):
+    # Check whether we need to keep the stack item around for the sake of 
+    # the children: i.e., being able to attach a word and Lower it onto the
+    # grandchild.
+    r = get_r(s, word)
+    if r == 0:
+        return False
+    for buff_i in range(s.i, s.n - 1):
+        if heads[buff_i] == r:
+            return True
+    return False
+
+ 
 
 DEF START_ON_STACK = True
 

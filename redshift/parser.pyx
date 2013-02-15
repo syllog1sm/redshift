@@ -49,9 +49,10 @@ cdef enum:
     LEFT
     RIGHT
     LOWER
+    INVERT
     _n_moves
 
-DEF N_MOVES = 6
+DEF N_MOVES = 7
 assert N_MOVES == _n_moves, "Set N_MOVES compile var to %d" % _n_moves
 
 
@@ -65,7 +66,7 @@ def red(string):
 
 
 cdef lmove_to_str(move, label):
-    moves = ['E', 'S', 'D', 'L', 'R', 'W']
+    moves = ['E', 'S', 'D', 'L', 'R', 'W', 'V']
     label = LABEL_STRS[label]
     if move == SHIFT:
         return 'S'
@@ -98,7 +99,7 @@ cdef class Parser:
                   shiftless=False, repair_only=False,
                   add_extra=True, label_set='MALT', feat_thresh=5,
                   allow_reattach=False, allow_lower=False,
-                  reuse_idx=False, grammar_loc=None):
+                  allow_invert=False, reuse_idx=False):
         model_dir = Path(model_dir)
         if not clean:
             params = dict([line.split() for line in model_dir.join('parser.cfg').open()])
@@ -110,15 +111,11 @@ cdef class Parser:
             feat_thresh = int(params['feat_thresh'])
             allow_reattach = params['allow_reattach'] == 'True'
             allow_lower = params['allow_lower'] == 'True'
-            grammar_loc = params['grammar_loc']
+            allow_invert = params['allow_invert'] == 'True'
             shiftless = params['shiftless'] == 'True'
             repair_only = params['repair_only'] == 'True'
             l_labels = params['left_labels']
             r_labels = params['right_labels']
-            if grammar_loc == 'None':
-                grammar_loc = None
-            else:
-                grammar_loc = Path(str(grammar_loc))
         if allow_reattach:
             print 'Reattach'
         if allow_lower:
@@ -127,6 +124,8 @@ cdef class Parser:
             print 'Shiftless'
         if repair_only:
             print 'Repair only'
+        if allow_invert:
+            print "Invert"
         self.model_dir = self.setup_model_dir(model_dir, clean)
         io_parse.set_labels(label_set)
         self.n_preds = features.make_predicates(add_extra, True)
@@ -141,7 +140,7 @@ cdef class Parser:
         if shiftless:
             assert not repair_only
         self.moves = TransitionSystem(io_parse.LABEL_STRS, allow_reattach=allow_reattach,
-                                      allow_lower=allow_lower, grammar_loc=grammar_loc,
+                                      allow_lower=allow_lower, allow_invert=allow_invert,
                                       shiftless=shiftless, repair_only=repair_only)
         if not clean:
             self.moves.set_labels(_parse_labels_str(l_labels), _parse_labels_str(r_labels))
@@ -191,6 +190,7 @@ cdef class Parser:
         self.write_cfg(self.model_dir.join('parser.cfg'))
         indices = range(sents.length)
         for n in range(n_iter):
+            self.guide.prune(5)
             random.shuffle(indices)
             for i in indices:
                 if self.train_alg == 'online':
@@ -202,8 +202,6 @@ cdef class Parser:
                                              self.guide.total, move_acc)
             self.guide.n_corr = 0
             self.guide.total = 0
-            if n % 2:
-                self.guide.prune(2)
         self.guide.train()
 
     cdef int static_train_one(self, size_t iter_num, Sentence* sent) except -1:
@@ -297,6 +295,11 @@ cdef class Parser:
                 best_right_guess = self.guide.predict_from_ints(n_feats, feats, right_arcs)
                 self.moves.unpair_label_move(best_right_guess, &s.guess_labels[s.i], &_)
                 assert s.guess_labels[s.i] != 0, best_right_guess
+            elif move == LEFT:
+                best_right_guess = self.guide.predict_from_ints(n_feats, feats, right_arcs)
+                self.moves.unpair_label_move(best_right_guess, &s.guess_labels[s.top], &_)
+                assert s.guess_labels[s.top] != 0, best_right_guess
+
             if DEBUG:
                 print s.i, lmove_to_str(move, label), transition_to_str(&s, move, label, py_words)
             self.moves.transition(move, label, &s)
@@ -332,6 +335,9 @@ cdef class Parser:
             if move == SHIFT or move == REDUCE:
                 best_right = self.guide.predict_from_ints(n_preds, feats, right_arcs)
                 self.moves.unpair_label_move(best_right, &s.guess_labels[s.i], &_)
+            elif move == LEFT:
+                best_right = self.guide.predict_from_ints(n_preds, feats, right_arcs)
+                self.moves.unpair_label_move(best_right, &s.guess_labels[s.top], &_)
             self.moves.transition(move, label, &s)
         # No need to copy heads for root and start symbols
         for i in range(1, sent.length - 1):
@@ -368,10 +374,10 @@ cdef class Parser:
             cfg.write(u'train_alg\t%s\n' % self.train_alg)
             cfg.write(u'add_extra\t%s\n' % self.add_extra)
             cfg.write(u'label_set\t%s\n' % self.label_set)
-            cfg.write(u'grammar_loc\t%s\n' % self.moves.grammar_loc)
             cfg.write(u'feat_thresh\t%d\n' % self.feat_thresh)
             cfg.write(u'allow_reattach\t%s\n' % self.moves.allow_reattach)
             cfg.write(u'allow_lower\t%s\n' % self.moves.allow_lower)
+            cfg.write(u'allow_invert\t%s\n' % self.moves.allow_invert)
             cfg.write(u'shiftless\t%s\n' % self.moves.shiftless)
             cfg.write(u'repair_only\t%s\n' % self.moves.repair_only)
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
@@ -426,14 +432,12 @@ cdef class Parser:
 cdef class TransitionSystem:
     cdef bint allow_reattach
     cdef bint allow_lower
+    cdef bint allow_invert
     cdef bint shiftless
     cdef bint repair_only
     cdef size_t n_labels
     cdef object py_labels
     cdef size_t[N_MOVES] offsets
-    cdef int grammar[50][50][50]
-    cdef int default_labels[50][50][50]
-    cdef object grammar_loc
     cdef bint* _move_validity
     cdef bint* _pair_validity
     cdef bint* right_arcs
@@ -452,23 +456,22 @@ cdef class TransitionSystem:
     cdef size_t r_end
     cdef size_t w_start
     cdef size_t w_end
+    cdef size_t v_id
 
     cdef int n_lmoves
 
     def __cinit__(self, object labels, allow_reattach=False,
-                  allow_lower=False, grammar_loc=None,
+                  allow_lower=False, allow_invert=False,
                   shiftless=False, repair_only=False):
         self.n_labels = len(labels)
         self.py_labels = labels
         self.allow_reattach = allow_reattach
         self.allow_lower = allow_lower
+        self.allow_invert = allow_invert
         self.shiftless = shiftless
         self.repair_only = repair_only
         if self.shiftless:
             assert not self.repair_only
-        if grammar_loc is not None:
-            self.read_grammar(grammar_loc)
-        self.grammar_loc = grammar_loc
         self.n_paired = N_MOVES * self.n_labels
         self._move_validity = <bint*>malloc(N_MOVES * sizeof(bint))
         self._pair_validity = <bint*>malloc(self.n_paired * sizeof(bint))
@@ -481,6 +484,7 @@ cdef class TransitionSystem:
         self.r_end = (RIGHT + 1) * self.n_labels
         self.w_start = LOWER * self.n_labels
         self.w_end = (LOWER + 1) * self.n_labels
+        self.v_id = self.w_end + 1
         for i in range(self.n_paired):
             self.right_arcs[i] = False
         for i in range(self.r_start, self.r_end):
@@ -510,6 +514,8 @@ cdef class TransitionSystem:
             paired = self.pair_label_move(label, LOWER)
         if self.allow_lower:
             valid_classes.append(self.w_start)
+        if self.allow_invert:
+            valid_classes.append(self.v_id)
 
         return valid_classes
 
@@ -519,21 +525,6 @@ cdef class TransitionSystem:
     cdef int unpair_label_move(self, size_t paired, size_t* label, size_t* move):
         move[0] = paired / self.n_labels
         label[0] = paired % self.n_labels
-
-    cdef int read_grammar(self, loc) except -1:
-        cdef size_t i, j, k
-        lines = [line.split() for line in loc.open().read().strip().split('\n')]
-        for i in range(50):
-            for j in range(50):
-                for k in range(50):
-                    self.grammar[i][j][k] = 0
-        for head, sib, child, freq, label in lines:
-            freq = int(freq)
-            head = index.hashes.encode_pos(head)
-            sib = index.hashes.encode_pos(sib)
-            child = index.hashes.encode_pos(child)
-            self.default_labels[head][sib][child] = io_parse.STR_TO_LABEL.get(label, 0)
-            self.grammar[head][sib][child] = freq
 
     cdef int transition(self, size_t move, size_t label, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc
@@ -571,6 +562,19 @@ cdef class TransitionSystem:
             s.top = c
             s.stack[s.stack_len] = c
             s.stack_len += 1
+        elif move == INVERT:
+            assert s.l_valencies[s.top] >= 1
+            assert self.allow_invert
+            c = get_l(s, s.top)
+            del_l_child(s, s.top)
+            # Implementation detail: we store the right-label for the _S0_
+            # when we choose Left-Arc as our transition, whereas we store
+            # the right-label for N0 for Shift and Reduce moves.
+            add_dep(s, c, s.top, s.guess_labels[c])
+            s.second = c
+            s.stack[s.stack_len - 1] = c
+            s.stack[s.stack_len] = s.top
+            s.stack_len += 1
         else:
             raise StandardError(lmove_to_str(move, label))
         if s.i == (s.n - 1):
@@ -593,6 +597,7 @@ cdef class TransitionSystem:
             assert s.stack_len >= 2
         unpaired[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
         unpaired[LOWER] = self.allow_lower and s.r_valencies[s.top] >= 2
+        unpaired[INVERT] = self.allow_invert and s.l_valencies[s.top] >= 1
         cdef bint* paired = self._pair_validity
         for i in range(self.n_paired):
             paired[i] = False
@@ -603,6 +608,7 @@ cdef class TransitionSystem:
         for i in range(self.n_r_classes):
             paired[self.r_classes[i]] = unpaired[RIGHT]
         paired[self.w_start] = unpaired[LOWER]
+        paired[self.v_id] = unpaired[INVERT]
         return paired
    
     cdef bint* check_costs(self, State* s, size_t* labels, size_t* heads) except NULL:
@@ -614,12 +620,13 @@ cdef class TransitionSystem:
         valid_moves[LEFT] = valid_moves[LEFT] and self.l_cost(s, heads)
         valid_moves[RIGHT] = valid_moves[RIGHT] and self.r_cost(s, heads)
         valid_moves[LOWER] = valid_moves[LOWER] and self.w_cost(s, heads)
+        valid_moves[INVERT] = valid_moves[INVERT] and self.v_cost(s, heads)
         for i in range(self.n_paired):
             paired_validity[i] = False
         paired_validity[self.s_id] = valid_moves[SHIFT]
-        if self.shiftless:
-            assert not paired_validity[self.s_id] 
         paired_validity[self.d_id] = valid_moves[REDUCE]
+        paired_validity[self.w_start] = valid_moves[LOWER]
+        paired_validity[self.v_id] = valid_moves[INVERT]
         if valid_moves[LEFT] and heads[s.top] == s.i:
             paired_validity[self.pair_label_move(labels[s.top], LEFT)] = True
         else:
@@ -630,9 +637,6 @@ cdef class TransitionSystem:
         else:
             for i in range(self.n_r_classes):
                 paired_validity[self.r_classes[i]] = valid_moves[RIGHT]
-        if valid_moves[LOWER]:
-            assert s.r_valencies[s.top] >= 2
-            paired_validity[self.w_start] = True
         return paired_validity
 
     cdef int break_tie(self, State* s, size_t* labels, size_t* heads,
@@ -675,7 +679,7 @@ cdef class TransitionSystem:
 
             # Why's this only apply to top again? I think there was a good
             # reason, I remember fixing this.
-            if s.r_valencies[s.top] >= 2 and self.w_cost(s, g_heads) \
+            if s.r_valencies[s.top] >= 2 and g_heads[get_r(s, s.top)] == get_r2(s, s.top) \
               and g_heads[s.i] == get_r2(s, s.top):
                 return False
         return True
@@ -700,7 +704,7 @@ cdef class TransitionSystem:
                     return False
             # This is a heuristic, because we could theoretically steal away the
             # bad dependency. But penalise it anyway
-            if s.r_valencies[s.top] >= 2 and self.w_cost(s, g_heads):
+            if s.r_valencies[s.top] >= 2 and g_heads[get_r(s, s.top)] == get_r2(s, s.top):
                 return False
         return True
 
@@ -717,10 +721,12 @@ cdef class TransitionSystem:
         if self.allow_reattach:
             assert g_heads[s.top] != s.n and g_heads[s.top] != (s.n - 1)
         if self.allow_lower and get_r(s, s.top) != 0:
-            for buff_i in range(s.i, s.n):
-                if g_heads[buff_i] == get_r(s, s.top):
-                    return False
-            if s.r_valencies[s.top] >= 2 and self.w_cost(s, g_heads):
+            if has_grandchild_via_lower(s, s.i, g_heads):
+                return False
+            #for buff_i in range(s.i, s.n):
+            #    if g_heads[buff_i] == get_r(s, s.top):
+            #        return False
+            if s.r_valencies[s.top] >= 2 and g_heads[get_r(s, s.top)] == get_r2(s, s.top):
                 return False
         return True
 
@@ -741,12 +747,37 @@ cdef class TransitionSystem:
             for buff_i in range(s.i, s.n - 1):
                 if g_heads[buff_i] == get_r(s, s.top):
                     return False
-            if s.r_valencies[s.top] >= 2 and self.w_cost(s, g_heads):
+            if s.r_valencies[s.top] >= 2 and g_heads[get_r(s, s.top)] == get_r2(s, s.top):
                 return False
         return True
 
     cdef bint w_cost(self, State *s, size_t* g_heads):
-        return g_heads[get_r(s, s.top)] == get_r2(s, s.top)
+        r = get_r(s, s.top)
+        r2 = get_r2(s, s.top)
+        assert r != 0 and r2 != 0
+        #if g_heads[r] == r2:
+        #    return True
+        #return False
+        # TODO: Is this a good idea? It doesnt seem to work
+        # Other functions were depending on this. Might work now.
+        if g_heads[r] == s.heads[r]:
+            return False
+        return True
+
+    cdef bint v_cost(self, State *s, size_t* g_heads):
+        left = get_l(s, s.top)
+        if g_heads[s.top] == left:
+            return True
+        if g_heads[left] == s.top:
+            return False
+        if g_heads[s.top] == s.heads[s.top]:
+            return False
+        if self.allow_reattach and g_heads[s.top] == s.second:
+            return False
+        if has_head_in_buffer(s, s.top, g_heads):
+            if not (self.allow_reattach and not self.repair_only):
+                return False
+        return True
 
     """
     cdef object oracle(self, State* s,  size_t* labels, size_t* heads, size_t* tags,
@@ -889,6 +920,10 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
         parent = tokens[get_r2(s, s.top)]
         top = tokens[s.top]
         return u'%s(%s, %s) ---> %s(%s(%s))' % (top, parent, child, top, parent, child)
+    elif move == INVERT:
+        left = tokens[get_l(s, s.top)]
+        top = tokens[s.top]
+        return u'%s(%s) --> %s(%s)' % (top, left, left, top)
     else:
         if move == LEFT:
             head = s.i
