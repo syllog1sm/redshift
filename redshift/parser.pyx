@@ -192,6 +192,7 @@ cdef class Parser:
         indices = range(sents.length)
         for n in range(n_iter):
             random.shuffle(indices)
+            self.guide.prune(5)
             for i in indices:
                 if self.train_alg == 'online':
                     self.online_train_one(n, &sents.s[i], sents.strings[i][0])
@@ -202,8 +203,6 @@ cdef class Parser:
                                              self.guide.total, move_acc)
             self.guide.n_corr = 0
             self.guide.total = 0
-            if n % 2:
-                self.guide.prune(2)
         self.guide.train()
 
     cdef int static_train_one(self, size_t iter_num, Sentence* sent) except -1:
