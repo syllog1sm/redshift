@@ -58,7 +58,7 @@ cdef class StrIndex(Index):
         if self.save_entries:
             self.out_file.close()
 
-cdef class FeatIndex(Index):
+cdef class PruningFeatIndex(Index):
     def __cinit__(self):
         cdef dense_hash_map[uint64_t, uint64_t] *table
         cdef dense_hash_map[uint64_t, uint64_t] *pruned
@@ -117,6 +117,53 @@ cdef class FeatIndex(Index):
 
     def set_threshold(self, uint64_t threshold):
         self.threshold = threshold
+
+
+cdef class FeatIndex(Index):
+    def __cinit__(self):
+        cdef dense_hash_map[uint64_t, uint64_t] *table
+        self.tables = vector[dense_hash_map[uint64_t, uint64_t]]()
+        self.i = 1
+
+    def set_n_predicates(self, uint64_t n):
+        cdef uint64_t i
+        self.n = n
+        self.save_entries = False
+        cdef uint64_t zero = 0
+        for i in range(n):
+            table = new dense_hash_map[uint64_t, uint64_t]()
+            self.tables.push_back(table[0])
+            self.tables[i].set_empty_key(zero)
+    
+    cdef uint64_t encode(self, uint64_t* feature, uint64_t length, uint64_t i):
+        cdef uint64_t value
+        cdef uint64_t hashed
+        hashed = MurmurHash64A(feature, length * sizeof(uint64_t), i)
+        value = self.tables[i][hashed]
+        if value == 0:
+            value = self.i
+            self.tables[i][hashed] = value
+            if self.save_entries:
+                py_feat = []
+                for j in range(length):
+                    py_feat.append(str(feature[j]))
+                self.save_entry(i, '_'.join(py_feat), hashed, self.i)
+            self.i += 1
+        return value
+
+    cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value):
+        self.tables[i][hashed] = value
+
+    def __dealloc__(self):
+        if self.save_entries:
+            self.out_file.close()
+
+    def set_feat_counting(self, count_feats):
+        self.count_features = count_feats
+
+    def set_threshold(self, uint64_t threshold):
+        self.threshold = threshold
+
 
 
 cdef class InstanceCounter:

@@ -75,7 +75,7 @@ cdef class StrIndex(Index):
     cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value)
 
 
-cdef class FeatIndex(Index):
+cdef class PruningFeatIndex(Index):
     cdef uint64_t n
     cdef uint64_t p_i
     cdef uint64_t threshold
@@ -83,6 +83,15 @@ cdef class FeatIndex(Index):
     cdef vector[dense_hash_map[uint64_t, uint64_t]] tables
     cdef vector[dense_hash_map[uint64_t, uint64_t]] unpruned
     cdef dense_hash_map[uint64_t, uint64_t] freqs
+    cdef uint64_t encode(self, uint64_t* feature, uint64_t length, uint64_t i)
+    cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value)
+
+
+cdef class FeatIndex(Index):
+    cdef uint64_t n
+    cdef uint64_t threshold
+    cdef bint count_features
+    cdef vector[dense_hash_map[uint64_t, uint64_t]] tables
     cdef uint64_t encode(self, uint64_t* feature, uint64_t length, uint64_t i)
     cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value)
 
