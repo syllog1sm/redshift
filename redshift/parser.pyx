@@ -765,33 +765,33 @@ cdef class TransitionSystem:
         r = get_r(s, s.top)
         r2 = get_r2(s, s.top)
         assert r != 0 and r2 != 0
-        if g_heads[r] == r2:
-            return True
-        return False
+        #if g_heads[r] == r2:
+        #    return True
+        #return False
         # TODO: Is this a good idea? It doesnt seem to work
         # Other functions were depending on this. Might work now.
-        #if g_heads[r] == s.heads[r]:
-        #    return False
+        if g_heads[r] == s.heads[r]:
+            return False
         return True
 
     cdef bint v_cost(self, State *s, size_t* g_heads):
         left = get_l(s, s.top)
         assert left != 0
-        if g_heads[s.top] == left:
-            return True
-        return False
+        #if g_heads[s.top] == left:
+        #    return True
+        #return False
         # TODO: Is this a good idea? Is it causing variance?
-        #if g_heads[left] == s.top:
-        #    return False
-        #if g_heads[s.top] == s.heads[s.top]:
-        #    return False
-        ## ie if reduce-reattach is allowed
-        #if self.repair_only and g_heads[s.top] == s.second:
-        #    return False
-        #if has_head_in_buffer(s, s.top, g_heads):
-        #    if not (self.allow_reattach and not self.repair_only):
-        #        return False
-        #return True
+        if g_heads[left] == s.top:
+            return False
+        if g_heads[s.top] == s.heads[s.top]:
+            return False
+        # ie if reduce-reattach is allowed
+        if self.repair_only and g_heads[s.top] == s.second:
+            return False
+        if has_head_in_buffer(s, s.top, g_heads):
+            if not (self.allow_reattach and not self.repair_only):
+                return False
+        return True
 
 cdef transition_to_str(State* s, size_t move, label, object tokens):
     tokens = tokens + ['<end>']
