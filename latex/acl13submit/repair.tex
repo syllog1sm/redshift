@@ -6,6 +6,26 @@
 \usepackage{xspace}
 \usepackage{natbib}
 \usepackage{tikz-dependency}
+\usepackage{placeins}
+% Alter some LaTeX defaults for better treatment of figures:
+    % See p.105 of "TeX Unbound" for suggested values.
+    % See pp. 199-200 of Lamport's "LaTeX" book for details.
+    %   General parameters, for ALL pages:
+    \renewcommand{\topfraction}{0.9}	% max fraction of floats at top
+    \renewcommand{\bottomfraction}{0.8}	% max fraction of floats at bottom
+    %   Parameters for TEXT pages (not float pages):
+    \setcounter{topnumber}{2}
+    \setcounter{bottomnumber}{2}
+    \setcounter{totalnumber}{4}     % 2 may work better
+    \setcounter{dbltopnumber}{2}    % for 2-column pages
+    \renewcommand{\dbltopfraction}{0.9}	% fit big float above 2-col. text
+    \renewcommand{\textfraction}{0.07}	% allow minimal text w. figs
+    %   Parameters for FLOAT pages (not text pages):
+    \renewcommand{\floatpagefraction}{0.7}	% require fuller float pages
+	% N.B.: floatpagefraction MUST be less than topfraction !!
+    \renewcommand{\dblfloatpagefraction}{0.7}	% require fuller float pages
+
+	% remember to use [htp] or [htpb] for placement
 
 
 \setlength\titlebox{6.5cm}    % Expanding the titlebox
@@ -42,191 +62,266 @@
 \begin{document}
 \maketitle
 \begin{abstract}
-    Previous approaches to incremental parsing have assumed that the parser
-    should build its analysis monotonically. We show that relaxing this constraint
-    can offer an improved transition system for English dependency parsing.
+    Previous algorithms for incremental parsing have assumed that state transititions
+    should be monotonic. However, psycholinguistic models of sentence processing
+    typically include moves that restructure the parse tree, in order to account
+    for eye-tracking and reading time experiments.
 
-    We modify the Left-Arc of the Arc-Eager transition system so that it can 
-    over-ride a previous Right-Arc. We then remove the Shift move, as there is no
-    reason not to create a provisional dependency when a word is pushed onto the stack.
-
-    We train the parser using the online learning algorithm described by
-    \citet{goldberg:12}, which allows training from states resulting from
-    transition errors. The updated transition system improves \uas by
-    0.5\%, to \sysacc, setting a new state-of-the-art for greedy dependency parsing.
+    We present a non-monotonic transition system
+    that achieves state-of-the-art accuracy for greedy English dependency parsing.
+    We show that simply removing standard constraints on the Arc-Eager system
+    leads to useful non-monotonic behaviour, especially when imperfect states
+    are introduced during training. With the addition of a new transition
+    to correct attachment errors, the repair moves improve accuracy by 0.5\% on
+    the standard evaluation, over a state-of-the-art baseline.
 \end{abstract}
 
 % P1
 \section{Introduction}
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
 
-\clearpage
+Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis, auctor a metus. Proin mi purus, dignissim eget tempus in, vestibulum eu libero.
+
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed. Aliquam et augue est, et pretium est. Aenean mattis lacinia elit quis accumsan.
+
+Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam. Nunc sem mauris, volutpat nec rhoncus quis, sodales ut massa. Praesent egestas ante interdum elit laoreet volutpat. Morbi quis velit tempor libero consequat volutpat at vel nulla. Morbi et justo ac liberos.
 
 % P2
 % 2-col Dependency parse graphic
 % Col 1
+\begin{table*}[ht]
+\centering
+    \begin{tabular}{ll|l}
+Transition & & Precondition \\
+\hline \hline
+Left-Arc   & (notation) & (S0 has no head) \\ 
+Right-Arc  & (notation) &   \\
+Reduce     & (notation) & (S0 has a head) \\  
+Shift      & (notation) & \\
+\end{tabular}
+\caption{In the Arc-Eager transition system, an arc is created either when the word is
+    pushed or popped from the stack. There are thus two pairs of operations: (Shift, Left)
+    and (Right, Reduce). The choice of pop move is constrained by which push move
+    was selected, so that the state is updated monotonically.\\
+Instead, we give the model free choice of pop moves, and reverse the previous
+decision if necessary. This allows the parser to recover from mistakes.}
+\label{tab:transitions}
+\end{table*}
+
+
+
 \section{Transition-based Dependency Parsing}
-\pagebreak
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
+
+Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis, auctor a metus. Proin mi purus, dignissim eget tempus in, vestibulum eu libero.
+
+Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis, auctor a metus. Proin mi purus, dignissim eget tempus in, vestibulum eu libero.
+
+
+Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. 
+
 % Col 2
 \subsection{Dynamic Oracle}
 \begin{figure}
-\begin{dependency}[theme=simple]
+\centering
+    \begin{verbatim}
 
-\tikzstyle{t}=[text=green,ultra thick,font=\bfseries\itshape]
-\tikzstyle{f}=[text=red,ultra thick,font=\bfseries\itshape]
-\tikzstyle{m}=[font=\bfseries\itshape]
-
-\begin{deptext}[column sep=.1cm, row sep=.1ex]
- The \&   \& man    \&      \& whisting \&    \& tunes \&    \& pianos \& \\
-|[m]|S \& |[m]|L \& |[m]|S \& |[m]|R \& |[f]|R \& \\
-    1   \& 2 \& 3      \& 4    \& 5         \& 6 \&   7    \& 8 \&    9    \& 10 \\
-\end{deptext}
-
-\depedge{3}{1}{2}
-\depedge{3}{5}{4}
-\depedge[red, ultra thick]{5}{7}{5}
-\deproot[edge height=0.7cm, ultra thick]{9}{}
-\wordgroup{1}{3}{3}{}
-\wordgroup{1}{5}{5}{}
-\wordgroup{1}{7}{7}{}
-\end{dependency}
-\caption{
-An example of the error propagation problem.
-The correct attachment of \emph{pianos} to \emph{tunes} may be
-prevented by the incorrect attachment of \emph{tunes} to \emph{whistling},
-especially if the parser has not been trained on suboptimal states.
-Words on the stack are circled and the transition-history is shown, with arcs
-labelled by the move that introduced them. The first word of the buffer is marked
-with an arrow. Incorrect transitions and arcs are highlghted in red.
-\label{fig:whistling_tunes}}
+while not state.is_finished {
+  feats = extract(state)
+  zero_costs = oracle(state)
+  gold = predict_from(feats, zero_costs)
+  prediction = predict(feats)
+  if prediction not in zero_costs {
+     update(features, gold, 1.0)
+     update(features, prediction, -1.0)
+  }
+  transition(state, prediction)
+}
+\end{verbatim}
+\caption{Dynamic oracle. TODO: Notation.}
 \end{figure}
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
 
-\pagebreak
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi.
 
 
 % P3&4
-\section{The Arc-Always Transition System}
+\section{Relaxing the monotonicity constraints}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
+
+
 \begin{figure}
     \centering
     \begin{dependency}[theme=simple]
         \tikzstyle{t}=[text=green,ultra thick,font=\bfseries\itshape]
         \tikzstyle{f}=[text=red,ultra thick,font=\bfseries\itshape]
         \tikzstyle{m}=[font=\bfseries\itshape]
+        \tikzstyle{n}=[font=\itshape]
 
-        \begin{deptext}[column sep=.1cm, row sep=.1ex]
-    I \&           \& saw \&          \& Jack       \& \& and     \&           \& Jill   \&      \& fall \\
-|[m]|S \& |[m]|L \& |[m]|S   \& |[m]|S \& |[m]|L \& |[f]|R \& |[m]|R \& |[m]|D \& |[t]|L    \\
+        \begin{deptext}[column sep=.075cm, row sep=.1ex]
+            I \&           \& saw \&          \& Jack       \& \& and     \&           \& Jill   \&  \& fall \& \textsc{r} \\
+|[m]|S \& |[m]|L \& |[m]|S   \& |[f]|R \& |[m]|R \& |[m]|D \& |[m]|R \& |[m]|D \& |[t]|L \& |[n]|R \& |[n]|D \& |[n]|L \\
             1 \&     2       \& 3  \&   4      \& 5          \& 6 \& 7     \& 8 \& 9 \& 10 \& 11 \& 12 \\
-    I \&           \& saw \&          \& Jack       \& \& and     \&           \& Jill   \&      \& fall \\
+    I \&           \& saw \&          \& Jack       \& \& and     \&           \& Jill   \&      \& fall \& \textsc{r} \\
         \end{deptext}
     \depedge{3}{1}{2}
-    \depedge{7}{5}{5}
-    \depedge[red, ultra thick]{3}{7}{6}
-    \depedge{7}{9}{7}
+    \depedge[red, ultra thick]{3}{5}{4}
+    \depedge{5}{7}{5}
+    \depedge{5}{9}{7}
+    
     \deproot[edge height=0.7cm, ultra thick]{11}{}
     \wordgroup{1}{3}{3}{}
-    \wordgroup{1}{7}{7}{}
-
+    \wordgroup{1}{5}{5}{}
+    
     \depedge[edge below]{3}{1}{2}
-    \depedge[edge below]{7}{5}{6}
-    \depedge[edge below]{7}{9}{5}
-    \depedge[edge below, green, ultra thick]{11}{7}{9}
+    \depedge[edge below]{5}{7}{5}
+    \depedge[edge below]{5}{9}{7}
+    \depedge[edge below, green, ultra thick]{11}{5}{9}
     \wordgroup{4}{3}{3}{}
 \end{dependency}
-\caption{Before and after for the modified Left-arc transition.
-    Left-arc (L) is modified so that it can over-ride, a previous
-    right-arc pointing to \stacktop.
-\label{fig:saw_fall}}
+\caption{
+    State before and after a non-monotonic Left-Arc.\\
+    At move 9, \emph{fall} is the first word of the buffer (marked with an arrow),
+    and \emph{saw} and \emph{Jack} are on the stack (circled). The arc created at move 4 was
+    incorrect (in red). Arcs are labelled with the move that created them.\\
+    After move 9 (the lower state), the non-monotonic Left-Arc move
+    has replaced the incorrect dependency with a correct Left-Arc (in green).
+\label{fig:reattach}}
 \end{figure}
+
+\subsection{Non-monotonic Left-Arc}
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae.
+
+
+\begin{figure}
+    \centering
+    \begin{dependency}[theme=simple]
+    \tikzstyle{t}=[text=green,ultra thick,font=\bfseries\itshape]
+    \tikzstyle{f}=[text=red,ultra thick,font=\bfseries\itshape]
+    \tikzstyle{m}=[font=\bfseries\itshape]
+    \tikzstyle{n}=[font=\itshape]
+    \begin{deptext}[column sep=.075cm, row sep=.1ex]
+        I \&           \& saw \&          \& Jack       \& \& and     \&           \& Jill \&   \& \textsc{r} \\
+       |[m]|S \& |[m]|L \& |[m]|S   \& |[f]|S \& |[m]|R \& |[m]|D \& |[m]|R \& |[m]|D \& |[m]|R \& |[m]|D \& |[t]|D \& |[n]|L \\
+            1 \&     2       \& 3  \&   4      \& 5          \& 6 \& 7     \& 8 \& 9 \& 10 \& 11 \& 12 \\
+            I \&           \& saw \&          \& Jack       \& \& and     \&           \& Jill \& \& \textsc{r} \\
+\end{deptext}
+    \depedge{3}{1}{2}
+    \depedge{5}{7}{5}
+    \depedge{5}{9}{7}
+    
+    \deproot[edge height=0.7cm, ultra thick]{11}{}
+    \wordgroup{1}{3}{3}{}
+    \wordgroup{1}{5}{5}{}
+    
+    \depedge[edge below]{3}{1}{2}
+    \depedge[edge below]{5}{7}{5}
+    \depedge[edge below]{5}{9}{7}
+    \depedge[edge below, green, ultra thick]{3}{5}{9}
+    \wordgroup{4}{3}{3}{}
+\end{dependency}
+\caption{
+State before and after a non-monotonic Reduce.\\
+After making the wrong push move at 4, at move 11
+the parser has \emph{Jack} on the stack (circled), with only the dummy \textsc{root}
+token left in the buffer. A monotonic parser must deterministically Left-Arc
+\emph{Jack} here to preserve the previous decision, despite the current state.\\
+We remove this constraint, and instead assume that when the model selects Reduce
+for a headless item, it is reversing the previous Shift/Right decision. We add
+the appropriate arc, assigning the label that scored highest when the Shift/Right
+decision was originally made.
+\label{fig:adduce}}
+\end{figure}
+
+\subsection{Non-monotonic Reduce}
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et.
+
+Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
+
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et.
+
+\subsection{Updated Oracle}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
+
+\section{Repair transitions}
+
+\subsection{Lower}
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat.
+
+
+
 \subsection{Oracle}
 
 \clearpage
 
-
 % P5
 \section{Experiments}
+\begin{table}
+    \small
+    
+    \centering
+    (S1w), (S1p), (S1w, S1p),\\
+    (S1w, N0w), (S1w, N0p), (S1p, N0p),\\
+    (S1w, S0w, N0w), (S1p, S0p, N0p), (S1p, S0p, N0p),\\
+    (S2w, N0w),\\
+    (S2w, N1w),\\
+    (S2p, N0p, N1w), (S2p, N0w, N1w), (S2w, N0p, N1p), \\
+    (S3w, N0w), \\
+    (S2w, N1w),\\ 
+    (S3p, S2p, N0w),\\
+    (dist, S1w, N1w),\\
+    (dist, S1p, N0p, N1p)
+\caption{Additional features. S=Stack, N=buffer. w=Word, p=\pos. Dist=Distance
+         between S0 and N0. TODO: Prettify this. TODO: Update it, it's from the old version.}
+\end{table}
+
+\begin{table}
+    \centering
+    \begin{tabular}{l|rr}
+        \hline 
+        Feature Set & \las  & \uas  \\
+        \hline \hline
+        Z\&N    & 00.00 & 00.00 \\
++Additional     & 00.00 & 00.00 \\
+    \hline
+    \end{tabular}
+    \caption{
+        Impact of the additional features on development set accuracy.
+    \label{tab:feats}}
+\end{table}
+
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
+
 
 \subsection{Parsing Model}
 
-In order to test repair transitions, we first implemented a baseline greedy
-deterministic parser.
-We followed \citet{zhang:11} in using arc-eager transitions, with joint
-prediction of arc labels for the left and right transitions.
-However, we use a logistic
-regression classifier, where \citet{zhang:11} and \citet{goldberg:12} use globally
-normalised averaged perceptron models. We use the logistic regression
-implementation in the
-LibLinear toolkit\footnote{http://www.csie.ntu.edu.tw/\~cjlin/liblinear/}.
-Features that occurred 5 or fewer times
-were pruned before training, and L1-regularisation with a penalty of 1.0 was
-used during training. Experiments on the development data showed that accuracies
-were not significantly higher when the regularisation penalty was tuned
-specifically for each model.
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
 
-We use the extended feature set from \citet{zhang:11} in our experiments, which
-is also the feature set used by \citet{goldberg:12}. 
+Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis, auctor a metus. Proin mi purus, dignissim eget tempus in, vestibulum eu libero.
 
-
-%However, this feature set
-%lacked features we expected would be needed to learn our repair moves, so we
-%experimented with additional features, and found that they substantially improved
-%the performance of the baseline model as well.
-
-%After some analysis, we determined that a greedy parser greatly benefits from
-%features that may not be required for beam-search parsing. 
-%Figure \ref{fig:pp_attach} shows the state of a parser before
-%it makes a \pp attachment decision, a common source parser error. Although
-%feature engineering was the
-%main contribution of \citet{zhang:11}, they lack a feature that pairs the verb
-%\emph{put} with the preposition \emph{on} at this state. Instead, their parser will
-%score the incorrect transition highly, but subsequent states along that path should
-%later score poorly and be pruned from the beam.
-
-%Table \ref{tab:features} shows our additional features. 
-%\begin{table}
-%    \small
-    
-%    \centering
-%    (S1w), (S1p), (S1w, S1p),\\
-%    (S1w, N0w), (S1w, N0p), (S1p, N0p),\\
-%    (S1w, S0w, N0w), (S1p, S0p, N0p), (S1p, S0p, N0p),\\
-%    (S2w, N0w),\\
-%    (S2w, N1w),\\
-%    (S2p, N0p, N1w), (S2p, N0w, N1w), (S2w, N0p, N1p), \\
-%    (S3w, N0w), \\
-%    (S2w, N1w),\\ 
-%    (S3p, S2p, N0w),\\
-%    (dist, S1w, N1w),\\
-%    (dist, S1p, N0p, N1p)
-%\caption{Additional features. S=Stack, N=buffer. w=Word, p=\pos. Dist=Distance
-%         between S0 and N0. TODO: Prettify this.}
-%\end{table}
-
-%\begin{table}
-%    \centering
-%    \begin{tabular}{l|rr}
-%        \hline 
-%        Feature Set & \las  & \uas  \\
-%        \hline \hline
-%        Z\&N 11  & 88.20 & 89.54 \\
-%+Additional      & 89.10 & 90.40 \\
-%    \hline
-%    \end{tabular}
-%    \caption{Development set accuracies for our parser trained
-%             with the original oracle, which is restricted
-%             to states along the path to the gold derivation.
-%             Our additional features improve accuracy, while label
-%         features hinder performance due to error propagation.\label{tab:feats}}
-%\end{table}
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
 %\subsection{Iterative Training}
 
 \subsection{Data and Evaluation}
-\clearpage
+
+Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam. Nunc sem mauris, volutpat nec rhoncus quis, sodales ut massa. Praesent egestas ante interdum elit laoreet volutpat. Morbi quis velit tempor libero consequat volutpat at vel nulla. Morbi et justo ac liberos.
 % P6
 
+
+Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis, auctor a metus. Proin mi purus, dignissim eget tempus in, vestibulum eu libero.
 % P7
-\subsection{Results}
+\section{Development Results}
 \label{sec:results}
+
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+
+
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
 \begin{table}
     \small
@@ -235,19 +330,32 @@ is also the feature set used by \citet{goldberg:12}.
         \hline 
         System             & \uas   & \las  \\
         \hline \hline
-        Static Arc-Eager   & 00.00  & 00.00 \\
-        Static Arc-Always  & 00.00  & 00.00 \\
+        Static Arc-Eager     & 00.00  & 00.00 \\
+        Static Non-monotonic  & 00.00  & 00.00 \\
         \hline \hline
-        Dynamic Arc-Eager  & 00.00  & 00.00 \\
-        Dynamic Arc-Always & 00.00  & 00.00 \\
-        +Right-Lower       & 00.00  & 00.00 \\
-        +Right-Raise       & 00.00  & 00.00 \\
-        +Left-Invert       & 00.00  & 00.00 \\
+        Dynamic Arc-Eager    & 00.00  & 00.00 \\
+        Static Non-monotonic  & 00.00  & 00.00 \\
         \hline
     \end{tabular}
     \caption{Dev set results.\label{tab:feats}}
 \end{table}
 
+\begin{table}
+    \centering
+    \begin{tabular}{rcc|rcc}
+        & Gold & Parser & Gold & Parser\\
+\hline \hline
+613 & R & D & 283 & S & L \\
+582 & D & R & 101 & L & R \\
+372 & S & R & 70  & R & L \\
+326 & R & S & 32  & S & D \\
+304 & L & S & 29  & D & S \\
+\hline
+\end{tabular}
+\caption{TODO: These numbers are NOT CORRECT. They're from a parser with the
+extra features enabled, as that's what I had lying around. Add stddev too.}
+TODO: Better in confusion matrix?
+\end{table}
 
 \begin{table}
     \centering
@@ -268,33 +376,17 @@ Arc-Always & $O(n)$ &       &       &       &  \\
          \label{tab:feats}}
 \end{table}
 
-\clearpage
+\subsection{Accuracy by label}
 
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
-\section{Why is Arc-Always better?}
-
-\subsection{Effect of Left-Reattach on Arc-Eager parsing}
-
-\pagebreak
-Describe the \emph{repair only} configuration and give its results
-
-
-\subsection{Effect of unconstrained Reduce on Arc-Eager parsing}
-
-Show what happens if we just remove the reduce constraint that says a word has
-to have a head specified (since we always have a head, maybe this is the relevant
-difference.)
-
-
-\pagebreak
-
-\subsection{Label accuracy analysis}
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
 \begin{table}
 \centering
 \small
 \begin{tabular}{lr|rr|rr}
-    Label        & n & Arc-Eager & Arc-Always & Diff & Weighted diff \\
+    Label        & n & Base & System & Diff & W. diff \\
     \hline \hline
     Left labels  &          &           &            &      &               \\
     \hline
@@ -302,19 +394,33 @@ difference.)
 \end{tabular}
 \end{table}
 
-\subsection{Error propagation analysis}
+\subsection{Effect on error propagation}
 
-If you're in a state and you've previously made $n$ errors, what's your probability
-of making an error? Plot for static and online arc-eager and arc-always parsers.
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
-\clearpage
+
+\section{Test Results}
+
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+
+
 
 % P8
 \section{Related Work}
-\pagebreak
 
+
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+
+\subsection{Relation to the Sentence Processing Model}
+
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 \section{Conclusion}
 
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
 \bibliography{repair}
 \bibliographystyle{aclnat}
