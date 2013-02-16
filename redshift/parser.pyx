@@ -268,24 +268,7 @@ cdef class Parser:
             preconditions = self.moves.check_preconditions(&s)
             pred_paired = self.guide.predict_from_ints(n_feats, feats, preconditions)
             zero_cost_moves = self.moves.check_costs(&s, g_labels, g_heads)
-            if g_heads[s.top] == s.i and self.moves.allow_reattach:
-                assert zero_cost_moves[self.moves.pair_label_move(g_labels[s.top], LEFT)]
-            if g_heads[s.i] == s.top:
-                assert zero_cost_moves[self.moves.pair_label_move(g_labels[s.i], RIGHT)]
-            try:
-                gold_paired = self.guide.predict_from_ints(n_feats, feats, zero_cost_moves)
-            except:
-                print s.stack_len
-                print s.n
-                print s.i
-                print s.top
-                print g_heads[s.top]
-                print self.moves.l_cost(&s, g_heads)
-                raise
-            if gold_paired == pred_paired and gold_paired == self.moves.w_start:
-                if DEBUG:
-                    print "LOWER"
-                    print py_words[s.top], s.r_valencies[s.top]
+            gold_paired = self.guide.predict_from_ints(n_feats, feats, zero_cost_moves)
             self.guide.update(pred_paired, gold_paired, n_feats, feats, weight)
             if zero_cost_moves[pred_paired]:
                 gold_paired = pred_paired
@@ -311,34 +294,59 @@ cdef class Parser:
 
     cdef int parse(self, Sentence* sent) except -1:
         cdef State s
-        cdef size_t move, label
+        cdef size_t move = 0
+        cdef size_t label = 0
         cdef size_t n_preds = self.n_preds
         cdef size_t* context = self._context
         cdef uint64_t* feats = self._hashed_feats
         cdef bint* valid
-        cdef bint* right_arcs = self.moves.right_arcs
+        cdef double* scores
         cdef size_t _ = 0
         cdef size_t guess_label = 0
         cdef size_t n = sent.length
         s = init_state(sent.length)
         sent.parse.n_moves = 0
         while not s.is_finished:
-            valid = self.moves.check_preconditions(&s)
             features.extract(context, feats, sent, &s)
-            paired = self.guide.predict_from_ints(n_preds, feats, valid)
-            sent.parse.moves[s.t] = paired
-            sent.parse.n_moves += 1
-            top = s.top
-            self.moves.unpair_label_move(paired, &label, &move)
-            best_right = self.guide.predict_from_ints(n_preds, feats, right_arcs)
-            self.moves.unpair_label_move(best_right, &guess_label, &_)
-            s.guess_labels[s.top][s.i] = guess_label
+            valid = self.moves.check_preconditions(&s)
+            self.predict(n_preds, feats, valid, &move, &label,
+                         &s.guess_labels[s.top][s.i])
+            sent.parse.moves[s.t] = self.moves.pair_label_move(label, move)
             self.moves.transition(move, label, &s)
+            sent.parse.n_moves += 1
         # No need to copy heads for root and start symbols
         for i in range(1, sent.length - 1):
             assert s.heads[i] != 0
             sent.parse.heads[i] = s.heads[i]
             sent.parse.labels[i] = s.labels[i]
+
+    cdef int predict(self, uint64_t n_preds, uint64_t* feats, bint* valid,
+            size_t* move, size_t* label, size_t* rlabel) except -1:
+        cdef:
+            size_t i
+            double score
+            size_t clas, best_valid, best_right
+            double* scores
+
+        cdef size_t right_move = 0
+        cdef double valid_score = -1000000
+        cdef double right_score = -100000
+        cdef uint64_t* labels = self.guide.get_labels()
+        scores = self.guide.predict_scores(n_preds, feats)
+        seen_valid = False
+        for i in range(self.guide.nr_class):
+            score = scores[i]
+            clas = labels[i]
+            if valid[clas] and score > valid_score:
+                best_valid = clas
+                valid_score = score
+                seen_valid = True
+            if self.moves.right_arcs[clas] and score > right_score:
+                best_right = clas
+                right_score = score
+        assert seen_valid
+        self.moves.unpair_label_move(best_valid, label, move)
+        self.moves.unpair_label_move(best_right, rlabel, &right_move)
 
     def save(self):
         self.guide.save(self.model_dir.join('model'))
@@ -390,6 +398,8 @@ cdef class Parser:
         cdef size_t* g_heads
         cdef size_t paired, parse_paired
         best_moves = []
+        # TODO: Unbreak
+        return ''
         for i in range(sents.length):
             sent = &sents.s[i]
             g_labels = gold.s[i].parse.labels
@@ -547,8 +557,6 @@ cdef class TransitionSystem:
                 del_r_child(s, s.heads[child])
             head = s.i
             add_dep(s, head, child, label)
-            if self.shiftless and s.stack_len == 1 and not s.at_end_of_buffer:
-                push_stack(s)
         elif move == RIGHT:
             child = s.i
             head = s.top
@@ -575,11 +583,13 @@ cdef class TransitionSystem:
             assert s.l_valencies[s.top] >= 1
             assert self.allow_invert
             c = get_l(s, s.top)
+            assert c != 0
             del_l_child(s, s.top)
             if s.heads[s.top] != 0:
                 del_r_child(s, s.second)
             assert c < s.top
             add_dep(s, c, s.top, s.guess_labels[c][s.top])
+            assert s.guess_labels[c][s.top] != 0
             s.second = c
             s.stack[s.stack_len - 1] = c
             s.stack[s.stack_len] = s.top
@@ -676,11 +686,11 @@ cdef class TransitionSystem:
             return False
         if has_head_in_stack(s, s.i, g_heads):
             return False
-        if self.allow_lower:
+        #if self.allow_lower:
             # If right-arcing the word provides a path to the correct head via Lower,
             # don't shift.
-            if has_head_via_lower(s, s.i, g_heads):
-                return False
+            #if has_head_via_lower(s, s.i, g_heads):
+            #    return False
             #for i in range(1, s.stack_len):
             #    stack_i = s.stack[i]
             #    if get_r(s, stack_i) != 0 and g_heads[s.i] == get_r(s, stack_i):
@@ -688,9 +698,12 @@ cdef class TransitionSystem:
 
             # Why's this only apply to top again? I think there was a good
             # reason, I remember fixing this.
-            if s.r_valencies[s.top] >= 2 and g_heads[get_r(s, s.top)] == get_r2(s, s.top) \
-              and g_heads[s.i] == get_r2(s, s.top):
-                return False
+            # Actually this isn't making much sense to me at all?
+            #if s.r_valencies[s.top] >= 2 and g_heads[get_r(s, s.top)] == get_r2(s, s.top) \
+            #  and g_heads[s.i] == get_r2(s, s.top):
+            #    return False
+        if self.allow_invert and g_heads[s.i] == get_l(s, s.top):
+            return False
         return True
 
     cdef bint r_cost(self, State *s, size_t* g_heads):
@@ -707,14 +720,16 @@ cdef class TransitionSystem:
         if has_head_in_stack(s, s.i, g_heads):
             return False
         if self.allow_lower:
-            for i in range(1, s.stack_len - 1):
-                stack_i = s.stack[i]
-                if get_r(s, stack_i) != 0 and g_heads[s.i] == get_r(s, stack_i):
-                    return False
+            #for i in range(1, s.stack_len - 1):
+            #    stack_i = s.stack[i]
+            #    if get_r(s, stack_i) != 0 and g_heads[s.i] == get_r(s, stack_i):
+            #        return False
             # This is a heuristic, because we could theoretically steal away the
             # bad dependency. But penalise it anyway
             if s.r_valencies[s.top] >= 2 and g_heads[get_r(s, s.top)] == get_r2(s, s.top):
                 return False
+        if self.allow_invert and g_heads[s.i] == get_l(s, s.i):
+            return False
         return True
 
     cdef bint d_cost(self, State *s, size_t* g_heads):

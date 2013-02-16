@@ -12,6 +12,7 @@ cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
     s.labels[child] = label
     if child < head:
         assert s.l_valencies[head] < MAX_VALENCY
+        assert s.l_children[head][s.l_valencies[head]] == 0
         s.l_children[head][s.l_valencies[head]] = child
         s.l_valencies[head] += 1
         s.llabel_set[head][label] = 1
@@ -154,25 +155,26 @@ cdef bint has_head_in_stack(State *s, size_t word, size_t* heads):
     return False
 
 cdef bint has_head_via_lower(State *s, size_t word, size_t* heads):
+    return False
     # Check whether the head is recoverable via the Lower transition
     # Assumes the transition's enabled.
-    for i in range(1, s.stack_len):
-        stack_i = s.stack[i]
-        if get_r(s, stack_i) != 0 and heads[word] == get_r(s, stack_i):
-            return True
+    #for i in range(1, s.stack_len):
+    #    stack_i = s.stack[i]
+    #    if get_r(s, stack_i) != 0 and heads[word] == get_r(s, stack_i):
+    #        return True
         # TODO: Should this be updated for r2 being a head?
-    return False
+    #return False
 
 cdef bint has_grandchild_via_lower(State *s, size_t word, size_t* heads):
     # Check whether we need to keep the stack item around for the sake of 
     # the children: i.e., being able to attach a word and Lower it onto the
     # grandchild.
-    r = get_r(s, word)
-    if r == 0:
-        return False
-    for buff_i in range(s.i, s.n - 1):
-        if heads[buff_i] == r:
-            return True
+    #r = get_r(s, word)
+    #if r == 0:
+    #    return False
+    #for buff_i in range(s.i, s.n - 1):
+    #    if heads[buff_i] == r:
+    #        return True
     return False
 
 DEF START_ON_STACK = True

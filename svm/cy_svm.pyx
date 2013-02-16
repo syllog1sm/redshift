@@ -167,6 +167,12 @@ cdef class Model:
                     double weight) except -1:
         return -1
 
+    cdef uint64_t* get_labels(self):
+        pass
+
+    cdef double* predict_scores(self, int n, uint64_t* feats):
+        pass
+
     def begin_adding_instances(self, n_instances):
         raise NotImplemented
 
@@ -197,6 +203,7 @@ cdef class Perceptron(Model):
         self.model.true_nr_class = nr_class
     
     def set_classes(self, labels):
+        self.nr_class = len(labels)
         for label in labels: self.model.lookup_label(label)
 
     def begin_adding_instances(self, uint64_t n_feats):
@@ -216,6 +223,9 @@ cdef class Perceptron(Model):
         if gold == pred:
             self.n_corr += 1
         self.total += 1
+
+    cdef uint64_t* get_labels(self):
+        return self.model.labels
 
     def train(self):
         self.model.finalize()
@@ -244,16 +254,9 @@ cdef class Perceptron(Model):
                 seen_valid = True
         assert seen_valid
         return best_class
-        # If can't find a valid label, add a previously unseen valid label
-        #if not seen_valid:
-        #    for i in range(self.model.max_classes):
-        #        if valid_classes[i]:
-        #            self.model.lookup_label(i)
-        #            return i
-        #    else:
-        #        raise StandardError
-        #return best_class
 
+    cdef double* predict_scores(self, int n, uint64_t* feats):
+        return self.model.get_scores(n, feats)
 
     cdef int predict_single(self, int n, uint64_t* feats) except -1:
         return self.model.predict_best_class(n, feats)
@@ -345,6 +348,9 @@ cdef class LibLinear(Model):
         free(scores_array)
         free(features)
         return value
+
+    cdef double* predict_scores(self, int n, uint64_t* feats):
+        pass
 
     cdef int predict_from_features(self, feature_node* features, bint* valid_classes) except -1:
         cdef uint64_t i
