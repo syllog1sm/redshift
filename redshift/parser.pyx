@@ -187,9 +187,8 @@ cdef class Parser:
         self.write_cfg(self.model_dir.join('parser.cfg'))
         indices = range(sents.length)
         for n in range(n_iter):
-            self.guide.prune(5)
             random.shuffle(indices)
-            for i in indices:
+            for sent_id, i in enumerate(indices):
                 if self.train_alg == 'online':
                     self.online_train_one(n, &sents.s[i], sents.strings[i][0])
                 else:
@@ -197,6 +196,7 @@ cdef class Parser:
             move_acc = (float(self.guide.n_corr) / self.guide.total) * 100
             print "#%d: Moves %d/%d=%.2f" % (n, self.guide.n_corr,
                                              self.guide.total, move_acc)
+            self.guide.prune(5)
             self.guide.n_corr = 0
             self.guide.total = 0
         self.guide.train()
@@ -254,10 +254,15 @@ cdef class Parser:
         cdef State s = init_state(sent.length)
         cdef int n_instances = 0
         cdef size_t _ = 0
+        cdef size_t guess_label = 0
         weight = 1
         if DEBUG:
             print ' '.join(py_words)
+        n_trans = 0
         while not s.is_finished:
+            n_trans += 1
+            if n_trans > 500:
+                raise StandardError
             features.extract(self._context, self._hashed_feats, sent, &s)
             # Determine which moves are zero-cost and meet pre-conditions
             preconditions = self.moves.check_preconditions(&s)
@@ -280,6 +285,7 @@ cdef class Parser:
             if gold_paired == pred_paired and gold_paired == self.moves.w_start:
                 if DEBUG:
                     print "LOWER"
+                    print py_words[s.top], s.r_valencies[s.top]
             self.guide.update(pred_paired, gold_paired, n_feats, feats, weight)
             if zero_cost_moves[pred_paired]:
                 gold_paired = pred_paired
@@ -288,15 +294,9 @@ cdef class Parser:
             else:
                 self.moves.unpair_label_move(gold_paired, &label, &move)
             # Save on reduce as well so we can use the guess label for Lower
-            if move == SHIFT or move == REDUCE:
-                best_right_guess = self.guide.predict_from_ints(n_feats, feats, right_arcs)
-                self.moves.unpair_label_move(best_right_guess, &s.guess_labels[s.i], &_)
-                assert s.guess_labels[s.i] != 0, best_right_guess
-            elif move == LEFT:
-                best_right_guess = self.guide.predict_from_ints(n_feats, feats, right_arcs)
-                self.moves.unpair_label_move(best_right_guess, &s.guess_labels[s.top], &_)
-                assert s.guess_labels[s.top] != 0, best_right_guess
-
+            best_right_guess = self.guide.predict_from_ints(n_feats, feats, right_arcs)
+            self.moves.unpair_label_move(best_right_guess, &guess_label, &_)
+            s.guess_labels[s.top][s.i] = guess_label
             if DEBUG:
                 print s.i, lmove_to_str(move, label), transition_to_str(&s, move, label, py_words)
             self.moves.transition(move, label, &s)
@@ -317,7 +317,8 @@ cdef class Parser:
         cdef uint64_t* feats = self._hashed_feats
         cdef bint* valid
         cdef bint* right_arcs = self.moves.right_arcs
-        cdef size_t _
+        cdef size_t _ = 0
+        cdef size_t guess_label = 0
         cdef size_t n = sent.length
         s = init_state(sent.length)
         sent.parse.n_moves = 0
@@ -329,12 +330,9 @@ cdef class Parser:
             sent.parse.n_moves += 1
             top = s.top
             self.moves.unpair_label_move(paired, &label, &move)
-            if move == SHIFT or move == REDUCE:
-                best_right = self.guide.predict_from_ints(n_preds, feats, right_arcs)
-                self.moves.unpair_label_move(best_right, &s.guess_labels[s.i], &_)
-            elif move == LEFT:
-                best_right = self.guide.predict_from_ints(n_preds, feats, right_arcs)
-                self.moves.unpair_label_move(best_right, &s.guess_labels[s.top], &_)
+            best_right = self.guide.predict_from_ints(n_preds, feats, right_arcs)
+            self.moves.unpair_label_move(best_right, &guess_label, &_)
+            s.guess_labels[s.top][s.i] = guess_label
             self.moves.transition(move, label, &s)
         # No need to copy heads for root and start symbols
         for i in range(1, sent.length - 1):
@@ -525,6 +523,11 @@ cdef class TransitionSystem:
 
     cdef int transition(self, size_t move, size_t label, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc
+        if s.top != 0:
+            assert s.second < s.top
+            assert s.second != s.top
+            if get_r(s, s.second) != 0:
+                assert get_r(s, s.second) <= s.top, '%d of %d > %d' % (get_r(s, s.second), s.second, s.top)
         s.history[s.t] = self.pair_label_move(label, move)
         s.t += 1 
         if move == SHIFT:
@@ -534,11 +537,13 @@ cdef class TransitionSystem:
             if s.heads[s.top] == 0:
                 assert self.repair_only
                 assert s.second != 0
-                add_dep(s, s.second, s.top, s.guess_labels[s.top])
+                assert s.second < s.top
+                add_dep(s, s.second, s.top, s.guess_labels[s.second][s.top])
             pop_stack(s)
         elif move == LEFT:
             child = pop_stack(s)
             if s.heads[child] != 0:
+                assert get_r(s, s.heads[child]) == child, get_r(s, s.heads[child])
                 del_r_child(s, s.heads[child])
             head = s.i
             add_dep(s, head, child, label)
@@ -553,10 +558,17 @@ cdef class TransitionSystem:
             assert s.r_valencies[s.top] >= 2
             gc = get_r(s, s.top)
             c = get_r2(s, s.top)
+            assert c != 0 and gc != 0
             del_r_child(s, s.top)
-            add_dep(s, c, gc, s.guess_labels[gc])
+            assert get_r(s, s.top) == c
+            add_dep(s, c, gc, s.guess_labels[c][gc])
+            assert get_r(s, s.top) == c
+            assert gc > c, gc
+            assert get_r(s, c) == gc
             s.second = s.top
             s.top = c
+            # Redundant, but just for clarity
+            s.stack[s.stack_len - 1] = s.second
             s.stack[s.stack_len] = c
             s.stack_len += 1
         elif move == INVERT:
@@ -564,10 +576,10 @@ cdef class TransitionSystem:
             assert self.allow_invert
             c = get_l(s, s.top)
             del_l_child(s, s.top)
-            # Implementation detail: we store the right-label for the _S0_
-            # when we choose Left-Arc as our transition, whereas we store
-            # the right-label for N0 for Shift and Reduce moves.
-            add_dep(s, c, s.top, s.guess_labels[c])
+            if s.heads[s.top] != 0:
+                del_r_child(s, s.second)
+            assert c < s.top
+            add_dep(s, c, s.top, s.guess_labels[c][s.top])
             s.second = c
             s.stack[s.stack_len - 1] = c
             s.stack[s.stack_len] = s.top
@@ -753,157 +765,33 @@ cdef class TransitionSystem:
         r = get_r(s, s.top)
         r2 = get_r2(s, s.top)
         assert r != 0 and r2 != 0
-        #if g_heads[r] == r2:
-        #    return True
-        #return False
+        if g_heads[r] == r2:
+            return True
+        return False
         # TODO: Is this a good idea? It doesnt seem to work
         # Other functions were depending on this. Might work now.
-        if g_heads[r] == s.heads[r]:
-            return False
+        #if g_heads[r] == s.heads[r]:
+        #    return False
         return True
 
     cdef bint v_cost(self, State *s, size_t* g_heads):
         left = get_l(s, s.top)
+        assert left != 0
         if g_heads[s.top] == left:
             return True
-        if g_heads[left] == s.top:
-            return False
-        if g_heads[s.top] == s.heads[s.top]:
-            return False
-        if self.allow_reattach and g_heads[s.top] == s.second:
-            return False
-        if has_head_in_buffer(s, s.top, g_heads):
-            if not (self.allow_reattach and not self.repair_only):
-                return False
-        return True
-
-    """
-    cdef object oracle(self, State* s,  size_t* labels, size_t* heads, size_t* tags,
-                       parse_move, size_t parse_label, bint* valid_moves):
-        self.validate_moves(s, heads, valid_moves)
-        if heads[s.i] == s.top:
-            return [(RIGHT, labels[s.i])]
-        if heads[s.top] == s.i:
-            return [(LEFT, labels[s.top])]
-        if valid_moves[parse_move]:
-            assert parse_move != ERR
-            label = self.get_label(s, tags, parse_move, parse_label, labels, heads)
-            return [(parse_move, label)]
-        if parse_move == ERR:
-            move = self.break_tie(s, labels, heads, tags, valid_moves)
-            label = self.get_label(s, tags, move, 0, labels, heads)
-            return [(move, label)]
-        # If we reduce incorrectly, don't confuse the decision boundary by supplying
-        # right or left
-        elif valid_moves[SHIFT] and parse_move == REDUCE:
-            return [(SHIFT, 0)]
-        omoves = []
-        for move in range(1, N_MOVES):
-            if valid_moves[move]:
-                label = self.get_label(s, tags, move, 0, labels, heads)
-                omoves.append((move, label))
-        return omoves
-
-    cdef int get_label(self, State* s, size_t* tags, size_t move, size_t parse_label,
-                       size_t* g_labels, size_t* g_heads) except -1:
-        if move == SHIFT:
-            return 0
-        if move == REDUCE:
-            return 0
-        if move == LEFT:
-            if g_heads[s.top] == s.i:
-                return g_labels[s.top]
-            else:
-                return parse_label
-        elif move == LOWER:
-            if g_heads[get_r(s, s.top)] == get_r2(s, s.top):
-                return g_labels[get_r(s, s.top)]
-            else:
-                return 0
-        elif move == RIGHT:
-            if g_heads[s.i] == s.top:
-                return g_labels[s.i]
-            elif parse_label != 0:
-                return parse_label
-            elif move == RIGHT:
-                sib = get_r(s, s.top)
-                sib_pos = tags[sib] if sib != 0 else index.hashes.encode_pos('NONE')
-                return self.default_labels[tags[s.top]][sib_pos][tags[s.i]]
-            else:
-                return 0
-        return -1
-
-
-    cdef int follow_moves(self, Sentence* sent, bint only_count, object py_words) except -1:
-        cdef size_t i = 0
-        cdef double freq = 0
-        cdef State s = init_state(sent.length)
-        cdef int n_instances = 0
-        while not s.is_finished:
-            p_move = sent.parse.moves[i]
-            p_label = sent.parse.move_labels[i]
-            i += 1
-            o_moves = self.moves.oracle(&s, sent.parse.labels, sent.parse.heads,
-                                        sent.pos, p_move, p_label,
-                                        self._valid_classes)
-            features.extract(self._context, self._hashed_feats, sent, &s)
-            self._add_instance(sent.id, s.history, o_moves,
-                               self.n_preds, self._hashed_feats, only_count)
-            n_instances += len(o_moves)
-            #print py_words[s.top],
-            if p_move == ERR:
-                assert len(o_moves) == 1
-                self.moves.transition(o_moves[0][0], o_moves[0][1], &s)
-            else:
-                self.moves.transition(p_move, p_label, &s)
-            #print py_words[s.top]
-        return n_instances
-
-    cdef int _add_instance(self, size_t sent_id, size_t* history, object moves,
-                           size_t n_feats, size_t* feats, bint only_count) except -1:
-        n_moves = len(moves)
-        for move, label in moves:
-            if self.guide.solver_type != PERCEPTRON_SOLVER:
-                freq = self.inst_counts.add(move, sent_id, history, not only_count)
-            else:
-                freq = 1
-            assert move != ERR
-            if freq > 0 and not only_count:
-                assert move != ERR
-                self.guide.add_instance(move, float(freq) / n_moves, n_feats, feats)
-                if move == LEFT:
-                    self.l_labeller.add_instance(label, 1, n_feats, feats)
-                elif move == RIGHT:
-                    self.r_labeller.add_instance(label, 1, n_feats, feats)
-
-
-    def train_svm(self, Sentences sents, C=None, eps=None):
-        cdef:
-            int i
-            Sentence* sent
-            State s
-
-        if C is not None:
-            self.guide.C = C
-        if eps is not None:
-            self.guide.eps = eps
-        # Build the instances without sending them to the learner, so that we
-        # can use a frequency threshold on the features.
-        index.hashes.set_feat_counting(True)
-        index.hashes.set_feat_threshold(self.feat_thresh)
-        cdef int n_instances = 0
-        for i in range(sents.length):
-            n_instances += self.follow_moves(&sents.s[i], True, sents.strings[i][0])
-        index.hashes.set_feat_counting(False)
-        self.guide.begin_adding_instances(n_instances)
-        self.l_labeller.begin_adding_instances(n_instances)
-        self.r_labeller.begin_adding_instances(n_instances)
-        for i in range(sents.length):
-            self.follow_moves(&sents.s[i], False, sents.strings[i][0])
-        self.guide.train()
-        self.l_labeller.train()
-        self.r_labeller.train()
-"""
+        return False
+        # TODO: Is this a good idea? Is it causing variance?
+        #if g_heads[left] == s.top:
+        #    return False
+        #if g_heads[s.top] == s.heads[s.top]:
+        #    return False
+        ## ie if reduce-reattach is allowed
+        #if self.repair_only and g_heads[s.top] == s.second:
+        #    return False
+        #if has_head_in_buffer(s, s.top, g_heads):
+        #    if not (self.allow_reattach and not self.repair_only):
+        #        return False
+        #return True
 
 cdef transition_to_str(State* s, size_t move, label, object tokens):
     tokens = tokens + ['<end>']

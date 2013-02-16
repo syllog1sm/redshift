@@ -17,6 +17,9 @@ cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
         s.llabel_set[head][label] = 1
     else:
         assert s.r_valencies[head] < MAX_VALENCY, s.r_valencies[head]
+        r = get_r(s, head)
+        if r != 0:
+            assert r < child, r
         s.r_children[head][s.r_valencies[head]] = child
         s.r_valencies[head] += 1
         s.rlabel_set[head][label] = 1
@@ -24,6 +27,7 @@ cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
 
 cdef int del_r_child(State *s, size_t head) except -1:
     child = get_r(s, head)
+    assert s.r_valencies[head] >= 1
     assert child > 0
     s.r_children[head][s.r_valencies[head] - 1] = 0
     s.r_valencies[head] -= 1
@@ -43,8 +47,9 @@ cdef int del_l_child(State *s, size_t head) except -1:
         size_t old_label
     assert s.l_valencies[head] >= 1
     child = get_l(s, head)
-    old_label = s.labels[child]
+    s.l_children[head][s.l_valencies[head] - 1] = 0
     s.l_valencies[head] -= 1
+    old_label = s.labels[child]
     for i in range(s.l_valencies[head]):
         if s.labels[s.l_children[head][i]] == old_label:
             break
@@ -192,9 +197,9 @@ cdef State init_state(size_t n):
         s.r_valencies[i] = 0
         s.heads[i] = 0 
         s.labels[i] = 0
-        s.guess_labels[i] = 0
         # Ideally this shouldn't matter, if we use valencies intelligently?
         for j in range(n):
+            s.guess_labels[i][j] = 0
             s.l_children[i][j] = 0
             s.r_children[i][j] = 0
         for j in range(n_labels):

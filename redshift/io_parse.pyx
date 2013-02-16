@@ -177,7 +177,7 @@ cdef class Sentences:
         cdef Sentence s
         cdef size_t i, j, move_and_label
         cdef object move
-        move_strs = ['E', 'S', 'D', 'R', 'L', 'W']
+        move_strs = ['E', 'S', 'D', 'R', 'L', 'W', 'V']
         for i in range(self.length):
             s = self.s[i]
             for j in range(s.parse.n_moves):
