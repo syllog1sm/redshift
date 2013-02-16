@@ -25,19 +25,19 @@ USE_HELD_OUT = False
     allow_reattach=("Allow left-clobber", "flag", "r", bool),
     allow_lower=("Allow raise/lower", "flag", "w", bool),
     allow_invert=("Allow invert", "flag", "v", bool),
-    shiftless=("Use no shift transition (requires reattach)", "flag", "s", bool),
     repair_only=("Penalise incorrect moves in the oracle even when they can be repaired",
                  "flag", "o", bool),
     profile=("Run profiler (slow)", "flag", None, bool),
     debug=("Set debug flag to True.", "flag", None, bool),
-    seed=("Set random seed", "option", None, int)
+    seed=("Set random seed", "option", "s", int)
 )
 def main(train_loc, model_loc, train_alg="online", n_iter=15,
          add_extra_feats=False, label_set="Stanford", feat_thresh=1,
          allow_reattach=False, allow_lower=False, allow_invert=False,
-         shiftless=False, repair_only=False,
+        repair_only=False,
          profile=False, debug=False, seed=0):
     random.seed(seed)
+    shiftless = False
     train_loc = Path(train_loc)
     if shiftless:
         assert allow_reattach
