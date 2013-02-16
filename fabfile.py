@@ -1,6 +1,8 @@
 from fabric.api import local, run, lcd, cd, env
 from pathlib import Path
 import time
+import re
+from math import sqrt
 
 env.use_ssh_config = True
 
@@ -11,13 +13,13 @@ from _paths import HOSTS, GATEWAY
 env.hosts = HOSTS
 env.gateway = GATEWAY
 
-def recompile():
-    local("make -C redshift clean")
-    local("make -C index clean")
-    local("make -C svm clean")
-    local("make -C svm")
-    local("make -C index")
-    local("make -C redshift")
+def recompile(runner=local):
+    runner("make -C redshift clean")
+    runner("make -C index clean")
+    runner("make -C svm clean")
+    runner("make -C svm")
+    runner("make -C index")
+    runner("make -C redshift")
 
 
 def deploy():
@@ -33,10 +35,99 @@ def amend(target="."):
     local("git pull")
     deploy()
 
+def reattach(name, size="5k", feats='base', thresh=5, here=True, n=1):
+    exp(name, size=size, feats=feats, thresh=thresh, here=here, n=n,
+        reattach=True)
 
-def online(name, size="full", feats='all', thresh=5, reattach=False, lower=False,
-           repair_only=False):
-    pass
+
+def invert(name, size="5k", feats='base', thresh=5, here=True, n=1):
+    exp(name, size=size, feats=feats, thresh=thresh, here=here, n=n,
+        invert=True, reattach=True)
+
+
+def lower(name, size="5k", feats='base', thresh=5, here=True, n=1):
+    exp(name, size=size, feats=feats, thresh=thresh, here=here, n=n,
+        lower=True, reattach=True)
+
+def full(name, size="5k", feats='base', thresh=5, here=True, n=1):
+    exp(name, size=size, feats=feats, thresh=thresh, here=here, n=n,
+        lower=True, invert=True, reattach=True)
+
+
+
+def exp(name, size="5k", feats='base', thresh=5, reattach=False, lower=False,
+        invert=False, extra=False, here=True, n=1):
+    runner = local if here == True else remote
+    cder = lcd if here == True else cd
+    #recompile(runner)
+    repair_str = _get_repair_str(reattach, lower, invert)
+    feat_flag = '-x' if feats == 'extra' else ''
+    repo, data_loc, parser_loc = _get_paths(here)
+    train_loc= _get_train_name(data_loc, size)
+    parser_loc = parser_loc.join(name)
+    if not parser_loc.exists():
+        parser_loc.mkdir()
+    dev_loc = data_loc.join('devr.txt')
+    in_loc = data_loc.join('dev_auto_pos.parse')
+    train_str = './scripts/train.py -s {seed} {repair} -f {thresh} {feats} {train} {out}'
+    parse_str = './scripts/parse.py -g {parser} {text} {parses}'
+    eval_str = './scripts/evaluate.py {parse_loc} {dev_loc} > {out_loc}'
+    with cder(str(repo)):
+        accs = []
+        for i in range(int(n)):
+            if n > 1:
+                model_dir = parser_loc.join(str(i))
+            else:
+                model_dir = parser_loc
+            out_dir = model_dir.join('dev')
+            runner(train_str.format(seed=i, repair=repair_str, thresh=thresh,
+                                    feats=feat_flag, train=train_loc, out=model_dir))
+            runner(parse_str.format(parser=model_dir, text=in_loc, parses=out_dir))
+            runner(eval_str.format(parse_loc=out_dir.join('parses'), dev_loc=dev_loc,
+                                   out_loc=out_dir.join('acc')))
+            accs.append(_get_acc(out_dir.join('acc')))
+    print ', '.join('%.2f' % a for a in accs)
+    mean = sum(accs)/len(accs)
+    var = sum((a - mean)**2 for a in accs)/len(accs)
+    print '%.2f +/- %.2f' % (mean, sqrt(var))
+
+
+uas_re = re.compile(r'U: (\d\d.\d\d)')
+def _get_acc(dev_loc):
+    text = dev_loc.open().read()
+    return float(uas_re.search(text).groups()[0])
+
+
+def _get_repair_str(reattach, lower, invert):
+    repair_str = []
+    if reattach:
+        repair_str.append('-r -o')
+    if lower:
+        repair_str.append('-w')
+    if invert:
+        repair_str.append('-v')
+    return ' '.join(repair_str)
+
+
+def _get_paths(here):
+    if here == True:
+        return LOCAL_REPO, LOCAL_STANFORD, LOCAL_PARSERS
+    else:
+        return REMOTE_REPO, REMOTE_STANFORD, REMOTE_PARSERS
+
+
+def _get_train_name(data_loc, size):
+    if size == 'full':
+        train_name = 'train.txt'
+    elif size == '1k':
+        train_name = '1k_train.txt'
+    elif size == '5k':
+        train_name = '5k_train.txt'
+    elif size == '10k':
+        train_name = '10k_train.txt'
+    else:
+        raise StandardError(size)
+    return data_loc.join(train_name)
 
 
 def run_static(name, size='full', here=True, feats='all', labels="MALT", thresh=5, reattach=False,
@@ -96,15 +187,3 @@ def run_static(name, size='full', here=True, feats='all', labels="MALT", thresh=
             runner('./scripts/evaluate.py %s %s' % (out_dir.join('parses'), dev_loc)) 
 
 
-def _get_train_name(size):
-    if size == 'full':
-        train_name = 'train.txt'
-    elif size == '1k':
-        train_name = '1k_train.txt'
-    elif size == '5k':
-        train_name = '5k_train.txt'
-    elif size == '10k':
-        train_name = '10k_train.txt'
-    else:
-        raise StandardError(size)
-    return train_name
