@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 #PBS -l walltime=10:00:00,mem=10gb,nodes=1:ppn=6
 
+import random
 import os
 import sys
 import plac
@@ -29,7 +30,7 @@ USE_HELD_OUT = False
                  "flag", "o", bool),
     profile=("Run profiler (slow)", "flag", None, bool),
     debug=("Set debug flag to True.", "flag", None, bool),
-    seed=("Set random seed", "option", int)
+    seed=("Set random seed", "option", None, int)
 )
 def main(train_loc, model_loc, train_alg="online", n_iter=15,
          add_extra_feats=False, label_set="Stanford", feat_thresh=1,
