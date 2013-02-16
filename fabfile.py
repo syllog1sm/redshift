@@ -35,31 +35,30 @@ def amend(target="."):
     local("git pull")
     deploy()
 
-def reattach(name, size="5k", feats='base', thresh=5, here=True, n=1):
+def reattach(name, size="5k", feats='base', thresh=5, here=True, n=1, niters=15):
     exp(name, size=size, feats=feats, thresh=thresh, here=here, n=n,
-        reattach=True)
+        reattach=True, niters=niters)
 
 
-def invert(name, size="5k", feats='base', thresh=5, here=True, n=1):
+def invert(name, size="5k", feats='base', thresh=5, here=True, n=1, niters=15):
     exp(name, size=size, feats=feats, thresh=thresh, here=here, n=n,
-        invert=True, reattach=True)
+        invert=True, reattach=True, niters=niters)
 
 
-def lower(name, size="5k", feats='base', thresh=5, here=True, n=1):
+def lower(name, size="5k", feats='base', thresh=5, here=True, n=1, niters=15):
     exp(name, size=size, feats=feats, thresh=thresh, here=here, n=n,
-        lower=True, reattach=True)
+        lower=True, reattach=True, niters=niters)
 
-def full(name, size="5k", feats='base', thresh=5, here=True, n=1):
+def full(name, size="5k", feats='base', thresh=5, here=True, n=1, niters=15):
     exp(name, size=size, feats=feats, thresh=thresh, here=here, n=n,
-        lower=True, invert=True, reattach=True)
-
+        lower=True, invert=True, reattach=True, niters=niters)
 
 
 def exp(name, size="5k", feats='base', thresh=5, reattach=False, lower=False,
-        invert=False, extra=False, here=True, n=1):
+        invert=False, extra=False, here=True, n=1, niters=15):
     runner = local if here == True else remote
     cder = lcd if here == True else cd
-    #recompile(runner)
+    recompile(runner)
     repair_str = _get_repair_str(reattach, lower, invert)
     feat_flag = '-x' if feats == 'extra' else ''
     repo, data_loc, parser_loc = _get_paths(here)
@@ -69,7 +68,7 @@ def exp(name, size="5k", feats='base', thresh=5, reattach=False, lower=False,
         parser_loc.mkdir()
     dev_loc = data_loc.join('devr.txt')
     in_loc = data_loc.join('dev_auto_pos.parse')
-    train_str = './scripts/train.py -s {seed} {repair} -f {thresh} {feats} {train} {out}'
+    train_str = './scripts/train.py -s {seed} {repair} -i {niters} -f {thresh} {feats} {train} {out}'
     parse_str = './scripts/parse.py -g {parser} {text} {parses}'
     eval_str = './scripts/evaluate.py {parse_loc} {dev_loc} > {out_loc}'
     with cder(str(repo)):
@@ -80,7 +79,7 @@ def exp(name, size="5k", feats='base', thresh=5, reattach=False, lower=False,
             else:
                 model_dir = parser_loc
             out_dir = model_dir.join('dev')
-            runner(train_str.format(seed=i, repair=repair_str, thresh=thresh,
+            runner(train_str.format(seed=i, repair=repair_str, niters=niters, thresh=thresh,
                                     feats=feat_flag, train=train_loc, out=model_dir))
             runner(parse_str.format(parser=model_dir, text=in_loc, parses=out_dir))
             runner(eval_str.format(parse_loc=out_dir.join('parses'), dev_loc=dev_loc,
