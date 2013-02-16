@@ -29,9 +29,12 @@ def get_pos(conll_str):
 
 @plac.annotations(
     use_gold=("Gold-formatted test data", "flag", "g", bool),
-    profile=("Do profiling", "flag", "p", bool)
+    profile=("Do profiling", "flag", "p", bool),
+    debug=("Set debug", "flag", "d", bool)
 )
-def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False):
+def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False, debug=False):
+    if debug:
+        redshift.parser.set_debug(debug)
     parser_dir = Path(parser_dir)
     text_loc = Path(text_loc)
     out_dir = Path(out_dir)
