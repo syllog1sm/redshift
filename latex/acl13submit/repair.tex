@@ -286,12 +286,13 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et.
 
-
-\subsection{Notable alternatives}
-
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
+
+\subsection{Alternatives}
+
+
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
 
@@ -345,7 +346,7 @@ Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis pu
 
 \textbf{Standard.} Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam. Nunc sem mauris, volutpat nec rhoncus quis,
 
-\textbf{Goldberg and Nivre.} Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit
+\textbf{Goldberg and Nivre.} Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida.
 
 \subsection{Transition systems}
 
@@ -402,8 +403,8 @@ Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auc
     \hline \hline
     \multicolumn{5}{c}{Left-Arcs} \\
     \hline
-    det	& 3350 & 00.0 & 0.0 & 0.0 \\
-     nn	& 3208 & 00.0 &	0.0 & 0.0 \\
+    det	& 3350 & 00.0 & +0.0 & 0.0 \\
+     nn	& 3208 & 00.0 &	-0.0 & 0.0 \\
   nsubj	& 2691 & 00.0 &	0.0 & 0.0 \\
    amod	& 2428 & 00.0 & 0.0 & 0.0 \\
 aux	    & 1229 & 00.0 &	0.0 & 0.0 \\
@@ -414,24 +415,29 @@ num	    & 749  & 00.0 & 0.0 & 0.0 \\
 \hline
 \multicolumn{5}{c}{Right-Arcs} \\
 \hline
-pobj	& 3739 &  &  & \\
-prep	& 3498 &  &  & \\
-dobj	& 1568 &  &  & \\
-conj	& 1002 &  &  & \\
-cc	    & 898  &  &  & \\
-number	& 468  &  &  & \\
- ccomp	& 449  &  &  & \\
- xcomp	& 438  &  &  & \\
-advmod	& 437  &  &  & \\
-ps	    & 425  &  &  & \\
-dep	    & 406  &  &  & \\
-  Other	& 2549 &  &  & \\
+pobj	& 3739  & 00.0 & 0.0 & 0.0 \\
+prep	& 3498  & 00.0 & 0.0 & 0.0 \\
+dobj	& 1568  & 00.0 & 0.0 & 0.0 \\
+conj	& 1002  & 00.0 & 0.0 & 0.0 \\
+cc	    & 898   & 00.0 & 0.0 & 0.0 \\
+number	& 468   & 00.0 & 0.0 & 0.0 \\
+ ccomp	& 449   & 00.0 & 0.0 & 0.0 \\
+ xcomp	& 438   & 00.0 & 0.0 & 0.0 \\
+advmod	& 437   & 00.0 & 0.0 & 0.0 \\
+ps	    & 425   & 00.0 & 0.0 & 0.0 \\
+dep	    & 406   & 00.0 & 0.0 & 0.0 \\
+  Other	& 2549  & 00.0 & 0.0 & 0.0 \\
 \hline
-All left  &     &      &     &     \\
-All right &     &      &     &     \\
-Root    & 1700 & 00.0 & 0.0 & 0.0 \\     
+All left  & 000 & 00.0 & 0.0 & 0.0  \\
+All right & 000 & 00.0 & 0.0 & 0.0  \\
+Root    & 1700 & 00.0 & 0.0 & 0.0    \\     
 \hline
 \end{tabular}
+\caption{\small Accuracies for common Stanford labels,
+         using G\&N training and standard features.
+         \textbf{NM L+D} accuracy is shown by difference from the baseline. The
+         WD column shows the difference weighted by the frequency of the label.
+     \label{tab:labels}}
 \end{table}
 
 
@@ -444,9 +450,28 @@ Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auc
 
 \subsection{Effect on error propagation}
 
-
-
 Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+
+\begin{table}
+    \small
+    \centering
+    \begin{tabular}{l|rrr|rrr}
+        & \multicolumn{3}{c|}{Standard Training} & \multicolumn{3}{c}{G\&N Training}\\
+        $E$   & N & Baseline & NM    & N &Baseline & NM    \\
+        \hline \hline
+        0     &   &          &        &   &       &        \\
+        1     &   &          &        &   &       &        \\
+        2     &   &          &        &   &       &        \\
+        3     &   &          &        &   &       &        \\
+        4     &   &          &        &   &       &        \\
+        5     &   &          &        &   &       &        \\
+        $>5$  &   &          &        &   &       &        \\
+        \hline
+    \end{tabular}
+\caption{\small Likelihood of making a transition error in a state given $E$ previous
+         errors with the two training strategies. The system accuracy (NM L+D) is
+     shown as a difference from the baseline.\label{tab:errprop}}
+\end{table}
 
 \subsection{Interaction with additional features}
 
@@ -518,7 +543,7 @@ Base + Feats   & $n$ &       &       &       &  \\
 NM L+D + Feats & $n$ &       &       &       &  \\
 \hline
     \end{tabular}
-    \caption{Test set results
+    \caption{Test results on \wsj 23. 
          \label{tab:feats}}
 \end{table}
 
