@@ -30,6 +30,9 @@
 
 \setlength\titlebox{6.5cm}    % Expanding the titlebox
 
+
+\renewcommand{\tabcolsep}{5pt}
+
 \newcommand{\baseacc}{00.00\xspace}
 \newcommand{\sysacc}{00.00\xspace}
 \newcommand{\sysimprove}{00.00\xspace}
@@ -101,11 +104,7 @@ Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapi
 
 Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed. Aliquam et augue est, et pretium est. Aenean mattis lacinia elit quis accumsan.
 
-<<<<<<< HEAD
-Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam. Nunc sem mauris, volutpat nec rhoncus quis, sodales ut massa. Praesent egestas ante interdum elit laoreet volutpat. Morbi quis velit tempor libero consequat volutpat at vel nulla. Morbi et justo ac liberos.
-=======
 Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam.
->>>>>>> dbd140b... * Work on abstract
 
 % P2
 % 2-col Dependency parse graphic
@@ -134,7 +133,9 @@ decision if necessary. This allows the parser to recover from mistakes.}
 \section{Transition-based Dependency Parsing}
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
 
-Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis, auctor a metus. Proin mi purus, dignissim eget tempus in, vestibulum eu libero.
+Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis.
+
+\subsection{Dynamic oracle}
 
 Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis, auctor a metus. Proin mi purus, dignissim eget tempus in, vestibulum eu libero.
 
@@ -142,7 +143,7 @@ Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapi
 Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. 
 
 % Col 2
-\subsection{Dynamic Oracle}
+\subsection{Following non-gold transitions in training}
 \begin{figure}
 \centering
     \begin{verbatim}
@@ -150,26 +151,28 @@ Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapi
 while not state.is_finished {
   feats = extract(state)
   zero_costs = oracle(state)
-  gold = predict_from(feats, zero_costs)
-  prediction = predict(feats)
-  if prediction not in zero_costs {
-     update(features, gold, 1.0)
-     update(features, prediction, -1.0)
+  g = predict_from(feats, zero_costs)
+  monotonic = check_constraints(state)
+  p = predict_from(feats, monotonic)
+  if p not in zero_costs {
+     update(feats, g, 1)
+     update(feats, p, -1)
   }
-  transition(state, prediction)
+  transition(state, p)
 }
 \end{verbatim}
 \caption{Dynamic oracle. TODO: Notation.}
 \end{figure}
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi.
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus.
 
 
 % P3&4
 \section{Relaxing the monotonicity constraints}
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
+
 
 
 \begin{figure}
@@ -202,17 +205,18 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu
     \wordgroup{4}{3}{3}{}
 \end{dependency}
 \caption{
-    State before and after a non-monotonic Left-Arc.\\
+    \small
+    State before and after a non-monotonic Left-Arc.
     At move 9, \emph{fall} is the first word of the buffer (marked with an arrow),
     and \emph{saw} and \emph{Jack} are on the stack (circled). The arc created at move 4 was
-    incorrect (in red). Arcs are labelled with the move that created them.\\
+    incorrect (in red). Arcs are labelled with the move that created them.
     After move 9 (the lower state), the non-monotonic Left-Arc move
     has replaced the incorrect dependency with a correct Left-Arc (in green).
 \label{fig:reattach}}
 \end{figure}
 
 \subsection{Non-monotonic Left-Arc}
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae.
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing.
 
 
 \begin{figure}
@@ -243,11 +247,12 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu
     \wordgroup{4}{3}{3}{}
 \end{dependency}
 \caption{
-State before and after a non-monotonic Reduce.\\
+\small
+State before and after a non-monotonic Reduce.
 After making the wrong push move at 4, at move 11
 the parser has \emph{Jack} on the stack (circled), with only the dummy \textsc{root}
 token left in the buffer. A monotonic parser must deterministically Left-Arc
-\emph{Jack} here to preserve the previous decision, despite the current state.\\
+\emph{Jack} here to preserve the previous decision, despite the current state.
 We remove this constraint, and instead assume that when the model selects Reduce
 for a headless item, it is reversing the previous Shift/Right decision. We add
 the appropriate arc, assigning the label that scored highest when the Shift/Right
@@ -260,142 +265,175 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu
 
 Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
 
-
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et.
 
-\subsection{Updated Oracle}
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque.
+Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et.
+
+
+Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et.
+
+\section{Non-monotonic parser oracle}
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
 
-\section{Repair transitions}
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
 
-\subsection{Lower}
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat.
-
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
 
 
-\subsection{Oracle}
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
 
-\clearpage
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et.
+
+
+\subsection{Notable alternatives}
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
+
+
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
 
 % P5
 \section{Experiments}
-\begin{table}
+
+\begin{table}[t]
     \small
-    
     \centering
-    (S1w), (S1p), (S1w, S1p),\\
-    (S1w, N0w), (S1w, N0p), (S1p, N0p),\\
-    (S1w, S0w, N0w), (S1p, S0p, N0p), (S1p, S0p, N0p),\\
-    (S2w, N0w),\\
-    (S2w, N1w),\\
-    (S2p, N0p, N1w), (S2p, N0w, N1w), (S2w, N0p, N1p), \\
-    (S3w, N0w), \\
-    (S2w, N1w),\\ 
-    (S3p, S2p, N0w),\\
-    (dist, S1w, N1w),\\
-    (dist, S1p, N0p, N1p)
-\caption{Additional features. S=Stack, N=buffer. w=Word, p=\pos. Dist=Distance
-         between S0 and N0. TODO: Prettify this. TODO: Update it, it's from the old version.}
-\end{table}
-
-\begin{table}
-    \centering
-    \begin{tabular}{l|rr}
-        \hline 
-        Feature Set & \las  & \uas  \\
+    \begin{tabular}{l|rrrr}
+        \hline
+                              & Stanford & MALT & CoNLL & ?? \\
         \hline \hline
-        Z\&N    & 00.00 & 00.00 \\
-+Additional     & 00.00 & 00.00 \\
-    \hline
+                              & \multicolumn{4}{c}{Unlabelled Attachment Scores} \\
+        \hline
+        Baseline              &  00.0  & 00.0 & 00.0 & 00.0   \\
+        NM L                  &  00.0  & 00.0 & 00.0 & 00.0   \\
+        NM D                  &  00.0  & 00.0 & 00.0 & 00.0   \\
+        NM L+D                &  00.0  & 00.0 & 00.0 & 00.0    \\ 
+        \hline
+                              & \multicolumn{4}{c}{Labelled Attachment Score} \\
+        \hline
+        Baseline              &  00.0  & 00.0 & 00.0  & 00.0   \\
+        NM L                  &  00.0  & 00.0 & 00.0  & 00.0   \\
+        NM D                  &  00.0  & 00.0 & 00.0  & 00.0   \\
+        NM L+D                &  00.0  & 00.0 & 00.0  & 00.0   \\ 
+        \hline
     \end{tabular}
-    \caption{
-        Impact of the additional features on development set accuracy.
-    \label{tab:feats}}
+    \caption{\small Effect of non-monotonic transitions with \textbf{standard training}.
+             All results averaged across 20 runs with different random seeds. All models
+             had $\sigma$=0.07-0.08.\label{tab:standard}}
 \end{table}
 
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
-
-
-\subsection{Parsing Model}
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
-
-Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis, auctor a metus. Proin mi purus, dignissim eget tempus in, vestibulum eu libero.
-
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
-
-%\subsection{Iterative Training}
 
 \subsection{Data and Evaluation}
 
 Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam. Nunc sem mauris, volutpat nec rhoncus quis, sodales ut massa. Praesent egestas ante interdum elit laoreet volutpat. Morbi quis velit tempor libero consequat volutpat at vel nulla. Morbi et justo ac liberos.
 % P6
 
+\subsection{Parser model}
 
-Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis, auctor a metus. Proin mi purus, dignissim eget tempus in, vestibulum eu libero.
-% P7
+Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam. Nunc sem mauris, volutpat nec rhoncus quis, sodales ut massa. Praesent egestas ante interdum elit laoreet volutpat. Morbi quis velit tempor libero consequat volutpat at vel nulla. Morbi et justo ac liberos.
+
+
+\subsection{Training strategies}
+
+\textbf{Standard.} Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam. Nunc sem mauris, volutpat nec rhoncus quis,
+
+\textbf{Goldberg and Nivre.} Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit
+
+\subsection{Transition systems}
+
+\textbf{Baseline.} Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor.
+
+\textbf{NM L.} Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue.
+
+\textbf{NM D.} Non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor.
+
+\textbf{NM L+D.} Non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+
+
+\begin{table}[t]
+    \small
+    \centering
+    \begin{tabular}{l|rrrr}
+        \hline
+                              & Stanford & MALT & CoNLL & ?? \\
+        \hline \hline
+                              & \multicolumn{4}{c}{Unlabelled Attachment Scores} \\
+        \hline
+        Baseline              &  00.0  & 00.0 & 00.0 & 00.0   \\
+        NM L                  &  00.0  & 00.0 & 00.0 & 00.0   \\
+        NM D                  &  00.0  & 00.0 & 00.0 & 00.0   \\
+        NM L+D                &  00.0  & 00.0 & 00.0 & 00.0    \\ 
+        \hline
+                              & \multicolumn{4}{c}{Labelled Attachment Score} \\
+        \hline
+        Baseline              &  00.0  & 00.0 & 00.0  & 00.0   \\
+        NM L                  &  00.0  & 00.0 & 00.0  & 00.0   \\
+        NM D                  &  00.0  & 00.0 & 00.0  & 00.0   \\
+        NM L+D                &  00.0  & 00.0 & 00.0  & 00.0   \\ 
+        \hline
+    \end{tabular}
+    \caption{\small Effect of non-monotonic transitions with \textbf{Goldberg and Nivre training}
+            All results averaged across 20 runs with different random seeds. All models
+             had $\sigma$=0.07-0.08.\label{tab:goldberg}}
+\end{table}
+
+
 \section{Development Results}
 \label{sec:results}
 
 Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
-
 Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
-\begin{table}
-    \small
-    \centering
-    \begin{tabular}{l|rr}
-        \hline 
-        System             & \uas   & \las  \\
-        \hline \hline
-        Static Arc-Eager     & 00.00  & 00.00 \\
-        Static Non-monotonic  & 00.00  & 00.00 \\
-        \hline \hline
-        Dynamic Arc-Eager    & 00.00  & 00.00 \\
-        Static Non-monotonic  & 00.00  & 00.00 \\
-        \hline
-    \end{tabular}
-    \caption{Dev set results.\label{tab:feats}}
-\end{table}
 
 \begin{table}
-    \centering
-    \begin{tabular}{rcc|rcc}
-        & Gold & Parser & Gold & Parser\\
-\hline \hline
-613 & R & D & 283 & S & L \\
-582 & D & R & 101 & L & R \\
-372 & S & R & 70  & R & L \\
-326 & R & S & 32  & S & D \\
-304 & L & S & 29  & D & S \\
+\centering
+\small
+\begin{tabular}{lrrrr}
+        & Freq. & Base & NM & WD \\
+    \hline \hline
+    \multicolumn{5}{c}{Left-Arcs} \\
+    \hline
+    det	& 3350 & 00.0 & 0.0 & 0.0 \\
+     nn	& 3208 & 00.0 &	0.0 & 0.0 \\
+  nsubj	& 2691 & 00.0 &	0.0 & 0.0 \\
+   amod	& 2428 & 00.0 & 0.0 & 0.0 \\
+aux	    & 1229 & 00.0 &	0.0 & 0.0 \\
+advmod  & 810  & 00.0 & 0.0 & 0.0 \\
+num	    & 749  & 00.0 & 0.0 & 0.0 \\
+   poss	& 707  & 00.0 & 0.0 & 0.0 \\
+  Other	& 2637 & 00.0 & 0.0 & 0.0 \\
+\hline
+\multicolumn{5}{c}{Right-Arcs} \\
+\hline
+pobj	& 3739 &  &  & \\
+prep	& 3498 &  &  & \\
+dobj	& 1568 &  &  & \\
+conj	& 1002 &  &  & \\
+cc	    & 898  &  &  & \\
+number	& 468  &  &  & \\
+ ccomp	& 449  &  &  & \\
+ xcomp	& 438  &  &  & \\
+advmod	& 437  &  &  & \\
+ps	    & 425  &  &  & \\
+dep	    & 406  &  &  & \\
+  Other	& 2549 &  &  & \\
+\hline
+All left  &     &      &     &     \\
+All right &     &      &     &     \\
+Root    & 1700 & 00.0 & 0.0 & 0.0 \\     
 \hline
 \end{tabular}
-\caption{TODO: These numbers are NOT CORRECT. They're from a parser with the
-extra features enabled, as that's what I had lying around. Add stddev too.}
-TODO: Better in confusion matrix?
 \end{table}
 
-\begin{table}
-    \centering
-    \small
-    \begin{tabular}{l|r|rr|rr}
-        \hline 
-System  &          & \multicolumn{2}{c|}{Penn2Malt} & \multicolumn{2}{c}{Stanford} \\
-                           &          & \las  & \uas  & \las & \uas \\
-        \hline \hline
-K\&C 10  & $O(n^3)$ & ---   & 93.00 & ---  & --- \\
-Z\&N 11  & $O(nk)$  & 91.8  & 92.9  & 91.9 & 93.5\\
-G\&N 12  & $O(n)$   & ---   & ---   & 88.72 & 90.96 \\
-        \hline
-Arc-Eager  & $O(n)$ &       &       &       &  \\
-Arc-Always & $O(n)$ &       &       &       &  \\
-    \end{tabular}
-    \caption{Test set results
-         \label{tab:feats}}
-\end{table}
 
 \subsection{Accuracy by label}
 
@@ -403,26 +441,86 @@ Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auc
 
 Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
-\begin{table}
-\centering
-\small
-\begin{tabular}{lr|rr|rr}
-    Label        & n & Base & System & Diff & W. diff \\
-    \hline \hline
-    Left labels  &          &           &            &      &               \\
-    \hline
-    Right labels &          &          &            &      &               \\
-\end{tabular}
-\end{table}
 
 \subsection{Effect on error propagation}
 
+
+
 Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+
+\subsection{Interaction with additional features}
+
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+\begin{table}
+\small
+
+\centering
+(S1w), (S1p), (S1w, S1p),\\
+(S1w, N0w), (S1w, N0p), (S1p, N0p),\\
+(S1w, S0w, N0w), (S1p, S0p, N0p), (S1p, S0p, N0p),\\
+(S2w, N0w),\\
+(S2w, N1w),\\
+(S2p, N0p, N1w), (S2p, N0w, N1w), (S2w, N0p, N1p), \\
+(S3w, N0w), \\
+(S2w, N1w),\\ 
+(S3p, S2p, N0w),\\
+(dist, S1w, N1w),\\
+(dist, S1p, N0p, N1p)
+\caption{Additional features. S=Stack, N=buffer. w=Word, p=\pos. Dist=Distance
+     between S0 and N0. TODO: Prettify this. TODO: Update it, it's from the old version.}
+\end{table}
+
+\begin{table}
+\centering
+\begin{tabular}{l|rr}
+    \hline 
+            & \las  & \uas  \\
+    \hline \hline 
+                & \multicolumn{2}{c}{Standard Features} \\
+                \hline
+    Baseline    & 00.0 & 00.0 \\
+    NM L+D      & 00.0 & 00.0 \\
+\hline
+                & \multicolumn{2}{c}{Additional features} \\
+                \hline
+    Baseline    & 00.0 & 00.0 \\
+    NM L+D      & 00.0 & 00.0 \\
+\end{tabular}
+\caption{
+    \small
+    Impact of the additional features on Stanford \wsj22 using the baseline and
+    non-monotonic transition systems.
+\label{tab:feats}}
+\end{table}
 
 
 \section{Test Results}
 
 Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+
+
+\begin{table}
+    \centering
+    \small
+    \begin{tabular}{l|r|rr|rr}
+        \hline 
+System  &   $O$      & \multicolumn{2}{c|}{Penn2Malt} & \multicolumn{2}{c}{Stanford} \\
+                           &          & \las  & \uas  & \las & \uas \\
+        \hline \hline
+K\&C 10  & $n^3$ & ---   & 93.00 & ---  & --- \\
+Z\&N 11  & $nk$  & 91.8  & 92.9  & 91.9 & 93.5\\
+G\&N 12  & $n$   & ---   & ---   & 88.72 & 90.96 \\
+        \hline
+Baseline    & $n$ &       &       &       &  \\
+NM L+D & $n$ &       &       &       &  \\
+\hline
+Base + Feats   & $n$ &       &       &       &  \\
+NM L+D + Feats & $n$ &       &       &       &  \\
+\hline
+    \end{tabular}
+    \caption{Test set results
+         \label{tab:feats}}
+\end{table}
 
 
 
@@ -436,9 +534,10 @@ Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auc
 
 Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
-\subsection{Relation to the Sentence Processing Model}
+\subsection{Parse restructuring in psycholinguistics}
 
 Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+
 \section{Conclusion}
 
 Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
