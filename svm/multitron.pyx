@@ -11,30 +11,33 @@ cdef size_t MIN_UPD = 2
 
 DEF MAX_PARAM = 15000000
 
-cdef inline double get_weight(Feature* feat, uint64_t clas):
-    if feat.seen[clas]:
-        return feat.params[clas].w
-    else:
-        return 0
-
 
 cdef inline void update_param(Feature* feat, uint64_t clas, uint64_t now, double weight):
+    cdef size_t i
     if feat.seen[clas]:
-        param = feat.params[clas]
-        param.acc += (now - param.last_upd) * param.w
-        param.w += weight
-        param.last_upd = now
+        for i in range(feat.n_class):
+            param = feat.params[i]
+            if param.clas == clas:
+                param.acc += (now - param.last_upd) * param.w
+                param.w += weight
+                param.last_upd = now
+                break
+        else:
+            raise StandardError
     else:
         feat.seen[clas] = True
-        feat.params[clas] = <Param*>malloc(sizeof(Param))
-        feat.params[clas].w = weight
-        feat.params[clas].acc = 0
-        feat.params[clas].last_upd = now
+        i = feat.n_class
+        feat.params[i] = <Param*>malloc(sizeof(Param))
+        feat.params[i].w = weight
+        feat.params[i].acc = 0
+        feat.params[i].last_upd = now
+        feat.params[i].clas = clas
+        feat.n_class += 1
 
 
-cdef void free_feat(Feature* feat, size_t n):
+cdef void free_feat(Feature* feat):
     cdef size_t i
-    for i in range(n):
+    for i in range(feat.n_class):
         if feat.seen[i]:
             free(feat.params[i])
     free(feat.params)
@@ -73,7 +76,7 @@ cdef class MultitronParameters:
         # TODO: Freeing
         for f in range(self.n_params):
             if self.seen[f]:
-                free_feat(self.W[f], self.true_nr_class)
+                free_feat(self.W[f])
         free(self.W)
         free(self.seen)
 
@@ -98,6 +101,7 @@ cdef class MultitronParameters:
         for i in range(self.true_nr_class):
             feat.seen[i] = False
         feat.n_upd = 0
+        feat.n_class = 0
         self.W[f] = feat
         self.seen[f] = True
 
@@ -114,7 +118,7 @@ cdef class MultitronParameters:
                 continue
             feat = W[f]
             if feat.n_upd < thresh:
-                free_feat(feat, self.true_nr_class)
+                free_feat(feat)
                 self.seen[f] = False
                 n_pruned += 1
             else:
@@ -151,19 +155,21 @@ cdef class MultitronParameters:
             update_param(self.W[f], gold_i, self.now, weight)
        
     cdef double* get_scores(self, uint64_t n_feats, uint64_t* features):
-        cdef uint64_t i, f, c
-        cdef uint64_t n_classes = self.true_nr_class
+        cdef uint64_t i, f, j
+        cdef Param* param
         cdef double* scores = self.scores
         cdef uint64_t max_param = self.max_param
         cdef Feature* feat
-        for c in range(n_classes):
+
+        for c in range(self.true_nr_class):
             scores[c] = 0
         for i in range(n_feats):
             f = features[i]
             if f != 0 and f < max_param and self.seen[f]:
                 feat = self.W[f]
-                for c in range(n_classes):
-                    scores[c] += get_weight(feat, c)
+                for j in range(feat.n_class):
+                    param = feat.params[j]
+                    scores[param.clas] += param.w
         return scores
 
     cdef uint64_t predict_best_class(self, uint64_t n_feats, uint64_t* features):
@@ -187,11 +193,10 @@ cdef class MultitronParameters:
             if not self.seen[f]:
                 continue
             feat = self.W[f]
-            for c in range(self.n_classes):
-                if feat.seen[c]:
-                    param = feat.params[c]
-                    param.acc += (self.now - param.last_upd) * param.w
-                    param.w = param.acc / self.now
+            for i in range(feat.n_class):
+                param = feat.params[i]
+                param.acc += (self.now - param.last_upd) * param.w
+                param.w = param.acc / self.now
 
     def dump(self, out=sys.stdout):
         cdef uint64_t i
@@ -212,10 +217,9 @@ cdef class MultitronParameters:
                 continue
             feat = self.W[f]
             non_zeroes = []
-            for i in range(self.true_nr_class):
-                w = get_weight(feat, i)
-                if w != 0:
-                    non_zeroes.append('%d=%s ' % (self.labels[i], w))
+            for i in range(feat.n_class):
+                param = feat.params[i]
+                non_zeroes.append('%d=%s ' % (self.labels[param.clas], param.w))
             if non_zeroes:
                 out.write(u'%d\t%s\n' % (f, ' '.join(non_zeroes)))
         out.close()
@@ -256,14 +260,20 @@ cdef class MultitronParameters:
             f = int(f)
             self.add_feature(f)
             feat = self.W[f]
+            classes = []
             for param_str in weights.split():
-                clas, w = param_str.split('=')
-                clas = int(clas)
-                i = self.label_to_i[clas]
+                raw_label, w = param_str.split('=')
+                i = self.label_to_i[int(raw_label)]
                 assert i != -1
+                classes.append((i, w))
+            # It's slightly faster if we're accessing the scores array sequentially,
+            # so sort the classes before we index them in our sparse array.
+            for i, w in sorted(classes):
+                feat.params[feat.n_class] = <Param*>malloc(sizeof(Param))
+                feat.params[feat.n_class].w = float(w)
+                feat.params[feat.n_class].clas = i
                 feat.seen[i] = True
-                feat.params[i] = <Param*>malloc(sizeof(Param))
-                feat.params[i].w = float(w)
+                feat.n_class += 1
 
             #weights = [float(w) for w in line.strip().split()]
             #if any(w != 0 for w in weights):

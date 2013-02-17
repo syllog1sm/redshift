@@ -8,14 +8,15 @@ DEF MAX_PARAMS = 15000000
 cdef struct Param:
     double w
     double acc
+    size_t clas
     size_t last_upd
 
 cdef struct Feature:
     Param** params
     bint* seen
     size_t n_upd
+    size_t n_class
 
-cdef inline double get_weight(Feature* feat, uint64_t clas)
 cdef void update_param(Feature* feat, uint64_t clas, uint64_t now, double weight)
 
 
