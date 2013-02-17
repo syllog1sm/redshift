@@ -196,7 +196,8 @@ cdef class Parser:
             move_acc = (float(self.guide.n_corr) / self.guide.total) * 100
             print "#%d: Moves %d/%d=%.2f" % (n, self.guide.n_corr,
                                              self.guide.total, move_acc)
-            self.guide.prune(self.feat_thresh)
+            if self.feat_thresh > 0:
+                self.guide.prune(self.feat_thresh)
             self.guide.n_corr = 0
             self.guide.total = 0
         self.guide.train()
