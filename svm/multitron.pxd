@@ -13,9 +13,10 @@ cdef struct Param:
 
 cdef struct Feature:
     Param** params
-    bint* seen
+    int* index
     size_t n_upd
     size_t n_class
+    size_t max_class
 
 cdef void update_param(Feature* feat, uint64_t clas, uint64_t now, double weight)
 
