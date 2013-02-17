@@ -581,7 +581,7 @@ cdef class TransitionSystem:
         if valid_moves[LEFT] and heads[s.top] == s.i:
             paired_validity[self.pair_label_move(labels[s.top], LEFT)] = True
         else:
-            for i in range(self.n_r_classes):
+            for i in range(self.n_l_classes):
                 paired_validity[self.l_classes[i]] = valid_moves[LEFT]
         if valid_moves[RIGHT] and heads[s.i] == s.top:
             paired_validity[self.pair_label_move(labels[s.i], RIGHT)] = True
