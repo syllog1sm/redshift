@@ -1,0 +1,46 @@
+This is BibTeX, Version 0.99d (TeX Live 2012)
+Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
+The top-level auxiliary file: repair.aux
+The style file: aclnat.bst
+Database file #1: repair.bib
+You've used 2 entries,
+            2965 wiz_defined-function locations,
+            637 strings with 5276 characters,
+and the built_in function-call counts, 1320 in all, are:
+= -- 112
+> -- 40
+< -- 3
++ -- 16
+- -- 12
+* -- 89
+:= -- 194
+add.period$ -- 11
+call.type$ -- 2
+change.case$ -- 18
+chr.to.int$ -- 2
+cite$ -- 2
+duplicate$ -- 101
+empty$ -- 108
+format.name$ -- 22
+if$ -- 273
+int.to.chr$ -- 1
+int.to.str$ -- 1
+missing$ -- 19
+newline$ -- 17
+num.names$ -- 8
+pop$ -- 44
+preamble$ -- 1
+purify$ -- 12
+quote$ -- 0
+skip$ -- 42
+stack$ -- 0
+substring$ -- 56
+swap$ -- 52
+text.length$ -- 1
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 18
+warning$ -- 0
+while$ -- 9
+width$ -- 0
+write$ -- 34
