@@ -91,9 +91,8 @@ cdef class Parser:
     cdef int feat_thresh
 
     def __cinit__(self, model_dir, clean=False, train_alg='static',
-                  shiftless=False, repair_only=False,
                   add_extra=True, label_set='MALT', feat_thresh=5,
-                  allow_reattach=False,
+                  allow_reattach=False, allow_reduce=False,
                   reuse_idx=False):
         model_dir = Path(model_dir)
         if not clean:
@@ -105,14 +104,17 @@ cdef class Parser:
             label_set = params['label_set']
             feat_thresh = int(params['feat_thresh'])
             allow_reattach = params['allow_reattach'] == 'True'
-            shiftless = params['shiftless'] == 'True'
-            repair_only = params['repair_only'] == 'True'
+            allow_reduce = params['allow_reduce'] == 'True'
             l_labels = params['left_labels']
             r_labels = params['right_labels']
-        if allow_reattach:
-            print 'Reattach'
-        if repair_only:
-            print 'Repair only'
+        if allow_reattach and allow_reduce:
+            print 'NM L+D'
+        elif allow_reattach:
+            print 'NM L'
+        elif allow_reduce:
+            print 'NM D'
+        else:
+            print 'Baseline'
         self.model_dir = self.setup_model_dir(model_dir, clean)
         io_parse.set_labels(label_set)
         self.n_preds = features.make_predicates(add_extra, True)
@@ -124,10 +126,8 @@ cdef class Parser:
             self.new_idx(self.model_dir, self.n_preds)
         else:
             self.load_idx(self.model_dir, self.n_preds)
-        if shiftless:
-            assert not repair_only
         self.moves = TransitionSystem(io_parse.LABEL_STRS, allow_reattach=allow_reattach,
-                                      shiftless=shiftless, repair_only=repair_only)
+                                      allow_reduce=allow_reduce)
         if not clean:
             self.moves.set_labels(_parse_labels_str(l_labels), _parse_labels_str(r_labels))
         guide_loc = self.model_dir.join('model')
@@ -155,21 +155,15 @@ cdef class Parser:
         # Count classes and labels
         seen_l_labels = set([])
         seen_r_labels = set([])
-        seen_classes = set([self.moves.d_id])
-        if not self.moves.shiftless:
-            seen_classes.add(self.moves.s_id)
         for i in range(sents.length):
             sent = &sents.s[i]
             for j in range(1, sent.length - 1):
                 label = sent.parse.labels[j]
                 if sent.parse.heads[j] > j:
-                    seen_classes.add(self.moves.pair_label_move(label, LEFT))
                     seen_l_labels.add(label)
                 else:
                     seen_r_labels.add(label)
-                    seen_classes.add(self.moves.pair_label_move(label, RIGHT))
         move_classes = self.moves.set_labels(seen_l_labels, seen_r_labels)
-        print "%d vs %d classes seen" % (len(seen_classes), len(move_classes))
         self.guide.set_classes(move_classes)
         self.write_cfg(self.model_dir.join('parser.cfg'))
         indices = range(sents.length)
@@ -183,7 +177,7 @@ cdef class Parser:
             move_acc = (float(self.guide.n_corr) / self.guide.total) * 100
             print "#%d: Moves %d/%d=%.2f" % (n, self.guide.n_corr,
                                              self.guide.total, move_acc)
-            if self.feat_thresh > 0:
+            if self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
             self.guide.n_corr = 0
             self.guide.total = 0
@@ -367,8 +361,7 @@ cdef class Parser:
             cfg.write(u'label_set\t%s\n' % self.label_set)
             cfg.write(u'feat_thresh\t%d\n' % self.feat_thresh)
             cfg.write(u'allow_reattach\t%s\n' % self.moves.allow_reattach)
-            cfg.write(u'shiftless\t%s\n' % self.moves.shiftless)
-            cfg.write(u'repair_only\t%s\n' % self.moves.repair_only)
+            cfg.write(u'allow_reduce\t%s\n' % self.moves.allow_reduce)
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
         
@@ -384,8 +377,6 @@ cdef class Parser:
         cdef size_t* g_heads
         cdef size_t paired, parse_paired
         best_moves = []
-        # TODO: Unbreak
-        return ''
         for i in range(sents.length):
             sent = &sents.s[i]
             g_labels = gold.s[i].parse.labels
@@ -422,8 +413,7 @@ cdef class Parser:
 
 cdef class TransitionSystem:
     cdef bint allow_reattach
-    cdef bint shiftless
-    cdef bint repair_only
+    cdef bint allow_reduce
     cdef size_t n_labels
     cdef object py_labels
     cdef size_t[N_MOVES] offsets
@@ -450,14 +440,11 @@ cdef class TransitionSystem:
     cdef int n_lmoves
 
     def __cinit__(self, object labels, allow_reattach=False,
-                  shiftless=False, repair_only=False):
+                  allow_reduce=False):
         self.n_labels = len(labels)
         self.py_labels = labels
         self.allow_reattach = allow_reattach
-        self.shiftless = shiftless
-        self.repair_only = repair_only
-        if self.shiftless:
-            assert not self.repair_only
+        self.allow_reduce = allow_reduce
         self.n_paired = N_MOVES * self.n_labels
         self._move_validity = <bint*>malloc(N_MOVES * sizeof(bint))
         self._pair_validity = <bint*>malloc(self.n_paired * sizeof(bint))
@@ -481,8 +468,7 @@ cdef class TransitionSystem:
         self.n_l_classes = len(left_labels)
         self.n_r_classes = len(right_labels)
         valid_classes = [self.d_id]
-        if not self.shiftless:
-            valid_classes.append(self.s_id)
+        valid_classes.append(self.s_id)
         for i, label in enumerate(left_labels):
             paired = self.pair_label_move(label, LEFT)
             valid_classes.append(paired)
@@ -505,19 +491,13 @@ cdef class TransitionSystem:
 
     cdef int transition(self, size_t move, size_t label, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc
-        if s.top != 0:
-            assert s.second < s.top
-            assert s.second != s.top
-            if get_r(s, s.second) != 0:
-                assert get_r(s, s.second) <= s.top, '%d of %d > %d' % (get_r(s, s.second), s.second, s.top)
         s.history[s.t] = self.pair_label_move(label, move)
         s.t += 1 
         if move == SHIFT:
-            assert not self.shiftless
             push_stack(s)
         elif move == REDUCE:
             if s.heads[s.top] == 0:
-                assert self.repair_only
+                assert self.allow_reduce
                 assert s.second != 0
                 assert s.second < s.top
                 add_dep(s, s.second, s.top, s.guess_labels[s.second][s.top])
@@ -546,14 +526,12 @@ cdef class TransitionSystem:
         cdef bint* unpaired = self._move_validity
         # Load pre-conditions that don't refer to gold heads
         unpaired[ERR] = False
-        unpaired[SHIFT] = (not s.at_end_of_buffer) and not self.shiftless
+        unpaired[SHIFT] = not s.at_end_of_buffer
         unpaired[RIGHT] = (not s.at_end_of_buffer) and s.top != 0
-        if self.repair_only:
+        if self.allow_reduce:
             unpaired[REDUCE] = s.heads[s.top] != 0 or s.second != 0
         else:
             unpaired[REDUCE] = s.heads[s.top] != 0
-        if self.shiftless and unpaired[REDUCE]:
-            assert s.stack_len >= 2
         unpaired[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
         cdef bint* paired = self._pair_validity
         for i in range(self.n_paired):
@@ -601,7 +579,6 @@ cdef class TransitionSystem:
         elif self._move_validity[REDUCE]:
             return REDUCE
         elif self._move_validity[SHIFT]:
-            assert not self.shiftless
             return SHIFT
         elif self._move_validity[RIGHT]:
             return RIGHT
@@ -623,10 +600,7 @@ cdef class TransitionSystem:
         if g_heads[s.i] == s.top:
             return True
         if has_head_in_buffer(s, s.i, g_heads):
-            if self.repair_only:
-                return False
-            elif not self.allow_reattach:
-                return False
+            return False
         if has_child_in_stack(s, s.i, g_heads):
             return False
         if has_head_in_stack(s, s.i, g_heads):
@@ -636,10 +610,11 @@ cdef class TransitionSystem:
     cdef bint d_cost(self, State *s, size_t* g_heads):
         if has_child_in_buffer(s, s.top, g_heads):
             return False
-        if self.allow_reattach and has_head_in_buffer(s, s.top, g_heads):
-            return False
-        if self.allow_reattach:
-            assert g_heads[s.top] != s.n and g_heads[s.top] != (s.n - 1)
+        if has_head_in_buffer(s, s.top, g_heads):
+            if self.allow_reattach:
+                return False
+            if self.allow_reduce and s.heads[s.top] == 0:
+                return False
         return True
 
     cdef bint l_cost(self, State *s, size_t* g_heads):
@@ -648,12 +623,11 @@ cdef class TransitionSystem:
             return True
         if has_head_in_buffer(s, s.top, g_heads):
             return False
-        assert g_heads[s.top] != s.n and g_heads[s.top] != (s.n - 1)
         if has_child_in_buffer(s, s.top, g_heads):
             return False
         if self.allow_reattach and g_heads[s.top] == s.heads[s.top]:
             return False
-        if self.repair_only and g_heads[s.top] == s.second:
+        if self.allow_reduce and g_heads[s.top] == s.second:
             return False
         return True
 
