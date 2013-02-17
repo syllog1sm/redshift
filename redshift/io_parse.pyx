@@ -30,6 +30,7 @@ def set_labels(name):
         raise StandardError, "Unrecognised label set: %s" % name
     for i, label in enumerate(LABEL_STRS):
         STR_TO_LABEL[label] = i
+    print "Loaded %s labels" % name
     ROOT_LABEL = STR_TO_LABEL['ROOT']
     PUNCT_LABEL = STR_TO_LABEL['P']
     set_n_labels(len(LABEL_STRS))
