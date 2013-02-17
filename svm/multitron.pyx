@@ -11,22 +11,31 @@ cdef size_t MIN_UPD = 2
 
 DEF MAX_PARAM = 15000000
 
+cdef void resize_feat(Feature* feat, size_t n):
+    cdef size_t i
+    feat.max_class = n
+    cdef Param** new_params = <Param**>malloc(n * sizeof(Param*))
+    for i in range(feat.n_class):
+        new_params[i] = feat.params[i]
+    free(feat.params)
+    feat.params = new_params
+
 
 cdef inline void update_param(Feature* feat, uint64_t clas, uint64_t now, double weight):
     cdef size_t i
-    if feat.seen[clas]:
-        for i in range(feat.n_class):
-            param = feat.params[i]
-            if param.clas == clas:
-                param.acc += (now - param.last_upd) * param.w
-                param.w += weight
-                param.last_upd = now
-                break
-        else:
-            raise StandardError
+    cdef Param** new_params
+    i = feat.index[clas]
+    if i != -1:
+        param = feat.params[i]
+        param.acc += (now - param.last_upd) * param.w
+        param.w += weight
+        param.last_upd = now
     else:
-        feat.seen[clas] = True
+        # Resize vector if necessary
+        if feat.n_class == feat.max_class:
+            resize_feat(feat, feat.max_class * 2)
         i = feat.n_class
+        feat.index[clas] = i
         feat.params[i] = <Param*>malloc(sizeof(Param))
         feat.params[i].w = weight
         feat.params[i].acc = 0
@@ -38,10 +47,10 @@ cdef inline void update_param(Feature* feat, uint64_t clas, uint64_t now, double
 cdef void free_feat(Feature* feat):
     cdef size_t i
     for i in range(feat.n_class):
-        if feat.seen[i]:
+        if feat.index[i] != -1:
             free(feat.params[i])
     free(feat.params)
-    free(feat.seen)
+    free(feat.index)
 
 cdef class MultitronParameters:
     """
@@ -96,12 +105,13 @@ cdef class MultitronParameters:
         if self.max_param <= f:
             self.max_param = f + 1
         cdef Feature* feat = <Feature*>malloc(sizeof(Feature))
-        feat.params = <Param**>malloc(self.true_nr_class * sizeof(Param*))
-        feat.seen = <bint*>malloc(self.true_nr_class * sizeof(bint))
+        feat.params = <Param**>malloc(5 * sizeof(Param*))
+        feat.index = <bint*>malloc(self.true_nr_class * sizeof(int))
         for i in range(self.true_nr_class):
-            feat.seen[i] = False
+            feat.index[i] = -1
         feat.n_upd = 0
         feat.n_class = 0
+        feat.max_class = 5
         self.W[f] = feat
         self.seen[f] = True
 
@@ -266,13 +276,14 @@ cdef class MultitronParameters:
                 i = self.label_to_i[int(raw_label)]
                 assert i != -1
                 classes.append((i, w))
+            resize_feat(feat, len(classes))
             # It's slightly faster if we're accessing the scores array sequentially,
             # so sort the classes before we index them in our sparse array.
             for i, w in sorted(classes):
                 feat.params[feat.n_class] = <Param*>malloc(sizeof(Param))
                 feat.params[feat.n_class].w = float(w)
                 feat.params[feat.n_class].clas = i
-                feat.seen[i] = True
+                feat.index[i] = feat.n_class
                 feat.n_class += 1
 
             #weights = [float(w) for w in line.strip().split()]
