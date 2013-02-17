@@ -62,18 +62,35 @@
 \begin{document}
 \maketitle
 \begin{abstract}
-    Previous algorithms for incremental parsing have assumed that state transititions
-    should be monotonic. However, psycholinguistic models of sentence processing
-    typically include moves that restructure the parse tree, in order to account
-    for eye-tracking and reading time experiments.
+    Previous incremental parsers have assumed that state transitions
+    should be monotonic. However, transitions can be made to revise
+    previous decisions quite naturally, based on further information.
+    Constraining this behaviour amounts
+    to placing less trust in the model, which we can expect to be less productive as
+    our models improve.
 
-    We present a non-monotonic transition system
-    that achieves state-of-the-art accuracy for greedy English dependency parsing.
-    We show that simply removing standard constraints on the Arc-Eager system
-    leads to useful non-monotonic behaviour, especially when imperfect states
-    are introduced during training. With the addition of a new transition
-    to correct attachment errors, the repair moves improve accuracy by 0.5\% on
-    the standard evaluation, over a state-of-the-art baseline.
+    We show how simple adjustments to the Arc-Eager transition system to relax the
+    monotonicity constraint improves accuracy, especially when imperfect
+    states are introduced during training. To support our claim that better models
+    profit more from non-monotonic transitions, we present a set of
+    additional features that improve accuracy substantially. Despite having fewer errors
+    to correct, relaxing the monotonicity constraints is even more productive on
+    the improved model, for a total improvement on the previous state-of-the-art of
+    Y\%.
+
+
+    %Previous algorithms for incremental parsing have assumed that state transititions
+    %should be monotonic. However, psycholinguistic models of sentence processing
+    %typically include moves that restructure the parse tree, in order to account
+    %for eye-tracking and reading time experiments.
+
+    %We present a non-monotonic transition system
+    %that achieves state-of-the-art accuracy for greedy English dependency parsing.
+    %We show that simply removing standard constraints on the Arc-Eager system
+    %leads to useful non-monotonic behaviour, especially when imperfect states
+    %are introduced during training. With the addition of a new transition
+    %to correct attachment errors, the repair moves improve accuracy by 0.5\% on
+    %the standard evaluation, over a state-of-the-art baseline.
 \end{abstract}
 
 % P1
@@ -84,7 +101,11 @@ Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapi
 
 Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed. Aliquam et augue est, et pretium est. Aenean mattis lacinia elit quis accumsan.
 
+<<<<<<< HEAD
 Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam. Nunc sem mauris, volutpat nec rhoncus quis, sodales ut massa. Praesent egestas ante interdum elit laoreet volutpat. Morbi quis velit tempor libero consequat volutpat at vel nulla. Morbi et justo ac liberos.
+=======
+Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam.
+>>>>>>> dbd140b... * Work on abstract
 
 % P2
 % 2-col Dependency parse graphic
