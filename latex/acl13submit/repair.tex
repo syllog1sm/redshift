@@ -224,10 +224,10 @@ the stack:
      \end{tabular}
 \end{center}
 
-Every word in the sentence is pushed once, and popped once; and every
+Every word in the sentence is pushed once and popped once; and every
 word must have exactly one head. This creates two pairings, along the
-diagonals: (Shift, Left), and (Right, Reduce). Every word must acquire
-its head when it is pushed, or when it is popped, but not both, and not neither.
+diagonals: (S, L) and (R, D). Every word must acquire
+its head when it is pushed or when it is popped, but not both, and not neither.
 
 The standard approach for guaranteeing this is to constrain the choice of pop move:
 
@@ -235,7 +235,7 @@ The standard approach for guaranteeing this is to constrain the choice of pop mo
     \item Iff $S_0$ has a head, Reduce;
     \item Iff $S_0$ has no head, Left-Arc.
 \end{itemize}
-The pair is therefore decided by the first move.
+The pair is therefore decided by the first move in the standard system.
 Our idea is simply to let the pair be decided by the \emph{second} move.
 
 This makes the transition system \emph{non-monotonic}, because if the model decides
