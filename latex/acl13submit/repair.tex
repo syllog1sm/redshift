@@ -217,22 +217,18 @@ the stack:
 
 \begin{center}
     \begin{tabular}{l|cc}
-         & Push  & Pop    \\
-         \hline
-   Arc   & Right & Left    \\
-  No arc & Shift & Reduce   \\
+             & Push  & Pop    \\
+           \hline
+ Sets head   & Right & Left    \\
+  No head    & Shift & Reduce   \\
      \end{tabular}
 \end{center}
-
-The transition system is complete in the sense that the 
-two opposite pairings are unlikely to be useful for projective parsing.
-Pushing the stack after a Left-Arc could introduce crossing dependencies, 
-and popping the stack after a Right-Arc restricts each word to one rightward child.
 
 Every word in the sentence is pushed once, and popped once; and every
 word must have exactly one head. This creates two pairings, along the
 diagonals: (Shift, Left), and (Right, Reduce). Every word must acquire
 its head when it is pushed, or when it is popped, but not both, and not neither.
+
 The standard approach for guaranteeing this is to constrain the choice of pop move:
 
 \begin{itemize}\setlength{\itemsep}{-2mm}
@@ -241,9 +237,10 @@ The standard approach for guaranteeing this is to constrain the choice of pop mo
 \end{itemize}
 The pair is therefore decided by the first move.
 Our idea is simply to let the pair be decided by the \emph{second} move.
+
 This makes the transition system \emph{non-monotonic}, because if the model decides
 on an incongruent pairing
-we will have to either undo a dependency now regarded as incorrect, or add a
+we will have to either undo a dependency we now regard as incorrect, or add a
 dependency we now regard as missing. We now describe these operations.
 
 \subsection{Non-monotonic Left-Arc}
@@ -265,7 +262,7 @@ even though the evidence for the correct decision is much stronger at the later 
 
 We allow Left-Arcs to `clobber' Right-Arcs if the model
 recommends it. The Right-Arc is deleted, and the Left-Arc proceeds as normal. The
-effect of this is exactly as if the model had correctly chosen \emph{Shift} at
+effect of this is exactly as if the model had correctly chosen Shift at
 move 4. We simply give the model a second chance to make the correct choice.
 
 \begin{figure}
@@ -312,7 +309,7 @@ decision was originally made.
 \subsection{Non-monotonic Reduce}
 
 The upper arcs in Figure \ref{fig:adduce} show a state resulting from the opposite error.
-In this example, the parser has Shifted \emph{Jack} instead of Right-Arcing it. After
+The parser has Shifted \emph{Jack} instead of Right-Arcing it. After
 building the \textsc{np} the buffer is exhausted, except for the artificial root token,
 which we use to Left-Arc the head of the sentence, following \citet{nivre:squib}.
 
@@ -320,10 +317,53 @@ Instead of letting the previous choice lock us in to the pair (Shift, Left), we 
 the latter decision reverse it to (Right, Reduce). This gives the model the flexibility
 to take advantage of the extra information, and make what should be an easy decision.
 When the Shift/Right decision is reversed, we add an arc between the top of the stack
-word above it, and select the Right-Arc label that the model scored most highly
-when the word was incorrectly Shifted.
+and the word above it. This is the arc that would have been created had the parser
+chosen to Right-Arc when it chose to Shift. Since our idea is to reverse this mistake,
+we select the Right-Arc label that the model scored most highly at that time.
 
-\section{Non-monotonic parser oracle}
+
+\subsection{Why have two push moves?}
+
+We have argued above that it is better to trust the second decision that the model
+makes, rather than using the first decision to determine the second. If this is
+the case, then why bother even making a decision on the first move?
+
+We can think of two ways to remove a push move from the Arc-Eager transition system.
+The first is to remove the Shift move, and always attach words when they are
+pushed to the stack. The second is to remove the Right-Arc move, and never attach
+words when they are pushed. There is a general problem with these transition systems
+that is easier to see when they are examined individually.
+
+In the `shiftless' configuration, we break approximately 50\% of the rightward
+dependencies we make, as every word that is pushed onto the stack but whose head
+is actually in the buffer will receive as a temporary head whatever word happens to be
+on top of the stack at the time. For instance, if a preposition is on top of the stack,
+and the next word is a determiner, we will create a dependency between them.
+These dependencies need labels, and it is not obvious which one to assign during training.
+We could reserve a special label, \emph{null}, for the non-gold dependencies. But then
+we should not want to reduce these \emph{null} typed dependencies away, as they are
+marked as incorrect --- so there is little difference between this approach and the original
+Arc-Eager system.
+
+Removing the Right-Arc is a little better, but labelling the arc that will be added
+when the word is reduced is a problem here, as well. We risk having to make the
+labelling decision in a state where we have lost the information that makes the choice easy.
+If we decide instead to build a special label model, then that again seems little different
+from just making a prediction when the word is on top of the stack, and retaining the
+ability to revise it later.
+
+The general problem these approaches share is that they do not do a good job
+of accumulating information in the parse as it progresses. The structure built by the
+original Arc-Eager system will be more informative than the ones built by these
+3-move systems. Most transition decisions are easy, and their predictions yield an
+informative state that makes the difficult decisions possible.
+
+The only advantage a single push system would have is in avoiding \emph{commitment}
+to one of these prior predictions. Our non-monotonic four move system has that
+property, without making its previous predictions any less specific.
+
+
+\subsection{Defining the oracle}
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
 
@@ -339,18 +379,6 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
-
-\subsection{Alternatives}
-
-
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
-
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
-
 % P5
 \section{Experiments}
 
