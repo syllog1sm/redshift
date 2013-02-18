@@ -232,8 +232,8 @@ its head when it is pushed, or when it is popped, but not both, and not neither.
 The standard approach for guaranteeing this is to constrain the choice of pop move:
 
 \begin{itemize}\setlength{\itemsep}{-2mm}
-    \item To Left-Arc, $S_0$ must \emph{not} have a head;
-    \item To Reduce, $S_0$ \emph{must} have a head.
+    \item Iff $S_0$ has a head, Reduce;
+    \item Iff $S_0$ has no head, Left-Arc.
 \end{itemize}
 The pair is therefore decided by the first move.
 Our idea is simply to let the pair be decided by the \emph{second} move.
@@ -428,7 +428,9 @@ We follow the suggestion of \citet{nivre:squib} to handle root-node dependencies
 adding a dummy token at the \emph{end} of the sentence.
 This improves accuracy by delaying root-node decisions, and likely accounts for the
 0.2\% extra accuracy of our standard-trained baseline system over the equivalent result
-reported by \citet{goldberg:12}. Our systems are otherwise identical.
+reported by \citet{goldberg:12}. The only other known difference between the systems
+is a modest model compaction step performed by the proprietary Google perceptron
+code.
 
 \subsection{Training strategies}
 
