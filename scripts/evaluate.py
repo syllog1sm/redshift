@@ -12,7 +12,7 @@ def fmt_acc(label, n, l_corr, u_corr, total_errs):
     l_pc = pc(l_corr, n)
     u_pc = pc(u_corr, n)
     err_pc = pc(n - l_corr, total_errs)
-    return '%s\t%d\t%.1f\t%.1f\t%.1f' % (label, n, l_pc, u_pc, err_pc)
+    return '%s\t%d\t%.3f\t%.3f\t%.3f' % (label, n, l_pc, u_pc, err_pc)
 
 
 @plac.annotations(
