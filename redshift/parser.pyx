@@ -173,7 +173,7 @@ cdef class Parser:
                 if self.train_alg == 'online':
                     self.online_train_one(n, &sents.s[i], sents.strings[i][0])
                 else:
-                    self.static_train_one(n, &sents.s[i])
+                    self.static_train_one(n, &sents.s[i], sents.strings[i][0])
             move_acc = (float(self.guide.n_corr) / self.guide.total) * 100
             print "#%d: Moves %d/%d=%.2f" % (n, self.guide.n_corr,
                                              self.guide.total, move_acc)
@@ -183,38 +183,36 @@ cdef class Parser:
             self.guide.total = 0
         self.guide.train()
 
-    cdef int static_train_one(self, size_t iter_num, Sentence* sent) except -1:
-        cdef size_t move
-        cdef size_t label
+    cdef int static_train_one(self, size_t iter_num, Sentence* sent, object py_words) except -1:
+        cdef size_t clas, move, label
 
         cdef size_t* g_labels = sent.parse.labels
         cdef size_t* g_heads = sent.parse.heads
-        cdef bint* valid
-        cdef size_t* tags = sent.pos
+        cdef bint* right_arcs = self.moves.right_arcs
+        cdef bint* left_arcs = self.moves.left_arcs
         cdef uint64_t* feats = self._hashed_feats
         cdef size_t* context = self._context
         cdef int n_feats = self.n_preds
 
         cdef State s = init_state(sent.length)
         cdef int n_instances = 0
-        cdef size_t p_move
-        cdef size_t p_label
+        if DEBUG:
+            print ' '.join(py_words)
         while not s.is_finished:
-            features.extract(self._context, self._hashed_feats, sent, &s)
-            # Determine which moves are zero-cost and meet pre-conditions
-            valid = self.moves.check_costs(&s, g_labels, g_heads)
-            # Translates the result of that into the "static oracle" move,
-            # i.e. it decides which single move to take.
-            move = self.moves.break_tie(&s, g_labels, g_heads, tags, valid)
+            features.extract(context, feats, sent, &s)
+            move = self.moves.move_from_gold(&s, g_labels, g_heads)
             if move == LEFT:
+                assert g_heads[s.top] == s.i
                 label = g_labels[s.top]
-            elif move == RIGHT and g_heads[s.i] == s.top:
+            elif move == RIGHT:
+                assert g_heads[s.i] == s.top
                 label = g_labels[s.i]
             else:
                 label = 0
-            paired = self.moves.pair_label_move(label, move)
-            if iter_num != 0:
-                self.guide.add_instance(paired, 1.0, n_feats, feats)
+            clas = self.moves.pair_label_move(label, move)
+            self.guide.add_instance(clas, 1.0, n_feats, feats)
+            if DEBUG:
+                print s.i, lmove_to_str(move, label), transition_to_str(&s, move, label, py_words)
             self.moves.transition(move, label, &s)
             n_instances += 1
         return n_instances
@@ -420,6 +418,7 @@ cdef class TransitionSystem:
     cdef bint* _move_validity
     cdef bint* _pair_validity
     cdef bint* right_arcs
+    cdef bint* left_arcs
     cdef list left_labels
     cdef list right_labels
     cdef size_t n_l_classes
@@ -436,7 +435,6 @@ cdef class TransitionSystem:
     cdef size_t w_start
     cdef size_t w_end
     cdef size_t v_id
-
     cdef int n_lmoves
 
     def __cinit__(self, object labels, allow_reattach=False,
@@ -449,6 +447,7 @@ cdef class TransitionSystem:
         self._move_validity = <bint*>malloc(N_MOVES * sizeof(bint))
         self._pair_validity = <bint*>malloc(self.n_paired * sizeof(bint))
         self.right_arcs = <bint*>malloc(self.n_paired * sizeof(bint))
+        self.left_arcs = <bint*>malloc(self.n_paired * sizeof(bint))
         self.s_id = SHIFT * self.n_labels
         self.d_id = REDUCE * self.n_labels
         self.l_start = LEFT * self.n_labels
@@ -457,8 +456,11 @@ cdef class TransitionSystem:
         self.r_end = (RIGHT + 1) * self.n_labels
         for i in range(self.n_paired):
             self.right_arcs[i] = False
+            self.left_arcs[i] = False
         for i in range(self.r_start, self.r_end):
             self.right_arcs[i] = True
+        for i in range(self.l_start, self.l_end):
+            self.left_arcs[i] = True
 
     def set_labels(self, left_labels, right_labels):
         self.left_labels = [self.py_labels[l] for l in sorted(left_labels)]
@@ -469,12 +471,14 @@ cdef class TransitionSystem:
         self.n_r_classes = len(right_labels)
         valid_classes = [self.d_id]
         valid_classes.append(self.s_id)
+        for i in range(self.n_paired):
+            self.right_arcs[i] = False
+            self.left_arcs[i] = False
         for i, label in enumerate(left_labels):
             paired = self.pair_label_move(label, LEFT)
             valid_classes.append(paired)
             self.l_classes[i] = paired
-        for i in range(self.n_paired):
-            self.right_arcs[i] = False
+            self.left_arcs[paired] = True
         for i, label in enumerate(right_labels):
             paired = self.pair_label_move(label, RIGHT)
             valid_classes.append(paired)
@@ -568,22 +572,17 @@ cdef class TransitionSystem:
                 paired_validity[self.r_classes[i]] = valid_moves[RIGHT]
         return paired_validity
 
-    cdef int break_tie(self, State* s, size_t* labels, size_t* heads,
-                       size_t* tags, bint* valid_moves) except -1:
-        cdef size_t w_id, l_id
-        self.check_costs(s, labels, heads)
-        if self._move_validity[RIGHT] and heads[s.i] == s.top:
-            return RIGHT
-        elif self._move_validity[LEFT] and heads[s.top] == s.i:
-            return LEFT
-        elif self._move_validity[REDUCE]:
-            return REDUCE
-        elif self._move_validity[SHIFT]:
+    cdef int move_from_gold(self, State* s, size_t* labels, size_t* heads) except -1:
+        if s.stack_len == 1:
             return SHIFT
-        elif self._move_validity[RIGHT]:
+        if not s.at_end_of_buffer and heads[s.i] == s.top:
             return RIGHT
-        elif self._move_validity[LEFT]:
+        elif heads[s.top] == s.i and (self.allow_reattach or s.heads[s.top] == 0):
             return LEFT
+        elif self.d_cost(s, heads) and (self.allow_reduce or s.heads[s.top] != 0):
+            return REDUCE
+        elif self.s_cost(s, heads):
+            return SHIFT
         else:
             raise StandardError
 
