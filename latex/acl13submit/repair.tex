@@ -327,25 +327,27 @@ we select the Right-Arc label that the model scored most highly at that time.
 
 We have argued above that it is better to trust the second decision that the model
 makes, rather than using the first decision to determine the second. If this is
-the case, what utility is gained from the first move?
-
-Instead of defining how pop moves can correct Shift/Right mistakes, an alternate
-strategy would be to eliminate the ambiguity. There are two possibilities:
+the case, is the first decision entirely redundant?
+Instead of defining how pop moves can correct Shift/Right mistakes, we could
+instead eliminate the ambiguity. There are two possibilities:
 Shift every token, and create all Right-Arcs via Reduce; or Right-Arc every token,
 and override the incorrect arcs with subsequent Left-Arcs.
 
 The problem with these approaches is that it is actually very useful to condition
-on the results of previous decisions. Most of the transition decisions are very
+on the results of previous decisions. Saving all of the difficulty for later
+is not a very good structured prediction strategy. Most of the transition decisions are very
 easy, and when the parser does encounter a difficult decision, it is advantageous
-to have the information that determines the previous choices condensed
-into a dependency structure. As an example of the problem, if the Shift move is
+to have the dependency structure as a summary of the previous information, in
+much the same way that the previous tags are critical for \pos tagging. 
+
+As an example of the problem, if the Shift move is
 eliminated, about half of the Right-Arcs created will be spurious. All of these
 arcs will be assigned labels\footnote{If the parser is trained to label the temporary
-arcs differently, its action is roughly isomorphic to the Shift move.}, making
-important features uselessly noisy.
+arcs differently, its action is roughly (but not fully) isomorphic to the Shift move.},
+making important features uselessly noisy.
 
 The non-monotonic transition system that we propose does not have this problem.
-The model makes the Shift vs. Right decisions as normal, and conditions on them --- but
+The model makes Shift vs. Right decisions as normal, and conditions on them --- but
 without \emph{committing} to them.
 
 \subsection{Defining the oracle}
@@ -398,7 +400,7 @@ investigate the impact on error propagation.
     \end{tabular}
     \caption{\small Effect of non-monotonic transitions with \textbf{standard training}.
              All results averaged across 20 runs with different random seeds. All models
-             had $\sigma$=0.07-0.08.\label{tab:standard}}
+             had $\sigma$=TODO-TODO.\label{tab:standard}}
 \end{table}
 
 
@@ -412,7 +414,11 @@ Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis pu
 We base our experiments on the parser described by \citet{goldberg:12}. We
 began by implementing their baseline system, a standard Arc-Eager parser using
 an averaged Perceptron learner and the extended feature set described by \citet{zhang:11}.
-We follow \citeauthor{goldberg:12} in training all models for 15 iterations.
+We follow \citeauthor{goldberg:12} in training all models for 15 iterations,
+and in shuffling the sentences before each iteration. This randomisation is
+important for accuracy, but causes variance, so accuracies
+are reported as the average of 20 runs. All experiments had a standard deviation between
+TODO and TODO\%.
 
 Labels and moves were learned jointly, resulting in a single model with 88 classes
 for the Stanford dependencies. Joint label/move learning proved surprisingly
