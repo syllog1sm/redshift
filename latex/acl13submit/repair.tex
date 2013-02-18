@@ -1,12 +1,15 @@
+% vim: set textwidth=78 fo+=t :
 
 \documentclass[11pt,letterpaper]{article}
 \usepackage{acl2013}
+\usepackage{amsmath, amsthm}
 \usepackage{times}
 \usepackage{latexsym}
 \usepackage{xspace}
 \usepackage{natbib}
 \usepackage{tikz-dependency}
 \usepackage{placeins}
+\usepackage{xcolor}
 % Alter some LaTeX defaults for better treatment of figures:
     % See p.105 of "TeX Unbound" for suggested values.
     % See pp. 199-200 of Lamport's "LaTeX" book for details.
@@ -44,6 +47,9 @@
 
 \newcommand{\stacktop}{S$_0$\xspace}
 \newcommand{\buffone}{N$_0$\xspace}
+
+\newcommand{\tuple}[1]{$\langle#1\rangle$}
+\newcommand{\maybe}[1]{\textcolor{gray}{#1}}
 
 \title{Removing Monotonicity Constraints Improves Accuracy for Arc-Eager Dependency Parsing}
 
@@ -130,17 +136,80 @@ decision if necessary. This allows the parser to recover from mistakes.}
 
 
 
-\section{Transition-based Dependency Parsing}
+\section{Arc-Eager Transition-based Dependency Parsing}
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
 
 Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis.
 
-\subsection{Dynamic oracle}
+\subsection{Dynamic oracles}
 
-Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis, auctor a metus. Proin mi purus, dignissim eget tempus in, vestibulum eu libero.
+An essential component when training a transition-based parser is an oracle
+which, given a gold-standard tree, dictates the sequence of moves a parser
+should make in order to derive it.  Traditionally, these oracles are defined
+as functions from trees to sequences, mapping a gold tree to a single sequence
+of actions deriving it, even if more than one sequence of actions derives the
+gold tree. We call such oracles \emph{static}.  Recently, Goldberg and Nivre
+\shortcite{coling2012} introduced the concept of a \emph{dynamic} oracle, and
+presented a concrete oracle for the arc-eager system.  Instead of mapping a
+gold tree to a sequence of actions, the dynamic oracle maps a
+\tuple{configuration, tree} pair to a \emph{set} of possible parser actions
+which are optimal at the given configuration.  More concretely, the dynamic
+oracle presented in \cite{coling2012} maps \tuple{action,configuration,tree}
+tuples to an integer, indicating the number of gold arcs in $tree$ that can be
+derived from $configuration$ by some sequence of actions, but could not be derived
+after applying $action$ to the configuration.\footnote{This correctness of
+the oracle is based on a property of the arc-eager system, stating that if a
+set of arcs which can be extended to a projective tree can be individually
+derived from a given configuration, then a projective tree containing all of
+the arcs in the set is also derivable from the same configuration.  This same
+property holds also for the transition system we present below.} We refer to
+this number as the $cost$ of taking action $a$ at configuration $c$. Actions
+with a cost of 0 are optimal at the given configuration, and as long as we
+follow only optimal actions we are guaranteed to reach the gold tree.
+%By definition, there is at least one 0-cost actions at each configuration.
+%Thus, for our purposes we only care to know if the cost of an action is zero
+%or non-zero. 
 
+The dynamic oracle for the arc-eager system is based on the properties of the
+system by which once words are put on the stack they can acquire heads and
+dependents only from the buffer, and once they are removed from the stack they
+can no longer acquire any heads or dependents. In addition, once a word
+acquired a head it can no longer acquire another head.  Given that words that
+are removed from the stack or the buffer can not return there later, it
+is straightforward to compute the number of gold arcs that are ``lost'' by an
+action by considering the effect of the action on the buffer and the stack,
+and reasoning accordingly (the notation assumes the configuration $c$ has $b$
+as the first item in the buffer $\beta$ and $s$ is the top of the stack
+$\sigma$, and $gold$ is a set of arcs. An arc is a triplet $(m,l,h)$ %TODO verify direction is correct.
+indicating that $m$ modifies $h$ with a label $l$).
 
-Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. 
+\begin{itemize}
+   \item $\mathcal{C}(\textsc{Left-Arc}_l; c, gold)$: 
+Adding the arc $(b, l, s)$ and popping $s$ from the stack means that $s$ will not be able
+to acquire any head or dependents in $\beta$. The cost is therefore the number of arcs 
+in $gold$ of the form $(k, l', s)$ or $(s, l', k)$ such that $k \in \beta$.
+
+\item $\mathcal{C}(\textsc{Right-Arc}_l; c, gold)$: 
+Adding the arc $(s, l, b)$ and pushing $b$ onto the stack means that $b$ will 
+not be able to acquire any head in $\sigma$ or $\beta$, nor any dependents in $\sigma$. 
+The cost is therefore the number of arcs in $gold$ of the form $(k, l', b)$,
+such that $k \in \sigma$ or $k \in \beta$, 
+or of the form $(b, l', k)$ such that $k \in \sigma$. 
+
+\item $\mathcal{C}(\textsc{Reduce}; c, gold)$: 
+Popping $s$ from the stack means that $s$ will not be able to acquire any dependents
+in $b|\beta$. The cost is therefore the number of arcs in $gold$ of the form $(s, l', k)$
+such that $k \in b|\beta$. \maybe{While it may seem that a gold arc of the form $(k, l, s)$ should be accounted for as well,
+note that a gold arc of that form, if it exists, is already accounted for by a previous (erroneous) \textsc{Right-Arc}$_l$ 
+transition when $s$ acquired its head.}
+
+\item $\mathcal{C}(\textsc{Shift}; c, gold)$: 
+Pushing $b$ onto the stack means that $b$ will not be able to acquire any head
+or dependents in $s|\sigma$. The cost is therefore the number of arcs in $gold$ of 
+the form $(k, l', b)$ or $(b, l', k)$ such that $k \in s|\sigma$. 
+\end{itemize}
+% TODO matt's note about considering only stack items with no assigned head.
+
 
 % Col 2
 \subsection{Following non-gold transitions in training}
@@ -333,7 +402,7 @@ In Section \ref{sec:left} we explained how the Left-Arc can be made to correct
 Shift/Right confusions.  Using this, we could label all Shifts as Right-Arcs,
 while still providing a path to the gold-standard dependencies. Equally, 
 in Section \ref{sec:reduce} we showed how the Reduce
-mpve can be extended to correct Right/Shift confusions, so we could instead
+move can be extended to correct Right/Shift confusions, so we could instead
 remove the Right-Arcs, and Shift every word onto the stack. They would either be
 Left-Arced, or Reduced and attached to the word above them on the
 stack.
@@ -352,7 +421,9 @@ dependency label of $S_0$, its rightward children, etc.
 
 The non-monotonic transition system that we propose does not have this problem.
 The model still makes Shift vs. Right decisions, and conditions on them --- but
-without \emph{committing} to them.
+without \emph{committing} to them -- the model still has a chance to repair
+some previous mistakes when more information about the continuation of the
+sentence presents itself.
 
 \subsection{Defining the oracle}
 
