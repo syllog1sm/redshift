@@ -45,7 +45,7 @@
 \newcommand{\stacktop}{S$_0$\xspace}
 \newcommand{\buffone}{N$_0$\xspace}
 
-\title{Removing Monotonicity Constraints Improves Arc-Eager Dependency Parsing}
+\title{Removing Monotonicity Constraints Improves Accuracy for Arc-Eager Dependency Parsing}
 
 
 \author{Author 1\\
@@ -167,14 +167,6 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu
 
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus.
 
-
-% P3&4
-\section{Relaxing the monotonicity constraints}
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos.
-
-
-
 \begin{figure}
     \centering
     \begin{dependency}[theme=simple]
@@ -212,12 +204,69 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu
     incorrect (in red). Arcs are labelled with the move that created them.
     After move 9 (the lower state), the non-monotonic Left-Arc move
     has replaced the incorrect dependency with a correct Left-Arc (in green).
-\label{fig:reattach}}
+\label{fig:clobber}}
 \end{figure}
 
-\subsection{Non-monotonic Left-Arc}
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing.
 
+
+\section{The Non-Monotonic Arc-Eager Transition System}
+
+The Arc-Eager transition system \citep{nivre:04} has four moves. Two create 
+dependencies, two push the first word of the buffer to the stack, and two pop 
+the stack:
+
+\begin{center}
+    \begin{tabular}{l|cc}
+         & Push  & Pop    \\
+         \hline
+   Arc   & Right & Left    \\
+  No arc & Shift & Reduce   \\
+     \end{tabular}
+\end{center}
+
+The transition system is complete in the sense that the 
+two opposite pairings are unlikely to be useful for projective parsing.
+Pushing the stack after a Left-Arc could introduce crossing dependencies, 
+and popping the stack after a Right-Arc restricts each word to one rightward child.
+
+Every word in the sentence is pushed once, and popped once; and every
+word must have exactly one head. This creates two pairings, along the
+diagonals: (Shift, Left), and (Right, Reduce). Every word must acquire
+its head when it is pushed, or when it is popped, but not both, and not neither.
+The standard approach for guaranteeing this is to constrain the choice of pop move:
+
+\begin{itemize}\setlength{\itemsep}{-2mm}
+    \item To Left-Arc, $S_0$ must \emph{not} have a head;
+    \item To Reduce, $S_0$ \emph{must} have a head.
+\end{itemize}
+The pair is therefore decided by the first move.
+Our idea is simply to let the pair be decided by the \emph{second} move.
+This makes the transition system \emph{non-monotonic}, because if the model decides
+on an incongruent pairing
+we will have to either undo a dependency now regarded as incorrect, or add a
+dependency we now regard as missing. We now describe these operations.
+
+\subsection{Non-monotonic Left-Arc}
+
+The upper arcs in Figure \ref{fig:clobber} show a transition history where the wrong
+push move was selected. The parser began correctly by Shifting \emph{I}
+and Left-Arcing it to \emph{saw}, which was then also Shifted. The incorrect move,
+4 (in red), is to Right-Arc \emph{Jack} instead of Shifting it.
+
+The difficulty of this kind of sentence for an incremental parser is fundamental.
+The leftward context does not constrain the decision, 
+and an arbitrary amount of text could separate \emph{Jack} from its true head,
+\emph{fall}. Eye-tracking
+experiments show that humans often perform a saccade while reading such examples (TODO).
+
+In moves 5-8 the parser correctly builds the rest of the \textsc{np}, and arrives
+at \emph{fall}. The monotonicity constraints would here force an incorrect analysis,
+even though the evidence for the correct decision is much stronger at the later move.
+
+We allow Left-Arcs to `clobber' Right-Arcs if the model
+recommends it. The Right-Arc is deleted, and the Left-Arc proceeds as normal. The
+effect of this is exactly as if the model had correctly chosen \emph{Shift} at
+move 4. We simply give the model a second chance to make the correct choice.
 
 \begin{figure}
     \centering
@@ -261,17 +310,18 @@ decision was originally made.
 \end{figure}
 
 \subsection{Non-monotonic Reduce}
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et.
 
-Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
+The upper arcs in Figure \ref{fig:adduce} show a state resulting from the opposite error.
+In this example, the parser has Shifted \emph{Jack} instead of Right-Arcing it. After
+building the \textsc{np} the buffer is exhausted, except for the artificial root token,
+which we use to Left-Arc the head of the sentence, following \citet{nivre:squib}.
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et.
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque.
-Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et.
-
-
-Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et.
+Instead of letting the previous choice lock us in to the pair (Shift, Left), we let
+the latter decision reverse it to (Right, Reduce). This gives the model the flexibility
+to take advantage of the extra information, and make what should be an easy decision.
+When the Shift/Right decision is reversed, we add an arc between the top of the stack
+word above it, and select the Right-Arc label that the model scored most highly
+when the word was incorrectly Shifted.
 
 \section{Non-monotonic parser oracle}
 

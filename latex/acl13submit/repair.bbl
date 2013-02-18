@@ -1,21 +1,14 @@
-\begin{thebibliography}{2}
+\begin{thebibliography}{1}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \providecommand{\urlprefix}{URL }
 
-\bibitem[{Goldberg and Nivre(2012)}]{goldberg:12}
-Yoav Goldberg and Joakim Nivre. 2012.
-\newblock A dynamic oracle for arc-eager dependency parsing.
-\newblock In \emph{Proceedings of the 24th International Conference on
-  Computational Linguistics (Coling 2012)}. Association for Computational
-  Linguistics, Mumbai, India.
-
-\bibitem[{Zhang and Nivre(2011)}]{zhang:11}
-Yue Zhang and Joakim Nivre. 2011.
-\newblock Transition-based dependency parsing with rich non-local features.
-\newblock In \emph{Proceedings of the 49th Annual Meeting of the Association
-  for Computational Linguistics: Human Language Technologies}, pages 188--193.
-  Association for Computational Linguistics, Portland, Oregon, USA.
-\newblock \urlprefix\url{http://www.aclweb.org/anthology/P11-2033}.
+\bibitem[{Nivre et~al.(2004)Nivre, Hall, and Nilsson}]{nivre:04}
+Joakim Nivre, Johan Hall, and Jens Nilsson. 2004.
+\newblock Memory-based dependency parsing.
+\newblock In Hwee~Tou Ng and Ellen Riloff, editors, \emph{HLT-NAACL 2004
+  Workshop: Eighth Conference on Computational Natural Language Learning
+  (CoNLL-2004)}, pages 49--56. Association for Computational Linguistics,
+  Boston, Massachusetts, USA.
 
 \end{thebibliography}
