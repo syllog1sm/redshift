@@ -50,6 +50,7 @@
 
 \newcommand{\tuple}[1]{$\langle#1\rangle$}
 \newcommand{\maybe}[1]{\textcolor{gray}{#1}}
+\newcommand{\note}[1]{\textcolor{red}{#1}}
 
 \title{Removing Monotonicity Constraints Improves Accuracy for Arc-Eager Dependency Parsing}
 
@@ -180,7 +181,7 @@ is straightforward to compute the number of gold arcs that are ``lost'' by an
 action by considering the effect of the action on the buffer and the stack,
 and reasoning accordingly (the notation assumes the configuration $c$ has $b$
 as the first item in the buffer $\beta$ and $s$ is the top of the stack
-$\sigma$, and $gold$ is a set of arcs. An arc is a triplet $(m,l,h)$ %TODO verify direction is correct.
+$\sigma$, and $gold$ is a set of arcs. An arc is a triplet $(h,l,m)$
 indicating that $m$ modifies $h$ with a label $l$).
 
 \begin{itemize}
@@ -194,7 +195,9 @@ Adding the arc $(s, l, b)$ and pushing $b$ onto the stack means that $b$ will
 not be able to acquire any head in $\sigma$ or $\beta$, nor any dependents in $\sigma$. 
 The cost is therefore the number of arcs in $gold$ of the form $(k, l', b)$,
 such that $k \in \sigma$ or $k \in \beta$, 
-or of the form $(b, l', k)$ such that $k \in \sigma$. 
+or of the form $(b, l', k)$ such that $k \in \sigma$ 
+% the following is new according to matt's fix:
+and $k$ is not assigned a head.
 
 \item $\mathcal{C}(\textsc{Reduce}; c, gold)$: 
 Popping $s$ from the stack means that $s$ will not be able to acquire any dependents
@@ -206,9 +209,14 @@ transition when $s$ acquired its head.}
 \item $\mathcal{C}(\textsc{Shift}; c, gold)$: 
 Pushing $b$ onto the stack means that $b$ will not be able to acquire any head
 or dependents in $s|\sigma$. The cost is therefore the number of arcs in $gold$ of 
-the form $(k, l', b)$ or $(b, l', k)$ such that $k \in s|\sigma$. 
+the form $(k, l', b)$ such that $k \in s|\sigma$ and of the form $(b, l', k)$ such that $k \in s|\sigma$
+% the following is new according to matt's fix:
+and $k$ is not assigned a head.
+\note{Matthew, notice that shift and right-arc changed their definition, as
+you pointed out they should, by requiring the stack item to not have a head
+assigned already. The deltas below are based on this new and correct
+definitions.}
 \end{itemize}
-% TODO matt's note about considering only stack items with no assigned head.
 
 
 % Col 2
@@ -427,20 +435,99 @@ sentence presents itself.
 
 \subsection{Defining the oracle}
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
+The new system .. like the old one ..
+.. with the following changes:
+\begin{itemize}
+   \item Once a word has acquired a head to its right it can still acquire a
+      different head to its left.  (due to change of the Left-arc transition).
+   \item Once words are put on the stack they can acquire heads not only from
+      the buffer but \textit{also from the word just before them on the
+      stack.} (due to the changed semantics of the reduce transition).
+\end{itemize}
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
+We will define the new dynamic oracles $\mathcal{C}_{NML}$,
+$\mathcal{C}_{NMD}$ and $\mathcal{C}_{NML+D}$ based on the arc-eager dynamic
+oracle $\mathcal{C}$ defined above, with additional $\Delta$ terms:
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
+\noindent$\mathcal{C}_{NML}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NML}(a,c,t)$\\
 
+\noindent$\mathcal{C}_{NMD}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NMD}(a,c,t)$\\
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
+\noindent$\mathcal{C}_{NML+D}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NML}(a,c,t) + \Delta_{NMD}(a,c,t)$\\
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et.
+The terms $\Delta_{NML}$ and $\Delta_{NMD}$ reflect the score adjustments that
+need to be done to the arc-eager oracle due to the changes of the Left-Arc and
+Reduce actions, respectively.
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
+The change due to the non-monotonic Left-Arc action:
 
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
+\begin{itemize}
+   \item $\Delta_{NML}(\textsc{RightArc},c,gold)$: The cost of Right-arc is decreased by 1 if the gold head of $b$ is on the buffer
+(because $b$ can still acquire its correct head later with a Left-Arc action).
+It is increased by 1 for any word $w$ on the stack such that $b$ is the gold
+parent of $w$ and $w$ is assigned a head already.
+
+   \item $\Delta_{NML}(\textsc{Reduce},c,gold)$: The cost of Reduce is increased by 1 if the gold head of $s$ is on the buffer
+(because this will preclude $s$ from acquiring its correct head later on with
+a Left-Arc action).
+
+   \item $\Delta_{NML}(\textsc{LeftArc},c,gold)$: The cost of Left-Arc is increased by 1 if $s$ is already assigned to its gold
+parent.
+
+  \item $\Delta_{NML}(\textsc{Shift},c,gold)$: The cost of Shift is increased by 1 for any word $w$ on the stack such that $b$ is the gold
+parent of $w$ and $w$ is assigned a head already.
+\end{itemize}
+
+The change due to the non-monotonic Reduce action:
+\begin{itemize}
+
+   \item $\Delta_{NMD}(\textsc{Shift},c,gold)$: The cost of Shift is decreased by 1 if the gold head of $b$ is $s$.
+
+   \item $\Delta_{NMD}(\textsc{LeftArc},c,gold)$: The cost of Left-Arc is increased by 1 if $s$ is not assigned a head, and the gold head of $s$ is $s_{-1}$.
+
+   \item $\Delta_{NMD}(\textsc{RightArc},c,gold)$ = 0
+
+   \item $\Delta_{NMD}(\textsc{Reduce},c,gold)$ = 0
+
+\end{itemize}
+
+\section{Training Procedure}
+
+Now that we have defined dynamic oracles for the non-monotonic arc-eager
+system, we could just plug them in the training algorithm of
+\cite{coling2012}.  However, the non monotonic oracles does not give the
+parser any incentive to learn not make mistakes that it can potentially recover from
+later, even if learning to fix the mistake is harder than learning not to make
+it in the first place.
+
+In order to correct for that, we can instead train the parser using both the
+monotonic and non-monotonic oracles simultaneously by combining their
+judgements: if the non-monotonic oracle assigns several actions a zero-cost,
+we prefer to follow those actions that are also assigned a zero-cost by the
+monotonic oracle, because these actions can lead to the best outcome without
+relying on a repair down the road.
+
+\note{should make nicer!}
+\begin{verbatim}
+
+while not state.is_finished {
+  feats = extract(state)
+  zero_costs =
+      O_r(state) intersect O_e(state)
+  if zero_costs.empty():
+   zero_costs = O_r(state)
+
+  g = predict_from(feats, zero_costs)
+  p = predict_from(feats, monotonic)
+  if p not in zero_costs {
+     update(feats, g, 1)
+     update(feats, p, -1)
+  }
+  transition(state, p)
+}
+\end{verbatim}
+   
+
 % P5
 \section{Experiments}
 
