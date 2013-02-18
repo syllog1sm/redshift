@@ -229,19 +229,20 @@ word must have exactly one head. This creates two pairings, along the
 diagonals: (S, L) and (R, D). Every word must acquire
 its head when it is pushed or when it is popped, but not both, and not neither.
 
-The standard approach for guaranteeing this is to constrain the choice of pop move:
+The Arc-Eager system guarantees this by constraining the choice of pop move:
 
 \begin{itemize}\setlength{\itemsep}{-2mm}
     \item Iff $S_0$ has a head, Reduce;
     \item Iff $S_0$ has no head, Left-Arc.
 \end{itemize}
-The pair is therefore decided by the first move in the standard system.
-Our idea is simply to let the pair be decided by the \emph{second} move.
+In the existing solution, the pair is decided by the first move.
+Our idea is to let the pair be decided by the \emph{second} move.
 
 This makes the transition system \emph{non-monotonic}, because if the model decides
 on an incongruent pairing
-we will have to either undo a dependency we now regard as incorrect, or add a
-dependency we now regard as missing. We now describe these operations.
+we will have to either undo or add a
+dependency, depending on whether we correct a Right-Arc with a Left-Arc, or correct
+a Shift with a Reduce. We now describe these operations.
 
 \subsection{Non-monotonic Left-Arc}
 
@@ -326,32 +327,25 @@ we select the Right-Arc label that the model scored most highly at that time.
 
 We have argued above that it is better to trust the second decision that the model
 makes, rather than using the first decision to determine the second. If this is
-the case, then why bother even making a decision on the first move?
+the case, what utility is gained from the first move?
 
-We can think of two ways to achieve this. 
-In Section \ref{sec:left} we explained how the Left-Arc can be made to correct
-Shift/Right confusions.  Using this, we could label all Shifts as Right-Arcs,
-while still providing a path to the gold-standard dependencies. Equally, 
-in Section \ref{sec:reduce} we showed how the Reduce
-mpve can be extended to correct Right/Shift confusions, so we could instead
-remove the Right-Arcs, and Shift every word onto the stack. They would either be
-Left-Arced, or Reduced and attached to the word above them on the
-stack.
+Instead of defining how pop moves can correct Shift/Right mistakes, an alternate
+strategy would be to eliminate the ambiguity. There are two possibilities:
+Shift every token, and create all Right-Arcs via Reduce; or Right-Arc every token,
+and override the incorrect arcs with subsequent Left-Arcs.
 
-The problem with these approaches is that they do not do a good job
-of accumulating information in the parse as it progresses. The structure built by the
-original Arc-Eager system will be more informative than the ones built by these
-3-move systems. Most transition decisions are easy, and their predictions yield an
-informative state that makes the difficult decisions possible.
-
-For instance, removing the Right-Arc move would mean that words are always Shifted,
-in order to delay setting their head. However, none of the states in between those two
-points would be able to condition on the previous choices. They would miss out on
-informative features, such as the 
-dependency label of $S_0$, its rightward children, etc.
+The problem with these approaches is that it is actually very useful to condition
+on the results of previous decisions. Most of the transition decisions are very
+easy, and when the parser does encounter a difficult decision, it is advantageous
+to have the information that determines the previous choices condensed
+into a dependency structure. As an example of the problem, if the Shift move is
+eliminated, about half of the Right-Arcs created will be spurious. All of these
+arcs will be assigned labels\footnote{If the parser is trained to label the temporary
+arcs differently, its action is roughly isomorphic to the Shift move.}, making
+important features uselessly noisy.
 
 The non-monotonic transition system that we propose does not have this problem.
-The model still makes Shift vs. Right decisions, and conditions on them --- but
+The model makes the Shift vs. Right decisions as normal, and conditions on them --- but
 without \emph{committing} to them.
 
 \subsection{Defining the oracle}
