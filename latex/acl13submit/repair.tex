@@ -219,23 +219,22 @@ the stack:
     \begin{tabular}{l|cc}
              & Push  & Pop    \\
            \hline
-           Sets head   & \emph{Right} & \textbf{Left}    \\
+           Adds head   & \emph{Right} & \textbf{Left}    \\
             No head    & \textbf{Shift} & \emph{Reduce}   \\
      \end{tabular}
 \end{center}
 
 Every word in the sentence is pushed once and popped once; and every
 word must have exactly one head. This creates two pairings, along the
-diagonals: (S, L) and (R, D). Every word must acquire
-its head when it is pushed or when it is popped, but not both, and not neither.
-
+diagonals: (S, L) and (R, D).
+Either the push move adds the head or the pop move does, but not both and not neither.
 The Arc-Eager system guarantees this by constraining the choice of pop move:
 
 \begin{itemize}\setlength{\itemsep}{-2mm}
     \item Iff $S_0$ has a head, Reduce;
     \item Iff $S_0$ has no head, Left-Arc.
 \end{itemize}
-In the existing solution, the pair is decided by the first move.
+In the existing solution, the first move decides both.
 Our idea is to let the pair be decided by the \emph{second} move.
 
 This makes the transition system \emph{non-monotonic}, because if the model decides
@@ -428,16 +427,36 @@ We follow the suggestion of \citet{nivre:squib} to handle root-node dependencies
 adding a dummy token at the \emph{end} of the sentence.
 This improves accuracy by delaying root-node decisions, and likely accounts for the
 0.2\% extra accuracy of our standard-trained baseline system over the equivalent result
-reported by \citet{goldberg:12}. The only other known difference between the systems
-is a modest model compaction step performed by the proprietary Google perceptron
-code.
+reported by \citet{goldberg:12}.
+
+The other difference between the systems is in feature pruning. After each iteration,
+we prune all features that have received fewer than five updates. We have not
+found this to have a substantial effect on accuracy.
 
 \subsection{Training strategies}
 
-\textbf{Standard.} Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam. Nunc sem mauris, volutpat nec rhoncus quis,
+Section \ref{sec:oracle} summarises a recent innovation in the way transition-based
+dependency parsers are trained. Their method allows examples of states that
+result from previous transition errors to be introduced into training, which is
+important for this work. We therefore evaluate our model with two training strategies.
 
-\textbf{Goldberg and Nivre.} Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida.
+\textbf{Standard.} 
+The parser begins stepping through the sentence, and at each state a small
+set of rules determines a single gold-standard transition. The transitions
+determine both the label for the instance and the next parser action. No ambiguity
+is preserved; the Perceptron's weights are updated even if its prediction was a move
+that could lead to the gold-standard dependencies.
 
+This is the method labelled \emph{static} in \citep{goldberg:12}.
+
+\textbf{Goldberg and Nivre.} The parser is allowed to train from states
+resulting from previous incorrect trainsitions. The function determing correctness
+is described in Section \ref{sec:oracle}. Another important difference is that
+multiple transitions may be regarded as correct, if they do not cause any new
+errors. Any prediction within this set will not result in the Perceptron's
+weights.
+
+This is the method labelled \emph{dynamic+explore} in \citet{goldberg:12}.
 
 \begin{table}[t]
     \small
