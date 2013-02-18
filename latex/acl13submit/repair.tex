@@ -328,40 +328,31 @@ We have argued above that it is better to trust the second decision that the mod
 makes, rather than using the first decision to determine the second. If this is
 the case, then why bother even making a decision on the first move?
 
-We can think of two ways to remove a push move from the Arc-Eager transition system.
-The first is to remove the Shift move, and always attach words when they are
-pushed to the stack. The second is to remove the Right-Arc move, and never attach
-words when they are pushed. There is a general problem with these transition systems
-that is easier to see when they are examined individually.
+We can think of two ways to achieve this. 
+In Section \ref{sec:left} we explained how the Left-Arc can be made to correct
+Shift/Right confusions.  Using this, we could label all Shifts as Right-Arcs,
+while still providing a path to the gold-standard dependencies. Equally, 
+in Section \ref{sec:reduce} we showed how the Reduce
+mpve can be extended to correct Right/Shift confusions, so we could instead
+remove the Right-Arcs, and Shift every word onto the stack. They would either be
+Left-Arced, or Reduced and attached to the word above them on the
+stack.
 
-In the `shiftless' configuration, we break approximately 50\% of the rightward
-dependencies we make, as every word that is pushed onto the stack but whose head
-is actually in the buffer will receive as a temporary head whatever word happens to be
-on top of the stack at the time. For instance, if a preposition is on top of the stack,
-and the next word is a determiner, we will create a dependency between them.
-These dependencies need labels, and it is not obvious which one to assign during training.
-We could reserve a special label, \emph{null}, for the non-gold dependencies. But then
-we should not want to reduce these \emph{null} typed dependencies away, as they are
-marked as incorrect --- so there is little difference between this approach and the original
-Arc-Eager system.
-
-Removing the Right-Arc is a little better, but labelling the arc that will be added
-when the word is reduced is a problem here, as well. We risk having to make the
-labelling decision in a state where we have lost the information that makes the choice easy.
-If we decide instead to build a special label model, then that again seems little different
-from just making a prediction when the word is on top of the stack, and retaining the
-ability to revise it later.
-
-The general problem these approaches share is that they do not do a good job
+The problem with these approaches is that they do not do a good job
 of accumulating information in the parse as it progresses. The structure built by the
 original Arc-Eager system will be more informative than the ones built by these
 3-move systems. Most transition decisions are easy, and their predictions yield an
 informative state that makes the difficult decisions possible.
 
-The only advantage a single push system would have is in avoiding \emph{commitment}
-to one of these prior predictions. Our non-monotonic four move system has that
-property, without making its previous predictions any less specific.
+For instance, removing the Right-Arc move would mean that words are always Shifted,
+in order to delay setting their head. However, none of the states in between those two
+points would be able to condition on the previous choices. They would miss out on
+informative features, such as the 
+dependency label of $S_0$, its rightward children, etc.
 
+The non-monotonic transition system that we propose does not have this problem.
+The model still makes Shift vs. Right decisions, and conditions on them --- but
+without \emph{committing} to them.
 
 \subsection{Defining the oracle}
 
@@ -381,6 +372,13 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu
 Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue.
 % P5
 \section{Experiments}
+
+We implemented a standard Arc-Eager parser trained with the averaged Perceptron,
+and used it to evaluate the non-monotonic transitions. We tested the transitions on
+multiple dependency schemes, to check whether any effects were specific to annotation
+contingencies. We also analyse the effect on accuracy by dependency type, and
+investigate the impact on error propagation.
+
 
 \begin{table}[t]
     \small
@@ -415,26 +413,28 @@ Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu
 Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam. Nunc sem mauris, volutpat nec rhoncus quis, sodales ut massa. Praesent egestas ante interdum elit laoreet volutpat. Morbi quis velit tempor libero consequat volutpat at vel nulla. Morbi et justo ac liberos.
 % P6
 
-\subsection{Parser model}
+\subsection{Parsing model}
 
-Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam. Nunc sem mauris, volutpat nec rhoncus quis, sodales ut massa. Praesent egestas ante interdum elit laoreet volutpat. Morbi quis velit tempor libero consequat volutpat at vel nulla. Morbi et justo ac liberos.
+We base our experiments on the parser described by \citet{goldberg:12}. We
+began by implementing their baseline system, a standard Arc-Eager parser using
+an averaged Perceptron learner and the extended feature set described by \citet{zhang:11}.
+We follow \citeauthor{goldberg:12} in training all models for 15 iterations.
 
+Labels and moves were learned jointly, resulting in a single model with 88 classes
+for the Stanford dependencies. Joint label/move learning proved surprisingly
+advantageous, giving 0.4\% additional \uas.
+
+We follow the suggestion of \citet{nivre:squib} to handle root-node dependencies by
+adding a dummy token at the \emph{end} of the sentence.
+This improves accuracy by delaying root-node decisions, and likely accounts for the
+0.2\% extra accuracy of our standard-trained baseline system over the equivalent result
+reported by \citet{goldberg:12}. Our systems are otherwise identical.
 
 \subsection{Training strategies}
 
 \textbf{Standard.} Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam. Nunc sem mauris, volutpat nec rhoncus quis,
 
 \textbf{Goldberg and Nivre.} Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida.
-
-\subsection{Transition systems}
-
-\textbf{Baseline.} Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor.
-
-\textbf{NM L.} Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue.
-
-\textbf{NM D.} Non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor.
-
-\textbf{NM L+D.} Non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
 
 \begin{table}[t]
@@ -463,6 +463,16 @@ Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis pu
             All results averaged across 20 runs with different random seeds. All models
              had $\sigma$=0.07-0.08.\label{tab:goldberg}}
 \end{table}
+
+\subsection{Transition systems}
+
+\textbf{Baseline.} Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor.
+
+\textbf{NM L.} Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue.
+
+\textbf{NM D.} Non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor.
+
+\textbf{NM L+D.} Non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
 
 \section{Development Results}
