@@ -51,8 +51,7 @@
 \newcommand{\tuple}[1]{$\langle#1\rangle$}
 \newcommand{\maybe}[1]{\textcolor{gray}{#1}}
 
-\title{Removing Monotonicity Constraints Improves Accuracy for Arc-Eager Dependency Parsing}
-
+\title{A Non-Monotonic Arc-Eager Transition System for Dependency Parsing}
 
 \author{Author 1\\
 	    XYZ Company\\
@@ -395,16 +394,15 @@ we select the Right-Arc label that the model scored most highly at that time.
 
 We have argued above that it is better to trust the second decision that the model
 makes, rather than using the first decision to determine the second. If this is
-<<<<<<< HEAD
 the case, is the first decision entirely redundant?
 Instead of defining how pop moves can correct Shift/Right mistakes, we could
 instead eliminate the ambiguity. There are two possibilities:
 Shift every token, and create all Right-Arcs via Reduce; or Right-Arc every token,
 and override the incorrect arcs with subsequent Left-Arcs.
 
-The problem with these approaches is that it is actually very useful to condition
+The problem with these approaches is that it is useful to condition
 on the results of previous decisions. Saving all of the difficulty for later
-is not a very good structured prediction strategy. Most of the transition decisions are very
+is not a very good structured prediction strategy. Most of the transition decisions are
 easy, and when the parser does encounter a difficult decision, it is advantageous
 to have the dependency structure as a summary of the previous information, in
 much the same way that the previous tags are critical for \pos tagging. 
@@ -475,7 +473,10 @@ investigate the impact on error propagation.
 
 \subsection{Data and Evaluation}
 
-Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam. Nunc sem mauris, volutpat nec rhoncus quis, sodales ut massa. Praesent egestas ante interdum elit laoreet volutpat. Morbi quis velit tempor libero consequat volutpat at vel nulla. Morbi et justo ac liberos.
+
+
+A train/dev/test split of 02-21 of the \wsj was used for all models.
+
 % P6
 
 \subsection{Parsing model}
@@ -484,10 +485,11 @@ We base our experiments on the parser described by \citet{goldberg:12}. We
 began by implementing their baseline system, a standard Arc-Eager parser using
 an averaged Perceptron learner and the extended feature set described by \citet{zhang:11}.
 We follow \citeauthor{goldberg:12} in training all models for 15 iterations,
-and in shuffling the sentences before each iteration. This randomisation is
-important for accuracy, but causes variance, so accuracies
-are reported as the average of 20 runs. All experiments had a standard deviation between
-TODO and TODO\%.
+and in shuffling the sentences before each iteration.
+The system is sensitive to the ordering of the sentences, so
+the order is shuffled before each iteration and
+so accuracies are reported as the average of 20 trials. All experiments had a
+standard deviation between TODO and TODO\%.
 
 Labels and moves were learned jointly, resulting in a single model with 88 classes
 for the Stanford dependencies. Joint label/move learning proved surprisingly
@@ -499,15 +501,11 @@ This improves accuracy by delaying root-node decisions, and likely accounts for 
 0.2\% extra accuracy of our standard-trained baseline system over the equivalent result
 reported by \citet{goldberg:12}.
 
-The other difference between the systems is in feature pruning. After each iteration,
-we prune all features that have received fewer than five updates. We have not
-found this to have a substantial effect on accuracy.
-
 \subsection{Training strategies}
 
 Section \ref{sec:oracle} summarises a recent innovation in the way transition-based
-dependency parsers are trained. Their method allows examples of states that
-result from previous transition errors to be introduced into training, which is
+dependency parsers are trained. This method allows training from states that
+result from previous transition errors, which is
 important for this work. We therefore evaluate our model with two training strategies.
 
 \textbf{Standard.} 
@@ -516,17 +514,15 @@ set of rules determines a single gold-standard transition. The transitions
 determine both the label for the instance and the next parser action. No ambiguity
 is preserved; the Perceptron's weights are updated even if its prediction was a move
 that could lead to the gold-standard dependencies.
-
-This is the method labelled \emph{static} in \citep{goldberg:12}.
+This is the baseline method for \citet{goldberg:12}.
 
 \textbf{Goldberg and Nivre.} The parser is allowed to train from states
-resulting from previous incorrect trainsitions. The function determing correctness
+resulting from previous incorrect transitions. The function determing correctness
 is described in Section \ref{sec:oracle}. Another important difference is that
 multiple transitions may be regarded as correct, if they do not cause any new
-errors. Any prediction within this set will not result in the Perceptron's
-weights.
-
-This is the method labelled \emph{dynamic+explore} in \citet{goldberg:12}.
+errors. Any prediction within this set will not result in an update to the
+Perceptron's weights. This is the method labelled \emph{dynamic+explore}
+in \citet{goldberg:12}.
 
 \begin{table}[t]
     \small
@@ -537,7 +533,7 @@ This is the method labelled \emph{dynamic+explore} in \citet{goldberg:12}.
         \hline \hline
                               & \multicolumn{4}{c}{Unlabelled Attachment Scores} \\
         \hline
-        Baseline              &  00.0  & 00.0 & 00.0 & 00.0   \\
+        Baseline              &  90.0  & 00.0 & 00.0 & 00.0   \\
         NM L                  &  00.0  & 00.0 & 00.0 & 00.0   \\
         NM D                  &  00.0  & 00.0 & 00.0 & 00.0   \\
         NM L+D                &  00.0  & 00.0 & 00.0 & 00.0    \\ 
@@ -652,27 +648,6 @@ Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auc
      shown as a difference from the baseline.\label{tab:errprop}}
 \end{table}
 
-\subsection{Interaction with additional features}
-
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
-\begin{table}
-\small
-
-\centering
-(S1w), (S1p), (S1w, S1p),\\
-(S1w, N0w), (S1w, N0p), (S1p, N0p),\\
-(S1w, S0w, N0w), (S1p, S0p, N0p), (S1p, S0p, N0p),\\
-(S2w, N0w),\\
-(S2w, N1w),\\
-(S2p, N0p, N1w), (S2p, N0w, N1w), (S2w, N0p, N1p), \\
-(S3w, N0w), \\
-(S2w, N1w),\\ 
-(S3p, S2p, N0w),\\
-(dist, S1w, N1w),\\
-(dist, S1p, N0p, N1p)
-\caption{Additional features. S=Stack, N=buffer. w=Word, p=\pos. Dist=Distance
-     between S0 and N0. TODO: Prettify this. TODO: Update it, it's from the old version.}
-\end{table}
 
 \begin{table}
 \centering
@@ -717,9 +692,6 @@ G\&N 12  & $n$   & ---   & ---   & 88.72 & 90.96 \\
         \hline
 Baseline    & $n$ &       &       &       &  \\
 NM L+D & $n$ &       &       &       &  \\
-\hline
-Base + Feats   & $n$ &       &       &       &  \\
-NM L+D + Feats & $n$ &       &       &       &  \\
 \hline
     \end{tabular}
     \caption{Test results on \wsj 23. 
