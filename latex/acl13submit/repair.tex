@@ -138,6 +138,57 @@ decision if necessary. This allows the parser to recover from mistakes.}
 
 \section{Arc-Eager Transition-based Dependency Parsing}
 
+A transition-based dependency parser approaches the task of building a dependency
+tree as a series of \emph{state transitions}, typically from start-to-finish
+along the sentence. A \emph{transition system} is the set of operations that the
+parser has available. A great variety of transition systems have been proposed,
+but we restrict our attention for to the Arc-Eager system \citep{nivre:04},
+which has been particularly influential.
+
+The \emph{state} that the transitions manipulate can be represented by the
+4-tuple (H, L, N, S), for the Heads, Labels, Buffer, and Stack. The Heads
+and Labels arrays are sufficient for storing the parse. When the head of word $i$
+is set to token $k$ with the label $l$, we will set $H[i]=k$ and $L[i]=l$.
+We will sometimes refer to this as `adding an arc', or `attaching', or `creating
+a dependency'. 
+The buffer is simply a queue of the words yet to be processed in the sentence.
+We assume that we begin parsing with the first word of the sentence on the stack.
+
+It is easier to intuit the system if we begin with a subset. The Right-Arc move
+sets $H[N_0]=S_0$, and pushes $N_0$ to the stack. The former $S_0$ is now $S_1$,
+and $N_1$ is now $N_0$, as we advance a token in the buffer. 
+With only the Right-Arc, we will build a uniformly right-branching tree for
+every sentence. Each move will correspond to an extra level in the tree.
+At the $i$th word of the sentence, there will be $i$ words on the stack, and
+every word's head will be the word before it in the string, and also immediately
+above it on the stack.
+
+To clear words from the stack, we add the Reduce move. This is, simply,
+pop. It does not create any dependencies or advance the buffer.
+When a word is on top of the stack, it is at the tip of the branch being built.
+Applying the Reduce move corresponds to walking up the branch one node, making the
+parent the active attachment point.
+
+A (Right, Reduce) transition system has an umambiguous mapping of move histories to
+trees. Consider the tree shape that would result from alternating between the moves.
+Every word would be attached as siblings to the first word. Note also that not
+all possible move histories correspond to trees. The history \textsc{ddddd} is not
+valid, as it involves applying the Reduce move to an empty stack. Similarly, we will
+not be able to Right-Arc once we reach the end of the buffer.
+
+The (Right, Reduce) transition system processes a sentence of length $N$ in exactly $2N$
+transitions, with exactly $N$ Right-Arcs and exactly $N$ Reduce moves. Furthermore,
+every word $w$ there will be exactly one Right-Arc such that $N_0=k$, and exactly
+one Reduce such that $S_0=k$. Each word must be `processed' by both moves; it must be
+pushed with the Right-Arc and popped with the Reduce.
+
+The same is true for a (Left, Shift) system. A good way to think of the two
+systems is that they are really the same, except that one move in each system
+writes a dependency as a side-effect. Viewed this way, it is natural to view the
+Left-Arc as a slightly different Reduce, and the Right-Arc as a slightly different Shift.
+This makes the 4-move system much easier to intuit.
+
+
 \subsection{Dynamic oracles}
 \label{ref:oracle}
 
