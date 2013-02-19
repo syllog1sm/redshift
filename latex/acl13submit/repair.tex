@@ -137,11 +137,9 @@ decision if necessary. This allows the parser to recover from mistakes.}
 
 
 \section{Arc-Eager Transition-based Dependency Parsing}
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
-
-Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis.
 
 \subsection{Dynamic oracles}
+\label{ref:oracle}
 
 An essential component when training a transition-based parser is an oracle
 which, given a gold-standard tree, dictates the sequence of moves a parser
@@ -531,39 +529,58 @@ investigate the impact on error propagation.
 
 
 \begin{table}[t]
+
+% UAS
+% baseline 21: 90.4 +/- 0.10
+% reattach 21: 90.2 +/- 0.09
+% adduce 21: 90.4 +/- 0.08
+% both 21: 90.3 +/- 0.09
+% LAS
+% baseline 21: 87.8 +/- 0.10
+% reattach 21: 87.6 +/- 0.09
+% adduce 21: 87.8 +/- 0.08
+% both 21: 87.6 +/- 0.09
     \small
     \centering
     \begin{tabular}{l|rrrr}
         \hline
-                              & Stanford & MALT & CoNLL & ?? \\
-        \hline \hline
-                              & \multicolumn{4}{c}{Unlabelled Attachment Scores} \\
+        & \multicolumn{2}{c}{Stanford} & \multicolumn{2}{c}{MALT}  \\
+        & \textsc{w}  & \textsc{s} & \textsc{w} & \textsc{s} \\
+\hline \hline
+        & \multicolumn{4}{c}{Unlabelled Attachment} \\
         \hline
-        Baseline              &  00.0  & 00.0 & 00.0 & 00.0   \\
-        NM L                  &  00.0  & 00.0 & 00.0 & 00.0   \\
-        NM D                  &  00.0  & 00.0 & 00.0 & 00.0   \\
-        NM L+D                &  00.0  & 00.0 & 00.0 & 00.0    \\ 
-        \hline
-                              & \multicolumn{4}{c}{Labelled Attachment Score} \\
-        \hline
-        Baseline              &  00.0  & 00.0 & 00.0  & 00.0   \\
-        NM L                  &  00.0  & 00.0 & 00.0  & 00.0   \\
-        NM D                  &  00.0  & 00.0 & 00.0  & 00.0   \\
-        NM L+D                &  00.0  & 00.0 & 00.0  & 00.0   \\ 
-        \hline
+Baseline & 90.4 & 41.2 & 00.0 & 00.0 \\
+NM L & 90.2 & 41.2 & 00.0 & 00.0 \\
+NM D & 90.4 & 41.1 & 00.0 & 00.0 \\
+NM L+D & 90.3 & 41.2 & 00.0 & 00.0 \\
+\hline
+            & \multicolumn{4}{c}{Labelled Attachment} \\
+            \hline
+Baseline & 87.8 & 31.4 & 00.0 & 00.0 \\
+NM L & 87.6 & 31.3 & 00.0 & 00.0 \\
+NM D & 87.8 & 31.3 & 00.0 & 00.0 \\
+NM L+D & 87.6 & 31.5 & 00.0 & 00.0 \\
+\hline
     \end{tabular}
-    \caption{\small Effect of non-monotonic transitions with \textbf{standard training}.
-             All results averaged across 20 runs with different random seeds. All models
-             had $\sigma$=TODO-TODO.\label{tab:standard}}
+    \caption{\small Non-monotonic transitions are not useful with
+        \textbf{standard training},
+where all training examples have gold-standard transition histories. Results refer to
+\wsj 22.\label{tab:standard}}
 \end{table}
 
 
 \subsection{Data and Evaluation}
 
+A train/dev/test split of 02-21 of the Penn Treebank \textsc{wsj} \citep{marcus:94}
+was used for all models. The data was converted into
+Stanford dependencies \citep{stanford_deps} after the \citet{vadas:07}
+\textsc{np}-bracketing patch was applied. We also evaluate our models on
+dependencies created by the \textsc{Penn2MALT} tool, to assist comparison 
+with previous results.
 
-
-A train/dev/test split of 02-21 of the \wsj was used for all models.
-
+The data was \pos tagged using the tagger described by \citep{zhang_pos:11}.
+As is standard, 4-fold jack-knifing was used to prevent learning incorrect
+weights from gold-standard tags.
 % P6
 
 \subsection{Parsing model}
@@ -612,42 +629,64 @@ Perceptron's weights. This is the method labelled \emph{dynamic+explore}
 in \citet{goldberg:12}.
 
 \begin{table}[t]
+% Stanford
+% UAS
+% baseline 21: 91.2 +/- 0.08
+% reattach 21: 91.4 +/- 0.07
+% adduce 21: 91.4 +/- 0.08
+% both 21: 91.6 +/- 0.08
+% LAS
+% baseline 21: 88.7 +/- 0.06
+% reattach 21: 89.0 +/- 0.08
+% adduce 21: 88.9 +/- 0.07
+% both 21: 89.1 +/- 0.09
     \small
     \centering
     \begin{tabular}{l|rrrr}
         \hline
-                              & Stanford & MALT & CoNLL & ?? \\
+        & \multicolumn{2}{c}{Stanford} & \multicolumn{2}{c}{MALT}  \\
+        & \textsc{w}  & \textsc{s} & \textsc{w} & \textsc{s} \\
         \hline \hline
-                              & \multicolumn{4}{c}{Unlabelled Attachment Scores} \\
+        & \multicolumn{4}{c}{Unlabelled Attachment} \\
         \hline
-        Baseline              &  90.0  & 00.0 & 00.0 & 00.0   \\
-        NM L                  &  00.0  & 00.0 & 00.0 & 00.0   \\
-        NM D                  &  00.0  & 00.0 & 00.0 & 00.0   \\
-        NM L+D                &  00.0  & 00.0 & 00.0 & 00.0    \\ 
+        Baseline & 91.2 & 42.0 & 90.9 & 39.7 \\
+        NM L & 91.4 & 43.1 & 91.0 & 40.1 \\
+        NM D & 91.4 & 42.8 & 91.1 & 41.2 \\
+        NM L+D & 91.6 & 43.3 & 91.3 & 41.5 \\
         \hline
-                              & \multicolumn{4}{c}{Labelled Attachment Score} \\
+        & \multicolumn{4}{c}{Labelled Attachment} \\
         \hline
-        Baseline              &  00.0  & 00.0 & 00.0  & 00.0   \\
-        NM L                  &  00.0  & 00.0 & 00.0  & 00.0   \\
-        NM D                  &  00.0  & 00.0 & 00.0  & 00.0   \\
-        NM L+D                &  00.0  & 00.0 & 00.0  & 00.0   \\ 
+        Baseline & 88.7 & 31.8 & 89.7 & 36.6 \\
+        NM L & 89.0 & 32.5 & 89.8 & 36.9 \\
+        NM D & 88.9 & 32.3 & 89.9 & 37.7 \\
+        NM L+D & 89.1 & 32.7 & 90.0 & 37.9 \\
         \hline
     \end{tabular}
-    \caption{\small Effect of non-monotonic transitions with \textbf{Goldberg and Nivre training}
-            All results averaged across 20 runs with different random seeds. All models
-             had $\sigma$=0.07-0.08.\label{tab:goldberg}}
+    \caption{\small
+        With \textbf{Goldberg and Nivre training}, both non-monotonic transitions
+        bring small improvements in per-token (\textsc{w}) and whole sentence (\textsc{s})
+        accuracy on the development data, \wsj 22.
+        \label{tab:goldberg}}
 \end{table}
 
 \subsection{Transition systems}
 
-\textbf{Baseline.} Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor.
+\textbf{Baseline.} The unmodified Arc-Eager transition system.
 
-\textbf{NM L.} Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue.
+\textbf{NM L.} The pre-condition on Left-Arc is removed, allowing the model to
+choose it when the top of the stack already has a head set, which the Left-Arc will
+over-ride. This move will be non-monotonic in the
+sense that it will delete a previously created dependency, in addition to creating
+a Left-Arc as normal.
 
-\textbf{NM D.} Non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor.
+\textbf{NM D.} The pre-condition on Reduce is removed, allowing the model to choose it
+when the top of the stack ($S0$) has no head set, so long as there is another word
+above it on the stack ($S1$). $S0$ is then attached as a child of $S1$. This move
+is non-monotonic in the sense that it over-rides the previous decision to push $S0$,
+instead of Right-Arc it to $S1$. The new arc will be assigned the highest scoring
+Right-Arc label from that previous decision.
 
-\textbf{NM L+D.} Non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
-
+\textbf{NM L+D.} Both non-monotonic moves are enabled. 
 
 \section{Development Results}
 \label{sec:results}
@@ -710,82 +749,45 @@ Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auc
 Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
 
-\subsection{Effect on error propagation}
-
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
-
-\begin{table}
-    \small
-    \centering
-    \begin{tabular}{l|rrr|rrr}
-        & \multicolumn{3}{c|}{Standard Training} & \multicolumn{3}{c}{G\&N Training}\\
-        $E$   & N & Baseline & NM    & N &Baseline & NM    \\
-        \hline \hline
-        0     &   &          &        &   &       &        \\
-        1     &   &          &        &   &       &        \\
-        2     &   &          &        &   &       &        \\
-        3     &   &          &        &   &       &        \\
-        4     &   &          &        &   &       &        \\
-        5     &   &          &        &   &       &        \\
-        $>5$  &   &          &        &   &       &        \\
-        \hline
-    \end{tabular}
-\caption{\small Likelihood of making a transition error in a state given $E$ previous
-         errors with the two training strategies. The system accuracy (NM L+D) is
-     shown as a difference from the baseline.\label{tab:errprop}}
-\end{table}
-
-
-\begin{table}
-\centering
-\begin{tabular}{lrr}
-    \hline 
-            & \las  & \uas  \\
-    \hline \hline 
-                & \multicolumn{2}{c}{Standard Features} \\
-                \hline
-    Baseline    & 00.0 & 00.0 \\
-    NM L+D      & 00.0 & 00.0 \\
-\hline
-                & \multicolumn{2}{c}{Additional features} \\
-                \hline
-    Baseline    & 00.0 & 00.0 \\
-    NM L+D      & 00.0 & 00.0 \\
-\end{tabular}
-\caption{
-    \small
-    Impact of the additional features on Stanford \wsj22 using the baseline and
-    non-monotonic transition systems.
-\label{tab:feats}}
-\end{table}
-
-
 \section{Test Results}
 
 Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
 
 \begin{table}
+%UAS
+%baseline 21: 90.9 +/- 0.04
+%both 21: 91.1 +/- 0.07
+%LAS
+%baseline 21: 88.7 +/- 0.05
+%both 21: 88.9 +/- 0.07
+% UAS
+% baseline 21: 90.6 +/- 0.07
+% both 21: 91.0 +/- 0.05
+% LAS
+% baseline 21: 89.5 +/- 0.07
+% both 21: 89.9 +/- 0.06
     \centering
     \small
     \begin{tabular}{l|r|rr|rr}
         \hline 
-System  &   $O$      & \multicolumn{2}{c|}{Penn2Malt} & \multicolumn{2}{c}{Stanford} \\
-                           &          & \las  & \uas  & \las & \uas \\
+System  &   $O$ &  \multicolumn{2}{c}{Stanford} & \multicolumn{2}{|c}{Penn2Malt} \\
+        &       &  \las  & \uas  & \las & \uas \\
         \hline \hline
-K\&C 10  & $n^3$ & ---   & 93.00 & ---  & --- \\
-Z\&N 11  & $nk$  & 91.8  & 92.9  & 91.9 & 93.5\\
-G\&N 12  & $n$   & ---   & ---   & 88.72 & 90.96 \\
+K\&C 10  & $n^3$ & ---   & ---   & ---  & 93.00 \\
+Z\&N 11  & $nk$  & 91.9  & 93.5  & 91.8 & 92.9 \\
+G\&N 12  & $n$   & 88.72 & 90.96 & ---  & --- \\
         \hline
-Baseline    & $n$ &       &       &       &  \\
-NM L+D & $n$ &       &       &       &  \\
+Baseline    & $n$ & 88.7 & 90.9 & 88.7  & 90.6 \\
+NM L+D      & $n$ & 88.9 & 91.1 & 88.9  & 91.0 \\
 \hline
     \end{tabular}
-    \caption{Test results on \wsj 23. 
-         \label{tab:feats}}
+    \caption{\small Test results on \wsj 23, with comparison against the
+        state-of-the-art systems from the literature of different run-times.
+        \textbf{K\&C 10}=\citet{koo:10}; \textbf{Z\&N 11}=\citet{zhang:11};
+        \textbf{G\&N 12}=\citet{goldberg:12}. The Baseline system is a re-implementation
+             of G\&N 12.\label{tab:eval}}
 \end{table}
-
-
 
 % P8
 \section{Related Work}
@@ -799,11 +801,53 @@ Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auc
 
 \subsection{Parse restructuring in psycholinguistics}
 
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus.
+
+Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor.
+
 
 \section{Conclusion}
 
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+We have described a minimal modification to the Arc-Eager transition system that
+allows a parser to repair bad states. This is achieved by removing the ordinary
+pre-conditions that would otherwise prevent such moves.
+
+From a machine learning perspective, the motivation for the change is straight-forward.
+Even if it is almost never correct to replace an existing head with a Left-Arc,
+or Reduce a word with no head, if it is \emph{sometimes} correct, then we ought to be
+able to learn a model that can out-perform a deterministic rule ---
+unless there is a systematic mismatch between training and run-time.
+That is just what occurs in the standard training regime, where all
+example states
+have perfect transition histories. But now that a straight-forward method of training
+from realistic states is available, the baseline set by the deterministic
+rule can be beaten.
+
+From a parsing perspective, the introduction of non-monotonic transitions is more novel.
+In a deterministic parser, monotonicity is essential --- a non-monotonic transition
+would be completely unmotivated. This has informed the design of wide-coverage
+statistical parsers, which solve a very different problem. Since the set of candidate
+analyses is too large to enumerate, search proceeds by heuristic.
+
+For transition-based parsers, the heuristic is typically tied to the linear order
+of the sentence.\footnote{The easy-first algorithm of \citet{goldberg:11} is a
+notable exception.} The danger is that the best tree spanning words $0..._n$ may
+be radically different from the best tree spanning $0..._{n+1}$.
+If all transitions are monotonic, the chance of pruning the good analyses rises
+steadily with $n$. The only path back to a good parse is the alternative stored
+when the mistake was made, so the more decisions we are forced to make in the meantime,
+the less likely we are to retain it. Non-monotonic transitions change this.
+
+The non-monotonic transition system we have presented provides a small improvement
+in parser accuracy, over a state-of-the-art baseline. The technique applies to
+a commonly used algorithm, and is no more difficult to implement than the standard
+alternative, so should be of practical benefit. From a broader perspective, our
+experiments are the first to show positive results for non-monotonic state transitions,
+breaking an under-examined assumption about parser design.
+
+
+
+
 
 \bibliography{repair}
 \bibliographystyle{aclnat}
