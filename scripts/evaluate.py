@@ -12,7 +12,7 @@ def fmt_acc(label, n, l_corr, u_corr, total_errs):
     l_pc = pc(l_corr, n)
     u_pc = pc(u_corr, n)
     err_pc = pc(n - l_corr, total_errs)
-    return '%s\t%d\t%.1f\t%.1f\t%.1f' % (label, n, l_pc, u_pc, err_pc)
+    return '%s\t%d\t%.3f\t%.3f\t%.3f' % (label, n, l_pc, u_pc, err_pc)
 
 
 @plac.annotations(
@@ -89,10 +89,10 @@ def main(test_loc, gold_loc, eval_punct=False):
                 u_corr = u_by_label[D][label]
                 yield fmt_acc(label, n, l_corr, u_corr, n_l_err)
         yield fmt_acc('Other', n_other, l_other, u_other, n_l_err) 
-    yield 'U: %.1f' % pc(u_nc, N)
-    yield 'L: %.1f' % pc(l_nc, N)
-    yield 'Sent u: %.1f' % pc(u_sents_c, n_sents)
-    yield 'Sent l: %.1f' % pc(l_sents_c, n_sents)
+    yield 'U: %.3f' % pc(u_nc, N)
+    yield 'L: %.3f' % pc(l_nc, N)
+    yield 'Sent u: %.3f' % pc(u_sents_c, n_sents)
+    yield 'Sent l: %.3f' % pc(l_sents_c, n_sents)
 
 
 if __name__ == '__main__':
