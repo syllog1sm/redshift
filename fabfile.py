@@ -1,8 +1,12 @@
 from fabric.api import local, run, lcd, cd, env
+from fabric.operations import get
 from pathlib import Path
 import time
 import re
 from math import sqrt
+from os.path import join as pjoin
+from os import listdir
+
 
 env.use_ssh_config = True
 
@@ -12,6 +16,7 @@ from _paths import HOSTS, GATEWAY
 
 env.hosts = HOSTS
 env.gateway = GATEWAY
+
 
 def recompile(runner=local):
     runner("make -C redshift clean")
@@ -91,11 +96,75 @@ def exp(name, size="5k", feats='base', thresh=5, reattach=False, lower=False,
     print '%.2f +/- %.2f' % (mean, sqrt(var))
 
 
-uas_re = re.compile(r'U: (\d\d.\d\d)')
-def _get_acc(dev_loc):
-    text = dev_loc.open().read()
-    return float(uas_re.search(text).groups()[0])
+def avg_accs(exp_name, test=False):
+    exp_dir = pjoin(str(REMOTE_PARSERS), exp_name)
+    if test:
+        exps = ['baseline', 'both']
+    else:
+        exps = ['baseline', 'reattach', 'adduce', 'both']
+    uas_results = {}
+    las_results = {}
+    with cd(exp_dir):
+        for system in exps:
+            sys_dir = pjoin(exp_dir, system)
+            uas = []
+            las = []
+            samples = run("ls %s" % sys_dir).split()
+            for sample in samples:
+                if sample == 'logs':
+                    continue
+                sample = Path(sys_dir).join(sample)
+                if test:
+                    acc_loc = sample.join('test').join('acc')
+                else:
+                    acc_loc = sample.join('dev').join('acc')
+                try:
+                    text = run("cat %s" % acc_loc).stdout
+                except:
+                    continue
+                uas.append(_get_acc(text, score='U'))
+                las.append(_get_acc(text, score='L'))
+            uas_results[system] = _get_stdev(uas)
+            las_results[system] = _get_stdev(las)
+    return uas_results, las_results
 
+def dev_eval_online(exp_name):
+    uas_results, las_results = avg_accs(exp_name)
+    print "UAS"
+    for name, (n, mean, stdev) in uas_results.items():
+        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+    print "LAS"
+    for name, (n, mean, stdev) in las_results.items():
+        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+
+
+def eval_online(exp_name):
+    uas_results, las_results = avg_accs(exp_name, test=True)
+    print "UAS"
+    for name, (n, mean, stdev) in uas_results.items():
+        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+    print "LAS"
+    for name, (n, mean, stdev) in las_results.items():
+        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+
+
+
+
+uas_re = re.compile(r'U: (\d\d.\d+)')
+las_re = re.compile(r'L: (\d\d.\d+)')
+# TODO: Hook up LAS arg
+def _get_acc(text, score='U'):
+    if score == 'U':
+        return float(uas_re.search(text).groups()[0])
+    else:
+        return float(las_re.search(text).groups()[0])
+
+
+def _get_stdev(scores):
+    n = len(scores)
+    mean = sum(scores) / n
+    var = sum((s - mean)**2 for s in scores)/n
+    return n, mean, sqrt(var)
 
 def _get_repair_str(reattach, lower, invert):
     repair_str = []
