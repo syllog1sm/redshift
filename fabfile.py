@@ -6,7 +6,7 @@ import re
 from math import sqrt
 from os.path import join as pjoin
 from os import listdir
-
+import scipy.stats
 
 env.use_ssh_config = True
 
@@ -96,7 +96,7 @@ def exp(name, size="5k", feats='base', thresh=5, reattach=False, lower=False,
     print '%.2f +/- %.2f' % (mean, sqrt(var))
 
 
-def avg_accs(exp_name, test=False):
+def get_accs(exp_name, test=False):
     exp_dir = pjoin(str(REMOTE_PARSERS), exp_name)
     if test:
         exps = ['baseline', 'both']
@@ -109,58 +109,107 @@ def avg_accs(exp_name, test=False):
             sys_dir = pjoin(exp_dir, system)
             uas = []
             las = []
-            samples = run("ls %s" % sys_dir).split()
+            usent = []
+            lsent = []
+            samples = sorted(run("ls %s" % sys_dir, quiet=True).split())
             for sample in samples:
                 if sample == 'logs':
                     continue
                 sample = Path(sys_dir).join(sample)
+                print sample
                 if test:
                     acc_loc = sample.join('test').join('acc')
                 else:
                     acc_loc = sample.join('dev').join('acc')
-                try:
-                    text = run("cat %s" % acc_loc).stdout
-                except:
-                    continue
+                text = run("cat %s" % acc_loc, quiet=True).stdout
                 uas.append(_get_acc(text, score='U'))
                 las.append(_get_acc(text, score='L'))
-            uas_results[system] = _get_stdev(uas)
-            las_results[system] = _get_stdev(las)
+                usent.append(_get_acc(text, score='u'))
+                lsent.append(_get_acc(text, score='l'))
+
+            uas_results[system] = (uas, usent)
+            las_results[system] = (las, lsent)
     return uas_results, las_results
 
+
 def dev_eval_online(exp_name):
-    uas_results, las_results = avg_accs(exp_name)
+    uas_results, las_results = get_accs(exp_name)
     print "UAS"
-    for name, (n, mean, stdev) in uas_results.items():
+    for name, (accs, _) in uas_results.items():
+        n, mean, stdev = _get_stdev(accs)
         print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
     print "LAS"
-    for name, (n, mean, stdev) in las_results.items():
+    for name, (accs, _) in las_results.items():
+        n = len(accs)
+        n, mean, stdev = _get_stdev(accs)
         print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+    print "U Sent %"
+    for name, (_, accs) in uas_results.items():
+        n, mean, stdev = _get_stdev(accs)
+        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+    print "L Sent %"
+    for name, (_, accs) in las_results.items():
+        n, mean, stdev = _get_stdev(accs)
+        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+
+def textab(stan_name, malt_name):
+    def fmt_acc(accs):
+        if accs == 0:
+            return '00.0'
+        n, mean, stdev = _get_stdev(accs)
+        return '%.1f' % mean
+
+    zeroes = {'baseline': (0, 0), 'reattach': (0, 0), 'adduce': (0, 0), 'both': (0, 0)}
+    if stan_name == 'None':
+        stan_u = zeroes
+        stan_l = zeroes
+    else:
+        stan_u, stan_l = get_accs(stan_name)
+    if malt_name == 'None':
+        malt_u = zeroes
+        malt_l = zeroes
+    else:
+        malt_u, malt_l = get_accs(malt_name)
+    exps = [('Baseline', 'baseline'), ('NM L', 'reattach'), ('NM D', 'adduce'),
+            ('NM L+D', 'both')]
+    print r"""\hline \hline
+        & \multicolumn{4}{c}{Unlabelled Attachment} \\
+        \hline"""
+    for stan, malt in [(stan_u, malt_u), (stan_l, malt_l)]:
+        for paper_name, exp_name in exps:
+            stan_w, stan_s = stan[exp_name]
+            malt_w, malt_s = malt[exp_name]
+            row = [paper_name]
+            row.extend(map(fmt_acc, (stan_w, stan_s, malt_w, malt_s)))
+            print ' & '.join(row), r'\\'
+        print r"""\hline
+            & \multicolumn{4}{c}{Labelled Attachment} \\
+            \hline"""
+
+
 
 
 def eval_online(exp_name):
-    uas_results, las_results = avg_accs(exp_name, test=True)
+    uas_results, las_results = get_accs(exp_name, test=True)
     print "UAS"
-    for name, (n, mean, stdev) in uas_results.items():
+    for name, (accs, _) in uas_results.items():
+        n, mean, stdev = _get_stdev(accs)
         print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+    acc1, acc2 = uas_results.values()
     print "LAS"
-    for name, (n, mean, stdev) in las_results.items():
+    for name, (accs, _) in las_results.items():
+        n, mean, stdev = _get_stdev(accs)
         print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+    acc1, acc2 = las_results.values()
 
 
-
-
-uas_re = re.compile(r'U: (\d\d.\d+)')
-las_re = re.compile(r'L: (\d\d.\d+)')
-# TODO: Hook up LAS arg
 def _get_acc(text, score='U'):
-    if score == 'U':
-        return float(uas_re.search(text).groups()[0])
-    else:
-        return float(las_re.search(text).groups()[0])
+    score_re = re.compile(r'%s: (\d\d.\d\d\d)' % score)
+    return float(score_re.search(text).groups()[0])
 
 
 def _get_stdev(scores):
+    scores = [s for s in scores if s is not None]
     n = len(scores)
     mean = sum(scores) / n
     var = sum((s - mean)**2 for s in scores)/n
