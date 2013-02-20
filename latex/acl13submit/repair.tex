@@ -974,16 +974,14 @@ labelled and unlabelled attachment score. All results are averages from 20 model
 trained with different random seeds, as the ordering of the sentences at each iteration
 of the Perceptron algorithm has an effect on the system's accuracy.
 
-The two non-monotonic transitions each bring small 
+The two non-monotonic transitions each bring small but statistically significant
+($p < 0.001$) improvements that are additive when combined in the NM L+D system.
+The result is stable across both dependency encoding schemes.
 
-compares the accuracy of the different transition systems
-
-Table \ref{tab:standard} compares the monotonic (Baseline) and non-monotonic transition
-systems when the standard training strategy is used.
-but use the standard training strategy for a transition-based parser.
-Unsurprisingly, the non-monotonic transitions
-were not useful in this system, as the standard training strategy does not include
-any examples of states where they are necessary.
+Table \ref{tab:standard} shows that the non-monotonic transitions are not effective
+when the standard training strategy is used. This is unsurprising, as with this
+training strategy the model will receive no examples where the transitions would
+be applicable.
 
 
 %\begin{table}
@@ -1038,8 +1036,21 @@ any examples of states where they are necessary.
 
 \section{Test Results}
 
-\note{Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.}
+Table \ref{tab:eval} shows the final test results. The system is evlauated on
+both common dependency evaluation datasets, to assist comparison with previous
+results from the literature.
 
+The non-monotonic labels were found to make a small but statistically significant
+improvement to the baseline system, a reimplementation of the current state-of-the-art
+1-best dependency parser. The row labelled G\&N 12 cites the accuracy reported by
+\citet{goldberg:12} for their implementation.
+
+The \citet{koo:10} and \citet{zhang:11} results are the current best published
+on the task. \citet{zhang:11} use a very similar configuration to our baseline:
+an averaged Perceptron learner, with the same feature set. The difference is 
+that they use beam-search ($k$=100), with global normalisation. With a beam-size
+of 1, their system should perform similarly to our standard-trained baseline in
+Table \ref{tab:baseline}, which scores 90.4\% \uas on the development data.
 
 \begin{table}
 %UAS
