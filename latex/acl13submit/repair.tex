@@ -444,7 +444,6 @@ The model makes Shift vs. Right decisions as normal, and conditions on them --- 
 without \emph{committing} to them.
 
 
-<<<<<<< HEAD
 
 \section{Dynamic oracle for the Arc-Eager system}
 \label{ref:oracle}
@@ -567,20 +566,12 @@ c_{nm} = O_{nm}(\state) - O_{nm}(T(\state))
 In summary, the oracle will penalise a transition if it makes an arc \emph{require}
 a non-monotonic move, or if it rules out an arc entirely.
 
-\section{Dynamic oracles} 
- 
+\section{Dynamic oracles}
+
  An essential component when training a transition-based parser is an oracle
  which, given a gold-standard tree, dictates the sequence of moves a parser
  should make in order to derive it.  Traditionally, these oracles are defined
  as functions from trees to sequences, mapping a gold tree to a single sequence
-=======
-\section{Dynamic oracles}
-
-An essential component when training a transition-based parser is an oracle
-which, given a gold-standard tree, dictates the sequence of moves a parser
-should make in order to derive it.  Traditionally, these oracles are defined
-as functions from trees to sequences, mapping a gold tree to a single sequence
->>>>>>> 082be4e38459d96d4458d5670ed51fa6c7e30a40
 of actions deriving it, even if more than one sequence of actions derives the
 gold tree. We call such oracles \emph{static}.  Recently, Goldberg and Nivre
 \shortcite{coling2012} introduced the concept of a \emph{dynamic} oracle, and
@@ -600,11 +591,6 @@ property holds also for the transition system we present below.} We refer to
 this number as the $cost$ of taking action $a$ at configuration $c$. Actions
 with a cost of 0 are optimal at the given configuration, and as long as we
 follow only optimal actions we are guaranteed to reach the gold tree.
-<<<<<<< HEAD
-By definition, there is at least one 0-cost actions at each configuration.
-Thus, for our purposes we only care to know if the cost of an action is zero
-or non-zero. 
-=======
 %By definition, there is at least one 0-cost actions at each configuration.
 %Thus, for our purposes we only care to know if the cost of an action is zero
 %or non-zero. 
@@ -638,7 +624,6 @@ to proceed from them.
 
 
 \subsection{Dynamic-oracle for the Arc-Eager System}
->>>>>>> 082be4e38459d96d4458d5670ed51fa6c7e30a40
 
 The dynamic oracle for the arc-eager system is based on the properties of the
 system by which once words are put on the stack they can acquire heads and
@@ -653,12 +638,9 @@ as the first item in the buffer $\beta$ and $s$ is the top of the stack
 $\sigma$, and $gold$ is a set of arcs. An arc is a triplet $(h,l,m)$
 indicating that $m$ modifies $h$ with a label $l$).
 
-<<<<<<< HEAD
 
 
 
-=======
->>>>>>> 082be4e38459d96d4458d5670ed51fa6c7e30a40
 \begin{itemize}
    \item $\mathcal{C}(\textsc{Left-Arc}_l; c, gold)$: 
 Adding the arc $(b, l, s)$ and popping $s$ from the stack means that $s$ will not be able
@@ -693,8 +675,6 @@ assigned already. The deltas below are based on this new and correct
 definitions.}
 \end{itemize}
 
-<<<<<<< HEAD
- Col 2
 \subsection{Following non-gold transitions in training}
 \begin{figure}
 \centering
@@ -717,9 +697,6 @@ while not state.is_finished {
 \end{figure}
 
 \subsection{Defining the oracle}
-=======
-\subsection{Dynamic oracle for the non-monotnic system}
->>>>>>> 082be4e38459d96d4458d5670ed51fa6c7e30a40
 
 The new system .. like the old one ..
 .. with the following changes:
