@@ -51,6 +51,7 @@
 \newcommand{\tuple}[1]{$\langle#1\rangle$}
 \newcommand{\maybe}[1]{\textcolor{gray}{#1}}
 \newcommand{\note}[1]{\textcolor{red}{#1}}
+\newcommand{\state}{\mathcal{S}}
 
 \title{A Non-Monotonic Arc-Eager Transition System for Dependency Parsing}
 
@@ -104,13 +105,13 @@
 
 % P1
 \section{Introduction}
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
+\note{Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.}
 
-Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis, auctor a metus. Proin mi purus, dignissim eget tempus in, vestibulum eu libero.
+\note{Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis, auctor a metus. Proin mi purus, dignissim eget tempus in, vestibulum eu libero.}
 
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed. Aliquam et augue est, et pretium est. Aenean mattis lacinia elit quis accumsan.
+\note{Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed. Aliquam et augue est, et pretium est. Aenean mattis lacinia elit quis accumsan.}
 
-Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam.
+\note{Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam.}
 
 % P2
 % 2-col Dependency parse graphic
@@ -375,13 +376,133 @@ without \emph{committing} to them.
 
 
 
-\subsection{Dynamic oracles}
+\section{Dynamic oracle for the Arc-Eager system}
 \label{ref:oracle}
 
-An essential component when training a transition-based parser is an oracle
-which, given a gold-standard tree, dictates the sequence of moves a parser
-should make in order to derive it.  Traditionally, these oracles are defined
-as functions from trees to sequences, mapping a gold tree to a single sequence
+This section describes the previous work of \citet{goldberg:12} in describing
+a \emph{dynamic oracle} for the Arc-Eager transition system.
+We opt for a different presentation of the oracle,
+to make its relationship with the new oracle for the non-monotonic transition
+system clearer.
+
+The key novel utility of this oracle is that it
+$O$ is defined for \emph{any} state. The previous oracle, described by 
+\citet{nivre:04}, was only defined for states resulting from gold-standard
+transitions. The old approach is analogous to training a \pos tagger
+and conditioning on gold-standard tags for the preceding words.
+Non-monotonic transitions are useless in such a set-up, as examples of their
+application are never encountered during training. We therefore need a version
+of the oracle correct for our adjusted transition system.
+
+A \emph{dynamic oracle} is a function
+from a parser state $\state$ and a proposed transition, $T$, to a cost, $c$:
+
+\begin{equation}
+c = O(\state, T)
+\end{equation}
+
+The cost denotes the number of gold-standandard arcs that cannot be
+recovered once the transition has been applied. This can be restated as:
+
+\begin{equation}
+c = O(\state) - O(T(\state))
+\end{equation}
+
+With this formulation, we need not define the oracle in terms of the individual
+transitions, as \citet{goldberg:12} do. That step is important when implementing
+the oracle, and perhaps makes its action easier to intuit,
+but is not necessary for the present purpose.
+
+The way forward to calculating $O$ is through a
+convenient property of the 
+Arc-Eager system, proven by TODO.  If a
+set of arcs which can be extended to a projective tree can be individually
+derived from a given configuration, then a projective tree containing all of
+the arcs in the set is also derivable from the same configuration.
+
+The next step, then, is to define what arcs can be reached from state $\state$.
+It is then trivial to take the intersection of this set and the gold-standard
+arcs, and the \emph{arc reachability} property guarantees that there will be a
+projective tree covering that subset.
+
+For a state with a stack of depth $n$, a buffer of length $i$, and an array of
+existing arcs $H$, all and only the arcs:
+
+\begin{eqnarray}
+    \langle S_{0...n}, B_{0...i}\rangle \label{eqn:oracle1} \\
+    \langle B_{0...i}, S_{i \in {0...n}\;\mbox{if}\; H[S_i] = \emptyset } \rangle \label{eqn:oracle2}\\
+    \langle B_{h \in {0...i}}, B_{c \in {0...i}}\;\; \mbox{where}\;\; h \neq c
+\end{eqnarray}
+
+Are reachable using the non-monotonic Arc-Eager transitions.
+To prove \ref{eqn:oracle1}, let $S_0=w$, and $B_0=k$. The
+arc $\langle w, k\rangle$ can be recoverd by the Right-Arc transition, which
+will change the state such that $S_0=k$, $S_1=w$ and $B_0=k+1$. The Reduce
+move will then change the state such that $S_0=w$, $B_0=k+1$. All arcs
+$\langle S_0, B_{0...j}\rangle$ are thus recoverable. To instead recover the arc
+$\langle S_1, B_{0}\rangle$, $S_0$ must be popped. This can either be done
+with the Reduce move, iff $H[S_0] \neq \emptyset$, or with the Left-Arc otherwise.
+
+For \ref{eqn:oracle2}, recall that the Arc-Eager system constrains
+Left-Arcs to prevent arcs where $H[S_0] \neq \emptyset$. The opposite constraint
+applies to the Reduce move, so the position of a word on the stack does not
+affect whether it can be attached to $B_0$. For the words $B_1...i$, we can
+advance them to $B_0$ by Right-Arcing and Reducing each word before them,
+after which the former proof applies.
+
+Finally, it is obvious that any dependency between two words in the buffer will
+be reachable, while all dependencies between two words on the stack are unreachable,
+as are dependencies involving a word neither on the stack nor in the buffer. The
+possibilities are thus exhausted.
+
+To recap, some subset of arcs in the gold projective tree will be recoverable
+from a given state, which means a tree containing those arcs is also recoverable.
+If a transition cuts off at least one previously reachable gold dependency, it is
+suboptimal; $c \ge 1$.
+At least one transition must be zero cost: for an arc to be reachable, there
+must be some transition which is the first step towards reaching it.
+
+\section{Dynamic oracle for the \textsc{nmae} transition system}
+
+Using the above definition of the Arc-Eager dynamic oracle, we can now
+define which arcs are reachable when the non-monotonic Left-Arc and Reduce moves
+are allowed. They will be the arcs such that:
+
+\begin{eqnarray}
+    \langle S_{0...n}, B_{0...i}\rangle \label{eqn:nmo1} \\
+    \langle B_{0...i}, S_{0...i} \rangle \label{eqn:nmo2} \\
+    \langle B_{h \in {0...i}}, B_{c \in {0...i}}\;\; \mbox{where}\;\; h \neq c\\
+    \langle S_1, S_0 \rangle \;\; \mbox{if} H[S_0] = S_1
+\end{eqnarray}
+
+We remove the reference to the head constraint for the Left-Arc, and add the
+possibility to attach a headless $S_0$ to $S_1$. The weakness of this oracle
+for training a parser is discussed in Section \ref{sec:whypush}. The Shift and
+Right-Arc moves will always be scored identically, as the oracle encodes no
+preference for monotonic paths. What we want instead is for the parser to regard
+the non-monotonic moves as repair operations, that are available in case of
+emergency. We want to train the parser to step as far towards the correct derivation
+as possible at each transition.
+
+We achieve this by making the cost sensitive to both oracles, as well as adding a
+`bonus' term, $f$, for a transition adding a gold dependency that was previously
+unrecoverable:
+
+\begin{eqnarray}
+c = c_m + c_{nm}\\
+c_m = O_m(\state) - O_m(T(\state))\\
+c_{nm} = O_{nm}(\state) - O_{nm}(T(\state))
+\end{eqnarray}
+
+In summary, the oracle will penalise a transition if it makes an arc \emph{require}
+a non-monotonic move, or if it rules out an arc entirely.
+
+\section{Dynamic oracles} 
+ 
+ An essential component when training a transition-based parser is an oracle
+ which, given a gold-standard tree, dictates the sequence of moves a parser
+ should make in order to derive it.  Traditionally, these oracles are defined
+ as functions from trees to sequences, mapping a gold tree to a single sequence
 of actions deriving it, even if more than one sequence of actions derives the
 gold tree. We call such oracles \emph{static}.  Recently, Goldberg and Nivre
 \shortcite{coling2012} introduced the concept of a \emph{dynamic} oracle, and
@@ -401,9 +522,9 @@ property holds also for the transition system we present below.} We refer to
 this number as the $cost$ of taking action $a$ at configuration $c$. Actions
 with a cost of 0 are optimal at the given configuration, and as long as we
 follow only optimal actions we are guaranteed to reach the gold tree.
-%By definition, there is at least one 0-cost actions at each configuration.
-%Thus, for our purposes we only care to know if the cost of an action is zero
-%or non-zero. 
+By definition, there is at least one 0-cost actions at each configuration.
+Thus, for our purposes we only care to know if the cost of an action is zero
+or non-zero. 
 
 The dynamic oracle for the arc-eager system is based on the properties of the
 system by which once words are put on the stack they can acquire heads and
@@ -455,7 +576,7 @@ assigned already. The deltas below are based on this new and correct
 definitions.}
 \end{itemize}
 
-% Col 2
+ Col 2
 \subsection{Following non-gold transitions in training}
 \begin{figure}
 \centering
@@ -476,9 +597,6 @@ while not state.is_finished {
 \end{verbatim}
 \caption{Dynamic oracle. TODO: Notation.}
 \end{figure}
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.
-
-Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus.
 
 \subsection{Defining the oracle}
 
@@ -555,27 +673,9 @@ monotonic oracle, because these actions can lead to the best outcome without
 relying on a repair down the road.
 
 \note{should make nicer!}
-\begin{verbatim}
-
-while not state.is_finished {
-  feats = extract(state)
-  zero_costs =
-      O_r(state) intersect O_e(state)
-  if zero_costs.empty():
-   zero_costs = O_r(state)
-
-  g = predict_from(feats, zero_costs)
-  p = predict_from(feats, monotonic)
-  if p not in zero_costs {
-     update(feats, g, 1)
-     update(feats, p, -1)
-  }
-  transition(state, p)
-}
-\end{verbatim}
-   
 
 % P5
+
 \section{Experiments}
 
 We implemented a standard Arc-Eager parser trained with the averaged Perceptron,
@@ -601,22 +701,22 @@ investigate the impact on error propagation.
     \centering
     \begin{tabular}{l|rrrr}
         \hline
-        & \multicolumn{2}{c}{Stanford} & \multicolumn{2}{c}{MALT}  \\
-        & \textsc{w}  & \textsc{s} & \textsc{w} & \textsc{s} \\
+        & \multicolumn{2}{c}{Stanford} \\
+        & \textsc{w}  & \textsc{s} \\
 \hline \hline
         & \multicolumn{4}{c}{Unlabelled Attachment} \\
         \hline
-Baseline & 90.4 & 41.2 & 00.0 & 00.0 \\
-NM L & 90.2 & 41.2 & 00.0 & 00.0 \\
-NM D & 90.4 & 41.1 & 00.0 & 00.0 \\
-NM L+D & 90.3 & 41.2 & 00.0 & 00.0 \\
+Baseline & 90.4 & 41.2 \\
+NM L & 90.2 & 41.2 \\
+NM D & 90.4 & 41.1 \\
+NM L+D & 90.3 & 41.2\\
 \hline
-            & \multicolumn{4}{c}{Labelled Attachment} \\
+            & \multicolumn{2}{c}{Labelled Attachment} \\
             \hline
-Baseline & 87.8 & 31.4 & 00.0 & 00.0 \\
-NM L & 87.6 & 31.3 & 00.0 & 00.0 \\
-NM D & 87.8 & 31.3 & 00.0 & 00.0 \\
-NM L+D & 87.6 & 31.5 & 00.0 & 00.0 \\
+Baseline & 87.8 & 31.4 \\
+NM L & 87.6 & 31.3 \\
+NM D & 87.8 & 31.3 \\
+NM L+D & 87.6 & 31.5 \\
 \hline
     \end{tabular}
     \caption{\small Non-monotonic transitions are not useful with
@@ -661,6 +761,29 @@ adding a dummy token at the \emph{end} of the sentence.
 This improves accuracy by delaying root-node decisions, and likely accounts for the
 0.2\% extra accuracy of our standard-trained baseline system over the equivalent result
 reported by \citet{goldberg:12}.
+
+\begin{figure}
+\begin{verbatim}
+
+while not state.is_finished {
+  feats = extract(state)
+  zero_costs =
+      O_r(state) intersect O_e(state)
+  if zero_costs.empty():
+   zero_costs = O_r(state)
+
+  g = predict_from(feats, zero_costs)
+  p = predict_from(feats, monotonic)
+  if p not in zero_costs {
+     update(feats, g, 1)
+     update(feats, p, -1)
+  }
+  transition(state, p)
+}
+\end{verbatim}
+\end{figure}
+
+
 
 \subsection{Training strategies}
 
@@ -747,68 +870,65 @@ Right-Arc label from that previous decision.
 
 \section{Development Results}
 \label{sec:results}
+\note{
+Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.}
 
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+\note{Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+}
 
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+%\begin{table}
+%\centering
+%\small
+%\begin{tabular}{lrrrr}
+%        & Freq. & Base & NM & WD \\
+%    \hline \hline
+%    \multicolumn{5}{c}{Left-Arcs} \\
+%    \hline
+%    det	& 3350 & 00.0 & +0.0 & 0.0 \\
+%     nn	& 3208 & 00.0 &	-0.0 & 0.0 \\
+%  nsubj	& 2691 & 00.0 &	0.0 & 0.0 \\
+%   amod	& 2428 & 00.0 & 0.0 & 0.0 \\
+%aux	    & 1229 & 00.0 &	0.0 & 0.0 \\
+%advmod  & 810  & 00.0 & 0.0 & 0.0 \\
+%num	    & 749  & 00.0 & 0.0 & 0.0 \\
+%   poss	& 707  & 00.0 & 0.0 & 0.0 \\
+%  Other	& 2637 & 00.0 & 0.0 & 0.0 \\
+%\hline
+%\multicolumn{5}{c}{Right-Arcs} \\
+%\hline
+%pobj	& 3739  & 00.0 & 0.0 & 0.0 \\
+%prep	& 3498  & 00.0 & 0.0 & 0.0 \\
+%dobj	& 1568  & 00.0 & 0.0 & 0.0 \\
+%conj	& 1002  & 00.0 & 0.0 & 0.0 \\
+%cc	    & 898   & 00.0 & 0.0 & 0.0 \\
+%number	& 468   & 00.0 & 0.0 & 0.0 \\
+% ccomp	& 449   & 00.0 & 0.0 & 0.0 \\
+% xcomp	& 438   & 00.0 & 0.0 & 0.0 \\
+%advmod	& 437   & 00.0 & 0.0 & 0.0 \\
+%ps	    & 425   & 00.0 & 0.0 & 0.0 \\
+%dep	    & 406   & 00.0 & 0.0 & 0.0 \\
+%  Other	& 2549  & 00.0 & 0.0 & 0.0 \\
+%\hline
+%All left  & 000 & 00.0 & 0.0 & 0.0  \\
+%All right & 000 & 00.0 & 0.0 & 0.0  \\
+%Root    & 1700 & 00.0 & 0.0 & 0.0    \\     
+%\hline
+%\end{tabular}
+%\caption{\small Accuracies for common Stanford labels,
+%         using G\&N training and standard features.
+%         \textbf{NM L+D} accuracy is shown by difference from the baseline. The
+%         WD column shows the difference weighted by the frequency of the label.
+%     \label{tab:labels}}
+%\end{table}
+%
 
+%\subsection{Accuracy by label}
 
-\begin{table}
-\centering
-\small
-\begin{tabular}{lrrrr}
-        & Freq. & Base & NM & WD \\
-    \hline \hline
-    \multicolumn{5}{c}{Left-Arcs} \\
-    \hline
-    det	& 3350 & 00.0 & +0.0 & 0.0 \\
-     nn	& 3208 & 00.0 &	-0.0 & 0.0 \\
-  nsubj	& 2691 & 00.0 &	0.0 & 0.0 \\
-   amod	& 2428 & 00.0 & 0.0 & 0.0 \\
-aux	    & 1229 & 00.0 &	0.0 & 0.0 \\
-advmod  & 810  & 00.0 & 0.0 & 0.0 \\
-num	    & 749  & 00.0 & 0.0 & 0.0 \\
-   poss	& 707  & 00.0 & 0.0 & 0.0 \\
-  Other	& 2637 & 00.0 & 0.0 & 0.0 \\
-\hline
-\multicolumn{5}{c}{Right-Arcs} \\
-\hline
-pobj	& 3739  & 00.0 & 0.0 & 0.0 \\
-prep	& 3498  & 00.0 & 0.0 & 0.0 \\
-dobj	& 1568  & 00.0 & 0.0 & 0.0 \\
-conj	& 1002  & 00.0 & 0.0 & 0.0 \\
-cc	    & 898   & 00.0 & 0.0 & 0.0 \\
-number	& 468   & 00.0 & 0.0 & 0.0 \\
- ccomp	& 449   & 00.0 & 0.0 & 0.0 \\
- xcomp	& 438   & 00.0 & 0.0 & 0.0 \\
-advmod	& 437   & 00.0 & 0.0 & 0.0 \\
-ps	    & 425   & 00.0 & 0.0 & 0.0 \\
-dep	    & 406   & 00.0 & 0.0 & 0.0 \\
-  Other	& 2549  & 00.0 & 0.0 & 0.0 \\
-\hline
-All left  & 000 & 00.0 & 0.0 & 0.0  \\
-All right & 000 & 00.0 & 0.0 & 0.0  \\
-Root    & 1700 & 00.0 & 0.0 & 0.0    \\     
-\hline
-\end{tabular}
-\caption{\small Accuracies for common Stanford labels,
-         using G\&N training and standard features.
-         \textbf{NM L+D} accuracy is shown by difference from the baseline. The
-         WD column shows the difference weighted by the frequency of the label.
-     \label{tab:labels}}
-\end{table}
-
-
-\subsection{Accuracy by label}
-
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
-
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
 
 
 \section{Test Results}
 
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+\note{Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.}
 
 
 \begin{table}
@@ -850,17 +970,17 @@ NM L+D      & $n$ & 88.9 & 91.1 & 88.9  & 91.0 \\
 \section{Related Work}
 
 
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+\note{Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.}
 
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+\note{Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.}
 
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
+\note{Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.}
 
 \subsection{Parse restructuring in psycholinguistics}
 
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus.
+\note{Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus.}
 
-Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor.
+\note{Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor.}
 
 
 \section{Conclusion}
