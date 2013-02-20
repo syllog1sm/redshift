@@ -138,58 +138,128 @@
 
 \section{Arc-Eager Transition-based Dependency Parsing}
 
-A transition-based dependency parser approaches the task of building a dependency
-graph as a series of \emph{state transitions}, typically from start-to-finish
-along the sentence. A \emph{transition system} is the set of operations that the
-parser has available. We restrict our attention to the Arc-Eager system \citep{nivre:04}
-for projective dependencies.
+In transition-based parsing, the parser consists of a state (or a
+configuration) which is manipulated by a set of actions.  An action is
+applied to a state and results in a new state.  The parsing process
+concludes when the parser reaches a final state, at which case the
+parse tree is read off of the state.  A particular set of states,
+actions and their semantics, yield a transition-system. Our starting
+point in this paper is the popular Arc-Eager transition system which
+we briefly describe below.  For further details, consult
+\citet{nivre:04,nivre-class}.
 
-The \emph{state} can be represented by the
-4-tuple $(H, L, B, S)$, for the Heads, Labels, Buffer, and Stack. The Heads
-and Labels arrays are sufficient for storing the parse. When the head of word $i$
-is set to token $k$ with the label $l$, we will set $H[i]=k$ and $L[i]=l$.
-The buffer is simply a queue of the words yet to be processed in the sentence.
-We assume that we begin parsing with the first word of the sentence on the stack.
+The state (or configuration) of the arc-eager system is composed of a
+stack, a buffer and a set of arcs.
 
-It is easier to intuit the system if we begin with a subset. The Right-Arc move
-sets $H[N_0]=S_0$, and pushes $B_0$ to the stack. The former $S_0$ is now $S_1$,
-and $N_1$ is now $N_0$, as we advance a token in the buffer. 
-With only the Right-Arc, we will build a unary tree of depth $n$ for every
-sentence of length $n$.
-At the $i$th word of the sentence, there will be $i$ words on the stack, and
-every word's head will be the word before it in the string, and also immediately
-above it on the stack.
+The stack and the buffer hold (indices to) the words of a sentence,
+and the set of arcs represent derived dependency relations.
 
-To pop the stack, we add the Reduce move, which makes no other action.
-It does not create any dependencies or advance the buffer.
-When a word is on top of the stack, it is at the tip of the branch being built.
-Applying the Reduce move corresponds to walking up the branch one node, making the
-parent the active attachment point. Consider the tree shape that would result
-from alternating between the moves.
-Every word would be be children of the first word, and siblings to each other.
+We use a notation in which the stack items are indicated by $S_i$,
+with $S_0$ being the top of the stack, $S_1$ the item previous to it
+and so on.  Similarly, the buffer items are indicated as $B_i$, with
+$B_0$ being the first item on the buffer.  The arcs are of them form
+$(h,l,m)$, indicating a dependency arc in which the word $m$ modifies
+the word $h$ with a dependency label $l$.
 
-Because we cannot Reduce an empty stack or Right-Arc into an empty buffer,
-the (Right, Reduce) transition system processes a sentence of length $N$ in exactly $2N$
-transitions, with exactly $N$ Right-Arcs and exactly $N$ Reduce moves. Furthermore,
-every word $w$ there will be exactly one Right-Arc such that $N_0=w$, and exactly
-one Reduce such that $S_0=w$. Each word must be `processed' by both moves; it must be
-pushed with the Right-Arc and popped with the Reduce.
+The initial configuration is initialized with an empty stack, and a
+buffer containing the words of the sentence in order, followed by an
+ROOT token\footnote{\citet{nivre:squib} has shown that setting the ROOT
+token at the end is usually superior to placing it at the beginning, as it is easier
+to determine root attachments at the end of the sentence.}
+In the final configuration the buffer is empty and the stack contains
+a single ROOT token. The set of arcs in the final configuration is the
+parse tree of the sentence.
 
-The same is true for a (Left, Shift) system. A good way to think of the two
-systems is that they are really the same, except that one move in each system
-writes a dependency as a side-effect. Viewed this way, it is natural to view the
-Left-Arc as a slightly different Reduce, and the Right-Arc as a slightly different Shift.
 
-Viewed this way, it is easy to see that there will still be exactly $2N$ transitions
-per sentence, although now there are two ways a word might be pushed, and two ways
-it might be popped. However, there are only two pairings that have exactly one
-arc-creating move, (Right, Reduce) and (Left, Shift). These are the only valid
-pairings in the Arc-Eager system.
+There are four parsing actions (Shift, Left, Right, Reduce) that
+manipulate stack and buffer items.  The \textbf{Shift} action pops the
+first item from the buffer and pushes it on the stack (the Shift
+action has a natural precondition that the buffer is not empty).  The
+\textbf{Right} action is similar to the Shift action, but it also adds
+a dependency arc $(S_0, B_0)$
+with the current top of the stack as the head of the newly pushed item
+(the Right action has an additionalprecondition that the stack is not
+empty).\footnote{%
+For labelled dependency parsing, the Right and Left actions are
+parameterized by a label $L$ such that the action $Right_L$ adds an
+arc $(S_0, L, B_0)$, similarly for $Left_L$.}
+The \textbf{Left} action adds a dependency arc $(B_0, H_0)$ with the
+first item in the buffer as the head of the top of the stack, and pops
+the stack (with a precondition that the stack and buffer are not
+empty, and that $S_0$ is not assigned a head yet). Finally, the
+\textbf{Reduce} action pops the stack, with a precondition that the
+stack is not empty and that $S_0$ is already assigned a head.
 
-This paper is about forming dependency trees out of move histories that include
-the (Right, Left) and (Shift, Reduce) pairings. The Arc-Eager system adds
-constraints to rule these transition histories out. We now describe our alternate
-solution.
+\subsection{Monotonicty}
+
+The preconditions of the Left and Reduce actions ensure that once an
+arc is added it is never removed in a subsequent state (alternatively,
+once a word is assinged a head it cannot be assigned a different head
+later on), and that words cannot be removed from the stack before they
+are assigned a head.  @@ We refer to these properties as the
+\textit{monotonicity} of the system.
+
+Due to monotonicuty, there is a natural pairing between the Right and
+Reduce actions and the Shift and Left actions: a word which is pushed
+into the stack by the Right action must be popped using a Reduce
+action, and a word which is pushed by the Shift action must be popped
+using the Left action.
+In what follows, we break this pairing and suggest a non-monotonic
+variant of the Arc-Eager transition system.
+
+
+%A transition-based dependency parser approaches the task of building a dependency
+%graph as a series of \emph{state transitions}, typically from start-to-finish
+%along the sentence. A \emph{transition system} is the set of operations that the
+%parser has available. We restrict our attention to the Arc-Eager system \citep{nivre:04}
+%for projective dependencies.
+%
+%The \emph{state} can be represented by the
+%4-tuple $(H, L, B, S)$, for the Heads, Labels, Buffer, and Stack. The Heads
+%and Labels arrays are sufficient for storing the parse. When the head of word $i$
+%is set to token $k$ with the label $l$, we will set $H[i]=k$ and $L[i]=l$.
+%The buffer is simply a queue of the words yet to be processed in the sentence.
+%We assume that we begin parsing with the first word of the sentence on the stack.
+%
+%It is easier to intuit the system if we begin with a subset. The Right-Arc move
+%sets $H[N_0]=S_0$, and pushes $B_0$ to the stack. The former $S_0$ is now $S_1$,
+%and $N_1$ is now $N_0$, as we advance a token in the buffer. 
+%With only the Right-Arc, we will build a unary tree of depth $n$ for every
+%sentence of length $n$.
+%At the $i$th word of the sentence, there will be $i$ words on the stack, and
+%every word's head will be the word before it in the string, and also immediately
+%above it on the stack.
+%
+%To pop the stack, we add the Reduce move, which makes no other action.
+%It does not create any dependencies or advance the buffer.
+%When a word is on top of the stack, it is at the tip of the branch being built.
+%Applying the Reduce move corresponds to walking up the branch one node, making the
+%parent the active attachment point. Consider the tree shape that would result
+%from alternating between the moves.
+%Every word would be be children of the first word, and siblings to each other.
+%
+%Because we cannot Reduce an empty stack or Right-Arc into an empty buffer,
+%the (Right, Reduce) transition system processes a sentence of length $N$ in exactly $2N$
+%transitions, with exactly $N$ Right-Arcs and exactly $N$ Reduce moves. Furthermore,
+%every word $w$ there will be exactly one Right-Arc such that $N_0=w$, and exactly
+%one Reduce such that $S_0=w$. Each word must be `processed' by both moves; it must be
+%pushed with the Right-Arc and popped with the Reduce.
+%
+%The same is true for a (Left, Shift) system. A good way to think of the two
+%systems is that they are really the same, except that one move in each system
+%writes a dependency as a side-effect. Viewed this way, it is natural to view the
+%Left-Arc as a slightly different Reduce, and the Right-Arc as a slightly different Shift.
+%
+%Viewed this way, it is easy to see that there will still be exactly $2N$ transitions
+%per sentence, although now there are two ways a word might be pushed, and two ways
+%it might be popped. However, there are only two pairings that have exactly one
+%arc-creating move, (Right, Reduce) and (Left, Shift). These are the only valid
+%pairings in the Arc-Eager system.
+%
+%This paper is about forming dependency trees out of move histories that include
+%the (Right, Left) and (Shift, Reduce) pairings. The Arc-Eager system adds
+%constraints to rule these transition histories out. We now describe our alternate
+%solution.
 
 \section{The Non-Monotonic Arc-Eager Transition System}
 
