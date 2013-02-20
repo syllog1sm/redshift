@@ -199,13 +199,31 @@ later on), and that words cannot be removed from the stack before they
 are assigned a head. We refer to these properties as the
 \textit{monotonicity} of the system.
 
-Due to monotonicuty, there is a natural pairing between the Right and
+Due to monotonicity, there is a natural pairing between the Right and
 Reduce actions and the Shift and Left actions: a word which is pushed
 into the stack by the Right action must be popped using a Reduce
 action, and a word which is pushed by the Shift action must be popped
 using the Left action.
-In what follows, we break this pairing and suggest a non-monotonic
-variant of the Arc-Eager transition system.
+As a consequence of this pairing, a Right move determines that the head of
+the pushed token must be to its right, while a Shift moves determines a head
+to its left. Crucially, the decision whether to Right or Shift is often taken
+in a state of missing information regarding the continuation of the sentence,
+forcing an incorrect head assignments later on. 
+
+\note{This is a bit redundant with what follows, but I think this redundancy
+is in place: first, it presents the ambiguity we are tackling in syntactic
+terms.  Second, it highlights the deficiency of the monotonic system without
+imposing the details of the proposed fix.}
+Consider a sentence pair such as ``I saw Jack and Jill'' and ``I saw Jack and Jill
+fall''. In the first sentence ``Jack and Jill'' is the NP object of ``saw'', while
+in the second it is a subject of the embedded verb ``fall''.  The monotonic arc-eager
+parser has to decide on an analysis as soon as it sees ``saw'' on the top of the
+stack and ``Jack'' as the front of the buffer, without seeing the
+disambiguating verb ``fall''.  
+
+In what follows, we suggest a non-monotonic variant of the Arc-Eager transition
+system, allowing the parser to recover from the incorrect head assignments
+which are forced by an incorrect resolution of a Shift/Right ambiguity.
 
 
 %A transition-based dependency parser approaches the task of building a dependency
@@ -371,8 +389,13 @@ to take advantage of the extra information, and make what should be an easy deci
 When the Shift/Right decision is reversed, we add an arc between the top of the stack
 and the word above it. This is the arc that would have been created had the parser
 chosen to Right-Arc when it chose to Shift. Since our idea is to reverse this mistake,
-we select the Right-Arc label that the model scored most highly at that time.
-
+we select the Right-Arc label that the model scored most highly at that
+time.\footnote{An alternative approach to label assignment is to parameterize
+the Reduce action with a label, similar to the Right-Arc and Left-Arc actions,
+and let that label override the previously assigned label if one exists, thus
+allowing the parser to change the assigned label in light of the new evidence. For
+efficiency and simplicity reasons, we chose instead to trust the label the model proposed
+when the reduced token was initially pushed into the stack.}
 
 \begin{figure}
     \centering
@@ -415,6 +438,20 @@ decision was originally made.
 \label{fig:adduce}}
 \end{figure}
 
+\noindent\paragraph{To summarize}, our non-monotnonic arc-eager system differs from
+monotonic system by:
+\begin{itemize}
+   \item Changing the Left action by removing the precondition that $S_0$
+   does not have a head, and updating the semantics such previously
+   derived arcs having $S_0$ as a dependent are removed from the arcs set.
+
+   \item Changing the Reduce action by removing the precondition that $S_0$
+   has a head, and updating the semantics such that if $S_0$ does not have
+   a head, $S_1$ is assigned as the head of $S_0$.
+\end{itemize}
+
+
+
 
 \subsection{Why have two push moves?}
 
@@ -442,7 +479,6 @@ making important features uselessly noisy.
 The non-monotonic transition system that we propose does not have this problem.
 The model makes Shift vs. Right decisions as normal, and conditions on them --- but
 without \emph{committing} to them.
-
 
 
 \section{Dynamic oracle for the Arc-Eager system}
