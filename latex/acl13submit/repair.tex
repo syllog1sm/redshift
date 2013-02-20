@@ -870,11 +870,23 @@ Right-Arc label from that previous decision.
 
 \section{Development Results}
 \label{sec:results}
-\note{
-Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.}
 
-\note{Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed.
-}
+Table \ref{tab:goldberg} shows the effect of the non-monotonic transitions on
+labelled and unlabelled attachment score. All results are averages from 20 models
+trained with different random seeds, as the ordering of the sentences at each iteration
+of the Perceptron algorithm has an effect on the system's accuracy.
+
+The two non-monotonic transitions each bring small 
+
+compares the accuracy of the different transition systems
+
+Table \ref{tab:standard} compares the monotonic (Baseline) and non-monotonic transition
+systems when the standard training strategy is used.
+but use the standard training strategy for a transition-based parser.
+Unsurprisingly, the non-monotonic transitions
+were not useful in this system, as the standard training strategy does not include
+any examples of states where they are necessary.
+
 
 %\begin{table}
 %\centering
@@ -983,48 +995,51 @@ NM L+D      & $n$ & 88.9 & 91.1 & 88.9  & 91.0 \\
 \note{Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor.}
 
 
-\section{Conclusion}
+\section{Conclusion and future work}
 
-We have described a minimal modification to the Arc-Eager transition system that
-allows a parser to repair bad states. This is achieved by removing the ordinary
-pre-conditions that would otherwise prevent such moves.
+\noindent
+We began this paper with the observation that because the Arc-Eager transition system \citep{nivre:04}
+attaches a word to its governor either when the word is pushed onto the stack or when it is
+popped off the stack, monotonicity (plus the ``tree constraint'' that a word has exactly one governor)
+implies that a word's push-move determines its associated pop-move. In this paper we suggest relaxing
+the monotonicity constraint to permit the pop-move to alter existing attachments if appropriate,
+thus breaking the 1-to-1 correspondence between push-moves and pop-moves.  This permits the parser
+to correct some early incorrect attachment decisions later in the parsing process.
+Adding additional transitions means
+that in general there are multiple transition sequences that generate any given syntactic analysis,
+i.e., our non-monotonic transition system generates spurious ambiguities (note that the
+Arc-Eager transition system on its own generates spurious ambiguities).
+As we explained in the paper, with the greedy best-first search used here additional
+spurious ambiguity is
+not necessarily a draw-back.
 
-From a machine learning perspective, the motivation for the change is straight-forward.
-Even if it is almost never correct to replace an existing head with a Left-Arc,
-or Reduce a word with no head, if it is \emph{sometimes} correct, then we ought to be
-able to learn a model that can out-perform a deterministic rule ---
-unless there is a systematic mismatch between training and run-time.
-That is just what occurs in the standard training regime, where all
-example states
-have perfect transition histories. But now that a straight-forward method of training
-from realistic states is available, the baseline set by the deterministic
-rule can be beaten.
+The conventional training procedure for transition-based parsers uses a ``static'' oracle
+based on ``gold'' parses that never predicts a non-monotonic transition, so it is clearly not
+appropriate here.  Instead, we use the incremental error-based training procedure involving
+a ``dynamic'' oracle proposed by  \citet{goldberg:12}, where the parser is trained to
+predict the transition that will produce
+the best-possible analysis from its current configuration.  We explained how to modify the Goldberg
+and Nivre oracle so it predicts the optimal moves, either monotonic or non-monotonic,
+from any configuration, and use this to train an averaged perceptron model.
 
-From a parsing perspective, the introduction of non-monotonic transitions is more novel.
-In a deterministic parser, monotonicity is essential --- a non-monotonic transition
-would be completely unmotivated. This has informed the design of wide-coverage
-statistical parsers, which solve a very different problem. Since the set of candidate
-analyses is too large to enumerate, search proceeds by heuristic.
+When evaluated on the standard WSJ training and test sets we obtained a \uas of 91.1\%,
+which is a 0.2\% improvement over the already state-of-the-art baseline of 90.9\% that we
+obtain with the error-based training procedure restricted to monotonic transitions of
+\citet{goldberg:12}.  We showed that this difference is significant using a Wilcoxon
+test on the output of 20 runs of each system.
 
-For transition-based parsers, the heuristic is typically tied to the linear order
-of the sentence.\footnote{The easy-first algorithm of \citet{goldberg:11} is a
-notable exception.} The danger is that the best tree spanning words $0..._n$ may
-be radically different from the best tree spanning $0..._{n+1}$.
-If all transitions are monotonic, the chance of pruning the good analyses rises
-steadily with $n$. The only path back to a good parse is the alternative stored
-when the mistake was made, so the more decisions we are forced to make in the meantime,
-the less likely we are to retain it. Non-monotonic transitions change this.
+Looking to the future, we believe that it would be interesting to investigate whether
+adding non-monotonic transitions is beneficial in other parsing systems as well, including
+systems that target formalisms other than dependency grammars.  As we observed
+in the paper, the spurious ambiguity that non-monotonic moves introduce may well be an
+advantage in a statistical parser with an enormous state-space because it provides
+multiple pathways to the correct analysis (of which we hope at least one is navigable).
 
-The non-monotonic transition system we have presented provides a small improvement
-in parser accuracy, over a state-of-the-art baseline. The technique applies to
-a commonly used algorithm, and is no more difficult to implement than the standard
-alternative, so should be of practical benefit. From a broader perspective, our
-experiments are the first to show positive results for non-monotonic state transitions,
-breaking an under-examined assumption about parser design.
-
-
-
-
+We investigated a very simple kind of non-monotonic transition here, but of course it's
+possible to design transition systems with many more transitions, including transitions
+that are explicitly designed to ``repair'' characteristic parser errors.  It might even
+be possible to automatically identify the most useful repair transitions and incorporate them
+into the parser.
 
 \bibliography{repair}
 \bibliographystyle{aclnat}
