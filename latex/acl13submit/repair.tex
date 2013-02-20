@@ -52,6 +52,7 @@
 \newcommand{\maybe}[1]{\textcolor{gray}{#1}}
 \newcommand{\note}[1]{\textcolor{red}{#1}}
 \newcommand{\state}{\mathcal{S}}
+\newcommand{\nmae}{\textsc{nmae}\xspace}
 
 \title{A Non-Monotonic Arc-Eager Transition System for Dependency Parsing}
 
@@ -424,8 +425,8 @@ decision was made.
 \label{fig:adduce}}
 \end{figure}
 
-\noindent\paragraph{To summarize}, our non-monotnonic arc-eager system differs from
-monotonic system by:
+\noindent\paragraph{To summarize,} our Non-Monotnonic Arc-Eager (\nmae) system
+differs from the monotonic system by:
 \begin{itemize}
    \item Changing the Left action by removing the precondition that $S_0$
    does not have a head, and updating the semantics such previously
@@ -439,7 +440,8 @@ monotonic system by:
 
 
 
-\subsection{Why have two push moves?}
+\section{Why have two push moves?}
+\label{ref:shiftless}
 
 We have argued above that it is better to trust the second decision that the model
 makes, rather than using the first decision to determine the second. If this is
@@ -450,40 +452,55 @@ Shift every token, and create all Right-Arcs via Reduce; or Right-Arc every toke
 and override the incorrect arcs with subsequent Left-Arcs.
 
 The problem with these approaches is that it is useful to condition
-on the results of previous decisions. Saving all of the difficulty for later
-is not a very good structured prediction strategy. Most of the transition decisions are
-easy, and when the parser does encounter a difficult decision, it is advantageous
-to have the dependency structure as a summary of the previous information, in
-much the same way that the previous tags are critical for \pos tagging. 
+on the results of previous decisions. 
+This may seem strange, given that the information that determined those decisions
+is never lost, but it is a common situation. In \pos tagging,
+we can use all the features that helped the model tag the previous word, yet still
+benefit from an additional feature for the model's prediction.
+Saving all of the difficulty for later
+is not a very good structured prediction strategy. 
 
 As an example of the problem, if the Shift move is
 eliminated, about half of the Right-Arcs created will be spurious. All of these
 arcs will be assigned labels\footnote{If the parser is trained to label the temporary
-arcs differently, its action is roughly (but not fully) isomorphic to the Shift move.},
-making important features uselessly noisy.
+arcs differently, the action is roughly isomorphic to the Shift move.},
+making important features uselessly noisy. In the other approach, we avoid creating
+spurious arcs, but the model does not predict whether $S_0$ is attached to $S_1$,
+or what the arc label would be. These are very useful features.
 
-The non-monotonic transition system that we propose does not have this problem.
+The non-monotonic transition system does not have this problem.
 The model makes Shift vs. Right decisions as normal, and conditions on them --- but
 without \emph{committing} to them.
 
 
-\section{Dynamic oracle for the Arc-Eager system}
+\section{Adapting the dynamic oracle}
 \label{ref:oracle}
 
-This section describes the previous work of \citet{goldberg:12} in describing
-a \emph{dynamic oracle} for the Arc-Eager transition system.
-We opt for a different presentation of the oracle,
-to make its relationship with the new oracle for the non-monotonic transition
-system clearer.
 
-The key novel utility of this oracle is that it
-$O$ is defined for \emph{any} state. The previous oracle, described by 
-\citet{nivre:04}, was only defined for states resulting from gold-standard
-transitions. The old approach is analogous to training a \pos tagger
-and conditioning on gold-standard tags for the preceding words.
-Non-monotonic transitions are useless in such a set-up, as examples of their
-application are never encountered during training. We therefore need a version
-of the oracle correct for our adjusted transition system.
+ An essential component when training a transition-based parser is an oracle
+ which, given a gold-standard tree, dictates the sequence of moves a parser
+ should make in order to derive it.  Traditionally, these oracles are defined
+ as functions from trees to sequences, mapping a gold tree to a single sequence
+ of actions deriving it, even if more than one sequence of actions derives the
+ gold tree. We call such oracles \emph{static}.  Recently, 
+ \citet{goldberg:12} introduced the concept of a \emph{dynamic} oracle, and
+ presented a concrete oracle for the arc-eager system.  Instead of mapping a
+ gold tree to a sequence of actions, the dynamic oracle maps a
+\tuple{configuration, tree} pair to a \emph{set} of optimal transitions.
+
+There are two advantages to this. First, the ability to label any configuration,
+rather than only those along a single path to the gold-standard derivation,
+allows much better training data to be generated. States come with realistic
+histories, including errors --- a critical point for the current work. Second,
+the oracle is correct with respect to ambiguity, as it will label multiple actions
+as correct if the optimal parses resulting from them are equally accurate.
+
+We will first define the Arc-Eager dynamic oracle, and then define an oracle
+that is correct for the Non-monotonic Arc-Eager  transition system
+we present. We opt for a different presentation of the oracle from \citet{goldberg:12},
+to make the new oracle easier to define.
+
+\subsection{Arc-Eager oracle definition}
 
 A \emph{dynamic oracle} is a function
 from a parser state $\state$ and a proposed transition, $T$, to a cost, $c$:
@@ -492,29 +509,22 @@ from a parser state $\state$ and a proposed transition, $T$, to a cost, $c$:
 c = O(\state, T)
 \end{equation}
 
-The cost denotes the number of gold-standandard arcs that cannot be
-recovered once the transition has been applied. This can be restated as:
+The $c$ denotes the number of gold-standandard arcs that cannot be
+recovered once the transition has been applied.
+A useful property of the  Arc-Eager transition system is \emph{arc-reachability}:
+If a set of arcs which can be extended to a projective tree can be individually
+derived from a given configuration, then a projective tree containing all of
+the arcs in the set is also derivable from the same configuration \citep{nivre:04}.
+Using this property, we can define the oracle in terms of a unary function over
+configurations, instead of a binary function over configuration/transition pairs.
+
+Let $R(\state)$ be the set of arcs \emph{reachable} from the current
+configuration $\state$, and $G$ the set of gold standard arcs. We 
+can then define $c$ as:
 
 \begin{equation}
-c = O(\state) - O(T(\state))
+c = \left| R(\state)\cap G \right|  - \left| R(T(\state))\cap G \right|
 \end{equation}
-
-With this formulation, we need not define the oracle in terms of the individual
-transitions, as \citet{goldberg:12} do. That step is important when implementing
-the oracle, and perhaps makes its action easier to intuit,
-but is not necessary for the present purpose.
-
-The way forward to calculating $O$ is through a
-convenient property of the 
-Arc-Eager system, proven by TODO.  If a
-set of arcs which can be extended to a projective tree can be individually
-derived from a given configuration, then a projective tree containing all of
-the arcs in the set is also derivable from the same configuration.
-
-The next step, then, is to define what arcs can be reached from state $\state$.
-It is then trivial to take the intersection of this set and the gold-standard
-arcs, and the \emph{arc reachability} property guarantees that there will be a
-projective tree covering that subset.
 
 For a state with a stack of depth $n$, a buffer of length $i$, and an array of
 existing arcs $H$, all and only the arcs:
@@ -522,7 +532,7 @@ existing arcs $H$, all and only the arcs:
 \begin{eqnarray}
     \langle S_{0...n}, B_{0...i}\rangle \label{eqn:oracle1} \\
     \langle B_{0...i}, S_{i \in {0...n}\;\mbox{if}\; H[S_i] = \emptyset } \rangle \label{eqn:oracle2}\\
-    \langle B_{h \in {0...i}}, B_{c \in {0...i}}\;\; \mbox{where}\;\; h \neq c
+    \langle B_{h \in {0...i}}, B_{c \in {0...i}}\;\; \mbox{where}\;\; h \neq c \rangle
 \end{eqnarray}
 
 Are reachable using the non-monotonic Arc-Eager transitions.
@@ -549,11 +559,11 @@ possibilities are thus exhausted.
 To recap, some subset of arcs in the gold projective tree will be recoverable
 from a given state, which means a tree containing those arcs is also recoverable.
 If a transition cuts off at least one previously reachable gold dependency, it is
-suboptimal; $c \ge 1$.
+suboptimal.
 At least one transition must be zero cost: for an arc to be reachable, there
 must be some transition which is the first step towards reaching it.
 
-\section{Dynamic oracle for the \textsc{nmae} transition system}
+\subsection{\nmae oracle}
 
 Using the above definition of the Arc-Eager dynamic oracle, we can now
 define which arcs are reachable when the non-monotonic Left-Arc and Reduce moves
@@ -562,9 +572,15 @@ are allowed. They will be the arcs such that:
 \begin{eqnarray}
     \langle S_{0...n}, B_{0...i}\rangle \label{eqn:nmo1} \\
     \langle B_{0...i}, S_{0...i} \rangle \label{eqn:nmo2} \\
-    \langle B_{h \in {0...i}}, B_{c \in {0...i}}\;\; \mbox{where}\;\; h \neq c\\
-    \langle S_1, S_0 \rangle \;\; \mbox{if} H[S_0] = S_1
+    \langle B_{h \in {0...i}}, B_{c \in {0...i}}\;\; \mbox{if}\;\; h \neq c \label{eqn:nmo3}\\
+    \langle S_{h \in {1...n}}, S_{c \in 0...{n-1}} \rangle \;\; \mbox{if}\;\; h=c+1\;\; \mbox{and} H[S_c]=\emptyset \label{eqn:nmo4}
 \end{eqnarray}
+
+\ref{eqn:nmo1} and \ref{eqn:nmo3} are unchanged from before.
+\ref{eqn:nm4}
+accounts for the arcs that the non-monotonic reduce move makes recoverable, and
+\ref{eqn:nmo2} is adjusted 
+
 
 We remove the reference to the head constraint for the Left-Arc, and add the
 possibility to attach a headless $S_0$ to $S_1$. The weakness of this oracle
