@@ -171,7 +171,8 @@ a single ROOT token. The set of arcs in the final configuration is the
 parse tree of the sentence.
 
 
-There are four parsing actions (Shift, Left, Right, Reduce) that
+There are four parsing actions (Shift, Left-Arc, Right-Arc and Reduce,
+abbreviated as S,L,R,D respectively) that
 manipulate stack and buffer items.  The \textbf{Shift} action pops the
 first item from the buffer and pushes it on the stack (the Shift
 action has a natural precondition that the buffer is not empty).  The
@@ -279,8 +280,10 @@ which are forced by an incorrect resolution of a Shift/Right ambiguity.
 %constraints to rule these transition histories out. We now describe our alternate
 %solution.
 
-\section{The Non-Monotonic Arc-Eager Transition System}
+\section{The Non-Monotonic Arc-Eager System}
 
+\note{Maybe shorten this just a tiny bit to remove some of the redundant
+discussion from above. But also maybe not..}
 The Arc-Eager transition system \citep{nivre:04} has four moves. Two create 
 dependencies, two push the first word of the buffer to the stack, and two pop 
 the stack:
@@ -438,7 +441,7 @@ decision was originally made.
 \label{fig:adduce}}
 \end{figure}
 
-\noindent\paragraph{To summarize}, our non-monotnonic arc-eager system differs from
+\noindent\textbf{To summarize}, our non-monotnonic arc-eager system differs from
 monotonic system by:
 \begin{itemize}
    \item Changing the Left action by removing the precondition that $S_0$
@@ -454,6 +457,8 @@ monotonic system by:
 
 
 \subsection{Why have two push moves?}
+\note{This discussion is neat, though I'm not sure its crucial -- if we end up
+lacking space, this is a good candidate for removal.}
 
 We have argued above that it is better to trust the second decision that the model
 makes, rather than using the first decision to determine the second. If this is
@@ -481,126 +486,126 @@ The model makes Shift vs. Right decisions as normal, and conditions on them --- 
 without \emph{committing} to them.
 
 
-\section{Dynamic oracle for the Arc-Eager system}
-\label{ref:oracle}
-
-This section describes the previous work of \citet{goldberg:12} in describing
-a \emph{dynamic oracle} for the Arc-Eager transition system.
-We opt for a different presentation of the oracle,
-to make its relationship with the new oracle for the non-monotonic transition
-system clearer.
-
-The key novel utility of this oracle is that it
-$O$ is defined for \emph{any} state. The previous oracle, described by 
-\citet{nivre:04}, was only defined for states resulting from gold-standard
-transitions. The old approach is analogous to training a \pos tagger
-and conditioning on gold-standard tags for the preceding words.
-Non-monotonic transitions are useless in such a set-up, as examples of their
-application are never encountered during training. We therefore need a version
-of the oracle correct for our adjusted transition system.
-
-A \emph{dynamic oracle} is a function
-from a parser state $\state$ and a proposed transition, $T$, to a cost, $c$:
-
-\begin{equation}
-c = O(\state, T)
-\end{equation}
-
-The cost denotes the number of gold-standandard arcs that cannot be
-recovered once the transition has been applied. This can be restated as:
-
-\begin{equation}
-c = O(\state) - O(T(\state))
-\end{equation}
-
-With this formulation, we need not define the oracle in terms of the individual
-transitions, as \citet{goldberg:12} do. That step is important when implementing
-the oracle, and perhaps makes its action easier to intuit,
-but is not necessary for the present purpose.
-
-The way forward to calculating $O$ is through a
-convenient property of the 
-Arc-Eager system, proven by TODO.  If a
-set of arcs which can be extended to a projective tree can be individually
-derived from a given configuration, then a projective tree containing all of
-the arcs in the set is also derivable from the same configuration.
-
-The next step, then, is to define what arcs can be reached from state $\state$.
-It is then trivial to take the intersection of this set and the gold-standard
-arcs, and the \emph{arc reachability} property guarantees that there will be a
-projective tree covering that subset.
-
-For a state with a stack of depth $n$, a buffer of length $i$, and an array of
-existing arcs $H$, all and only the arcs:
-
-\begin{eqnarray}
-    \langle S_{0...n}, B_{0...i}\rangle \label{eqn:oracle1} \\
-    \langle B_{0...i}, S_{i \in {0...n}\;\mbox{if}\; H[S_i] = \emptyset } \rangle \label{eqn:oracle2}\\
-    \langle B_{h \in {0...i}}, B_{c \in {0...i}}\;\; \mbox{where}\;\; h \neq c
-\end{eqnarray}
-
-Are reachable using the non-monotonic Arc-Eager transitions.
-To prove \ref{eqn:oracle1}, let $S_0=w$, and $B_0=k$. The
-arc $\langle w, k\rangle$ can be recoverd by the Right-Arc transition, which
-will change the state such that $S_0=k$, $S_1=w$ and $B_0=k+1$. The Reduce
-move will then change the state such that $S_0=w$, $B_0=k+1$. All arcs
-$\langle S_0, B_{0...j}\rangle$ are thus recoverable. To instead recover the arc
-$\langle S_1, B_{0}\rangle$, $S_0$ must be popped. This can either be done
-with the Reduce move, iff $H[S_0] \neq \emptyset$, or with the Left-Arc otherwise.
-
-For \ref{eqn:oracle2}, recall that the Arc-Eager system constrains
-Left-Arcs to prevent arcs where $H[S_0] \neq \emptyset$. The opposite constraint
-applies to the Reduce move, so the position of a word on the stack does not
-affect whether it can be attached to $B_0$. For the words $B_1...i$, we can
-advance them to $B_0$ by Right-Arcing and Reducing each word before them,
-after which the former proof applies.
-
-Finally, it is obvious that any dependency between two words in the buffer will
-be reachable, while all dependencies between two words on the stack are unreachable,
-as are dependencies involving a word neither on the stack nor in the buffer. The
-possibilities are thus exhausted.
-
-To recap, some subset of arcs in the gold projective tree will be recoverable
-from a given state, which means a tree containing those arcs is also recoverable.
-If a transition cuts off at least one previously reachable gold dependency, it is
-suboptimal; $c \ge 1$.
-At least one transition must be zero cost: for an arc to be reachable, there
-must be some transition which is the first step towards reaching it.
-
-\section{Dynamic oracle for the \textsc{nmae} transition system}
-
-Using the above definition of the Arc-Eager dynamic oracle, we can now
-define which arcs are reachable when the non-monotonic Left-Arc and Reduce moves
-are allowed. They will be the arcs such that:
-
-\begin{eqnarray}
-    \langle S_{0...n}, B_{0...i}\rangle \label{eqn:nmo1} \\
-    \langle B_{0...i}, S_{0...i} \rangle \label{eqn:nmo2} \\
-    \langle B_{h \in {0...i}}, B_{c \in {0...i}}\;\; \mbox{where}\;\; h \neq c\\
-    \langle S_1, S_0 \rangle \;\; \mbox{if} H[S_0] = S_1
-\end{eqnarray}
-
-We remove the reference to the head constraint for the Left-Arc, and add the
-possibility to attach a headless $S_0$ to $S_1$. The weakness of this oracle
-for training a parser is discussed in Section \ref{sec:whypush}. The Shift and
-Right-Arc moves will always be scored identically, as the oracle encodes no
-preference for monotonic paths. What we want instead is for the parser to regard
-the non-monotonic moves as repair operations, that are available in case of
-emergency. We want to train the parser to step as far towards the correct derivation
-as possible at each transition.
-
-We achieve this by making the cost sensitive to both oracles, as well as adding a
-`bonus' term, $f$, for a transition adding a gold dependency that was previously
-unrecoverable:
-
-\begin{eqnarray}
-c = c_m + c_{nm}\\
-c_m = O_m(\state) - O_m(T(\state))\\
-c_{nm} = O_{nm}(\state) - O_{nm}(T(\state))
-\end{eqnarray}
-
-In summary, the oracle will penalise a transition if it makes an arc \emph{require}
-a non-monotonic move, or if it rules out an arc entirely.
+%\section{Dynamic oracle for the Arc-Eager system}
+%\label{ref:oracle}
+%
+%This section describes the previous work of \citet{goldberg:12} in describing
+%a \emph{dynamic oracle} for the Arc-Eager transition system.
+%We opt for a different presentation of the oracle,
+%to make its relationship with the new oracle for the non-monotonic transition
+%system clearer.
+%
+%The key novel utility of this oracle is that it
+%$O$ is defined for \emph{any} state. The previous oracle, described by 
+%\citet{nivre:04}, was only defined for states resulting from gold-standard
+%transitions. The old approach is analogous to training a \pos tagger
+%and conditioning on gold-standard tags for the preceding words.
+%Non-monotonic transitions are useless in such a set-up, as examples of their
+%application are never encountered during training. We therefore need a version
+%of the oracle correct for our adjusted transition system.
+%
+%A \emph{dynamic oracle} is a function
+%from a parser state $\state$ and a proposed transition, $T$, to a cost, $c$:
+%
+%\begin{equation}
+%c = O(\state, T)
+%\end{equation}
+%
+%The cost denotes the number of gold-standandard arcs that cannot be
+%recovered once the transition has been applied. This can be restated as:
+%
+%\begin{equation}
+%c = O(\state) - O(T(\state))
+%\end{equation}
+%
+%With this formulation, we need not define the oracle in terms of the individual
+%transitions, as \citet{goldberg:12} do. That step is important when implementing
+%the oracle, and perhaps makes its action easier to intuit,
+%but is not necessary for the present purpose.
+%
+%The way forward to calculating $O$ is through a
+%convenient property of the 
+%Arc-Eager system, proven by TODO.  If a
+%set of arcs which can be extended to a projective tree can be individually
+%derived from a given configuration, then a projective tree containing all of
+%the arcs in the set is also derivable from the same configuration.
+%
+%The next step, then, is to define what arcs can be reached from state $\state$.
+%It is then trivial to take the intersection of this set and the gold-standard
+%arcs, and the \emph{arc reachability} property guarantees that there will be a
+%projective tree covering that subset.
+%
+%For a state with a stack of depth $n$, a buffer of length $i$, and an array of
+%existing arcs $H$, all and only the arcs:
+%
+%\begin{eqnarray}
+%    \langle S_{0...n}, B_{0...i}\rangle \label{eqn:oracle1} \\
+%    \langle B_{0...i}, S_{i \in {0...n}\;\mbox{if}\; H[S_i] = \emptyset } \rangle \label{eqn:oracle2}\\
+%    \langle B_{h \in {0...i}}, B_{c \in {0...i}}\;\; \mbox{where}\;\; h \neq c
+%\end{eqnarray}
+%
+%Are reachable using the non-monotonic Arc-Eager transitions.
+%To prove \ref{eqn:oracle1}, let $S_0=w$, and $B_0=k$. The
+%arc $\langle w, k\rangle$ can be recoverd by the Right-Arc transition, which
+%will change the state such that $S_0=k$, $S_1=w$ and $B_0=k+1$. The Reduce
+%move will then change the state such that $S_0=w$, $B_0=k+1$. All arcs
+%$\langle S_0, B_{0...j}\rangle$ are thus recoverable. To instead recover the arc
+%$\langle S_1, B_{0}\rangle$, $S_0$ must be popped. This can either be done
+%with the Reduce move, iff $H[S_0] \neq \emptyset$, or with the Left-Arc otherwise.
+%
+%For \ref{eqn:oracle2}, recall that the Arc-Eager system constrains
+%Left-Arcs to prevent arcs where $H[S_0] \neq \emptyset$. The opposite constraint
+%applies to the Reduce move, so the position of a word on the stack does not
+%affect whether it can be attached to $B_0$. For the words $B_1...i$, we can
+%advance them to $B_0$ by Right-Arcing and Reducing each word before them,
+%after which the former proof applies.
+%
+%Finally, it is obvious that any dependency between two words in the buffer will
+%be reachable, while all dependencies between two words on the stack are unreachable,
+%as are dependencies involving a word neither on the stack nor in the buffer. The
+%possibilities are thus exhausted.
+%
+%To recap, some subset of arcs in the gold projective tree will be recoverable
+%from a given state, which means a tree containing those arcs is also recoverable.
+%If a transition cuts off at least one previously reachable gold dependency, it is
+%suboptimal; $c \ge 1$.
+%At least one transition must be zero cost: for an arc to be reachable, there
+%must be some transition which is the first step towards reaching it.
+%
+%\section{Dynamic oracle for the \textsc{nmae} transition system}
+%
+%Using the above definition of the Arc-Eager dynamic oracle, we can now
+%define which arcs are reachable when the non-monotonic Left-Arc and Reduce moves
+%are allowed. They will be the arcs such that:
+%
+%\begin{eqnarray}
+%    \langle S_{0...n}, B_{0...i}\rangle \label{eqn:nmo1} \\
+%    \langle B_{0...i}, S_{0...i} \rangle \label{eqn:nmo2} \\
+%    \langle B_{h \in {0...i}}, B_{c \in {0...i}}\;\; \mbox{where}\;\; h \neq c\\
+%    \langle S_1, S_0 \rangle \;\; \mbox{if} H[S_0] = S_1
+%\end{eqnarray}
+%
+%We remove the reference to the head constraint for the Left-Arc, and add the
+%possibility to attach a headless $S_0$ to $S_1$. The weakness of this oracle
+%for training a parser is discussed in Section \ref{sec:whypush}. The Shift and
+%Right-Arc moves will always be scored identically, as the oracle encodes no
+%preference for monotonic paths. What we want instead is for the parser to regard
+%the non-monotonic moves as repair operations, that are available in case of
+%emergency. We want to train the parser to step as far towards the correct derivation
+%as possible at each transition.
+%
+%We achieve this by making the cost sensitive to both oracles, as well as adding a
+%`bonus' term, $f$, for a transition adding a gold dependency that was previously
+%unrecoverable:
+%
+%\begin{eqnarray}
+%c = c_m + c_{nm}\\
+%c_m = O_m(\state) - O_m(T(\state))\\
+%c_{nm} = O_{nm}(\state) - O_{nm}(T(\state))
+%\end{eqnarray}
+%
+%In summary, the oracle will penalise a transition if it makes an arc \emph{require}
+%a non-monotonic move, or if it rules out an arc entirely.
 
 \section{Dynamic oracles}
 
@@ -645,7 +650,7 @@ it is a crucial aspect of our non-monotonic system.  The non-monotonic
 actions are repair-operations, undoing previous decisions.  It would be very
 hard to manually design a heuristic dictating which arcs to construct just so
 that they can be removed later, and which arcs not to construct in the first
-place.  The dynamic-oracle allows us to encode both options, and let the
+place.  A dynamic-oracle allows us to encode both options, and let the
 learner chose when to take each course. 
 
 \subsection{Training to recover from mistakes}
@@ -659,59 +664,154 @@ configurations that result from common mistakes, and teach it the optimal way
 to proceed from them.
 
 
-\subsection{Dynamic-oracle for the Arc-Eager System}
+\subsection{The Monotonic Arc-Eager Dynamic Oracle}
+We now briefly describe the dynamic oracle for the arc-eager system. For more
+details, see \cite{coling2012}. The oracle is computed by reasoning about the
+arcs which are reachable from a given state, and counting the number of gold
+arcs which will no longer be reachable after applying a given transition at a
+given state.
+The reasoning is based on the observations that in the arc-eager system, new
+arcs $(h,l,m)$ can be derived iff the following conditions hold:\\
+(a) There is no existing arc $(h',l',m)$ such that $h'!=h$.\\
+(b) Either both $h$ and $m$ are on the buffer, or one of them is on the buffer
+and the other is on the stack.
 
-The dynamic oracle for the arc-eager system is based on the properties of the
-system by which once words are put on the stack they can acquire heads and
-dependents only from the buffer, and once they are removed from the stack they
-can no longer acquire any heads or dependents. In addition, once a word
-acquired a head it can no longer acquire another head.  Given that words that
-are removed from the stack or the buffer can not return there later, it
-is straightforward to compute the number of gold arcs that are ``lost'' by an
-action by considering the effect of the action on the buffer and the stack,
-and reasoning accordingly (the notation assumes the configuration $c$ has $b$
-as the first item in the buffer $\beta$ and $s$ is the top of the stack
-$\sigma$, and $gold$ is a set of arcs. An arc is a triplet $(h,l,m)$
-indicating that $m$ modifies $h$ with a label $l$).
+\noindent In other words:\\
+(a) once a word acquires a head (in a Left-Arc or Right-Arc transition) it loses the ability to acquire
+any other head.\\
+(b) once a word is moved from the buffer to the stack (Shift or Right-Arc) it loses the ability to
+acquire heads that are currently on the stack, as well as dependents that are
+currently on the stack and are not yet assigned a head.\footnote{The condition
+that the words on the stack are not yet assigned a head is missing from
+\cite{coling12}.}\\
+(c) once a word is removed from the stack (Left-Arc or Reduce) it loses the
+ability to acquire any dependents on the buffer.\\
 
+Based on these observations, \cite{coling12} present an oracle
+$\mathcal{C}(a,c,t)$ for the monotonic arc-eager system, computing the number
+of arcs in the gold tree $t$ that are reachable from a parser's configuration
+$c$ and are no longer reachable from the configuration $a(c)$.
+action, $c$ is a parser configuration, $t$ is a gold-standard tree. 
 
+\subsection{Dynamic Oracles for the Non-Monotonic Variants}
 
+Given the oracle $\mathcal{C}(a,c,t)$ for the monotonic system,
+we adapt it to a non-monotonic variant by considering the changes from the
+monotonic to the non-monotonic system, and adding $\Delta$ terms accordingly.
+We define three novel oracles: $\mathcal{C}_{NML}$, $\mathcal{C}_{NMD}$ and
+$\mathcal{C}_{NML+D}$ for systems with a non-monotonic Left-Arc, Reduce or both.
+
+\noindent$\mathcal{C}_{NML}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NML}(a,c,t)$\\
+\noindent$\mathcal{C}_{NMD}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NMD}(a,c,t)$\\
+\noindent$\mathcal{C}_{NML+D}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NML}(a,c,t) + \Delta_{NMD}(a,c,t)$\\
+
+The terms $\Delta_{NML}$ and $\Delta_{NMD}$ reflect the score adjustments that
+need to be done to the arc-eager oracle due to the changes of the Left-Arc and
+Reduce actions, respectively, and are detailed below.
+
+\noindent The changes due to the non-monotonic Left-Arc action:
 
 \begin{itemize}
-   \item $\mathcal{C}(\textsc{Left-Arc}_l; c, gold)$: 
-Adding the arc $(b, l, s)$ and popping $s$ from the stack means that $s$ will not be able
-to acquire any head or dependents in $\beta$. The cost is therefore the number of arcs 
-in $gold$ of the form $(k, l', s)$ or $(s, l', k)$ such that $k \in \beta$.
+   \item $\Delta_{NML}(\textsc{RightArc},c,t)$: The cost of Right-arc is
+      decreased by 1 if the gold head of $B_0$ is on the buffer
+         (because $b$ can still acquire its correct head later with a Left-Arc action).
+It is increased by 1 for any word $w$ on the stack such that $B_0$ is the gold
+parent of $w$ and $w$ is assigned a head already (in the monotonic oracle,
+this cost was taken care of when the word was assigned an incorrect head. In the
+non-monotonic variant, this cost is delayed).
 
-\item $\mathcal{C}(\textsc{Right-Arc}_l; c, gold)$: 
-Adding the arc $(s, l, b)$ and pushing $b$ onto the stack means that $b$ will 
-not be able to acquire any head in $\sigma$ or $\beta$, nor any dependents in $\sigma$. 
-The cost is therefore the number of arcs in $gold$ of the form $(k, l', b)$,
-such that $k \in \sigma$ or $k \in \beta$, 
-or of the form $(b, l', k)$ such that $k \in \sigma$ 
-% the following is new according to matt's fix:
-and $k$ is not assigned a head.
+   \item $\Delta_{NML}(\textsc{Reduce},c,t)$: The cost of Reduce is increased
+      by 1 if the gold head of $S_0$ is on the buffer,
+because removing $S_0$ from the stack precludes it from acquiring its correct head later on with
+a Left-Arc action. (This cost is paid for in the monotonic version when $S_0$
+acquired its incorrect head).
 
-\item $\mathcal{C}(\textsc{Reduce}; c, gold)$: 
-Popping $s$ from the stack means that $s$ will not be able to acquire any dependents
-in $b|\beta$. The cost is therefore the number of arcs in $gold$ of the form $(s, l', k)$
-such that $k \in b|\beta$. \maybe{While it may seem that a gold arc of the form $(k, l, s)$ should be accounted for as well,
-note that a gold arc of that form, if it exists, is already accounted for by a previous (erroneous) \textsc{Right-Arc}$_l$ 
-transition when $s$ acquired its head.}
+   \item $\Delta_{NML}(\textsc{LeftArc},c,t)$: The cost of Left-Arc is increased by 1 if $S_0$ is already assigned to its gold
+parent. (This situation is blocked by a precondition in the monotonic
+case).
 
-\item $\mathcal{C}(\textsc{Shift}; c, gold)$: 
-Pushing $b$ onto the stack means that $b$ will not be able to acquire any head
-or dependents in $s|\sigma$. The cost is therefore the number of arcs in $gold$ of 
-the form $(k, l', b)$ such that $k \in s|\sigma$ and of the form $(b, l', k)$ such that $k \in s|\sigma$
-% the following is new according to matt's fix:
-and $k$ is not assigned a head.
-\note{Matthew, notice that shift and right-arc changed their definition, as
-you pointed out they should, by requiring the stack item to not have a head
-assigned already. The deltas below are based on this new and correct
-definitions.}
+  \item $\Delta_{NML}(\textsc{Shift},c,gold)$: The cost of Shift is increased
+     by 1 for any word $w$ on the stack such that $B_0$ is the gold
+parent of $w$ and $w$ is assigned a head already. (As in Right-Arc, In the monotonic oracle,
+this cost was taken care of when $w$ was assigned an incorrect head.)
 \end{itemize}
 
+\noindent The changes due to the non-monotonic Reduce action:
+\begin{itemize}
+
+   \item $\Delta_{NMD}(\textsc{Shift},c,gold)$: The cost of Shift is decreased
+      by 1 if the gold head of $B_0$ is $S_0$ (Because this arc can be added
+      later on with a non-monotonic Reduce action).
+
+   \item $\Delta_{NMD}(\textsc{LeftArc},c,gold)$: The cost of Left-Arc is
+      increased by 1 if $S_0$ is not assigned a head, and the gold head of
+      $S_0$ is $s_{1}$ (Because this precludes adding the correct arc
+      with a Reduce of $S_0$ later).
+
+   \item $\Delta_{NMD}(\textsc{Reduce},c,gold)$ = 0. While it may seem that a
+      change to the cost of a Reduce action is required, in fact the costs of
+      the monotonic system hold here, as the head of $S_0$ is predetermined to
+      be $S_1$.  The needed adjustments are taken care of
+      in Left-Arc and Shift actions.\footnote{If using a labeled reduce transition,
+      the label assignment costs should be handled here.}
+
+   \item $\Delta_{NMD}(\textsc{RightArc},c,gold)$ = 0
+\end{itemize}
+
+%\subsection{Dynamic-oracle for the Arc-Eager System}
+%
+%The dynamic oracle for the arc-eager system is based on the properties of the
+%system by which once words are put on the stack they can acquire heads and
+%dependents only from the buffer, and once they are removed from the stack they
+%can no longer acquire any heads or dependents. In addition, once a word
+%acquired a head it can no longer acquire another head.  Given that words that
+%are removed from the stack or the buffer can not return there later, it
+%is straightforward to compute the number of gold arcs that are ``lost'' by an
+%action by considering the effect of the action on the buffer and the stack,
+%and reasoning accordingly (the notation assumes the configuration $c$ has $b$
+%as the first item in the buffer $\beta$ and $s$ is the top of the stack
+%$\sigma$, and $gold$ is a set of arcs. An arc is a triplet $(h,l,m)$
+%indicating that $m$ modifies $h$ with a label $l$).
+%
+%
+%
+%
+%\begin{itemize}
+%   \item $\mathcal{C}(\textsc{Left-Arc}_l; c, gold)$: 
+%Adding the arc $(b, l, s)$ and popping $s$ from the stack means that $s$ will not be able
+%to acquire any head or dependents in $\beta$. The cost is therefore the number of arcs 
+%in $gold$ of the form $(k, l', s)$ or $(s, l', k)$ such that $k \in \beta$.
+%
+%\item $\mathcal{C}(\textsc{Right-Arc}_l; c, gold)$: 
+%Adding the arc $(s, l, b)$ and pushing $b$ onto the stack means that $b$ will 
+%not be able to acquire any head in $\sigma$ or $\beta$, nor any dependents in $\sigma$. 
+%The cost is therefore the number of arcs in $gold$ of the form $(k, l', b)$,
+%such that $k \in \sigma$ or $k \in \beta$, 
+%or of the form $(b, l', k)$ such that $k \in \sigma$ 
+%% the following is new according to matt's fix:
+%and $k$ is not assigned a head.
+%
+%\item $\mathcal{C}(\textsc{Reduce}; c, gold)$: 
+%Popping $s$ from the stack means that $s$ will not be able to acquire any dependents
+%in $b|\beta$. The cost is therefore the number of arcs in $gold$ of the form $(s, l', k)$
+%such that $k \in b|\beta$. \maybe{While it may seem that a gold arc of the form $(k, l, s)$ should be accounted for as well,
+%note that a gold arc of that form, if it exists, is already accounted for by a previous (erroneous) \textsc{Right-Arc}$_l$ 
+%transition when $s$ acquired its head.}
+%
+%\item $\mathcal{C}(\textsc{Shift}; c, gold)$: 
+%Pushing $b$ onto the stack means that $b$ will not be able to acquire any head
+%or dependents in $s|\sigma$. The cost is therefore the number of arcs in $gold$ of 
+%the form $(k, l', b)$ such that $k \in s|\sigma$ and of the form $(b, l', k)$ such that $k \in s|\sigma$
+%% the following is new according to matt's fix:
+%and $k$ is not assigned a head.
+%\note{Matthew, notice that shift and right-arc changed their definition, as
+%you pointed out they should, by requiring the stack item to not have a head
+%assigned already. The deltas below are based on this new and correct
+%definitions.}
+%\end{itemize}
+
 \subsection{Following non-gold transitions in training}
+\note{What is this supposed to be?}
 \begin{figure}
 \centering
     \begin{verbatim}
@@ -732,63 +832,30 @@ while not state.is_finished {
 \caption{Dynamic oracle. TODO: Notation.}
 \end{figure}
 
-\subsection{Defining the oracle}
-
-The new system .. like the old one ..
-.. with the following changes:
-\begin{itemize}
-   \item Once a word has acquired a head to its right it can still acquire a
-      different head to its left.  (due to change of the Left-arc transition).
-   \item Once words are put on the stack they can acquire heads not only from
-      the buffer but \textit{also from the word just before them on the
-      stack.} (due to the changed semantics of the reduce transition).
-\end{itemize}
-
-We will define the new dynamic oracles $\mathcal{C}_{NML}$,
-$\mathcal{C}_{NMD}$ and $\mathcal{C}_{NML+D}$ based on the arc-eager dynamic
-oracle $\mathcal{C}$ defined above, with additional $\Delta$ terms:
-
-\noindent$\mathcal{C}_{NML}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NML}(a,c,t)$\\
-
-\noindent$\mathcal{C}_{NMD}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NMD}(a,c,t)$\\
-
-\noindent$\mathcal{C}_{NML+D}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NML}(a,c,t) + \Delta_{NMD}(a,c,t)$\\
-
-The terms $\Delta_{NML}$ and $\Delta_{NMD}$ reflect the score adjustments that
-need to be done to the arc-eager oracle due to the changes of the Left-Arc and
-Reduce actions, respectively.
-
-The change due to the non-monotonic Left-Arc action:
-
-\begin{itemize}
-   \item $\Delta_{NML}(\textsc{RightArc},c,gold)$: The cost of Right-arc is decreased by 1 if the gold head of $b$ is on the buffer
-(because $b$ can still acquire its correct head later with a Left-Arc action).
-It is increased by 1 for any word $w$ on the stack such that $b$ is the gold
-parent of $w$ and $w$ is assigned a head already.
-
-   \item $\Delta_{NML}(\textsc{Reduce},c,gold)$: The cost of Reduce is increased by 1 if the gold head of $s$ is on the buffer
-(because this will preclude $s$ from acquiring its correct head later on with
-a Left-Arc action).
-
-   \item $\Delta_{NML}(\textsc{LeftArc},c,gold)$: The cost of Left-Arc is increased by 1 if $s$ is already assigned to its gold
-parent.
-
-  \item $\Delta_{NML}(\textsc{Shift},c,gold)$: The cost of Shift is increased by 1 for any word $w$ on the stack such that $b$ is the gold
-parent of $w$ and $w$ is assigned a head already.
-\end{itemize}
-
-The change due to the non-monotonic Reduce action:
-\begin{itemize}
-
-   \item $\Delta_{NMD}(\textsc{Shift},c,gold)$: The cost of Shift is decreased by 1 if the gold head of $b$ is $s$.
-
-   \item $\Delta_{NMD}(\textsc{LeftArc},c,gold)$: The cost of Left-Arc is increased by 1 if $s$ is not assigned a head, and the gold head of $s$ is $s_{-1}$.
-
-   \item $\Delta_{NMD}(\textsc{RightArc},c,gold)$ = 0
-
-   \item $\Delta_{NMD}(\textsc{Reduce},c,gold)$ = 0
-
-\end{itemize}
+%\subsection{Defining the oracle}
+%
+%The new system .. like the old one ..
+%.. with the following changes:
+%\begin{itemize}
+%   \item Once a word has acquired a head to its right it can still acquire a
+%      different head to its left.  (due to change of the Left-arc transition).
+%   \item Once words are put on the stack they can acquire heads not only from
+%      the buffer but \textit{also from the word just before them on the
+%      stack.} (due to the changed semantics of the reduce transition).
+%\end{itemize}
+%
+%We will define the new dynamic oracles $\mathcal{C}_{NML}$,
+%$\mathcal{C}_{NMD}$ and $\mathcal{C}_{NML+D}$ based on the arc-eager dynamic
+%oracle $\mathcal{C}$ defined above, with additional $\Delta$ terms:
+%
+%\noindent$\mathcal{C}_{NML}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NML}(a,c,t)$\\
+%
+%\noindent$\mathcal{C}_{NMD}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NMD}(a,c,t)$\\
+%
+%\noindent$\mathcal{C}_{NML+D}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NML}(a,c,t) + \Delta_{NMD}(a,c,t)$\\
+%
+%
+%\end{itemize}
 
 \section{Training Procedure}
 
@@ -799,14 +866,14 @@ parser any incentive to learn not make mistakes that it can potentially recover 
 later, even if learning to fix the mistake is harder than learning not to make
 it in the first place.
 
-In order to correct for that, we can instead train the parser using both the
+In order to correct for that, we instead train the parser using both the
 monotonic and non-monotonic oracles simultaneously by combining their
 judgements: if the non-monotonic oracle assigns several actions a zero-cost,
 we prefer to follow those actions that are also assigned a zero-cost by the
 monotonic oracle, because these actions can lead to the best outcome without
-relying on a repair down the road.
+relying on a non-monotonic (repair) operation down the road.
 
-\note{should make nicer!}
+%\note{should make nicer!}
 
 % P5
 
@@ -817,6 +884,7 @@ and used it to evaluate the non-monotonic transitions. We tested the transitions
 multiple dependency schemes, to check whether any effects were specific to annotation
 contingencies. We also analyse the effect on accuracy by dependency type, and
 investigate the impact on error propagation.
+\note{I'd emphasize also the several runs with different seeds aspect.}
 
 
 \begin{table}[t]
@@ -926,7 +994,7 @@ dependency parsers are trained. This method allows training from states that
 result from previous transition errors, which is
 important for this work. We therefore evaluate our model with two training strategies.
 
-\textbf{Standard.} 
+\textbf{Standard.} \note{Do we do that?}
 The parser begins stepping through the sentence, and at each state a small
 set of rules determines a single gold-standard transition. The transitions
 determine both the label for the instance and the next parser action. No ambiguity
@@ -941,6 +1009,7 @@ multiple transitions may be regarded as correct, if they do not cause any new
 errors. Any prediction within this set will not result in an update to the
 Perceptron's weights. This is the method labelled \emph{dynamic+explore}
 in \citet{goldberg:12}.
+
 
 \begin{table}[t]
 % Stanford
@@ -983,22 +1052,28 @@ in \citet{goldberg:12}.
         \label{tab:goldberg}}
 \end{table}
 
+\note{I suggest emphasizing that the Baseline is in fact a reimplementation of
+Goldberg and Nivre, and is already substantially better than the baseline of a ``plain''
+arc-eager system with a static oracle.}
+
 \subsection{Transition systems}
 
-\textbf{Baseline.} The unmodified Arc-Eager transition system.
+\textbf{Baseline.} The unmodified Arc-Eager transition system with training as
+in Goldberg and Nivre 2012.
 
-\textbf{NM L.} The pre-condition on Left-Arc is removed, allowing the model to
-choose it when the top of the stack already has a head set, which the Left-Arc will
-over-ride. This move will be non-monotonic in the
-sense that it will delete a previously created dependency, in addition to creating
-a Left-Arc as normal.
+%\textbf{NM L.} The pre-condition on Left-Arc is removed, allowing the model to choose it when the top of the stack already has a head set, which the Left-Arc will
+%over-ride. This move will be non-monotonic in the
+%sense that it will delete a previously created dependency, in addition to creating
+%a Left-Arc as normal.
+\textbf{NM L.} Arc-Eager with non-monotonic Left-Arc.
 
-\textbf{NM D.} The pre-condition on Reduce is removed, allowing the model to choose it
-when the top of the stack ($S0$) has no head set, so long as there is another word
-above it on the stack ($S1$). $S0$ is then attached as a child of $S1$. This move
-is non-monotonic in the sense that it over-rides the previous decision to push $S0$,
-instead of Right-Arc it to $S1$. The new arc will be assigned the highest scoring
-Right-Arc label from that previous decision.
+%\textbf{NM D.} The pre-condition on Reduce is removed, allowing the model to choose it
+%when the top of the stack ($S0$) has no head set, so long as there is another word
+%above it on the stack ($S1$). $S0$ is then attached as a child of $S1$. This move
+%is non-monotonic in the sense that it over-rides the previous decision to push $S0$,
+%instead of Right-Arc it to $S1$. The new arc will be assigned the highest scoring
+%Right-Arc label from that previous decision.
+\textbf{NM D.} Arc-Eager with non-monotonic Reduce.
 
 \textbf{NM L+D.} Both non-monotonic moves are enabled. 
 
