@@ -23,7 +23,8 @@ from io_parse import LABEL_STRS, STR_TO_LABEL
 import index.hashes
 from index.hashes cimport InstanceCounter
 
-from svm.cy_svm cimport Model, LibLinear, Perceptron
+#from svm.cy_svm cimport Model, LibLinear, Perceptron
+from svm.cy_svm cimport Model, Perceptron
 
 from libc.stdint cimport uint64_t, int64_t
 
@@ -241,7 +242,7 @@ cdef class Parser:
         n_trans = 0
         while not s.is_finished:
             n_trans += 1
-            if n_trans > 500:
+            if n_trans > 1000:
                 raise StandardError
             features.extract(self._context, self._hashed_feats, sent, &s)
             # Determine which moves are zero-cost and meet pre-conditions

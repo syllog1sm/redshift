@@ -2,7 +2,7 @@
 import io_parse
 from features cimport N_LABELS
 
-DEF MAX_SENT_LEN = 256
+DEF MAX_SENT_LEN = 500
 DEF MAX_TRANSITIONS = MAX_SENT_LEN * 2
 DEF MAX_VALENCY = 127
 

@@ -196,7 +196,7 @@ The preconditions of the Left and Reduce actions ensure that once an
 arc is added it is never removed in a subsequent state (alternatively,
 once a word is assinged a head it cannot be assigned a different head
 later on), and that words cannot be removed from the stack before they
-are assigned a head.  @@ We refer to these properties as the
+are assigned a head. We refer to these properties as the
 \textit{monotonicity} of the system.
 
 Due to monotonicuty, there is a natural pairing between the Right and
@@ -294,7 +294,6 @@ on an incongruent pairing
 we will have to either undo or add a
 dependency, depending on whether we correct a Right-Arc with a Left-Arc, or correct
 a Shift with a Reduce. We now describe these operations.
-
 
 \begin{figure}
     \centering
@@ -445,6 +444,7 @@ The model makes Shift vs. Right decisions as normal, and conditions on them --- 
 without \emph{committing} to them.
 
 
+<<<<<<< HEAD
 
 \section{Dynamic oracle for the Arc-Eager system}
 \label{ref:oracle}
@@ -573,6 +573,14 @@ a non-monotonic move, or if it rules out an arc entirely.
  which, given a gold-standard tree, dictates the sequence of moves a parser
  should make in order to derive it.  Traditionally, these oracles are defined
  as functions from trees to sequences, mapping a gold tree to a single sequence
+=======
+\section{Dynamic oracles}
+
+An essential component when training a transition-based parser is an oracle
+which, given a gold-standard tree, dictates the sequence of moves a parser
+should make in order to derive it.  Traditionally, these oracles are defined
+as functions from trees to sequences, mapping a gold tree to a single sequence
+>>>>>>> 082be4e38459d96d4458d5670ed51fa6c7e30a40
 of actions deriving it, even if more than one sequence of actions derives the
 gold tree. We call such oracles \emph{static}.  Recently, Goldberg and Nivre
 \shortcite{coling2012} introduced the concept of a \emph{dynamic} oracle, and
@@ -592,9 +600,45 @@ property holds also for the transition system we present below.} We refer to
 this number as the $cost$ of taking action $a$ at configuration $c$. Actions
 with a cost of 0 are optimal at the given configuration, and as long as we
 follow only optimal actions we are guaranteed to reach the gold tree.
+<<<<<<< HEAD
 By definition, there is at least one 0-cost actions at each configuration.
 Thus, for our purposes we only care to know if the cost of an action is zero
 or non-zero. 
+=======
+%By definition, there is at least one 0-cost actions at each configuration.
+%Thus, for our purposes we only care to know if the cost of an action is zero
+%or non-zero. 
+\subsection{Encoding Spurious Ambiguity}
+\note{I'm not sure where to include this text}
+An important benefit of dynamic oracles over static ones is that they do not
+commit to a single sequence of actions for a deriving a given tree, but instead
+compactly encode all the deriving sequences. A suitable training algorithm
+(see Section \ref{training}) can then be used to learn a good sequence of
+actions based on the oracle's guidance.  The task of dealing with spurious
+ambiguity is thus moved from the definition of the oracle (a manual task) to
+the training procedure.
+
+While spurious ambiguity in the arc-eager transition system is fairly limited, 
+it is a crucial aspect of our non-monotonic system.  The non-monotonic
+actions are repair-operations, undoing previous decisions.  It would be very
+hard to manually design a heuristic dictating which arcs to construct just so
+that they can be removed later, and which arcs not to construct in the first
+place.  The dynamic-oracle allows us to encode both options, and let the
+learner chose when to take each course. 
+
+\subsection{Training to recover from mistakes}
+\note{Do we need this? here?}
+Another benefit of the dynamic-oracle as defined here is that it is well
+defined for every parser configuration, not just configurations leading to the
+gold tree.  In a configuration which cannot lead to the gold tree, the oracle
+encodes the paths leading to the best tree which is still reachable.  As we
+know the parser is going to make mistakes, it is useful to let it see
+configurations that result from common mistakes, and teach it the optimal way
+to proceed from them.
+
+
+\subsection{Dynamic-oracle for the Arc-Eager System}
+>>>>>>> 082be4e38459d96d4458d5670ed51fa6c7e30a40
 
 The dynamic oracle for the arc-eager system is based on the properties of the
 system by which once words are put on the stack they can acquire heads and
@@ -609,9 +653,12 @@ as the first item in the buffer $\beta$ and $s$ is the top of the stack
 $\sigma$, and $gold$ is a set of arcs. An arc is a triplet $(h,l,m)$
 indicating that $m$ modifies $h$ with a label $l$).
 
+<<<<<<< HEAD
 
 
 
+=======
+>>>>>>> 082be4e38459d96d4458d5670ed51fa6c7e30a40
 \begin{itemize}
    \item $\mathcal{C}(\textsc{Left-Arc}_l; c, gold)$: 
 Adding the arc $(b, l, s)$ and popping $s$ from the stack means that $s$ will not be able
@@ -646,6 +693,7 @@ assigned already. The deltas below are based on this new and correct
 definitions.}
 \end{itemize}
 
+<<<<<<< HEAD
  Col 2
 \subsection{Following non-gold transitions in training}
 \begin{figure}
@@ -669,6 +717,9 @@ while not state.is_finished {
 \end{figure}
 
 \subsection{Defining the oracle}
+=======
+\subsection{Dynamic oracle for the non-monotnic system}
+>>>>>>> 082be4e38459d96d4458d5670ed51fa6c7e30a40
 
 The new system .. like the old one ..
 .. with the following changes:
@@ -1116,3 +1167,4 @@ into the parser.
 
 
 \end{document}
+
