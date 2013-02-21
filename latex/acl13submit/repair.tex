@@ -73,32 +73,65 @@
 \begin{document}
 \maketitle
 \begin{abstract}
-    Previous incremental parsers have assumed that state transitions
-    should be monotonic. However, transitions can be made to revise
+    Previous incremental parsers have used monotonic state transitions
+    However, transitions can be made to revise
     previous decisions quite naturally, based on further information.
-    Constraining this behaviour amounts
-    to placing less trust in the model, which we can expect to be less productive as
-    our models improve.
 
-    We show how simple adjustments to the Arc-Eager transition system to relax the
-    monotonicity constraint improves accuracy, especially when imperfect
-    states are introduced during training. To support our claim that better models
-    profit more from non-monotonic transitions, we present a set of
-    additional features that improve accuracy substantially. Despite having fewer errors
-    to correct, relaxing the monotonicity constraints is even more productive on
-    the improved model, for a total improvement on the previous state-of-the-art of
-    Y\%.
+    We show that a simple adjustments to the Arc-Eager transition system to relax its
+    monotonicity constraints can improve accuracy, so long as the training data
+    includes examples of mistakes for the non-monotonic transitions to repair.
+    
+    We evaluate the change in the context of a state-of-the-art system, and
+    obtain a statistically significant improvement on the English
+    evaluation. On the multi-lingual evaluation, 6/11 languages improved in accuracy,
+    with none declining.
 \end{abstract}
 
 % P1
 \section{Introduction}
-\note{Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer at mi justo, eu ullamcorper elit. Quisque aliquet massa eget lacus posuere vulputate. Phasellus scelerisque nibh vel nisi dapibus dapibus. Phasellus elementum eleifend neque. Pellentesque non enim urna, in molestie nisi. Sed mattis orci a massa ultricies congue. Suspendisse euismod cursus dolor, a luctus elit ultrices et. Praesent at eros orci. Integer suscipit neque sit amet felis eleifend vel ullamcorper mauris congue. Sed imperdiet ultricies elit in adipiscing. Quisque condimentum consequat turpis at feugiat. Sed fringilla viverra quam, sed auctor nunc convallis vitae. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Phasellus vitae elit vel quam pulvinar cursus ut nec erat.}
 
-\note{Maecenas sed sollicitudin nisl. Maecenas vehicula lacinia tristique. In nec sapien augue, eu tincidunt arcu. Nulla molestie lectus a sapien tincidunt a volutpat nisl consequat. Vivamus consectetur semper risus, nec pretium felis sagittis et. Nam tellus dolor, pulvinar non fermentum quis, auctor a metus. Proin mi purus, dignissim eget tempus in, vestibulum eu libero.}
+%A transition-based parser constructs a syntactic analysis by performing a series
+%of operations on each token, usually in order. For instance, an operation might
+%move the token to a stack from a buffer of the remaining words, create a dependency,
+%pop the stack, or some combination of these actions.
 
-\note{Sed tempus euismod risus et pharetra. Donec consectetur blandit tortor vitae auctor. Sed nec est posuere mauris volutpat laoreet. Nunc placerat orci vitae mauris rhoncus a condimentum arcu vulputate. Ut tincidunt, purus quis ultrices pulvinar, nulla leo scelerisque mauris, sit amet convallis tellus orci eu augue. In tincidunt, dolor rhoncus rhoncus vehicula, magna est laoreet velit, non tincidunt neque nulla vel nulla. Nullam metus enim, blandit eu sodales vitae, dictum vel metus. Praesent nec ornare tellus. Integer aliquet mauris sit amet mi eleifend nec iaculis orci ultrices. Nulla aliquet malesuada porttitor. Sed a erat tortor. Nullam placerat massa sed massa dictum aliquet. Curabitur lobortis dictum tortor, sit amet dignissim erat fringilla sed. Aliquam et augue est, et pretium est. Aenean mattis lacinia elit quis accumsan.}
+Historically, monotonicity has played an important role in transition-based parsing
+systems.  Non-monotonic systems, including the one presented here, typically
+redundantly generate multiple derivations for each syntactic analysis, leading to
+{\em spurious ambiguity} \citep{Steedman00b}.  Early, pre-statistical work on transition-based
+parsing such as \citet{Abney91} implicitly assumed that the parser searches the
+entire space of possible derivations. The presence of spurious ambiguity causes
+this search space to be a directed graph rather than a tree, which considerably
+complicates the search, so spurious ambiguity was avoided whenever possible.
 
-\note{Nunc pellentesque magna et augue hendrerit dignissim. Donec tempus velit quis purus tincidunt placerat. Suspendisse venenatis aliquet elit id convallis. Praesent porttitor, libero eu pretium gravida, urna velit sollicitudin lectus, sit amet malesuada velit quam tristique diam.}
+However, we claim that non-monotonicity and spurious ambiguity are not disadvantages in a
+modern statistical parsing system such as ours.  Modern statistical models have
+much larger search spaces because almost all possible analyses are allowed, and
+a numerical score (say, a probability distribution) is used to distinguish better
+analyses from worse ones.  These search spaces are so large that we cannot
+exhaustively search them, so instead we use the scores associated with partial
+analyses to guide a search that explores only a minuscule fraction of the space
+(In our case we use a best-first search, but even a beam search only explores
+a small fraction of the exponentially-many possible analyses). Spurious ambiguity
+is much less a problem in such a setting since the chance of revisiting the same
+analysis on two different derivations is small.
+
+In fact, as we show here  the
+additional redundant pathways between search states that non-monotonicity
+generates can be advantageous because they allow the parser to ``correct'' an earlier
+parsing move and provide an opportunity to recover from formerly ``fatal'' mistakes.
+Informally, non-monotonicity provides ``many paths up the mountain'' in the hope
+of making it easier to find at least one.
+
+We demonstrate this by modifying the Arc-Eager transition system to allow a limited
+capability for non-monotonic transitions. The system normally employs two
+deterministic constraints that limit the parser to actions consistent with the
+previous history. We remove these constraints, and update the transitions
+so that conflicts are resolved in favour of the latest prediction.
+
+The non-monotonic behaviour provides a small but statistically significant improvement in
+accuracy over a state-of-the-art baseline,
+so long as an appropriate training strategy is employed. 
 
 % Col 1
 %\begin{table*}[ht]
@@ -528,7 +561,7 @@ that is correct for the Non-monotonic Arc-Eager  transition system
 we present. We opt for a different presentation of the oracle from \citet{goldberg:12},
 to make the new oracle easier to define.
 
-\subsection{The Monotonic Arc-Eager Dynamic Oracle}
+\subsection{Monotonic Arc-Eager Dynamic Oracle}
 
 We now briefly describe the dynamic oracle for the arc-eager system. For more
 details, see \citet{goldberg:12}. The oracle is computed by reasoning about the
@@ -548,7 +581,7 @@ any other head.\\
 acquire heads that are currently on the stack, as well as dependents that are
 currently on the stack and are not yet assigned a head.\footnote{The condition
 that the words on the stack are not yet assigned a head is missing from
-\cite{coling12}.}\\
+\citet{goldberg:12}}\\
 (c) once a word is removed from the stack (Left-Arc or Reduce) it loses the
 ability to acquire any dependents on the buffer.\\
 
@@ -558,7 +591,7 @@ of arcs in the gold tree $t$ that are reachable from a parser's configuration
 $c$ and are no longer reachable from the configuration $a(c)$.
 action, $c$ is a parser configuration, $t$ is a gold-standard tree. 
 
-\subsection{Dynamic Oracles for the Non-Monotonic Variants}
+\subsection{Dynamic Oracles for \textsc{nmae} Variants}
 
 Given the oracle $\mathcal{C}(a,c,t)$ for the monotonic system,
 we adapt it to a non-monotonic variant by considering the changes from the
@@ -910,7 +943,22 @@ be applicable.
 %\subsection{Accuracy by label}
 
 
+\begin{table*}
+    \begin{tabular}{rrrrrrrrrr}
+\small
+\centering
+%arabic & basque & catalan & chinese & czech & english & greek & hungarian & italian & turkish \\
+AR & BQ & CAT & CHI & CZE & ENG & GRE & HUG & ITA & TUR \\
+\hline \hline
+83.1 &  75.8 &  91.2 &  82.3 &  80.0 &  88.3 &  81.8 &  77.6 &  83.9 &  77.9 \\
+82.9 &  75.6 &  91.2 &  82.3 &  78.1 &  87.7 &  81.1 &  77.2 &  83.8 &  77.9 \\
+$0.029$ & $0.081$ & $0.143$ & $0.364$ & $\le 0.001$ & $\le 0.001$ & $\le 0.001$ & $0.004$ & $0.063$ & $0.352$ \\
+\hline
+    \end{tabular}
+\caption{TODO: These results cannot be included as is! Some of the languages have samples
+missing from failed jobs. Working on this.}
 
+\end{table*}
 \section{Test Results}
 
 Table \ref{tab:eval} shows the final test results. The system is evlauated on
