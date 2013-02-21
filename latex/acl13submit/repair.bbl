@@ -1,7 +1,90 @@
-\begin{thebibliography}{1}
+\begin{thebibliography}{18}
 \providecommand{\natexlab}[1]{#1}
 \providecommand{\url}[1]{\texttt{#1}}
 \providecommand{\urlprefix}{URL }
+
+\bibitem[{Attardi and Ciaramita(2007)}]{attardi:07}
+Giuseppe Attardi and Massimiliano Ciaramita. 2007.
+\newblock Tree revision learning for dependency parsing.
+\newblock In \emph{Human Language Technologies 2007: The Conference of the
+  North American Chapter of the Association for Computational Linguistics;
+  Proceedings of the Main Conference}, pages 388--395. Association for
+  Computational Linguistics, Rochester, New York.
+\newblock \urlprefix\url{http://www.aclweb.org/anthology/N/N07/N07-1049}.
+
+\bibitem[{Ballesteros and Nivre(2013)}]{nivre:squib}
+Miguel Ballesteros and Joakim Nivre. 2013.
+\newblock Going to the roots of dependency parsing.
+\newblock \emph{Computational Linguistics. 39:1}.
+
+\bibitem[{de~Marneffe et~al.(2006)de~Marneffe, MacCartney, and
+  Manning}]{stanford_deps}
+Marie-Catherine de~Marneffe, Bill MacCartney, and Christopher~D. Manning. 2006.
+\newblock Generating typed dependency parses from phrase structure parses.
+\newblock In \emph{Proceedings of the 5th International Conference on Language
+  Resources and Evaluation ({LREC})}.
+
+\bibitem[{Goldberg and Elhadad(2010)}]{goldberg10}
+Yoav Goldberg and Michael Elhadad. 2010.
+\newblock An efficient algorithm for easy-first non-directional dependency
+  parsing.
+\newblock In \emph{Human Language Technologies: The 2010 Annual Conference of
+  the North American Chapter of the Association for Computational Linguistics
+  (NAACL HLT)}, pages 742--750.
+
+\bibitem[{Goldberg and Nivre(2012)}]{goldberg:12}
+Yoav Goldberg and Joakim Nivre. 2012.
+\newblock A dynamic oracle for arc-eager dependency parsing.
+\newblock In \emph{Proceedings of the 24th International Conference on
+  Computational Linguistics (Coling 2012)}. Association for Computational
+  Linguistics, Mumbai, India.
+
+\bibitem[{Hall and Nov{\'{a}}k(2005)}]{hall05iwpt}
+Keith Hall and Vaclav Nov{\'{a}}k. 2005.
+\newblock Corrective modeling for non-projective dependency parsing.
+\newblock In \emph{Proceedings of the 9th International Workshop on Parsing
+  Technologies ({IWPT})}, pages 42--52.
+
+\bibitem[{Huang and Sagae(2010)}]{huang:10}
+Liang Huang and Kenji Sagae. 2010.
+\newblock Dynamic programming for linear-time incremental parsing.
+\newblock In \emph{Proceedings of the 48th Annual Meeting of the Association
+  for Computational Linguistics ({ACL})}, pages 1077--1086.
+
+\bibitem[{Koo and Collins(2010)}]{koo:10}
+Terry Koo and Michael Collins. 2010.
+\newblock Efficient third-order dependency parsers.
+\newblock In \emph{Proceedings of the 48th Annual Meeting of the Association
+  for Computational Linguistics ({ACL})}, pages 1--11.
+
+\bibitem[{Kuhlmann et~al.(2011)Kuhlmann, G\'{o}mez-Rodr\'{\i}guez, and
+  Satta}]{kuhlmann:11}
+Marco Kuhlmann, Carlos G\'{o}mez-Rodr\'{\i}guez, and Giorgio Satta. 2011.
+\newblock Dynamic programming algorithms for transition-based dependency
+  parsers.
+\newblock In \emph{Proceedings of the 49th Annual Meeting of the Association
+  for Computational Linguistics: Human Language Technologies - Volume 1}, HLT
+  '11, pages 673--682. Association for Computational Linguistics, Stroudsburg,
+  PA, USA.
+\newblock \urlprefix\url{http://dl.acm.org/citation.cfm?id=2002472.2002558}.
+
+\bibitem[{Marcus et~al.(1993)Marcus, Santorini, and Marcinkiewicz}]{marcus:94}
+Mitchell~P. Marcus, Beatrice Santorini, and Mary~Ann Marcinkiewicz. 1993.
+\newblock Building a large annotated corpus of {E}nglish: The {P}enn
+  {T}reebank.
+\newblock \emph{Computational Linguistics}, 19:313--330.
+
+\bibitem[{Martins et~al.(2008)Martins, Das, Smith, and
+  Xing}]{torresmartins:08:stacking}
+Andr\'{e}~Filipe Martins, Dipanjan Das, Noah~A. Smith, and Eric~P. Xing. 2008.
+\newblock Stacking dependency parsers.
+\newblock In \emph{Proceedings of the Conference on Empirical Methods in
+  Natural Language Processing ({EMNLP})}, pages 157--166.
+
+\bibitem[{Nivre(2008)}]{nivre:cl}
+Joakim Nivre. 2008.
+\newblock Algorithms for deterministic incremental dependency parsing.
+\newblock \emph{Computational Linguistics}, 34:513--553.
 
 \bibitem[{Nivre et~al.(2004)Nivre, Hall, and Nilsson}]{nivre:04}
 Joakim Nivre, Johan Hall, and Jens Nilsson. 2004.
@@ -10,5 +93,42 @@ Joakim Nivre, Johan Hall, and Jens Nilsson. 2004.
   Workshop: Eighth Conference on Computational Natural Language Learning
   (CoNLL-2004)}, pages 49--56. Association for Computational Linguistics,
   Boston, Massachusetts, USA.
+
+\bibitem[{Nivre and McDonald(2008)}]{nivre-mcdonald-stacking}
+Joakim Nivre and Ryan McDonald. 2008.
+\newblock Integrating graph-based and transition-based dependency parsers.
+\newblock In \emph{Proceedings of the 46th Annual Meeting of the Association
+  for Computational Linguistics ({ACL})}, pages 950--958.
+
+\bibitem[{Vadas and Curran(2007)}]{vadas:07}
+David Vadas and James Curran. 2007.
+\newblock Adding noun phrase structure to the penn treebank.
+\newblock In \emph{Proceedings of the 45th Annual Meeting of the Association of
+  Computational Linguistics}, pages 240--247. Association for Computational
+  Linguistics, Prague, Czech Republic.
+\newblock \urlprefix\url{http://www.aclweb.org/anthology/P/P07/P07-1031}.
+
+\bibitem[{Zhang and Clark(2008)}]{zhang:08}
+Yue Zhang and Stephen Clark. 2008.
+\newblock A tale of two parsers: {I}nvestigating and combining graph-based and
+  transition-based dependency parsing.
+\newblock In \emph{Proceedings of the 2008 Conference on Empirical Methods in
+  Natural Language Processing}, pages 562--571. Association for Computational
+  Linguistics, Honolulu, Hawaii.
+\newblock \urlprefix\url{http://www.aclweb.org/anthology/D08-1059}.
+
+\bibitem[{Zhang and Clark(2011)}]{zhang_pos:11}
+Yue Zhang and Stephen Clark. 2011.
+\newblock Syntactic processing using the generalized perceptron and beam
+  search.
+\newblock \emph{Computational Linguistics}, 37(1):105--151.
+
+\bibitem[{Zhang and Nivre(2011)}]{zhang:11}
+Yue Zhang and Joakim Nivre. 2011.
+\newblock Transition-based dependency parsing with rich non-local features.
+\newblock In \emph{Proceedings of the 49th Annual Meeting of the Association
+  for Computational Linguistics: Human Language Technologies}, pages 188--193.
+  Association for Computational Linguistics, Portland, Oregon, USA.
+\newblock \urlprefix\url{http://www.aclweb.org/anthology/P11-2033}.
 
 \end{thebibliography}
