@@ -79,7 +79,7 @@
     However, transitions can be made to revise
     previous decisions quite naturally, based on further information.
 
-    We show that a simple adjustments to the Arc-Eager transition system to relax its
+    We show that a simple adjustment to the Arc-Eager transition system to relax its
     monotonicity constraints can improve accuracy, so long as the training data
     includes examples of mistakes for the non-monotonic transitions to repair.
     We evaluate the change in the context of a state-of-the-art system, and
@@ -685,8 +685,7 @@ this cost was taken care of when $w$ was assigned an incorrect head.)
 
 Once the dynamic-oracles for the non-monotonic system are defined, we could in
 principle just plug them in the perceptron-based training procedure described
-in \citet{goldberg:12} (see also Algorithm \ref{alg:explore-online-training}
-below).
+in \citet{goldberg:12}.
 However, a tacit assumption of the dynamic-oracles is that all paths to
 %Non-monotonic transitions raise an additional issue for a dynamic oracle, however.
 %A tacit assumption of the Arc-Eager oracle is that all paths to
@@ -702,14 +701,16 @@ Right-Arc, which we expect to usually be correct.  However, in those cases
 where the model does make the wrong decision, it should have the ability to later over-turn that decision, by having an unconstrained
 choice of Reduce vs. Left-Arc.
 
-In order to correct for that, don't use the non-monotonic oracles directly
-when training the parser, but we instead train the parser using both the
+In order to correct for that, we don't use the non-monotonic oracles directly
+when training the parser, but instead train the parser using both the
 monotonic and non-monotonic oracles simultaneously by combining their
 judgements: while we always prefer zero-cost non-monotonic actions to
-monotonic-actions with non-zero cost, if the non-monotonic oracle assigns several actions a zero-cost,
+monotonic-actions with non-zero cost, if the non-monotonic oracle assigns
+several actions a zero-cost,
 we prefer to follow those actions that are also assigned a zero-cost by the
 monotonic oracle, as these actions lead to the best outcome without
 relying on a non-monotonic (repair) operation down the road.
+
 
 \section{Experiments}
 
