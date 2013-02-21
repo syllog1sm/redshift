@@ -3,61 +3,44 @@ Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
 The top-level auxiliary file: repair.aux
 The style file: aclnat.bst
 Database file #1: repair.bib
-Warning--I didn't find a database entry for "nivre:cl"
-Warning--I didn't find a database entry for "coling12"
-Warning--I didn't find a database entry for "marcus:94"
-Warning--I didn't find a database entry for "stanford_deps"
-Warning--I didn't find a database entry for "vadas:07"
-Warning--I didn't find a database entry for "koo:10"
-Warning--I didn't find a database entry for "nivremcdonald"
-Warning--I didn't find a database entry for "noahsmith"
-Warning--I didn't find a database entry for "attardi"
-Warning--I didn't find a database entry for "kbhall"
-Warning--I didn't find a database entry for "leroux"
-Warning--I didn't find a database entry for "goldberg10"
-Warning--I didn't find a database entry for "zhang-clark"
-Warning--I didn't find a database entry for "zhang-nivre"
-Warning--I didn't find a database entry for "huang"
-Warning--I didn't find a database entry for "satta"
-You've used 5 entries,
+You've used 18 entries,
             2965 wiz_defined-function locations,
-            673 strings with 5935 characters,
-and the built_in function-call counts, 3169 in all, are:
-= -- 262
-> -- 116
-< -- 6
-+ -- 42
-- -- 35
-* -- 227
-:= -- 478
-add.period$ -- 24
-call.type$ -- 5
-change.case$ -- 42
-chr.to.int$ -- 5
-cite$ -- 5
-duplicate$ -- 239
-empty$ -- 245
-format.name$ -- 59
-if$ -- 643
+            742 strings with 8787 characters,
+and the built_in function-call counts, 12061 in all, are:
+= -- 1053
+> -- 406
+< -- 25
++ -- 149
+- -- 125
+* -- 828
+:= -- 1766
+add.period$ -- 84
+call.type$ -- 18
+change.case$ -- 159
+chr.to.int$ -- 18
+cite$ -- 18
+duplicate$ -- 894
+empty$ -- 945
+format.name$ -- 202
+if$ -- 2513
 int.to.chr$ -- 1
 int.to.str$ -- 1
-missing$ -- 48
-newline$ -- 32
-num.names$ -- 22
-pop$ -- 100
+missing$ -- 165
+newline$ -- 101
+num.names$ -- 74
+pop$ -- 355
 preamble$ -- 1
-purify$ -- 31
+purify$ -- 113
 quote$ -- 0
-skip$ -- 94
+skip$ -- 405
 stack$ -- 0
-substring$ -- 134
-swap$ -- 129
-text.length$ -- 2
+substring$ -- 638
+swap$ -- 480
+text.length$ -- 12
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 45
+type$ -- 162
 warning$ -- 0
-while$ -- 23
+while$ -- 96
 width$ -- 0
-write$ -- 73
-(There were 16 warnings)
+write$ -- 254

@@ -1017,10 +1017,15 @@ NM L+D      & $n$ & 88.9 & 91.1 & 88.9  & 91.0 \\
 One can view our non-monotonic parsing system as adding ``repair'' operations to a greedy, deterministic parser, allowing it to undo previous decisions and thus mitigating the effect of incorrect parsing decisions due to uncertain future, which is inherent in greedy left-to-right transition-based parsers. 
 While we do not know of any previous successful attempts to add repair operations to a greedy parser, several lines works attempt to tackle this deficiency of incremental parsers in various ways. These include:
 
-\noindent\textbf{Stacking} \cite{nivremcdonald,noahsmith}, in which a second-stage parser runs over the sentence using the predictions of the first-stage parser as features. In contrast our parser works in a single, left-to-right pass over the sentence.\\
-\noindent\textbf{Post-processing Repairs} Closely related to stacking, this line of work attempts to train classifiers to repair attachment mistakes after a parse is proposed by a parser by changing head attachment decisions \cite{attardi,kbhall,leroux}.\\
+\noindent\textbf{Stacking} \cite{nivre-mcdonald-stacking,torresmartins:08:stacking}, in which a second-stage parser runs over the sentence using the predictions of the first-stage parser as features. In contrast our parser works in a single, left-to-right pass over the sentence.\\
+\noindent\textbf{Post-processing Repairs} Closely related to stacking, this
+line of work attempts to train classifiers to repair attachment mistakes after
+a parse is proposed by a parser by changing head attachment decisions
+\cite{attardi:07,hall05iwpt}.\\
 \noindent\textbf{Non-directional Parsing} The EasyFirst parser of \cite{goldberg10} tackles similar forms of ambiguities by dropping the Shift action altogether, and processing the sentence in an easy-to-hard bottom-up order instead of left-to-right, resulting in a greedy but non-directional parser.  The indeterminate processing order increases the parser's runtime from $O(n)$ to $O(n\log{}n)$.  In contrast to the EasyFirst approach, our parser processes the sentence incrementally from left-to-right, and runs in a linear time.  It is however possible that similar strategies to ours could be applied also to the EasyFirst parsing system, improving it as well. This is left for future research.\\
-\noindent\textbf{Beam Search} An obvious approach to tackling ambiguities is to forgo the greedy nature of the parser and instead to adopt a beam search \cite{zhang-clark,zhang-nivre} or dynamic programming \cite{huang,satta} approach. While these approaches are very successful in producing high-accuracy parsers, we are more interested in what can be achieved in a strictly deterministic system, which results in much faster and incremental parsing algorithms.  In addition, our proposed non-monotonic system might prove to be useful also in the context of transition-based parsers that do use search.
+\noindent\textbf{Beam Search} An obvious approach to tackling ambiguities is
+to forgo the greedy nature of the parser and instead to adopt a beam search
+\cite{zhang:08,zhang:11} or a dynamic programming \cite{huang:10,kuhlmann:11} approach. While these approaches are very successful in producing high-accuracy parsers, we are more interested in what can be achieved in a strictly deterministic system, which results in much faster and incremental parsing algorithms.  In addition, our proposed non-monotonic system might prove to be useful also in the context of transition-based parsers that do use search.
 
 
 \section{Conclusion and future work}
