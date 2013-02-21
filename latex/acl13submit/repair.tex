@@ -10,6 +10,8 @@
 \usepackage{tikz-dependency}
 \usepackage{placeins}
 \usepackage{xcolor}
+\usepackage[noend]{algpseudocode}
+\usepackage{algorithm}
 % Alter some LaTeX defaults for better treatment of figures:
     % See p.105 of "TeX Unbound" for suggested values.
     % See pp. 199-200 of Lamport's "LaTeX" book for details.
@@ -88,6 +90,9 @@
     to correct, relaxing the monotonicity constraints is even more productive on
     the improved model, for a total improvement on the previous state-of-the-art of
     Y\%.
+    \note{This needs to be tightened a bit. Also, we should not claim imp.
+    over state of the art in general, but confine ourselves to ``with a greedy
+    left-to-right parser'' or something similar.}
 \end{abstract}
 
 % P1
@@ -123,7 +128,7 @@
 
 \section{The Arc-Eager Transition System}
 
-In transition-based parsing, the parser consists of a state (or a
+In transition-based parsing, a parser consists of a state (or a
 configuration) which is manipulated by a set of actions.  An action is
 applied to a state and results in a new state.  The parsing process
 concludes when the parser reaches a final state, at which case the
@@ -131,12 +136,11 @@ parse tree is read off of the state.  A particular set of states,
 actions and their semantics, yield a transition-system. Our starting
 point in this paper is the popular Arc-Eager transition system which
 we briefly describe below.  For further details, consult
-\citet{nivre:04}.
-% TODO: Do we need this? nivre-class}.
+\citet{nivre:04,nivre:cl}.
 
-The state (or configuration) of the arc-eager system is composed of a
+The state of the arc-eager system is composed of a
 stack, a buffer and a set of arcs.
-The stack and the buffer hold (indices to) the words of a sentence,
+The stack and the buffer hold the words of a sentence,
 and the set of arcs represent derived dependency relations.
 
 We use a notation in which the stack items are indicated by $S_i$,
@@ -146,9 +150,14 @@ $B_0$ being the first item on the buffer.  The arcs are of the form
 $(h,l,m)$, indicating a dependency arc in which the word $m$ modifies
 the word $h$ with label $l$.
 
-In the initial configuration, there is an empty stack, and a
-buffer containing the words of the sentence in order, followed by an
-ROOT token.
+In the initial configuration the stack is empty, and the buffer
+contains the words of the sentence followed by an
+artificial ROOT token.
+\footnote{We follow the suggestion of \citet{nivre:squib} to handle root-node dependencies by
+adding the artificial ROOT token at the \emph{end} of the sentence.\maybe{This improves
+accuracy by delaying root-node decisions, and likely accounts for the 0.2\%
+extra accuracy of our standard-trained baseline system over the equivalent
+result reported by \citet{goldberg:12}.}}
 In the final configuration the buffer is empty and the stack contains
 a single ROOT token. The set of arcs in the final configuration is the
 parse tree.
@@ -157,16 +166,17 @@ There are four parsing actions (Shift, Left-Arc, Right-Arc and Reduce,
 abbreviated as S,L,R,D respectively) that
 manipulate stack and buffer items.  The \textbf{Shift} action pops the
 first item from the buffer and pushes it on the stack (the Shift
-action has a natural precondition that the buffer is not empty).  The
-\textbf{Right} action is similar to the Shift action, but it also adds
+action has a natural precondition that the buffer is not empty, as well as a
+precondition that ROOT can only be pushed to an empty stack).  The
+\textbf{Right-Arc} action is similar to the Shift action, but it also adds
 a dependency arc $(S_0, B_0)$,
 with the current top of the stack as the head of the newly pushed item
 (the Right action has an additional precondition that the stack is not
 empty).\footnote{%
-For labelled dependency parsing, the Right and Left actions are
-parameterized by a label $L$ such that the action $Right_L$ adds an
-arc $(S_0, L, B_0)$, similarly for $Left_L$.}
-The \textbf{Left} action adds a dependency arc $(B_0, S_0)$ with the
+For labelled dependency parsing, the Right-Arc and Left-Arc actions are
+parameterized by a label $L$ such that the action Right-Arc$_L$ adds an
+arc $(S_0, L, B_0)$, similarly for Left-Arc$_L$.}
+The \textbf{Left-Arc} action adds a dependency arc $(B_0, S_0)$ with the
 first item in the buffer as the head of the top of the stack, and pops
 the stack (with a precondition that the stack and buffer are not
 empty, and that $S_0$ is not assigned a head yet). Finally, the
@@ -242,44 +252,37 @@ stack is not empty and that $S_0$ is already assigned a head.
 
 \subsection{Monotonicty}
 
-The preconditions of the Left and Reduce actions ensure that once an
+The preconditions of the Left-Arc and Reduce actions ensure that once an
 arc is added it is never removed in a subsequent state (alternatively,
-once a word is assinged a head it cannot be assigned a different head
+once a word is assigned a head it cannot be assigned a different head
 later on), and that words cannot be removed from the stack before they
 are assigned a head. We refer to these properties as the
 \textit{monotonicity} of the system.
 
-Due to monotonicity, there is a natural pairing between the Right and
-Reduce actions and the Shift and Left actions: a word which is pushed
-into the stack by the Right action must be popped using a Reduce
-action, and a word which is pushed by the Shift action must be popped
-using the Left action.
-As a consequence of this pairing, a Right move determines that the head of
+Due to monotonicity, there is a natural pairing between the Right-Arc and
+Reduce actions and the Shift and Left-Arc actions: a word which is pushed
+into the stack by Right-Arc must be popped using Reduce,
+ and a word which is pushed by Shift action must be popped
+using Left-Arc.
+As a consequence of this pairing, a Right-Arc move determines that the head of
 the pushed token must be to its right, while a Shift moves determines a head
-to its left. Crucially, the decision whether to Right or Shift is often taken
+to its left. Crucially, the decision whether to Right-Arc or Shift is often taken
 in a state of missing information regarding the continuation of the sentence,
 forcing an incorrect head assignments later on. 
 
-\note{This is a bit redundant with what follows, but I think this redundancy
-is in place: first, it presents the ambiguity we are tackling in syntactic
-terms.  Second, it highlights the deficiency of the monotonic system without
-imposing the details of the proposed fix.}
-Consider a sentence pair such as ``I saw Jack and Jill'' and ``I saw Jack and Jill
-fall''. In the first sentence ``Jack and Jill'' is the NP object of ``saw'', while
-in the second it is a subject of the embedded verb ``fall''.  The monotonic arc-eager
+Consider a sentence pair such as (a)``I saw Jack and Jill'' / (b)``I saw Jack and Jill
+fall''. In (a), ``Jack and Jill'' is the NP object of ``saw'', while
+in (b) it is a subject of the embedded verb ``fall''.  The monotonic arc-eager
 parser has to decide on an analysis as soon as it sees ``saw'' on the top of the
-stack and ``Jack'' as the front of the buffer, without seeing the
+stack and ``Jack'' at the front of the buffer, without access to the
 disambiguating verb ``fall''.  
 
 In what follows, we suggest a non-monotonic variant of the Arc-Eager transition
 system, allowing the parser to recover from the incorrect head assignments
-which are forced by an incorrect resolution of a Shift/Right ambiguity.
-
+which are forced by an incorrect resolution of a Shift/Right-Arc ambiguity.
 
 \section{The Non-Monotonic Arc-Eager System}
 
-\note{Maybe shorten this just a tiny bit to remove some of the redundant
-discussion from above. But also maybe not..}
 The Arc-Eager transition system \citep{nivre:04} has four moves. Two create 
 dependencies, two push the first word of the buffer to the stack, and two pop 
 the stack:
@@ -297,20 +300,21 @@ Every word in the sentence is pushed once and popped once; and every
 word must have exactly one head. This creates two pairings, along the
 diagonals: (S, L) and (R, D).
 Either the push move adds the head or the pop move does, but not both and not neither.
-The Arc-Eager system guarantees this by constraining the choice of pop move:
+\maybe{
+The Arc-Eager system guarantees this by constraining the choice of pop move:}
 
 \begin{itemize}\setlength{\itemsep}{-2mm}
-    \item Iff $S_0$ has a head, Reduce;
-    \item Iff $S_0$ has no head, Left-Arc.
-\end{itemize}
-In the existing solution, the first move decides both.
-Our idea is to let the pair be decided by the \emph{second} move.
+   \item \maybe{ Iff $S_0$ has a head, Reduce;}
+   \item \maybe{ Iff $S_0$ has no head, Left-Arc.}
+ \end{itemize}
+In the arc-eager system, the first move decides both.
+We change this behaviour and let the pair be decided by the \emph{second} move.
 
-This makes the transition system \emph{non-monotonic}, because if the model decides
+This change makes the transition system \emph{non-monotonic}, because if the model decides
 on an incongruent pairing
 we will have to either undo or add a
 dependency, depending on whether we correct a Right-Arc with a Left-Arc, or correct
-a Shift with a Reduce. We now describe these operations.
+a Shift with a Reduce. We now describe our modifications to the system.
 
 
 %Our idea is to give the parser the ability to change its mind. The model chooses
@@ -364,7 +368,7 @@ a Shift with a Reduce. We now describe these operations.
 \subsection{Non-monotonic Left-Arc}
 
 Figure \ref{fig:clobber} shows a before-and-after view of a non-monotonic
-transition. The line below the words shows the transition history.
+transition. The sequence below the words shows the transition history.
 The words that are circled in the upper and lower line are on the stack before
 and after the transition, respectively. The arrow depicts the start of the buffer,
 and arcs are labelled according to the move that added them. 
@@ -373,15 +377,21 @@ The parser began correctly by Shifting \emph{I}
 and Left-Arcing it to \emph{saw}, which was then also Shifted. The mistake, made
 at Move 4, was to Right-Arc \emph{Jack} instead of Shifting it.
 
-The difficulty of this kind of sentence for an incremental parser is fundamental.
+The difficulty of this kind of a decision for an incremental parser is fundamental.
 The leftward context does not constrain the decision, 
 and an arbitrary amount of text could separate \emph{Jack} from
 \emph{fall}. Eye-tracking
-experiments show that humans often perform a saccade while reading such examples (TODO).
+experiments show that humans often perform a saccade while reading such
+examples (\note{TODO}).
 
 In moves 5-8 the parser correctly builds the rest of the \textsc{np}, and arrives
-at \emph{fall}. The monotonicity constraints would here force an incorrect analysis,
-even though the evidence for the correct decision is much stronger at the later move.
+at \emph{fall}. The monotonicity constraints would here force an incorrect
+analysis (either having \emph{fall} modify \emph{Jack}, \emph{fall} modify
+\emph{saw} or \emph{saw} modify \emph{fall}\footnote{\maybe{Note that while having
+\emph{fall} modify \emph{saw} might be a good choice in terms
+of arc-accuracy score, it would still result in an il-formed parse tree in which
+\emph{fall} is an embedded verb with no arguments.}})
+even though the evidence for the correct decision is now much stronger.
 
 We allow Left-Arcs to `clobber' Right-Arcs if the model
 recommends it. The Right-Arc is deleted, and the Left-Arc proceeds as normal. The
@@ -393,16 +403,17 @@ move 4. We simply give the model a second chance to make the correct choice.
 The upper arcs in Figure \ref{fig:adduce} show a state resulting from the opposite error.
 The parser has Shifted \emph{Jack} instead of Right-Arcing it. After
 building the \textsc{np} the buffer is exhausted, except for the ROOT token,
-which is used to Left-Arc the sentence's head word \citep{nivre:squib}.
+which is used to wrongly Left-Arc \emph{Jack} as the sentence's head word.
 
-Instead of letting the previous choice lock us in to the pair (Shift, Left), we let
-the later decision reverse it to (Right, Reduce), if the parser has predicted
-Reduce in spite of the strong signal from its previous decision.
-In the context shown in \ref{fig:adduce}, the correctness of the Reduce move should be
-quite predictable, once the choice is made available.
+Instead of letting the previous choice lock us in to the pair (Shift, Left-Arc), we let
+the later decision reverse it to (Right-Arc, Reduce), if the parser has predicted
+Reduce in spite of the signal from its previous decision.
+In the context shown in Figure \ref{fig:adduce}, the correctness of the Reduce
+move is quite predictable, once the choice is made available.
 
-When the Shift/Right decision is reversed, we add an arc between the top of the stack
-and the word above it. This is the arc that would have been created had the parser
+When the Shift/Right-Arc decision is reversed, we add an arc between the top
+of the stack ($S_0$)
+and the word preceding it ($S_1$). This is the arc that would have been created had the parser
 chosen to Right-Arc when it chose to Shift. Since our idea is to reverse this mistake,
 we select the Right-Arc label that the model scored most highly at that
 time.\footnote{An alternative approach to label assignment is to parameterize
@@ -456,7 +467,7 @@ decision was made.
 \noindent\paragraph{To summarize,} our Non-Monotnonic Arc-Eager (\nmae) system
 differs from the monotonic system by:
 \begin{itemize}
-   \item Changing the Left action by removing the precondition that $S_0$
+   \item Changing the Left-Arc action by removing the precondition that $S_0$
    does not have a head, and updating the semantics such previously
    derived arcs having $S_0$ as a dependent are removed from the arcs set.
 
@@ -466,23 +477,22 @@ differs from the monotonic system by:
 \end{itemize}
 
 
-
-
 \section{Why have two push moves?}
 \label{ref:shiftless}
 
 We have argued above that it is better to trust the second decision that the model
 makes, rather than using the first decision to determine the second. If this is
 the case, is the first decision entirely redundant?
-Instead of defining how pop moves can correct Shift/Right mistakes, we could
+Instead of defining how pop moves can correct Shift/Right-Arc mistakes, we could
 instead eliminate the ambiguity. There are two possibilities:
 Shift every token, and create all Right-Arcs via Reduce; or Right-Arc every token,
 and override the incorrect arcs with subsequent Left-Arcs.
 
-The problem with these approaches is that it is useful to condition
-on the results of previous decisions. 
+The problem with these approaches is that in many cases the decision whether
+to Shift or Right-Arc is quite clear, and its result provides useful
+conditioning context to later decisions.
 This may seem strange, given that the information that determined those decisions
-is never lost, but it is a common situation. In \pos tagging,
+is never lost, but it is a common situation -- consider \pos tagging, in which 
 we can use all the features that helped the model tag the previous word, yet still
 benefit from an additional feature for the model's prediction.
 Saving all of the difficulty for later
@@ -496,14 +506,16 @@ making important features uselessly noisy. In the other approach, we avoid creat
 spurious arcs, but the model does not predict whether $S_0$ is attached to $S_1$,
 or what the arc label would be. These are very useful features.
 
-The non-monotonic transition system does not have this problem.
-The model makes Shift vs. Right decisions as normal, and conditions on them --- but
+\maybe{Moreover, if the Shift and Right-Arc contexts are mostly different than each
+other, it would be easier for the learner to learn two different separators
+instead of trying to generalize them into a common class.}
+
+The non-monotonic transition system we propose does not have these problems.
+The model learns to make Shift vs. Right-Arc decisions as normal, and conditions on them --- but
 without \emph{committing} to them.
 
-
-\section{Adapting the dynamic oracle}
+\section{Dynamic Oracles}
 \label{ref:oracle}
-
 
  An essential component when training a transition-based parser is an oracle
  which, given a gold-standard tree, dictates the sequence of moves a parser
@@ -514,30 +526,39 @@ without \emph{committing} to them.
  \citet{goldberg:12} introduced the concept of a \emph{dynamic} oracle, and
  presented a concrete oracle for the arc-eager system.  Instead of mapping a
  gold tree to a sequence of actions, the dynamic oracle maps a
-\tuple{configuration, tree} pair to a \emph{set} of optimal transitions.
+ \tuple{\text{configuration}, \text{tree}} pair to a \emph{set} of optimal transitions.
 
 There are two advantages to this. First, the ability to label any configuration,
 rather than only those along a single path to the gold-standard derivation,
 allows much better training data to be generated. States come with realistic
 histories, including errors --- a critical point for the current work. Second,
-the oracle is correct with respect to ambiguity, as it will label multiple actions
+the oracle is correct with respect to spuriously ambiguity, as it will label multiple actions
 as correct if the optimal parses resulting from them are equally accurate.
+\note{I don't like ``is correct with respect to''. Not sure what's better,
+though. ``naturally accommodates ambiguity''?}
 
-We will first define the Arc-Eager dynamic oracle, and then define an oracle
-that is correct for the Non-monotonic Arc-Eager  transition system
-we present. We opt for a different presentation of the oracle from \citet{goldberg:12},
-to make the new oracle easier to define.
+We will first describe the Arc-Eager dynamic oracle, and then define dynamic
+oracles for the non-monotonic transition systems we present.
+%We opt for a different presentation of the oracle from \citet{goldberg:12},
+%to make the new oracle easier to define.
 
-\subsection{The Monotonic Arc-Eager Dynamic Oracle}
+\subsection{Monotonic Arc-Eager Dynamic Oracle}
 
 We now briefly describe the dynamic oracle for the arc-eager system. For more
 details, see \citet{goldberg:12}. The oracle is computed by reasoning about the
 arcs which are reachable from a given state, and counting the number of gold
 arcs which will no longer be reachable after applying a given transition at a
 given state.
+\footnote{The correctness of
+the oracle is based on a property of the arc-eager system, stating that if a
+set of arcs which can be extended to a projective tree can be individually
+derived from a given configuration, then a projective tree containing all of
+the arcs in the set is also derivable from the same configuration. This same
+property holds also for the non-monotonic variants we propose.}
+
 The reasoning is based on the observations that in the arc-eager system, new
 arcs $(h,l,m)$ can be derived iff the following conditions hold:\\
-(a) There is no existing arc $(h',l',m)$ such that $h'!=h$.\\
+(a) There is no existing arc $(h',l',m)$ such that $h'!=h$, and 
 (b) Either both $h$ and $m$ are on the buffer, or one of them is on the buffer
 and the other is on the stack.
 
@@ -548,17 +569,16 @@ any other head.\\
 acquire heads that are currently on the stack, as well as dependents that are
 currently on the stack and are not yet assigned a head.\footnote{The condition
 that the words on the stack are not yet assigned a head is missing from
-\cite{coling12}.}\\
+\cite{goldberg:12}.}\\
 (c) once a word is removed from the stack (Left-Arc or Reduce) it loses the
 ability to acquire any dependents on the buffer.\\
 
-Based on these observations, \cite{coling12} present an oracle
+Based on these observations, \cite{goldberg:12} present an oracle
 $\mathcal{C}(a,c,t)$ for the monotonic arc-eager system, computing the number
 of arcs in the gold tree $t$ that are reachable from a parser's configuration
 $c$ and are no longer reachable from the configuration $a(c)$.
-action, $c$ is a parser configuration, $t$ is a gold-standard tree. 
 
-\subsection{Dynamic Oracles for the Non-Monotonic Variants}
+\subsection{Non-monotonic Dynamic Oracles}
 
 Given the oracle $\mathcal{C}(a,c,t)$ for the monotonic system,
 we adapt it to a non-monotonic variant by considering the changes from the
@@ -566,20 +586,23 @@ monotonic to the non-monotonic system, and adding $\Delta$ terms accordingly.
 We define three novel oracles: $\mathcal{C}_{NML}$, $\mathcal{C}_{NMD}$ and
 $\mathcal{C}_{NML+D}$ for systems with a non-monotonic Left-Arc, Reduce or both.
 
-\noindent$\mathcal{C}_{NML}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NML}(a,c,t)$\\
-\noindent$\mathcal{C}_{NMD}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NMD}(a,c,t)$\\
-\noindent$\mathcal{C}_{NML+D}(a,c,t) = \mathcal{C}(a,c,t) + \Delta_{NML}(a,c,t) + \Delta_{NMD}(a,c,t)$\\
+\[\begin{array}{lcll} 
+\mathcal{C}_{NML}(a,c,t)& = &\mathcal{C}(a,c,t)&+ \Delta_{NML}(a,c,t)\\
+\mathcal{C}_{NMD}(a,c,t)& = &\mathcal{C}(a,c,t)&+ \Delta_{NMD}(a,c,t)\\
+\mathcal{C}_{NML+D}(a,c,t)& = &\mathcal{C}(a,c,t)&+ \Delta_{NML}(a,c,t)\\ 
+                                     &  & &+ \Delta_{NMD}(a,c,t)
+\end{array}\]
 
 The terms $\Delta_{NML}$ and $\Delta_{NMD}$ reflect the score adjustments that
 need to be done to the arc-eager oracle due to the changes of the Left-Arc and
 Reduce actions, respectively, and are detailed below.
 
-\noindent The changes due to the non-monotonic Left-Arc action:
+\noindent \emph{Changes due to non-monotonic Left-Arc:}
 
 \begin{itemize}
-   \item $\Delta_{NML}(\textsc{RightArc},c,t)$: The cost of Right-arc is
+   \item $\Delta_{NML}(\textsc{RightArc},c,t)$: The cost of Right-Arc is
       decreased by 1 if the gold head of $B_0$ is on the buffer
-         (because $b$ can still acquire its correct head later with a Left-Arc action).
+         (because $B_0$ can still acquire its correct head later with a Left-Arc action).
 It is increased by 1 for any word $w$ on the stack such that $B_0$ is the gold
 parent of $w$ and $w$ is assigned a head already (in the monotonic oracle,
 this cost was taken care of when the word was assigned an incorrect head. In the
@@ -597,11 +620,11 @@ case).
 
   \item $\Delta_{NML}(\textsc{Shift},c,gold)$: The cost of Shift is increased
      by 1 for any word $w$ on the stack such that $B_0$ is the gold
-parent of $w$ and $w$ is assigned a head already. (As in Right-Arc, In the monotonic oracle,
+parent of $w$ and $w$ is assigned a head already. (As in Right-Arc, in the monotonic oracle,
 this cost was taken care of when $w$ was assigned an incorrect head.)
 \end{itemize}
 
-\noindent The changes due to the non-monotonic Reduce action:
+\noindent \emph{Changes due to non-monotonic Reduce:}
 \begin{itemize}
 
    \item $\Delta_{NMD}(\textsc{Shift},c,gold)$: The cost of Shift is decreased
@@ -610,7 +633,7 @@ this cost was taken care of when $w$ was assigned an incorrect head.)
 
    \item $\Delta_{NMD}(\textsc{LeftArc},c,gold)$: The cost of Left-Arc is
       increased by 1 if $S_0$ is not assigned a head, and the gold head of
-      $S_0$ is $s_{1}$ (Because this precludes adding the correct arc
+      $S_0$ is $S_{1}$ (Because this precludes adding the correct arc
       with a Reduce of $S_0$ later).
 
    \item $\Delta_{NMD}(\textsc{Reduce},c,gold)$ = 0. While it may seem that a
@@ -623,30 +646,33 @@ this cost was taken care of when $w$ was assigned an incorrect head.)
    \item $\Delta_{NMD}(\textsc{RightArc},c,gold)$ = 0
 \end{itemize}
 
-\subsection{Applying the Oracle}
+\section{Applying the Oracles in Training}
 
-
-Non-monotonic transitions raise an additional issue for a dynamic oracle, however.
-A tacit assumption of the Arc-Eager oracle is that all paths to
-recovering a given arc should be treated equally. This is a questionable assumption
-for the non-monotonic system.
+Once the dynamic-oracles for the non-monotonic system are defined, we could in
+principle just plug them in the perceptron-based training procedure described in \cite{goldberg:12}.
+However, a tacit assumption of the dynamic-oracles is that all paths to
+%Non-monotonic transitions raise an additional issue for a dynamic oracle, however.
+%A tacit assumption of the Arc-Eager oracle is that all paths to
+recovering a given arc are treated equally. This assumption may be sub-optimal
+for the purpose of training a parser for a non-monotonic system.
 
 In Section \ref{sec:shiftless}, we argued that removing the ambiguity between
 Shift and Right-Arcs altogether was an inferior strategy. Failing to discriminate
 between arcs reachable by monotonic and non-monotonic paths does just that.
 
 Instead,  we want to learn a model that will offer its best prediction of Shift vs.
-Right, which we expect to almost always be followed. However, in exceptional cases, the
-model should have the ability to later over-turn that decision, by having an unconstrained
-choice of Reduce vs. Left.
+Right-Arc, which we expect to usually be correct.  However, in those cases
+where the model does make the wrong decision, it should have the ability to later over-turn that decision, by having an unconstrained
+choice of Reduce vs. Left-Arc.
 
-In order to correct for that, we instead train the parser using both the
+In order to correct for that, don't use the non-monotonic oracles directly
+when training the parser, but we instead train the parser using both the
 monotonic and non-monotonic oracles simultaneously by combining their
-judgements: if the non-monotonic oracle assigns several actions a zero-cost,
+judgements: while we always prefer zero-cost non-monotonic actions to
+monotonic-actions with non-zero cost, if the non-monotonic oracle assigns several actions a zero-cost,
 we prefer to follow those actions that are also assigned a zero-cost by the
-monotonic oracle, because these actions can lead to the best outcome without
+monotonic oracle, as these actions lead to the best outcome without
 relying on a non-monotonic (repair) operation down the road.
-
 
 \section{Experiments}
 
@@ -656,12 +682,12 @@ multiple dependency schemes, to check whether any effects were specific to annot
 contingencies. We also analyse the effect on accuracy by dependency type, and
 investigate the impact on error propagation.
 
-All results are averaged from scores produced by 20 models trained with
+As the training procedure we use includes a random component, all results are averaged from scores produced by 20 models trained with
 different random seeds. The seed determines the initial ordering of the
-sentences and how they are shuffled before each iteration. Typical standard
+sentences and how they are shuffled before each iteration, as well as when to
+follow an optimal action and when to follow a non-optimal action during training. Typical standard
 deviation between the samples was $0.05--0.07$.
 Test results were tested for significance using a Wilcox test.
-
 
 \begin{table}[t]
 
@@ -708,12 +734,12 @@ where all training examples have gold-standard transition histories. Results ref
 
 A train/dev/test split of 02-21 of the Penn Treebank \textsc{wsj} \citep{marcus:94}
 was used for all models. The data was converted into
-Stanford dependencies \citep{stanford_deps} after the \citet{vadas:07}
+Stanford dependencies \citep{stanford_deps} with copula-as-head after the \citet{vadas:07}
 \textsc{np}-bracketing patch was applied. We also evaluate our models on
 dependencies created by the \textsc{Penn2MALT} tool, to assist comparison 
 with previous results.
 
-The data was \pos tagged using the tagger described by \citep{zhang_pos:11}.
+The data was automatically \pos tagged using the tagger described by \citep{zhang_pos:11}.
 As is standard, 4-fold jack-knifing was used to prevent learning incorrect
 weights from gold-standard tags.
 % P6
@@ -723,56 +749,76 @@ weights from gold-standard tags.
 We base our experiments on the parser described by \citet{goldberg:12}. We
 began by implementing their baseline system, a standard Arc-Eager parser using
 an averaged Perceptron learner and the extended feature set described by \citet{zhang:11}.
-We follow \citeauthor{goldberg:12} in training all models for 15 iterations,
+We follow \cite{goldberg:12} in training all models for 15 iterations,
 and in shuffling the sentences before each iteration.
 
 Labels and moves were learned jointly, resulting in a single model with 88 classes
-for the Stanford dependencies. Joint label/move learning proved surprisingly
+for the Stanford dependencies. Joint label/move learning proved 
 advantageous, giving 0.4\% additional \uas.
 
-We follow the suggestion of \citet{nivre:squib} to handle root-node dependencies by
-adding a dummy token at the \emph{end} of the sentence.
-This improves accuracy by delaying root-node decisions, and likely accounts for the
-0.2\% extra accuracy of our standard-trained baseline system over the equivalent result
-reported by \citet{goldberg:12}.
-
-
-\begin{figure}
-\begin{verbatim}
-
-while not state.is_finished {
-  feats = extract(state)
-  zero_costs =
-      O_r(state) intersect O_e(state)
-  if zero_costs.empty():
-   zero_costs = O_r(state)
-
-  g = predict_from(feats, zero_costs)
-  p = predict_from(feats, monotonic)
-  if p not in zero_costs {
-     update(feats, g, 1)
-     update(feats, p, -1)
-  }
-  transition(state, p)
-}
-\end{verbatim}
-\caption{The dynamic oracle training algorithm of \citet{goldberg:12}, used in our baseline and
-non-monotonic systems. \label{code:train}}
-\end{figure}
-
+%\begin{figure}
+%\begin{verbatim}
+%
+%while not state.is_finished {
+%  feats = extract(state)
+%  zero_costs =
+%      O_r(state) intersect O_e(state)
+%  if zero_costs.empty():
+%   zero_costs = O_r(state)
+%
+%  g = predict_from(feats, zero_costs)
+%  p = predict_from(feats, monotonic)
+%  if p not in zero_costs {
+%     update(feats, g, 1)
+%     update(feats, p, -1)
+%  }
+%  transition(state, p)
+%}
+%\end{verbatim}
+%\caption{The dynamic oracle training algorithm of \citet{goldberg:12}, used in our baseline and
+%non-monotonic systems. \label{code:train}}
+%\end{figure}
+\begin{algorithm}[tb]
+   \caption{Online training with a dynamic oracle $\mathcal{C}$ (single sentence)}
+   \label{alg:explore-online-training}
+\begin{algorithmic}[1]
+   \State{\textbf{Inputs:} sentence $x$, gold tree $T$, iteration number $i$,
+   feature function $\phi$, action-set $A$, current weights $\mathbf{w}$}
+      \State $c \gets c_{\text{initial}}(x)$
+            \While{$c$ is not terminal}
+            \State{//Predict with current weights}
+            \State $a_{\text{pred}} \gets \arg\max_{a\in A} \mathbf{w} \cdot \phi(c,a)$
+            \State $\textsc{zero\_cost} \gets \{a | \mathcal{C}(a, c, T) = 0\}$
+            \State{//Update if needed}
+            \If{$a_\text{pred} \not\in \textsc{zero\_cost}$}
+            \State $a_\text{opt} \gets \arg\max_{a \in \textsc{zero\_cost}}\mathbf{w} \cdot \phi(c,a)$
+            \State $\mathbf{w} \gets \mathbf{w} + \phi(c,a_\text{opt}) - \phi(c,a_\text{pred})$
+            \EndIf
+            \State{//Choose action to follow}
+            \If{$a_\text{pred} \in \textsc{zero\_cost}$} \State $a_\text{next} \gets a_\text{pred}$ 
+            \ElsIf{$i > 2$ and \Call{rand} $> 0.1$} \State $a_\text{next} \gets a_\text{pred}$
+            \Else \State $a_\text{next} \gets$ \Call{rand\_elem}{\textsc{zero\_cost}}
+            \EndIf
+            \State{//Move to next state}
+            \State $c \gets a_\text{next}(c)$
+            \EndWhile
+      \State \Return updated $\mathbf{w}$
+\end{algorithmic}
+\end{algorithm}
 
 \subsection{Training strategies}
 
-
 \textbf{Dynamic oracle.} The parser is allowed to train from states
-resulting from previous incorrect transitions. The function determing correctness
+resulting from previous incorrect transitions. The function determining correctness
 is described in Section \ref{sec:oracle}. Another important difference is that
 multiple transitions may be regarded as correct, if they do not cause any new
 errors. Any prediction within this set will not result in an update to the
 Perceptron's weights. This is the method labelled \emph{dynamic+explore}
-in \citet{goldberg:12}. Pseudo-code for the algorithm is shown in Figure \ref{code:train}.
+in \citet{goldberg:12}. Pseudo-code for the algorithm is shown in Algorithm
+\ref{alg:explore-online-training}.
 
 \textbf{Standard.}
+\note{How do we chose one single gold action if several are provided by the oracle? at random? I'm not sure that we need this experiment here. If we do keep it, the description is unclear. Can we say just ``traditionally trained dependency parser'' or something to that effect?}
 The parser begins stepping through the sentence, and at each state a small
 set of rules determines a single gold-standard transition. The transitions
 determine both the label for the instance and the next parser action. No ambiguity
@@ -800,14 +846,14 @@ that could lead to the gold-standard dependencies.
         \hline \hline
         & \multicolumn{4}{c}{Unlabelled Attachment} \\
         \hline
-        Baseline & 91.2 & 42.0 & 90.9 & 39.7 \\
+        Baseline (G\&N-12) & 91.2 & 42.0 & 90.9 & 39.7 \\
         NM L & 91.4 & 43.1 & 91.0 & 40.1 \\
         NM D & 91.4 & 42.8 & 91.1 & 41.2 \\
         NM L+D & 91.6 & 43.3 & 91.3 & 41.5 \\
         \hline
         & \multicolumn{4}{c}{Labelled Attachment} \\
         \hline
-        Baseline & 88.7 & 31.8 & 89.7 & 36.6 \\
+        Baseline (G\&N-12)& 88.7 & 31.8 & 89.7 & 36.6 \\
         NM L & 89.0 & 32.5 & 89.8 & 36.9 \\
         NM D & 88.9 & 32.3 & 89.9 & 37.7 \\
         NM L+D & 89.1 & 32.7 & 90.0 & 37.9 \\
@@ -816,22 +862,23 @@ that could lead to the gold-standard dependencies.
     \caption{\small
         With \textbf{dynamic oracle training}, both non-monotonic transitions
         bring small improvements in per-token (\textsc{w}) and whole sentence (\textsc{s})
-        accuracy on the development data, \wsj 22.
+        accuracy on the development data, \wsj 22. The improvements are
+        additive.
         \label{tab:goldberg}}
 \end{table}
 
 
 \subsection{Transition systems}
 
-\textbf{Baseline.}
-An implementation of \citet{goldberg:12}. Features the unmodified Arc-Eager transition
+\textbf{Baseline(G\&N-12).}
+A re-implementation of \citep{goldberg:12}. Features the unmodified Arc-Eager transition
 system, with the dynamic oracle-based training strategy.
 
 %\textbf{NM L.} The pre-condition on Left-Arc is removed, allowing the model to choose it when the top of the stack already has a head set, which the Left-Arc will
 %over-ride. This move will be non-monotonic in the
 %sense that it will delete a previously created dependency, in addition to creating
 %a Left-Arc as normal.
-\textbf{NM L.} Arc-Eager with non-monotonic Left.
+\noindent\textbf{NM L.} Arc-Eager with non-monotonic Left-Arc.
 
 %\textbf{NM D.} The pre-condition on Reduce is removed, allowing the model to choose it
 %when the top of the stack ($S0$) has no head set, so long as there is another word
@@ -839,9 +886,9 @@ system, with the dynamic oracle-based training strategy.
 %is non-monotonic in the sense that it over-rides the previous decision to push $S0$,
 %instead of Right-Arc it to $S1$. The new arc will be assigned the highest scoring
 %Right-Arc label from that previous decision.
-\textbf{NM D.} Arc-Eager with non-monotonic Reduce.
+\noindent\textbf{NM D.} Arc-Eager with non-monotonic Reduce.
 
-\textbf{NM L+D.} Both non-monotonic moves are enabled. 
+\noindent\textbf{NM L+D.} Arc-Eager with both non-monotonic moves.
 
 \section{Development Results}
 \label{sec:results}
@@ -953,7 +1000,7 @@ K\&C 10  & $n^3$ & ---   & ---   & ---  & 93.00 \\
 Z\&N 11  & $nk$  & 91.9  & 93.5  & 91.8 & 92.9 \\
 G\&N 12  & $n$   & 88.72 & 90.96 & ---  & --- \\
         \hline
-Baseline    & $n$ & 88.7 & 90.9 & 88.7  & 90.6 \\
+Baseline(G\&N-12)   & $n$ & 88.7 & 90.9 & 88.7  & 90.6 \\
 NM L+D      & $n$ & 88.9 & 91.1 & 88.9  & 91.0 \\
 \hline
     \end{tabular}
@@ -1004,9 +1051,10 @@ and Nivre oracle so it predicts the optimal moves, either monotonic or non-monot
 from any configuration, and use this to train an averaged perceptron model.
 
 When evaluated on the standard WSJ training and test sets we obtained a \uas of 91.1\%,
-which is a 0.2\% improvement over the already state-of-the-art baseline of 90.9\% that we
-obtain with the error-based training procedure restricted to monotonic transitions of
-\citet{goldberg:12}.  We showed that this difference is significant using a Wilcoxon
+which is a 0.2\% improvement over the already state-of-the-art baseline of
+90.9\% that is obtained with the error-based training procedure restricted to monotonic transitions of
+\citet{goldberg:12}.  We showed that this difference is significant using a
+Wilcoxon\note{Wilcox or Wilcoxon?}
 test on the output of 20 runs of each system.
 
 Looking to the future, we believe that it would be interesting to investigate whether
