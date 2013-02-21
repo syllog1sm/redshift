@@ -132,8 +132,9 @@ previous history. We remove these constraints, and update the transitions
 so that conflicts are resolved in favour of the latest prediction.
 
 The non-monotonic behaviour provides a small but statistically significant improvement in
-accuracy over a state-of-the-art baseline,
-so long as an appropriate training strategy is employed. 
+accuracy over the baseline, a state-of-the-art greedy deterministic parser.
+The technique is also very practical, as it is no more difficult to implement than
+the existing alternative.
 
 % Col 1
 %\begin{table*}[ht]
@@ -301,12 +302,12 @@ to its left. Crucially, the decision whether to Right-Arc or Shift is often take
 in a state of missing information regarding the continuation of the sentence,
 forcing an incorrect head assignment on a subsequent move. 
 
-%Consider a sentence pair such as (a)``I saw Jack and Jill'' / (b)``I saw Jack and Jill
-%fall''. In (a), ``Jack and Jill'' is the NP object of ``saw'', while
-%in (b) it is a subject of the embedded verb ``fall''.  The monotonic arc-eager
-%parser has to decide on an analysis as soon as it sees ``saw'' on the top of the
-%stack and ``Jack'' at the front of the buffer, without access to the
-%disambiguating verb ``fall''.  
+Consider a sentence pair such as (a)``I saw Jack and Jill'' / (b)``I saw Jack and Jill
+fall''. In (a), ``Jack and Jill'' is the NP object of ``saw'', while
+in (b) it is a subject of the embedded verb ``fall''.  The monotonic arc-eager
+parser has to decide on an analysis as soon as it sees ``saw'' on the top of the
+stack and ``Jack'' at the front of the buffer, without access to the
+disambiguating verb ``fall''.  
 
 In what follows, we suggest a non-monotonic variant of the Arc-Eager transition
 system, allowing the parser to recover from the incorrect head assignments
@@ -338,8 +339,9 @@ Either the push move adds the head or the pop move does, but not both and not ne
 %   \item \maybe{ Iff $S_0$ has a head, Reduce;}
 %   \item \maybe{ Iff $S_0$ has no head, Left-Arc.}
 % \end{itemize}
-In the Arc-Eager system, the first move decides both of the operations.
-We change this behaviour and let the pair be decided by the \emph{second} move.
+Thus in the Arc-Eager system the first move determines the corresponding second move.
+In our non-monotonic system we allow the second move to over-write an attachment made
+by the first move.
 
 This change makes the transition system \emph{non-monotonic}, because if the model decides
 on an incongruent pairing
@@ -388,6 +390,7 @@ dependency, depending on whether we correct a prior Right-Arc, or a prior Shift.
     \wordgroup{4}{3}{3}{}
 \end{dependency}
 \caption{
+\small
     State before and after a non-monotonic Left-Arc.
     At move 9, \emph{fall} is the first word of the buffer (marked with an arrow),
     and \emph{saw} and \emph{Jack} are on the stack (circled). The arc created at move 4 was
@@ -420,12 +423,12 @@ examples \citep{FrazierRayner1982}.
 In moves 5-8 the parser correctly builds the rest of the \textsc{np}, and arrives
 at \emph{fall}. The monotonicity constraints would here force an incorrect
 analysis,
-%either having \emph{fall} modify \emph{Jack}, \emph{fall} modify
-%\emph{saw} or \emph{saw} modify \emph{fall})
-%\footnote{\maybe{Note that while having
-%\emph{fall} modify \emph{saw} might be a good choice in terms
-%of arc-accuracy score, it would still result in an il-formed parse tree in which
-%\emph{fall} is an embedded verb with no arguments.}})
+either having \emph{fall} modify \emph{Jack}, \emph{fall} modify
+\emph{saw} or \emph{saw} modify \emph{fall})
+\footnote{Note that while having
+\emph{fall} modify \emph{saw} might be a good choice in terms
+of arc-accuracy score, it would still result in an il-formed parse tree in which
+\emph{fall} is an embedded verb with no arguments.}
 even though the evidence for the correct decision is now much stronger.
 
 We allow Left-Arcs to `clobber' Right-Arcs if the model
@@ -461,6 +464,7 @@ move 4. We simply give the model a second chance to make the correct choice.
     \wordgroup{4}{3}{3}{}
 \end{dependency}
 \caption{
+    \small
 State before and after a non-monotonic Reduce.
 After making the wrong push move at 4, at move 11
 the parser has \emph{Jack} on the stack (circled), with only the dummy \textsc{root}
@@ -504,11 +508,11 @@ proposed when the reduced token was initially pushed into the stack.}
 differs from the monotonic Arc-Eager system by:
 \begin{itemize}
    \item Changing the Left-Arc action by removing the precondition that $S_0$
-   does not have a head, and updating the semantics such previously
+   does not have a head, and updating the dependency arcs such previously
    derived arcs having $S_0$ as a dependent are removed from the arcs set.
 
    \item Changing the Reduce action by removing the precondition that $S_0$
-   has a head, and updating the semantics such that if $S_0$ does not have
+   has a head, and updating the dependency arcs such that if $S_0$ does not have
    a head, $S_1$ is assigned as the head of $S_0$.
 \end{itemize}
 
@@ -528,8 +532,7 @@ The problem with these approaches is that in many cases the decision whether
 to Shift or Right-Arc is quite clear, and its result provides useful
 conditioning context to later decisions.
 This may seem strange, given that the information that determined those decisions
-is never lost, but it is a common situation. In \pos tagging, 
-context is never discarded, but previous predicted tag is a crucial feature.
+is never lost, but it is a common situation.
 Saving all of the difficulty for later
 is not a very good structured prediction strategy. 
 
@@ -561,7 +564,15 @@ without \emph{committing} to them.
  \citet{goldberg:12} introduced the concept of a \emph{dynamic} oracle, and
  presented a concrete oracle for the arc-eager system.  Instead of mapping a
  gold tree to a sequence of actions, the dynamic oracle maps a
- \tuple{\text{configuration}, \text{tree}} pair to a \emph{set} of optimal transitions.
+ \tuple{\text{configuration}, \text{gold tree}} pair to a \emph{set} of optimal transitions.
+ More concretely, the dynamic
+    oracle presented in \cite{goldberg:12} maps
+\tuple{\text{action},\text{configuration},\text{tree}}
+    tuples to an integer, indicating the number of gold arcs in $tree$
+that can be
+    derived from $configuration$ by some sequence of actions, but
+could not be derived
+    after applying $action$ to the configuration.
 
 There are two advantages to this. First, the ability to label any configuration,
 rather than only those along a single path to the gold-standard derivation,
@@ -593,7 +604,7 @@ property holds also for the non-monotonic variants we propose.}
 
 The reasoning is based on the observations that in the arc-eager system, new
 arcs $(h,l,m)$ can be derived iff the following conditions hold:\\
-(a) There is no existing arc $(h',l',m)$ such that $h'!=h$, and 
+(a) There is no existing arc $(h',l',m)$ such that $h'\neq h$, and 
 (b) Either both $h$ and $m$ are on the buffer, or one of them is on the buffer
 and the other is on the stack.
 
@@ -607,7 +618,6 @@ that the words on the stack are not yet assigned a head is missing from
 \citep{goldberg:12}}\\
 (c) once a word is removed from the stack (Left-Arc or Reduce) it loses the
 ability to acquire any dependents on the buffer.\\
-
 Based on these observations, \citet{goldberg:12} present an oracle
 $\mathcal{C}(a,c,t)$ for the monotonic arc-eager system, computing the number
 of arcs in the gold tree $t$ that are reachable from a parser's configuration
@@ -828,8 +838,9 @@ Our systems are labelled in the results tables as follows:
 \end{table}
 
 
-\textbf{Baseline(G\&N-12).}
-A re-implementation of \citep{goldberg:12}. Features the unmodified Arc-Eager transition
+\noindent \textbf{Baseline(G\&N-12).}
+A re-implementation of \citep{goldberg:12}, which uses the
+unmodified Arc-Eager transition
 system, with the dynamic oracle-based training strategy.
 
 %\textbf{NM L.} The pre-condition on Left-Arc is removed, allowing the model to choose it when the top of the stack already has a head set, which the Left-Arc will
