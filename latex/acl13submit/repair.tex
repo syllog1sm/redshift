@@ -136,7 +136,7 @@ parse tree is read off of the state.  A particular set of states,
 actions and their semantics, yield a transition-system. Our starting
 point in this paper is the popular Arc-Eager transition system which
 we briefly describe below.  For further details, consult
-\citet{nivre:04,nivre:cl}.
+\citep{nivre:04,nivre:cl}.
 
 The state of the arc-eager system is composed of a
 stack, a buffer and a set of arcs.
@@ -568,12 +568,12 @@ any other head.\\
 (b) once a word is moved from the buffer to the stack (Shift or Right-Arc) it loses the ability to
 acquire heads that are currently on the stack, as well as dependents that are
 currently on the stack and are not yet assigned a head.\footnote{The condition
-that the words on the stack are not yet assigned a head is missing from
-\cite{goldberg:12}.}\\
+that the words on the stack are not yet assigned a head is missing in
+\citep{goldberg:12}.}\\
 (c) once a word is removed from the stack (Left-Arc or Reduce) it loses the
 ability to acquire any dependents on the buffer.\\
 
-Based on these observations, \cite{goldberg:12} present an oracle
+Based on these observations, \citet{goldberg:12} present an oracle
 $\mathcal{C}(a,c,t)$ for the monotonic arc-eager system, computing the number
 of arcs in the gold tree $t$ that are reachable from a parser's configuration
 $c$ and are no longer reachable from the configuration $a(c)$.
@@ -649,7 +649,9 @@ this cost was taken care of when $w$ was assigned an incorrect head.)
 \section{Applying the Oracles in Training}
 
 Once the dynamic-oracles for the non-monotonic system are defined, we could in
-principle just plug them in the perceptron-based training procedure described in \cite{goldberg:12}.
+principle just plug them in the perceptron-based training procedure described
+in \citet{goldberg:12} (see also Algorithm \ref{alg:explore-online-training}
+below).
 However, a tacit assumption of the dynamic-oracles is that all paths to
 %Non-monotonic transitions raise an additional issue for a dynamic oracle, however.
 %A tacit assumption of the Arc-Eager oracle is that all paths to
@@ -739,7 +741,7 @@ Stanford dependencies \citep{stanford_deps} with copula-as-head after the \citet
 dependencies created by the \textsc{Penn2MALT} tool, to assist comparison 
 with previous results.
 
-The data was automatically \pos tagged using the tagger described by \citep{zhang_pos:11}.
+The data was automatically \pos tagged using the tagger described in \citep{zhang_pos:11}.
 As is standard, 4-fold jack-knifing was used to prevent learning incorrect
 weights from gold-standard tags.
 % P6
@@ -749,12 +751,13 @@ weights from gold-standard tags.
 We base our experiments on the parser described by \citet{goldberg:12}. We
 began by implementing their baseline system, a standard Arc-Eager parser using
 an averaged Perceptron learner and the extended feature set described by \citet{zhang:11}.
-We follow \cite{goldberg:12} in training all models for 15 iterations,
+We follow \citet{goldberg:12} in training all models for 15 iterations,
 and in shuffling the sentences before each iteration.
 
+\maybe{
 Labels and moves were learned jointly, resulting in a single model with 88 classes
 for the Stanford dependencies. Joint label/move learning proved 
-advantageous, giving 0.4\% additional \uas.
+advantageous, giving 0.4\% additional \uas.}
 
 %\begin{figure}
 %\begin{verbatim}
@@ -1017,15 +1020,32 @@ NM L+D      & $n$ & 88.9 & 91.1 & 88.9  & 91.0 \\
 One can view our non-monotonic parsing system as adding ``repair'' operations to a greedy, deterministic parser, allowing it to undo previous decisions and thus mitigating the effect of incorrect parsing decisions due to uncertain future, which is inherent in greedy left-to-right transition-based parsers. 
 While we do not know of any previous successful attempts to add repair operations to a greedy parser, several lines works attempt to tackle this deficiency of incremental parsers in various ways. These include:
 
-\noindent\textbf{Stacking} \cite{nivre-mcdonald-stacking,torresmartins:08:stacking}, in which a second-stage parser runs over the sentence using the predictions of the first-stage parser as features. In contrast our parser works in a single, left-to-right pass over the sentence.\\
-\noindent\textbf{Post-processing Repairs} Closely related to stacking, this
-line of work attempts to train classifiers to repair attachment mistakes after
-a parse is proposed by a parser by changing head attachment decisions
-\cite{attardi:07,hall05iwpt}.\\
-\noindent\textbf{Non-directional Parsing} The EasyFirst parser of \cite{goldberg10} tackles similar forms of ambiguities by dropping the Shift action altogether, and processing the sentence in an easy-to-hard bottom-up order instead of left-to-right, resulting in a greedy but non-directional parser.  The indeterminate processing order increases the parser's runtime from $O(n)$ to $O(n\log{}n)$.  In contrast to the EasyFirst approach, our parser processes the sentence incrementally from left-to-right, and runs in a linear time.  It is however possible that similar strategies to ours could be applied also to the EasyFirst parsing system, improving it as well. This is left for future research.\\
-\noindent\textbf{Beam Search} An obvious approach to tackling ambiguities is
-to forgo the greedy nature of the parser and instead to adopt a beam search
-\cite{zhang:08,zhang:11} or a dynamic programming \cite{huang:10,kuhlmann:11} approach. While these approaches are very successful in producing high-accuracy parsers, we are more interested in what can be achieved in a strictly deterministic system, which results in much faster and incremental parsing algorithms.  In addition, our proposed non-monotonic system might prove to be useful also in the context of transition-based parsers that do use search.
+\noindent\textbf{Stacking} \citep{nivre-mcdonald-stacking,torresmartins:08:stacking}, in which a second-stage parser runs over the sentence using the predictions of the first-stage parser as features. In contrast our parser works in a single, left-to-right pass over the sentence.\\
+\noindent\textbf{Post-processing Repairs} \citep{attardi:07,hall05iwpt}
+Closely related to stacking, this line of work attempts to train classifiers
+to repair attachment mistakes after a parse is proposed by a parser by
+changing head attachment decisions.\\
+\noindent\textbf{Non-directional Parsing} 
+The EasyFirst parser of \citet{goldberg10}
+tackles similar forms of
+ambiguities by dropping the Shift action altogether, and processing the
+sentence in an easy-to-hard bottom-up order instead of left-to-right,
+resulting in a greedy but non-directional parser.  The indeterminate
+processing order increases the parser's runtime from $O(n)$ to $O(n\log{}n)$.
+In contrast to the EasyFirst approach, our parser processes the sentence
+incrementally from left-to-right, and runs in a linear time.  It is however
+possible that similar strategies to ours could be applied also to the
+EasyFirst parsing system, improving it as well. This is left for future
+research.\\
+\noindent\textbf{Beam Search} An obvious approach to tackling
+ambiguities is to forgo the greedy nature of the parser and instead to adopt a
+beam search \citep{zhang:08,zhang:11} or a dynamic programming \citep{huang:10,kuhlmann:11}
+approach. While these approaches are very successful in producing
+high-accuracy parsers, we are more interested in what can be achieved in a
+strictly deterministic system, which results in much faster and incremental
+parsing algorithms.  In addition, our proposed non-monotonic system might
+prove to be useful also in the context of transition-based parsers that do use
+search.
 
 
 \section{Conclusion and future work}
