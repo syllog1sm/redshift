@@ -1,5 +1,5 @@
 from fabric.api import local, run, lcd, cd, env
-from fabric.operations import get
+from fabric.operations import get, put
 from pathlib import Path
 import time
 import re
@@ -7,6 +7,8 @@ from math import sqrt
 from os.path import join as pjoin
 from os import listdir
 import scipy.stats
+from fabric.contrib.files import exists
+from StringIO import StringIO
 
 env.use_ssh_config = True
 
@@ -59,6 +61,74 @@ def full(name, size="5k", feats='base', thresh=5, here=True, n=1, niters=15):
         lower=True, invert=True, reattach=True, niters=niters)
 
 
+
+
+def run_lang(name, lang, n=1, baseline=True):
+    n = int(n)
+    REMOTE_CONLL = '/home/mhonniba/data/mlconll'
+    train_loc = pjoin(REMOTE_CONLL, '%s.train.proj.malt' % lang)
+    pos_loc = pjoin(REMOTE_CONLL, '%s.test.pos' % lang)
+    test_loc = pjoin(REMOTE_CONLL, '%s.test.malt' % lang)
+
+    base_dir = pjoin(str(REMOTE_PARSERS), name, lang)
+    if baseline:
+        train_args = ''
+    else:
+        train_args = '-r -d'
+
+    pbs = """#! /bin/bash
+#PBS -l walltime=20:00:00,mem=8gb,nodes=1:ppn=5
+source /home/mhonniba/py27/bin/activate
+export PYTHONPATH=/home/mhonniba/repos/fork:/home/mhonniba/repos/fork/redshift:/home/mhonniba/repos/fork/svm
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/lib64:/usr/lib64/:/usr/local/lib64/:/usr/lib64/atlas:/home/mhonniba/repos/redshift/svm/lib/
+cd /home/mhonniba/repos/fork
+
+    ./scripts/train.py -l conll {train_args} -s {seed} {train_loc} {model}
+    ./scripts/parse.py {model} {pos_loc} {model}/test
+    ./scripts/evaluate.py {model}/test/test {gold_test} > {model}/test/acc""" 
+
+    
+    for i in range(n):
+        model_dir = pjoin(base_dir, str(i))
+        with cd('/home/mhonniba/repos/fork'):
+            if not exists(model_dir):
+                run("mkdir -p %s" % model_dir)
+            config = pbs.format(
+                        seed=i,
+                        train_loc=train_loc,
+                        model=model_dir,
+                        train_args=train_args,
+                        pos_loc=pos_loc,
+                        gold_test=test_loc)
+            put(StringIO(config), './pbs/lang.pbs')
+            put(StringIO(config), pjoin(model_dir, 'lang.pbs'))
+            run('qsub ./pbs/lang.pbs')
+
+
+def eval_langs(baseline, test=None, lang=None):
+    if lang is None:
+        langs = ['arabic', 'basque', 'catalan',  'chinese', 'czech',
+                'english',  'greek',  'hungarian',  'italian',  'turkish']
+    else:
+        langs = [lang]
+
+    uas, las = get_accs(baseline, exps=langs, test=True)
+    if test:
+        t_uas, t_las = get_accs(test, exps=langs, test=True)
+    for lang in langs:
+        wac, sac = uas[lang]
+        n, mean, stdev = _get_stdev(wac)
+        if test:
+            twac, tsac = t_uas[lang]
+            tn, tmean, tstdev = _get_stdev(twac)
+            z, p = scipy.stats.mannwhitneyu(wac, twac)
+        else:
+            tmean = 0
+            p = 0
+        print lang, n, '%.1f' % mean, '%.1f' % tmean, '%.3f' % p
+
+
+
 def exp(name, size="5k", feats='base', thresh=5, reattach=False, lower=False,
         invert=False, extra=False, here=True, n=1, niters=15):
     runner = local if here == True else remote
@@ -96,9 +166,11 @@ def exp(name, size="5k", feats='base', thresh=5, reattach=False, lower=False,
     print '%.2f +/- %.2f' % (mean, sqrt(var))
 
 
-def get_accs(exp_name, test=False):
+def get_accs(exp_name, test=False, exps=[]):
     exp_dir = pjoin(str(REMOTE_PARSERS), exp_name)
-    if test:
+    if exps:
+        pass
+    elif test:
         exps = ['baseline', 'both']
     else:
         exps = ['baseline', 'reattach', 'adduce', 'both']
@@ -187,8 +259,6 @@ def textab(stan_name, malt_name):
             \hline"""
 
 
-
-
 def eval_online(exp_name):
     uas_results, las_results = get_accs(exp_name, test=True)
     print "UAS"
@@ -204,13 +274,18 @@ def eval_online(exp_name):
 
 
 def _get_acc(text, score='U'):
-    score_re = re.compile(r'%s: (\d\d.\d\d\d)' % score)
-    return float(score_re.search(text).groups()[0])
+    try:
+        score_re = re.compile(r'%s: (\d\d.\d\d\d)' % score)
+        return float(score_re.search(text).groups()[0])
+    except:
+        return None
 
 
 def _get_stdev(scores):
     scores = [s for s in scores if s is not None]
     n = len(scores)
+    if n == 0:
+        return 0, 0, 0
     mean = sum(scores) / n
     var = sum((s - mean)**2 for s in scores)/n
     return n, mean, sqrt(var)
