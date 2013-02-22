@@ -1,8 +1,14 @@
 from fabric.api import local, run, lcd, cd, env
+from fabric.operations import get, put
 from pathlib import Path
 import time
 import re
 from math import sqrt
+from os.path import join as pjoin
+from os import listdir
+import scipy.stats
+from fabric.contrib.files import exists
+from StringIO import StringIO
 
 env.use_ssh_config = True
 
@@ -12,6 +18,7 @@ from _paths import HOSTS, GATEWAY
 
 env.hosts = HOSTS
 env.gateway = GATEWAY
+
 
 def recompile(runner=local):
     runner("make -C redshift clean")
@@ -54,6 +61,74 @@ def full(name, size="5k", feats='base', thresh=5, here=True, n=1, niters=15):
         lower=True, invert=True, reattach=True, niters=niters)
 
 
+
+
+def run_lang(name, lang, n=1, baseline=True):
+    n = int(n)
+    REMOTE_CONLL = '/home/mhonniba/data/mlconll'
+    train_loc = pjoin(REMOTE_CONLL, '%s.train.proj.malt' % lang)
+    pos_loc = pjoin(REMOTE_CONLL, '%s.test.pos' % lang)
+    test_loc = pjoin(REMOTE_CONLL, '%s.test.malt' % lang)
+
+    base_dir = pjoin(str(REMOTE_PARSERS), name, lang)
+    if baseline:
+        train_args = ''
+    else:
+        train_args = '-r -d'
+
+    pbs = """#! /bin/bash
+#PBS -l walltime=20:00:00,mem=8gb,nodes=1:ppn=5
+source /home/mhonniba/py27/bin/activate
+export PYTHONPATH=/home/mhonniba/repos/fork:/home/mhonniba/repos/fork/redshift:/home/mhonniba/repos/fork/svm
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/lib64:/usr/lib64/:/usr/local/lib64/:/usr/lib64/atlas:/home/mhonniba/repos/redshift/svm/lib/
+cd /home/mhonniba/repos/fork
+
+    ./scripts/train.py -l conll {train_args} -s {seed} {train_loc} {model}
+    ./scripts/parse.py {model} {pos_loc} {model}/test
+    ./scripts/evaluate.py {model}/test/test {gold_test} > {model}/test/acc""" 
+
+    
+    for i in range(n):
+        model_dir = pjoin(base_dir, str(i))
+        with cd('/home/mhonniba/repos/fork'):
+            if not exists(model_dir):
+                run("mkdir -p %s" % model_dir)
+            config = pbs.format(
+                        seed=i,
+                        train_loc=train_loc,
+                        model=model_dir,
+                        train_args=train_args,
+                        pos_loc=pos_loc,
+                        gold_test=test_loc)
+            put(StringIO(config), './pbs/lang.pbs')
+            put(StringIO(config), pjoin(model_dir, 'lang.pbs'))
+            run('qsub ./pbs/lang.pbs')
+
+
+def eval_langs(baseline, test=None, lang=None):
+    if lang is None:
+        langs = ['arabic', 'basque', 'catalan',  'chinese', 'czech',
+                'english',  'greek',  'hungarian',  'italian',  'turkish']
+    else:
+        langs = [lang]
+
+    uas, las = get_accs(baseline, exps=langs, test=True)
+    if test:
+        t_uas, t_las = get_accs(test, exps=langs, test=True)
+    for lang in langs:
+        wac, sac = uas[lang]
+        n, mean, stdev = _get_stdev(wac)
+        if test:
+            twac, tsac = t_uas[lang]
+            tn, tmean, tstdev = _get_stdev(twac)
+            z, p = scipy.stats.mannwhitneyu(wac, twac)
+        else:
+            tmean = 0
+            p = 0
+        print lang, n, '%.1f' % mean, '%.1f' % tmean, '%.3f' % p
+
+
+
 def exp(name, size="5k", feats='base', thresh=5, reattach=False, lower=False,
         invert=False, extra=False, here=True, n=1, niters=15):
     runner = local if here == True else remote
@@ -91,11 +166,129 @@ def exp(name, size="5k", feats='base', thresh=5, reattach=False, lower=False,
     print '%.2f +/- %.2f' % (mean, sqrt(var))
 
 
-uas_re = re.compile(r'U: (\d\d.\d\d)')
-def _get_acc(dev_loc):
-    text = dev_loc.open().read()
-    return float(uas_re.search(text).groups()[0])
+def get_accs(exp_name, test=False, exps=[]):
+    exp_dir = pjoin(str(REMOTE_PARSERS), exp_name)
+    if exps:
+        pass
+    elif test:
+        exps = ['baseline', 'both']
+    else:
+        exps = ['baseline', 'reattach', 'adduce', 'both']
+    uas_results = {}
+    las_results = {}
+    with cd(exp_dir):
+        for system in exps:
+            sys_dir = pjoin(exp_dir, system)
+            uas = []
+            las = []
+            usent = []
+            lsent = []
+            samples = sorted(run("ls %s" % sys_dir, quiet=True).split())
+            for sample in samples:
+                if sample == 'logs':
+                    continue
+                sample = Path(sys_dir).join(sample)
+                print sample
+                if test:
+                    acc_loc = sample.join('test').join('acc')
+                else:
+                    acc_loc = sample.join('dev').join('acc')
+                text = run("cat %s" % acc_loc, quiet=True).stdout
+                uas.append(_get_acc(text, score='U'))
+                las.append(_get_acc(text, score='L'))
+                usent.append(_get_acc(text, score='u'))
+                lsent.append(_get_acc(text, score='l'))
 
+            uas_results[system] = (uas, usent)
+            las_results[system] = (las, lsent)
+    return uas_results, las_results
+
+
+def dev_eval_online(exp_name):
+    uas_results, las_results = get_accs(exp_name)
+    print "UAS"
+    for name, (accs, _) in uas_results.items():
+        n, mean, stdev = _get_stdev(accs)
+        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+    print "LAS"
+    for name, (accs, _) in las_results.items():
+        n = len(accs)
+        n, mean, stdev = _get_stdev(accs)
+        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+    print "U Sent %"
+    for name, (_, accs) in uas_results.items():
+        n, mean, stdev = _get_stdev(accs)
+        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+    print "L Sent %"
+    for name, (_, accs) in las_results.items():
+        n, mean, stdev = _get_stdev(accs)
+        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+
+def textab(stan_name, malt_name):
+    def fmt_acc(accs):
+        if accs == 0:
+            return '00.0'
+        n, mean, stdev = _get_stdev(accs)
+        return '%.1f' % mean
+
+    zeroes = {'baseline': (0, 0), 'reattach': (0, 0), 'adduce': (0, 0), 'both': (0, 0)}
+    if stan_name == 'None':
+        stan_u = zeroes
+        stan_l = zeroes
+    else:
+        stan_u, stan_l = get_accs(stan_name)
+    if malt_name == 'None':
+        malt_u = zeroes
+        malt_l = zeroes
+    else:
+        malt_u, malt_l = get_accs(malt_name)
+    exps = [('Baseline', 'baseline'), ('NM L', 'reattach'), ('NM D', 'adduce'),
+            ('NM L+D', 'both')]
+    print r"""\hline \hline
+        & \multicolumn{4}{c}{Unlabelled Attachment} \\
+        \hline"""
+    for stan, malt in [(stan_u, malt_u), (stan_l, malt_l)]:
+        for paper_name, exp_name in exps:
+            stan_w, stan_s = stan[exp_name]
+            malt_w, malt_s = malt[exp_name]
+            row = [paper_name]
+            row.extend(map(fmt_acc, (stan_w, stan_s, malt_w, malt_s)))
+            print ' & '.join(row), r'\\'
+        print r"""\hline
+            & \multicolumn{4}{c}{Labelled Attachment} \\
+            \hline"""
+
+
+def eval_online(exp_name):
+    uas_results, las_results = get_accs(exp_name, test=True)
+    print "UAS"
+    for name, (accs, _) in uas_results.items():
+        n, mean, stdev = _get_stdev(accs)
+        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+    acc1, acc2 = uas_results.values()
+    print "LAS"
+    for name, (accs, _) in las_results.items():
+        n, mean, stdev = _get_stdev(accs)
+        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
+    acc1, acc2 = las_results.values()
+
+
+def _get_acc(text, score='U'):
+    try:
+        score_re = re.compile(r'%s: (\d\d.\d\d\d)' % score)
+        return float(score_re.search(text).groups()[0])
+    except:
+        return None
+
+
+def _get_stdev(scores):
+    scores = [s for s in scores if s is not None]
+    n = len(scores)
+    if n == 0:
+        return 0, 0, 0
+    mean = sum(scores) / n
+    var = sum((s - mean)**2 for s in scores)/n
+    return n, mean, sqrt(var)
 
 def _get_repair_str(reattach, lower, invert):
     repair_str = []

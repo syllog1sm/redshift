@@ -32,10 +32,16 @@ def main(test_loc, gold_loc, eval_punct=False):
     N = 0
     u_nc = 0
     l_nc = 0
+    u_sents_c = 0
+    l_sents_c = 0
+    n_sents = 0
     for test_sent, gold_sent in zip(test_sents, gold_sents):
         test_sent = test_sent.split('\n')
+        n_sents += 1
         gold_sent = gold_sent.split('\n')
         assert len(test_sent) == len(gold_sent)
+        u_sent_err = False
+        l_sent_err = False
         for i, (t, g) in enumerate(zip(test_sent, gold_sent)):
             t = t.strip().split()
             g = g.strip().split()
@@ -59,6 +65,12 @@ def main(test_loc, gold_loc, eval_punct=False):
             n_by_label[d][g_label] += 1
             u_by_label[d][g_label] += u_c
             l_by_label[d][g_label] += l_c
+            if not u_c:
+                u_sent_err = True
+            if not l_c:
+                l_sent_err = True
+        u_sents_c += not u_sent_err
+        l_sents_c += not l_sent_err
     n_l_err = N - l_nc
     for D in ['L', 'R']:
         yield D 
@@ -77,8 +89,10 @@ def main(test_loc, gold_loc, eval_punct=False):
                 u_corr = u_by_label[D][label]
                 yield fmt_acc(label, n, l_corr, u_corr, n_l_err)
         yield fmt_acc('Other', n_other, l_other, u_other, n_l_err) 
-    yield 'U: %.1f' % pc(u_nc, N)
-    yield 'L: %.1f' % pc(l_nc, N)
+    yield 'U: %.3f' % pc(u_nc, N)
+    yield 'L: %.3f' % pc(l_nc, N)
+    yield 'Sent u: %.3f' % pc(u_sents_c, n_sents)
+    yield 'Sent l: %.3f' % pc(l_sents_c, n_sents)
 
 
 if __name__ == '__main__':

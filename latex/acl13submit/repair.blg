@@ -3,44 +3,44 @@ Capacity: max_strings=35307, hash_size=35307, hash_prime=30011
 The top-level auxiliary file: repair.aux
 The style file: aclnat.bst
 Database file #1: repair.bib
-You've used 1 entry,
+You've used 18 entries,
             2965 wiz_defined-function locations,
-            632 strings with 5048 characters,
-and the built_in function-call counts, 834 in all, are:
-= -- 65
-> -- 36
-< -- 1
-+ -- 12
-- -- 11
-* -- 64
-:= -- 125
-add.period$ -- 5
-call.type$ -- 1
-change.case$ -- 10
-chr.to.int$ -- 1
-cite$ -- 1
-duplicate$ -- 61
-empty$ -- 61
-format.name$ -- 15
-if$ -- 168
+            742 strings with 8787 characters,
+and the built_in function-call counts, 12061 in all, are:
+= -- 1053
+> -- 406
+< -- 25
++ -- 149
+- -- 125
+* -- 828
+:= -- 1766
+add.period$ -- 84
+call.type$ -- 18
+change.case$ -- 159
+chr.to.int$ -- 18
+cite$ -- 18
+duplicate$ -- 894
+empty$ -- 945
+format.name$ -- 202
+if$ -- 2513
 int.to.chr$ -- 1
 int.to.str$ -- 1
-missing$ -- 13
-newline$ -- 11
-num.names$ -- 6
-pop$ -- 26
+missing$ -- 165
+newline$ -- 101
+num.names$ -- 74
+pop$ -- 355
 preamble$ -- 1
-purify$ -- 7
+purify$ -- 113
 quote$ -- 0
-skip$ -- 23
+skip$ -- 405
 stack$ -- 0
-substring$ -- 35
-swap$ -- 37
-text.length$ -- 1
+substring$ -- 638
+swap$ -- 480
+text.length$ -- 12
 text.prefix$ -- 0
 top$ -- 0
-type$ -- 9
+type$ -- 162
 warning$ -- 0
-while$ -- 7
+while$ -- 96
 width$ -- 0
-write$ -- 19
+write$ -- 254

@@ -2,8 +2,8 @@ from libcpp.vector cimport vector
 
 cimport _state
 
-DEF MAX_SENT_LEN = 256
-DEF MAX_TRANSITIONS = (256 * 2) - 2
+DEF MAX_SENT_LEN = 500
+DEF MAX_TRANSITIONS = (500 * 2) - 2
 
 
 cdef struct _Parse:

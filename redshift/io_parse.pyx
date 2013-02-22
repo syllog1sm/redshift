@@ -6,8 +6,8 @@ from pathlib import Path
 
 cimport _state
 from features cimport set_n_labels
-DEF MAX_SENT_LEN = 256
-DEF MAX_TRANSITIONS = 256 * 2
+DEF MAX_SENT_LEN = 500
+DEF MAX_TRANSITIONS = 500 * 2
 
 
 # Ensure ERR is always specified first, so 0 remains null label
@@ -26,11 +26,26 @@ def set_labels(name):
         LABEL_STRS.extend(('ERR', 'ROOT', 'P'))
     elif name == 'Stanford':
         LABEL_STRS.extend('ERR,ROOT,P,abbrev,acomp,advcl,advmod,amod,appos,attr,aux,auxpass,cc,ccomp,complm,conj,cop,csubj,csubjpass,dep,det,dobj,expl,infmod,iobj,mark,mwe,neg,nn,npadvmod,nsubj,nsubjpass,num,number,parataxis,partmod,pcomp,pobj,poss,preconj,predet,prep,prt,ps,purpcl,quantmod,rcmod,rel,tmod,xcomp'.split(','))
+    elif name.endswith(".conll"):
+        labels_set = set()
+        for line in file(name):
+           line = line.strip().split()
+           if not line: continue
+           labels_set.add(line[-3])
+        LABEL_STRS.extend(labels_set)
+    elif name.endswith(".malt"):
+        labels_set = set()
+        for line in file(name):
+           line = line.strip().split()
+           if not line: continue
+           labels_set.add(line[-1])
+        LABEL_STRS.extend(['ERR','ROOT','P'])
+        LABEL_STRS.extend(labels_set)
     else:
         raise StandardError, "Unrecognised label set: %s" % name
     for i, label in enumerate(LABEL_STRS):
         STR_TO_LABEL[label] = i
-    print "Loaded %s labels" % name
+    print "Loaded %s labels (%s labels)" % (name, len(LABEL_STRS))
     ROOT_LABEL = STR_TO_LABEL['ROOT']
     PUNCT_LABEL = STR_TO_LABEL['P']
     set_n_labels(len(LABEL_STRS))
@@ -75,6 +90,7 @@ def read_conll(conll_str, moves=None):
         object words, tags, heads, labels, token_str, word, pos, head, label
         Sentences sentences
     sent_strs = conll_str.strip().split('\n\n')
+    #print "sent_strs",type(sent_strs[0]), sent_strs[0]
     sentences = Sentences(max_length=len(sent_strs))
     first_sent = sent_strs[0]
     cdef size_t id_
@@ -95,7 +111,7 @@ def read_conll(conll_str, moves=None):
             try:
                 word, pos, head, label = pieces
             except:
-                print pieces
+                print pieces.encode("utf8")
                 raise
             words.append(word)
             tags.append(pos)
