@@ -2,9 +2,9 @@
 import io_parse
 from features cimport N_LABELS
 
-DEF MAX_SENT_LEN = 256
+DEF MAX_SENT_LEN = 300
 DEF MAX_TRANSITIONS = MAX_SENT_LEN * 2
-DEF MAX_VALENCY = 127
+DEF MAX_VALENCY = MAX_SENT_LEN / 2
 
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:

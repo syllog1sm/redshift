@@ -238,11 +238,7 @@ cdef class Parser:
         weight = 1
         if DEBUG:
             print ' '.join(py_words)
-        n_trans = 0
         while not s.is_finished:
-            n_trans += 1
-            if n_trans > 500:
-                raise StandardError
             features.extract(self._context, self._hashed_feats, sent, &s)
             # Determine which moves are zero-cost and meet pre-conditions
             preconditions = self.moves.check_preconditions(&s)
