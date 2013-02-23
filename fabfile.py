@@ -19,13 +19,15 @@ env.gateway = GATEWAY
 
 
 def recompile(runner=local):
-    runner("make -C redshift clean")
-    runner("make -C index clean")
-    runner("make -C svm clean")
-    runner("make -C svm")
-    runner("make -C index")
-    runner("make -C redshift")
+    clean()
+    make()
 
+def clean():
+    local('make -C redshift clean')
+
+def make():
+    with cd(str(LOCAL_REPO)):
+        local('python setup.py build_ext --inplace')
 
 def deploy():
     local("make -C redshift")
