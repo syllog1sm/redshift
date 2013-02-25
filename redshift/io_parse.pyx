@@ -4,11 +4,9 @@ import index.hashes
 
 from pathlib import Path
 
-cimport _state
 from features cimport set_n_labels
 DEF MAX_SENT_LEN = 300
 DEF MAX_TRANSITIONS = 300 / 2
-
 
 # Ensure ERR is always specified first, so 0 remains null label
 LABEL_STRS = []

@@ -10,6 +10,8 @@ from index.hashes cimport encode_feat
 
 from _state cimport State, get_left_edge, get_right_edge
 
+cimport redshift._state
+
 DEF CONTEXT_SIZE = 60
 
 # There must be a way to keep this in synch??

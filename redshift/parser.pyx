@@ -29,6 +29,10 @@ from libc.stdint cimport uint64_t, int64_t
 
 cdef int CONTEXT_SIZE = features.CONTEXT_SIZE
 
+from _state cimport *
+
+cdef State s = init_state(5)
+
 VOCAB_SIZE = 1e6
 TAG_SET_SIZE = 50
 cdef double FOLLOW_ERR_PC = 0.90
@@ -170,10 +174,7 @@ cdef class Parser:
         for n in range(n_iter):
             random.shuffle(indices)
             for sent_id, i in enumerate(indices):
-                if self.train_alg == 'online':
-                    self.online_train_one(n, &sents.s[i], sents.strings[i][0])
-                else:
-                    self.static_train_one(n, &sents.s[i], sents.strings[i][0])
+                self.train_one(n, &sents.s[i], self.train_alg == 'online', sents.strings[i][0])
             move_acc = (float(self.guide.n_corr) / self.guide.total) * 100
             print "#%d: Moves %d/%d=%.2f" % (n, self.guide.n_corr,
                                              self.guide.total, move_acc)
@@ -183,79 +184,38 @@ cdef class Parser:
             self.guide.total = 0
         self.guide.train()
 
-    cdef int static_train_one(self, size_t iter_num, Sentence* sent, object py_words) except -1:
-        cdef size_t clas, move, label
-
+    cdef int train_one(self, int iter_num, Sentence* sent, bint online, py_words) except -1:
+        cdef bint* valid
+        cdef bint* oracle
         cdef size_t* g_labels = sent.parse.labels
         cdef size_t* g_heads = sent.parse.heads
-        cdef bint* right_arcs = self.moves.right_arcs
-        cdef bint* left_arcs = self.moves.left_arcs
-        cdef uint64_t* feats = self._hashed_feats
-        cdef size_t* context = self._context
-        cdef int n_feats = self.n_preds
-
-        cdef State s = init_state(sent.length)
-        cdef int n_instances = 0
-        if DEBUG:
-            print ' '.join(py_words)
-        while not s.is_finished:
-            features.extract(context, feats, sent, &s)
-            move = self.moves.move_from_gold(&s, g_labels, g_heads)
-            if move == LEFT:
-                assert g_heads[s.top] == s.i
-                label = g_labels[s.top]
-            elif move == RIGHT:
-                assert g_heads[s.i] == s.top
-                label = g_labels[s.i]
-            else:
-                label = 0
-            clas = self.moves.pair_label_move(label, move)
-            self.guide.add_instance(clas, 1.0, n_feats, feats)
-            if DEBUG:
-                print s.i, lmove_to_str(move, label), transition_to_str(&s, move, label, py_words)
-            self.moves.transition(move, label, &s)
-            n_instances += 1
-        return n_instances
-
-    cdef int online_train_one(self, int iter_num, Sentence* sent, py_words) except -1:
-        cdef size_t move, label, gold_move, gold_label, pred_move, pred_label
-        cdef bint* preconditions
-        cdef bint* zero_cost_moves
-        cdef bint* right_arcs = self.moves.right_arcs
-        cdef double weight = 1
-        
-        cdef size_t* g_labels = sent.parse.labels
-        cdef size_t* g_heads = sent.parse.heads
-        cdef size_t* tags = sent.pos
 
         cdef size_t* context = self._context
         cdef uint64_t* feats = self._hashed_feats
         cdef size_t n_feats = self.n_preds
         cdef State s = init_state(sent.length)
-        cdef int n_instances = 0
+        cdef size_t move = 0
+        cdef size_t label = 0
         cdef size_t _ = 0
-        cdef size_t guess_label = 0
-        weight = 1
         if DEBUG:
             print ' '.join(py_words)
         while not s.is_finished:
-            features.extract(self._context, self._hashed_feats, sent, &s)
-            # Determine which moves are zero-cost and meet pre-conditions
-            preconditions = self.moves.check_preconditions(&s)
-            pred_paired = self.guide.predict_from_ints(n_feats, feats, preconditions)
-            zero_cost_moves = self.moves.check_costs(&s, g_labels, g_heads)
-            gold_paired = self.guide.predict_from_ints(n_feats, feats, zero_cost_moves)
-            self.guide.update(pred_paired, gold_paired, n_feats, feats, weight)
-            if zero_cost_moves[pred_paired]:
-                gold_paired = pred_paired
-            if iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
-                self.moves.unpair_label_move(pred_paired, &label, &move)
+            features.extract(context, feats, sent, &s)
+            valid = self.moves.get_valid(&s)
+            pred = self.predict(n_feats, feats, valid, &s.guess_labels[s.top][s.i])
+            if online:
+                oracle = self.moves.get_oracle(&s, g_heads, g_labels)
+                gold = self.predict(n_feats, feats, oracle, &_)
             else:
-                self.moves.unpair_label_move(gold_paired, &label, &move)
-            # Save on reduce as well so we can use the guess label for Lower
-            best_right_guess = self.guide.predict_from_ints(n_feats, feats, right_arcs)
-            self.moves.unpair_label_move(best_right_guess, &guess_label, &_)
-            s.guess_labels[s.top][s.i] = guess_label
+                gold = self.moves.break_tie(&s, g_heads, g_labels, valid)
+            self.guide.update(pred, gold, n_feats, feats, 1)
+            # This shouldn't matter, right?
+            #if zero_cost_moves[pred_paired]:
+            #    gold_paired = pred_paired
+            if online and iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
+                self.moves.unpair_label_move(pred, &label, &move)
+            else:
+                self.moves.unpair_label_move(gold, &label, &move)
             if DEBUG:
                 print s.i, lmove_to_str(move, label), transition_to_str(&s, move, label, py_words)
             self.moves.transition(move, label, &s)
@@ -272,24 +232,21 @@ cdef class Parser:
         cdef State s
         cdef size_t move = 0
         cdef size_t label = 0
+        cdef size_t clas
         cdef size_t n_preds = self.n_preds
         cdef size_t* context = self._context
         cdef uint64_t* feats = self._hashed_feats
-        cdef bint* valid
         cdef double* scores
-        cdef size_t _ = 0
-        cdef size_t guess_label = 0
-        cdef size_t n = sent.length
         s = init_state(sent.length)
         sent.parse.n_moves = 0
         while not s.is_finished:
             features.extract(context, feats, sent, &s)
-            valid = self.moves.check_preconditions(&s)
-            self.predict(n_preds, feats, valid, &move, &label,
-                         &s.guess_labels[s.top][s.i])
-            sent.parse.moves[s.t] = self.moves.pair_label_move(label, move)
+            clas = self.predict(n_preds, feats, self.moves.get_valid(&s),
+                                  &s.guess_labels[s.top][s.i])
+            sent.parse.moves[s.t] = clas
+            self.moves.unpair_label_move(clas, &label, &move)
             self.moves.transition(move, label, &s)
-            sent.parse.n_moves += 1
+        sent.parse.n_moves = s.t
         # No need to copy heads for root and start symbols
         for i in range(1, sent.length - 1):
             assert s.heads[i] != 0
@@ -297,7 +254,7 @@ cdef class Parser:
             sent.parse.labels[i] = s.labels[i]
 
     cdef int predict(self, uint64_t n_preds, uint64_t* feats, bint* valid,
-            size_t* move, size_t* label, size_t* rlabel) except -1:
+                     size_t* rlabel) except -1:
         cdef:
             size_t i
             double score
@@ -321,8 +278,8 @@ cdef class Parser:
                 best_right = clas
                 right_score = score
         assert seen_valid
-        self.moves.unpair_label_move(best_valid, label, move)
-        self.moves.unpair_label_move(best_right, rlabel, &right_move)
+        rlabel[0] = best_right % self.moves.n_labels
+        return best_valid
 
     def save(self):
         self.guide.save(self.model_dir.join('model'))
@@ -380,11 +337,11 @@ cdef class Parser:
             sent_moves = []
             tokens = sents.strings[i][0]
             while not s.is_finished:
-                valid = self.moves.check_costs(&s, g_labels, g_heads)
+                oracle = self.moves.get_oracle(&s, g_heads, g_labels)
                 best_strs = []
                 best_ids = set()
                 for paired in range(self.moves.n_paired):
-                    if valid[paired]:
+                    if oracle[paired]:
                         self.moves.unpair_label_move(paired, &label, &move)
                         if move not in best_ids:
                             best_strs.append(lmove_to_str(move, label))
@@ -411,8 +368,7 @@ cdef class TransitionSystem:
     cdef size_t n_labels
     cdef object py_labels
     cdef size_t[N_MOVES] offsets
-    cdef bint* _move_validity
-    cdef bint* _pair_validity
+    cdef bint* _oracle
     cdef bint* right_arcs
     cdef bint* left_arcs
     cdef list left_labels
@@ -440,8 +396,7 @@ cdef class TransitionSystem:
         self.allow_reattach = allow_reattach
         self.allow_reduce = allow_reduce
         self.n_paired = N_MOVES * self.n_labels
-        self._move_validity = <bint*>malloc(N_MOVES * sizeof(bint))
-        self._pair_validity = <bint*>malloc(self.n_paired * sizeof(bint))
+        self._oracle = <bint*>malloc(self.n_paired * sizeof(bint))
         self.right_arcs = <bint*>malloc(self.n_paired * sizeof(bint))
         self.left_arcs = <bint*>malloc(self.n_paired * sizeof(bint))
         self.s_id = SHIFT * self.n_labels
@@ -451,6 +406,7 @@ cdef class TransitionSystem:
         self.r_start = RIGHT * self.n_labels
         self.r_end = (RIGHT + 1) * self.n_labels
         for i in range(self.n_paired):
+            self._oracle[i] = False
             self.right_arcs[i] = False
             self.left_arcs[i] = False
         for i in range(self.r_start, self.r_end):
@@ -520,89 +476,85 @@ cdef class TransitionSystem:
             s.at_end_of_buffer = True
         if s.at_end_of_buffer and s.stack_len == 1:
             s.is_finished = True
-
-    cdef bint* check_preconditions(self, State* s) except NULL:
+  
+    cdef bint* get_oracle(self, State* s, size_t* heads, size_t* labels) except NULL:
         cdef size_t i
-        cdef bint* unpaired = self._move_validity
-        # Load pre-conditions that don't refer to gold heads
-        unpaired[ERR] = False
-        unpaired[SHIFT] = not s.at_end_of_buffer
-        unpaired[RIGHT] = (not s.at_end_of_buffer) and s.top != 0
-        if self.allow_reduce:
-            unpaired[REDUCE] = s.heads[s.top] != 0 or s.second != 0
-        else:
-            unpaired[REDUCE] = s.heads[s.top] != 0
-        unpaired[LEFT] = s.top != 0 and (s.heads[s.top] == 0 or self.allow_reattach)
-        cdef bint* paired = self._pair_validity
+        cdef bint* oracle = self._oracle
         for i in range(self.n_paired):
-            paired[i] = False
-        paired[self.s_id] = unpaired[SHIFT]
-        paired[self.d_id] = unpaired[REDUCE]
-        for i in range(self.n_l_classes):
-            paired[self.l_classes[i]] = unpaired[LEFT]
-        for i in range(self.n_r_classes):
-            paired[self.r_classes[i]] = unpaired[RIGHT]
-        return paired
-   
-    cdef bint* check_costs(self, State* s, size_t* labels, size_t* heads) except NULL:
-        cdef size_t l_id, r_id, w_id
-        cdef bint* valid_moves = self._move_validity
-        paired_validity = self.check_preconditions(s)
-        valid_moves[SHIFT] = valid_moves[SHIFT] and self.s_cost(s, heads)
-        valid_moves[REDUCE] = valid_moves[REDUCE] and self.d_cost(s, heads)
-        valid_moves[LEFT] = valid_moves[LEFT] and self.l_cost(s, heads)
-        valid_moves[RIGHT] = valid_moves[RIGHT] and self.r_cost(s, heads)
-        for i in range(self.n_paired):
-            paired_validity[i] = False
-        paired_validity[self.s_id] = valid_moves[SHIFT]
-        paired_validity[self.d_id] = valid_moves[REDUCE]
-        if valid_moves[LEFT] and heads[s.top] == s.i:
-            paired_validity[self.pair_label_move(labels[s.top], LEFT)] = True
-        else:
-            for i in range(self.n_l_classes):
-                paired_validity[self.l_classes[i]] = valid_moves[LEFT]
-        if valid_moves[RIGHT] and heads[s.i] == s.top:
-            paired_validity[self.pair_label_move(labels[s.i], RIGHT)] = True
-        else:
-            for i in range(self.n_r_classes):
-                paired_validity[self.r_classes[i]] = valid_moves[RIGHT]
-        return paired_validity
+            oracle[i] = False
+        if s.stack_len == 1 and not s.at_end_of_buffer:
+            oracle[self.s_id] = True
+            return oracle
+        if not s.at_end_of_buffer:
+            self.s_oracle(s, heads, labels, oracle)
+            self.r_oracle(s, heads, labels, oracle)
+        if s.stack_len >= 2:
+            self.d_oracle(s, heads, labels, oracle)
+            self.l_oracle(s, heads, labels, oracle)
+        return oracle
 
-    cdef int move_from_gold(self, State* s, size_t* labels, size_t* heads) except -1:
+    cdef bint* get_valid(self, State* s):
+        cdef size_t i
+        cdef bint* valid = self._oracle
+        for i in range(self.n_paired):
+            valid[i] = False
+        if not s.at_end_of_buffer:
+            valid[self.s_id] = True
+            if s.stack_len == 1:
+                return valid
+            for i in range(self.n_r_classes):
+                valid[self.r_classes[i]] = True
+        if s.stack_len != 1:
+            valid[self.d_id] = s.heads[s.top] != 0
+            for i in range(self.n_l_classes):
+                valid[self.l_classes[i]] = self.allow_reattach or s.heads[s.top] == 0
+        if s.stack_len >= 3 and self.allow_reduce:
+            valid[self.d_id] = True
+        return valid  
+
+    cdef int break_tie(self, State* s, size_t* heads, size_t* labels, bint* oracle) except -1:
         if s.stack_len == 1:
-            return SHIFT
-        if not s.at_end_of_buffer and heads[s.i] == s.top:
-            return RIGHT
+            return self.s_id
+        elif not s.at_end_of_buffer and heads[s.i] == s.top:
+            return self.pair_label_move(s.labels[s.i], RIGHT)
         elif heads[s.top] == s.i and (self.allow_reattach or s.heads[s.top] == 0):
-            return LEFT
-        elif self.d_cost(s, heads) and (self.allow_reduce or s.heads[s.top] != 0):
-            return REDUCE
-        elif self.s_cost(s, heads):
-            return SHIFT
+            return self.pair_label_move(s.labels[s.top], LEFT)
+        elif self.d_oracle(s, heads, labels, oracle):
+            return self.d_id
+        elif not s.at_end_of_buffer and self.s_oracle(s, heads, labels, oracle):
+            return self.s_id
         else:
             raise StandardError
 
-    cdef bint s_cost(self, State *s, size_t* g_heads):
+    cdef bint s_oracle(self, State *s, size_t* heads, size_t* labels, bint* oracle):
         cdef size_t i, stack_i
-        if has_child_in_stack(s, s.i, g_heads):
+        if has_child_in_stack(s, s.i, heads):
             return False
-        if has_head_in_stack(s, s.i, g_heads):
+        if has_head_in_stack(s, s.i, heads):
             return False
+        oracle[self.s_id] = True
         return True
 
-    cdef bint r_cost(self, State *s, size_t* g_heads):
+    cdef bint r_oracle(self, State *s, size_t* heads, size_t* labels,
+                       bint* oracle):
         cdef size_t i, buff_i, stack_i
-        if g_heads[s.i] == s.top:
+        if heads[s.i] == s.top:
+            oracle[self.pair_label_move(labels[s.i], RIGHT)] = True
             return True
-        if has_head_in_buffer(s, s.i, g_heads):
+        if has_head_in_buffer(s, s.i, heads):
             return False
-        if has_child_in_stack(s, s.i, g_heads):
+        if has_child_in_stack(s, s.i, heads):
             return False
-        if has_head_in_stack(s, s.i, g_heads):
+        if has_head_in_stack(s, s.i, heads):
             return False
+        for i in range(self.n_r_classes):
+            oracle[self.r_classes[i]] = True
         return True
 
-    cdef bint d_cost(self, State *s, size_t* g_heads):
+    cdef bint d_oracle(self, State *s, size_t* g_heads, size_t* g_labels,
+                       bint* oracle):
+        if s.heads[s.top] == 0 and (s.stack_len == 2 or not self.allow_reattach):
+            return False
         if has_child_in_buffer(s, s.top, g_heads):
             return False
         if has_head_in_buffer(s, s.top, g_heads):
@@ -610,20 +562,27 @@ cdef class TransitionSystem:
                 return False
             if self.allow_reduce and s.heads[s.top] == 0:
                 return False
+        oracle[self.d_id] = True
         return True
 
-    cdef bint l_cost(self, State *s, size_t* g_heads):
-        cdef size_t buff_i
-        if g_heads[s.top] == s.i:
+    cdef bint l_oracle(self, State *s, size_t* heads, size_t* labels, bint* oracle):
+        cdef size_t buff_i, i
+
+        if s.heads[s.top] != 0 and not self.allow_reattach:
+            return False
+        if heads[s.top] == s.i:
+            oracle[self.pair_label_move(labels[s.top], LEFT)] = True
             return True
-        if has_head_in_buffer(s, s.top, g_heads):
+        if has_head_in_buffer(s, s.top, heads):
             return False
-        if has_child_in_buffer(s, s.top, g_heads):
+        if has_child_in_buffer(s, s.top, heads):
             return False
-        if self.allow_reattach and g_heads[s.top] == s.heads[s.top]:
+        if self.allow_reattach and heads[s.top] == s.heads[s.top]:
             return False
-        if self.allow_reduce and g_heads[s.top] == s.second:
+        if self.allow_reduce and heads[s.top] == s.second:
             return False
+        for i in range(self.n_l_classes):
+            oracle[self.l_classes[i]] = True
         return True
 
 

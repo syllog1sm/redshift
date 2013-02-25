@@ -1,5 +1,3 @@
-cimport _state
-
 DEF MAX_SENT_LEN = 300
 DEF MAX_TRANSITIONS = 300 / 2
 
