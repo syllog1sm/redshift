@@ -23,17 +23,43 @@ def recompile(runner=local):
     make()
 
 def clean():
-    local('make -C redshift clean')
+    with lcd(str(LOCAL_REPO)):
+        local('python setup.py clean --all')
 
 def make():
-    with cd(str(LOCAL_REPO)):
-        local('python setup.py build_ext --inplace')
+    with lcd(str(LOCAL_REPO)):
+        err = local('python setup.py build_ext --inplace', capture=True).stderr
+        for line in err:
+            if 'error: ' in line:
+                print line
 
 def deploy():
-    local("make -C redshift")
-    local("git push")
+    with lcd(str(LOCAL_REPO)):
+        local("make -C redshift")
+        local("git push")
     with cd(REMOTE_REPO):
         run('git pull')
+
+def _train(data, model, debug=False):
+    template = './scripts/train.py {data} {model}'
+    if debug:
+        template += ' -debug'
+    return template.format(data=data, model=model)
+
+def _parse(model, data, out, gold=False):
+    template = './scripts/parse.py {model} {data} {out} '
+    if gold:
+        template += '-g'
+    return template.format(model=model, data=data, out=out)
+
+def test1k(model="baseline", dbg=False):
+    with lcd(str(LOCAL_REPO)):
+        local(_train('~/work_data/stanford/1k_train.txt',  '~/work_data/parsers/tmp',
+                    debug=dbg))
+        local(_parse('~/work_data/parsers/tmp', '~/work_data/stanford/dev_auto_pos.parse',
+                     '/tmp/parse',
+                     gold=True))
+
 
 
 def amend(target="."):
