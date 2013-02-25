@@ -109,7 +109,7 @@ cdef class Parser:
             feat_thresh = int(params['feat_thresh'])
             allow_reattach = params['allow_reattach'] == 'True'
             allow_reduce = params['allow_reduce'] == 'True'
-            shifty = params['shifty'] == 'True'
+            shifty = params.get('shifty') == 'True'
             l_labels = params['left_labels']
             r_labels = params['right_labels']
         if allow_reattach and allow_reduce:
@@ -313,6 +313,7 @@ cdef class Parser:
             cfg.write(u'label_set\t%s\n' % self.label_set)
             cfg.write(u'feat_thresh\t%d\n' % self.feat_thresh)
             cfg.write(u'allow_reattach\t%s\n' % self.moves.allow_reattach)
+            cfg.write(u'shifty\t%s\n' % self.moves.shifty)
             cfg.write(u'allow_reduce\t%s\n' % self.moves.allow_reduce)
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
