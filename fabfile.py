@@ -1,12 +1,13 @@
 from fabric.api import local, run, lcd, cd, env
-from fabric.operations import get
+from fabric.operations import get, put
+from fabric.contrib.files import exists
 from pathlib import Path
 import time
 import re
 from math import sqrt
 from os.path import join as pjoin
 from os import listdir
-
+from StringIO import StringIO
 
 env.use_ssh_config = True
 
@@ -34,11 +35,41 @@ def make():
                 print line
 
 def deploy():
-    with lcd(str(LOCAL_REPO)):
-        local("make -C redshift")
-        local("git push")
+    clean()
+    make()
     with cd(REMOTE_REPO):
         run('git pull')
+
+def draxx_baseline(name):
+    model = pjoin(str(REMOTE_PARSERS), name)
+    data = str(REMOTE_STANFORD)
+    repo = str(REMOTE_REPO)
+    train_str = _train(pjoin(data, 'train.txt'), model)
+    parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'))
+    eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.text'))
+    script = _pbsify(repo, [train_str, parse_str, eval_str])
+    script_loc = pjoin(repo, 'pbs', '%s_draxx_baseline.pbs' % name)
+    with cd(repo):
+        put(StringIO(script), script_loc)
+        #run('qsub -N %s_bl %s' % (name, script_loc))
+
+def test1k(model="baseline", dbg=False):
+    with lcd(str(LOCAL_REPO)):
+        local(_train('~/work_data/stanford/1k_train.txt',  '~/work_data/parsers/tmp',
+                    debug=dbg))
+        local(_parse('~/work_data/parsers/tmp', '~/work_data/stanford/dev_auto_pos.parse',
+                     '/tmp/parse', gold=True))
+
+
+
+def _pbsify(repo, command_strs):
+    header = """#! /bin/bash
+#PBS -l walltime=20:00:00,mem=8gb,nodes=1:ppn=5
+source /home/mhonniba/py27/bin/activate
+export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/lib64:/usr/lib64/:/usr/local/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
+cd {repo}"""
+    return header.format(repo=repo) + '\n' + '\n'.join(command_strs)
 
 def _train(data, model, debug=False):
     template = './scripts/train.py {data} {model}'
@@ -52,77 +83,8 @@ def _parse(model, data, out, gold=False):
         template += '-g'
     return template.format(model=model, data=data, out=out)
 
-def test1k(model="baseline", dbg=False):
-    with lcd(str(LOCAL_REPO)):
-        local(_train('~/work_data/stanford/1k_train.txt',  '~/work_data/parsers/tmp',
-                    debug=dbg))
-        local(_parse('~/work_data/parsers/tmp', '~/work_data/stanford/dev_auto_pos.parse',
-                     '/tmp/parse',
-                     gold=True))
-
-
-
-def amend(target="."):
-    local("git add %s" % target)
-    local('git commit -m "* Amendment"')
-    local("git pull")
-    deploy()
-
-def reattach(name, size="5k", feats='base', thresh=5, here=True, n=1, niters=15):
-    exp(name, size=size, feats=feats, thresh=thresh, here=here, n=n,
-        reattach=True, niters=niters)
-
-
-def invert(name, size="5k", feats='base', thresh=5, here=True, n=1, niters=15):
-    exp(name, size=size, feats=feats, thresh=thresh, here=here, n=n,
-        invert=True, reattach=True, niters=niters)
-
-
-def lower(name, size="5k", feats='base', thresh=5, here=True, n=1, niters=15):
-    exp(name, size=size, feats=feats, thresh=thresh, here=here, n=n,
-        lower=True, reattach=True, niters=niters)
-
-def full(name, size="5k", feats='base', thresh=5, here=True, n=1, niters=15):
-    exp(name, size=size, feats=feats, thresh=thresh, here=here, n=n,
-        lower=True, invert=True, reattach=True, niters=niters)
-
-
-def exp(name, size="5k", feats='base', thresh=5, reattach=False, lower=False,
-        invert=False, extra=False, here=True, n=1, niters=15):
-    runner = local if here == True else remote
-    cder = lcd if here == True else cd
-    recompile(runner)
-    repair_str = _get_repair_str(reattach, lower, invert)
-    feat_flag = '-x' if feats == 'extra' else ''
-    repo, data_loc, parser_loc = _get_paths(here)
-    train_loc= _get_train_name(data_loc, size)
-    parser_loc = parser_loc.join(name)
-    if not parser_loc.exists():
-        parser_loc.mkdir()
-    dev_loc = data_loc.join('devr.txt')
-    in_loc = data_loc.join('dev_auto_pos.parse')
-    train_str = './scripts/train.py -s {seed} {repair} -i {niters} -f {thresh} {feats} {train} {out}'
-    parse_str = './scripts/parse.py -g {parser} {text} {parses}'
-    eval_str = './scripts/evaluate.py {parse_loc} {dev_loc} > {out_loc}'
-    with cder(str(repo)):
-        accs = []
-        for i in range(int(n)):
-            if n > 1:
-                model_dir = parser_loc.join(str(i))
-            else:
-                model_dir = parser_loc
-            out_dir = model_dir.join('dev')
-            runner(train_str.format(seed=i, repair=repair_str, niters=niters, thresh=thresh,
-                                    feats=feat_flag, train=train_loc, out=model_dir))
-            runner(parse_str.format(parser=model_dir, text=in_loc, parses=out_dir))
-            runner(eval_str.format(parse_loc=out_dir.join('parses'), dev_loc=dev_loc,
-                                   out_loc=out_dir.join('acc')))
-            accs.append(_get_acc(out_dir.join('acc')))
-    print ', '.join('%.2f' % a for a in accs)
-    mean = sum(accs)/len(accs)
-    var = sum((a - mean)**2 for a in accs)/len(accs)
-    print '%.2f +/- %.2f' % (mean, sqrt(var))
-
+def _evaluate(test, gold):
+    return './scripts/evaluate.py %s %s' % (test, gold)
 
 def avg_accs(exp_name, test=False):
     exp_dir = pjoin(str(REMOTE_PARSERS), exp_name)
