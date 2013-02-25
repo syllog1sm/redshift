@@ -137,7 +137,7 @@ cdef class Parser:
             self.moves.set_labels(_parse_labels_str(l_labels), _parse_labels_str(r_labels))
         guide_loc = self.model_dir.join('model')
         n_labels = len(io_parse.LABEL_STRS)
-        self.guide = Perceptron(self.moves.n_paired, guide_loc)
+        self.guide = Perceptron(self.moves.n_class, guide_loc)
         self._context = features.init_context()
         self._hashed_feats = features.init_hashed_features()
         self.inst_counts = InstanceCounter()
@@ -210,13 +210,12 @@ cdef class Parser:
             else:
                 gold = self.moves.break_tie(&s, g_heads, g_labels, valid)
             self.guide.update(pred, gold, n_feats, feats, 1)
-            # This shouldn't matter, right?
-            #if zero_cost_moves[pred_paired]:
-            #    gold_paired = pred_paired
             if online and iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
-                self.moves.unpair_label_move(pred, &label, &move)
+                move = self.moves.class_to_move(pred)
+                label = self.moves.class_to_label(pred)
             else:
-                self.moves.unpair_label_move(gold, &label, &move)
+                move = self.moves.class_to_move(gold)
+                label = self.moves.class_to_label(gold)
             if DEBUG:
                 print s.i, lmove_to_str(move, label), transition_to_str(&s, move, label, py_words)
             self.moves.transition(move, label, &s)
@@ -245,7 +244,8 @@ cdef class Parser:
             clas = self.predict(n_preds, feats, self.moves.get_valid(&s),
                                   &s.guess_labels[s.top][s.i])
             sent.parse.moves[s.t] = clas
-            self.moves.unpair_label_move(clas, &label, &move)
+            move = self.moves.class_to_move(clas)
+            label = self.moves.class_to_label(clas)
             self.moves.transition(move, label, &s)
         sent.parse.n_moves = s.t
         # No need to copy heads for root and start symbols
@@ -264,7 +264,7 @@ cdef class Parser:
 
         cdef size_t right_move = 0
         cdef double valid_score = -1000000
-        cdef double right_score = -100000
+        cdef double right_score = -1000000
         cdef uint64_t* labels = self.guide.get_labels()
         scores = self.guide.predict_scores(n_preds, feats)
         seen_valid = False
@@ -279,7 +279,7 @@ cdef class Parser:
                 best_right = clas
                 right_score = score
         assert seen_valid
-        rlabel[0] = best_right % self.moves.n_labels
+        rlabel[0] = self.moves.class_to_label(best_right)
         return best_valid
 
     def save(self):
@@ -327,7 +327,7 @@ cdef class Parser:
         cdef size_t i
         cdef size_t* g_labels
         cdef size_t* g_heads
-        cdef size_t paired, parse_paired
+        cdef size_t clas, parse_class
         best_moves = []
         for i in range(sents.length):
             sent = &sents.s[i]
@@ -341,16 +341,18 @@ cdef class Parser:
                 oracle = self.moves.get_oracle(&s, g_heads, g_labels)
                 best_strs = []
                 best_ids = set()
-                for paired in range(self.moves.n_paired):
-                    if oracle[paired]:
-                        self.moves.unpair_label_move(paired, &label, &move)
+                for clas in range(self.moves.n_class):
+                    if oracle[clas]:
+                        move = self.moves.class_to_move(clas)
+                        label = self.moves.label_to_move(clas)
                         if move not in best_ids:
                             best_strs.append(lmove_to_str(move, label))
                         best_ids.add(move)
                 best_strs = ','.join(best_strs)
                 best_id_str = ','.join(map(str, sorted(best_ids)))
-                parse_paired = sent.parse.moves[s.t]
-                self.moves.unpair_label_move(parse_paired, &label, &move)
+                parse_class = sent.parse.moves[s.t]
+                move = self.moves.class_to_move(parse_class)
+                label = self.moves.class_to_label(parse_class)
                 state_str = transition_to_str(&s, move, label, tokens)
                 parse_move_str = lmove_to_str(move, label)
                 if move not in best_ids:
@@ -379,7 +381,7 @@ cdef class TransitionSystem:
     cdef size_t n_r_classes
     cdef size_t* l_classes
     cdef size_t* r_classes
-    cdef size_t n_paired
+    cdef size_t n_class
     cdef size_t s_id
     cdef size_t d_id
     cdef size_t l_start
@@ -398,17 +400,17 @@ cdef class TransitionSystem:
         self.allow_reattach = allow_reattach
         self.allow_reduce = allow_reduce
         self.shifty = shifty
-        self.n_paired = N_MOVES * self.n_labels
-        self._oracle = <bint*>malloc(self.n_paired * sizeof(bint))
-        self.right_arcs = <bint*>malloc(self.n_paired * sizeof(bint))
-        self.left_arcs = <bint*>malloc(self.n_paired * sizeof(bint))
+        self.n_class = N_MOVES * self.n_labels
+        self._oracle = <bint*>malloc(self.n_class * sizeof(bint))
+        self.right_arcs = <bint*>malloc(self.n_class * sizeof(bint))
+        self.left_arcs = <bint*>malloc(self.n_class * sizeof(bint))
         self.s_id = SHIFT * self.n_labels
         self.d_id = REDUCE * self.n_labels
         self.l_start = LEFT * self.n_labels
         self.l_end = (LEFT + 1) * self.n_labels
         self.r_start = RIGHT * self.n_labels
         self.r_end = (RIGHT + 1) * self.n_labels
-        for i in range(self.n_paired):
+        for i in range(self.n_class):
             self._oracle[i] = False
             self.right_arcs[i] = False
             self.left_arcs[i] = False
@@ -426,31 +428,33 @@ cdef class TransitionSystem:
         self.n_r_classes = len(right_labels)
         valid_classes = [self.d_id]
         valid_classes.append(self.s_id)
-        for i in range(self.n_paired):
+        for i in range(self.n_class):
             self.right_arcs[i] = False
             self.left_arcs[i] = False
         for i, label in enumerate(left_labels):
-            paired = self.pair_label_move(label, LEFT)
-            valid_classes.append(paired)
-            self.l_classes[i] = paired
-            self.left_arcs[paired] = True
+            clas = self.pack_class(label, LEFT)
+            valid_classes.append(clas)
+            self.l_classes[i] = clas
+            self.left_arcs[clas] = True
         for i, label in enumerate(right_labels):
-            paired = self.pair_label_move(label, RIGHT)
-            valid_classes.append(paired)
-            self.right_arcs[paired] = True
-            self.r_classes[i] = paired
+            clas = self.pack_class(label, RIGHT)
+            valid_classes.append(clas)
+            self.right_arcs[clas] = True
+            self.r_classes[i] = clas
         return valid_classes
 
-    cdef size_t pair_label_move(self, size_t label, size_t move):
+    cdef size_t pack_class(self, size_t label, size_t move):
         return move * self.n_labels + label
 
-    cdef int unpair_label_move(self, size_t paired, size_t* label, size_t* move):
-        move[0] = paired / self.n_labels
-        label[0] = paired % self.n_labels
+    cdef size_t class_to_move(self, size_t clas):
+        return clas / self.n_labels
+
+    cdef size_t class_to_label(self, size_t clas):
+        return clas % self.n_labels
 
     cdef int transition(self, size_t move, size_t label, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc
-        s.history[s.t] = self.pair_label_move(label, move)
+        s.history[s.t] = self.pack_class(label, move)
         s.t += 1 
         if move == SHIFT:
             push_stack(s)
@@ -483,7 +487,7 @@ cdef class TransitionSystem:
     cdef bint* get_oracle(self, State* s, size_t* heads, size_t* labels) except NULL:
         cdef size_t i
         cdef bint* oracle = self._oracle
-        for i in range(self.n_paired):
+        for i in range(self.n_class):
             oracle[i] = False
         if s.stack_len == 1 and not s.at_end_of_buffer:
             oracle[self.s_id] = True
@@ -499,7 +503,7 @@ cdef class TransitionSystem:
     cdef bint* get_valid(self, State* s):
         cdef size_t i
         cdef bint* valid = self._oracle
-        for i in range(self.n_paired):
+        for i in range(self.n_class):
             valid[i] = False
         if not s.at_end_of_buffer:
             valid[self.s_id] = True
@@ -519,9 +523,9 @@ cdef class TransitionSystem:
         if s.stack_len == 1:
             return self.s_id
         elif not s.at_end_of_buffer and heads[s.i] == s.top:
-            return self.pair_label_move(s.labels[s.i], RIGHT)
+            return self.pack_class(s.labels[s.i], RIGHT)
         elif heads[s.top] == s.i and (self.allow_reattach or s.heads[s.top] == 0):
-            return self.pair_label_move(s.labels[s.top], LEFT)
+            return self.pack_class(s.labels[s.top], LEFT)
         elif self.d_oracle(s, heads, labels, oracle):
             return self.d_id
         elif not s.at_end_of_buffer and self.s_oracle(s, heads, labels, oracle):
@@ -542,7 +546,7 @@ cdef class TransitionSystem:
                        bint* oracle):
         cdef size_t i, buff_i, stack_i
         if heads[s.i] == s.top:
-            oracle[self.pair_label_move(labels[s.i], RIGHT)] = True
+            oracle[self.pack_class(labels[s.i], RIGHT)] = True
             return True
         if has_head_in_buffer(s, s.i, heads):
             return False
@@ -574,7 +578,7 @@ cdef class TransitionSystem:
         if s.heads[s.top] != 0 and not self.allow_reattach:
             return False
         if heads[s.top] == s.i:
-            oracle[self.pair_label_move(labels[s.top], LEFT)] = True
+            oracle[self.pack_class(labels[s.top], LEFT)] = True
             return True
         if has_head_in_buffer(s, s.top, heads):
             return False
@@ -605,6 +609,3 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
             head = s.top
             child = s.i if s.i < len(tokens) else 0
         return u'%s(%s)' % (tokens[head], tokens[child])
-
-
-
