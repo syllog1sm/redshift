@@ -97,7 +97,7 @@ cdef class Parser:
     def __cinit__(self, model_dir, clean=False, train_alg='static',
                   add_extra=True, label_set='MALT', feat_thresh=5,
                   allow_reattach=False, allow_reduce=False,
-                  reuse_idx=False):
+                  reuse_idx=False, shifty=False):
         model_dir = Path(model_dir)
         if not clean:
             params = dict([line.split() for line in model_dir.join('parser.cfg').open()])
@@ -109,6 +109,7 @@ cdef class Parser:
             feat_thresh = int(params['feat_thresh'])
             allow_reattach = params['allow_reattach'] == 'True'
             allow_reduce = params['allow_reduce'] == 'True'
+            shifty = params['shifty'] == 'True'
             l_labels = params['left_labels']
             r_labels = params['right_labels']
         if allow_reattach and allow_reduce:
@@ -131,7 +132,7 @@ cdef class Parser:
         else:
             self.load_idx(self.model_dir, self.n_preds)
         self.moves = TransitionSystem(io_parse.LABEL_STRS, allow_reattach=allow_reattach,
-                                      allow_reduce=allow_reduce)
+                                      allow_reduce=allow_reduce, shifty=shifty)
         if not clean:
             self.moves.set_labels(_parse_labels_str(l_labels), _parse_labels_str(r_labels))
         guide_loc = self.model_dir.join('model')
@@ -365,6 +366,7 @@ cdef class Parser:
 cdef class TransitionSystem:
     cdef bint allow_reattach
     cdef bint allow_reduce
+    cdef bint shifty
     cdef size_t n_labels
     cdef object py_labels
     cdef size_t[N_MOVES] offsets
@@ -390,11 +392,12 @@ cdef class TransitionSystem:
     cdef int n_lmoves
 
     def __cinit__(self, object labels, allow_reattach=False,
-                  allow_reduce=False):
+                  allow_reduce=False, shifty=False):
         self.n_labels = len(labels)
         self.py_labels = labels
         self.allow_reattach = allow_reattach
         self.allow_reduce = allow_reduce
+        self.shifty = shifty
         self.n_paired = N_MOVES * self.n_labels
         self._oracle = <bint*>malloc(self.n_paired * sizeof(bint))
         self.right_arcs = <bint*>malloc(self.n_paired * sizeof(bint))
