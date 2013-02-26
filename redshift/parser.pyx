@@ -5,6 +5,7 @@ MALT-style dependency parser
 cimport cython
 import random
 from libc.stdlib cimport malloc, free
+from libc.string cimport memcpy
 from pathlib import Path
 from collections import defaultdict
 import sh
@@ -185,6 +186,97 @@ cdef class Parser:
             self.guide.total = 0
         self.guide.train()
 
+    cdef int train_beam(self, int iter_num, Sentence* sent, size_t beam_width,
+                        py_words) except -1:
+        cdef size_t* g_labels = sent.parse.labels
+        cdef size_t* g_heads = sent.parse.heads
+
+        cdef size_t* context = self._context
+        cdef uint64_t* feats = self._hashed_feats
+        cdef size_t n_feats = self.n_preds
+        cdef size_t move = 0
+        cdef size_t label = 0
+        cdef dict gold_counts = defaultdict(int)
+        cdef State gold_state = init_state(sent.length)
+        cdef State** beam = <State**>malloc(beam_width * sizeof(State*))
+        cdef State* p
+        while not gold_state.is_finished:
+            gold_class = self.moves.break_tie(&gold_state, g_heads, g_labels)
+            features.extract(context, feats, sent, &gold_state)
+            for f in range(n_feats):
+                gold_counts[(gold_class, f)] += 1
+            g_scores = self.guide.predict_scores(n_feats, feats)
+            gold_state.score += g_scores[gold_class]
+            self.moves.transition(move, label, &gold_state)
+            move = self.moves.class_from_move(gold_class)
+            label = self.moves.class_from_label(gold_class)
+            move_scores = self._get_move_scores(sent, beam_width, beam)
+            # Gold out of beam -- do early update
+            if gold_state.score < move_scores[beam_width][0]:
+                p = beam[move_scores[0][1]]
+                move = self.moves.class_from_move(gold_class)
+                label = self.moves.class_from_label(gold_class)
+                self.moves.transition(move, label, p)
+                pred_counts = self._count_feats(sent, p.t, p.history)
+                self.guide.global_update(pred_counts, gold_counts)
+                return 0
+            beam = self._refresh_beam(move_scores, beam_width, beam)
+        p = beam[0]
+        if gold_state.score < p.score:
+            pred_counts = self._count_feats(sent, p.t, p.history)
+            self.guide.global_update(pred_counts, gold_counts)
+
+    cdef list _get_move_scores(self, Sentence* sent, size_t k, State** beam):
+        cdef size_t* context = self._context
+        cdef uint64_t* feats = self._hashed_feats
+        cdef size_t n_feats = self.n_preds
+        next_moves = []
+        for i in range(k):
+            s = beam[i]
+            features.extract(context, feats, sent, s)
+            valid = self.moves.get_valid(s)
+            scores = self.guide.predict_scores(n_feats, feats)
+            for clas in range(self.moves.n_class):
+                if valid[clas]:
+                    next_moves.append((scores[clas] + s.score, i, clas))
+        next_moves.sort()
+        next_moves.reverse()
+        return next_moves[:k]
+
+    cdef State** _refresh_beam(self, list move_scores, size_t k, State** beam):
+        cdef State** new_beam = <State**>malloc(k * sizeof(State*))
+        cdef State* old
+        cdef State* new
+        for i, (score, c, clas) in enumerate(move_scores):
+            old = beam[c]
+            new = <State*>malloc(sizeof(State))
+            memcpy(<void*>old, <void*> new, sizeof(State))
+            new.score = score
+            move = self.moves.class_to_move(clas)
+            label = self.moves.class_to_label(clas)
+            self.moves.transition(move, label, new)
+            new_beam[i] = new
+        for i in range(k):
+            free(beam[i])
+        free(beam)
+        return new_beam
+
+    cdef dict _count_feats(self, Sentence* sent, size_t t, size_t* history):
+        cdef size_t* context = self._context
+        cdef uint64_t* feats = self._hashed_feats
+        cdef size_t n_feats = self.n_preds
+        cdef State s = init_state(sent.length)
+        pred_counts = defaultdict(int)
+        for i in range(t):
+            features.extract(context, feats, sent, &s)
+            clas = history[i]
+            for f in range(n_feats):
+                pred_counts[(clas, feats[f])] += 1
+            move = self.moves.class_to_move(clas)
+            label = self.moves.class_to_label(clas)
+            self.moves.transition(move, label, &s)
+        return pred_counts
+
     cdef int train_one(self, int iter_num, Sentence* sent, bint online, py_words) except -1:
         cdef bint* valid
         cdef bint* oracle
@@ -206,9 +298,9 @@ cdef class Parser:
             pred = self.predict(n_feats, feats, valid, &s.guess_labels[s.top][s.i])
             if online:
                 oracle = self.moves.get_oracle(&s, g_heads, g_labels)
-                gold = self.predict(n_feats, feats, oracle, &_)
+                gold = self.predict(n_feats, feats, oracle, &_) if not oracle[pred] else pred
             else:
-                gold = self.moves.break_tie(&s, g_heads, g_labels, valid)
+                gold = self.moves.break_tie(&s, g_heads, g_labels)
             self.guide.update(pred, gold, n_feats, feats, 1)
             if online and iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
                 move = self.moves.class_to_move(pred)
@@ -520,16 +612,16 @@ cdef class TransitionSystem:
             valid[self.d_id] = True
         return valid  
 
-    cdef int break_tie(self, State* s, size_t* heads, size_t* labels, bint* oracle) except -1:
+    cdef int break_tie(self, State* s, size_t* heads, size_t* labels) except -1:
         if s.stack_len == 1:
             return self.s_id
         elif not s.at_end_of_buffer and heads[s.i] == s.top:
             return self.pack_class(s.labels[s.i], RIGHT)
         elif heads[s.top] == s.i and (self.allow_reattach or s.heads[s.top] == 0):
             return self.pack_class(s.labels[s.top], LEFT)
-        elif self.d_oracle(s, heads, labels, oracle):
+        elif self.d_oracle(s, heads, labels, self._oracle):
             return self.d_id
-        elif not s.at_end_of_buffer and self.s_oracle(s, heads, labels, oracle):
+        elif not s.at_end_of_buffer and self.s_oracle(s, heads, labels, self._oracle):
             return self.s_id
         else:
             raise StandardError
