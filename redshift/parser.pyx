@@ -206,7 +206,7 @@ cdef class Parser:
             pred = self.predict(n_feats, feats, valid, &s.guess_labels[s.top][s.i])
             if online:
                 oracle = self.moves.get_oracle(&s, g_heads, g_labels)
-                gold = self.predict(n_feats, feats, oracle, &_)
+                gold = self.predict(n_feats, feats, oracle, &_) if not oracle[pred] else pred
             else:
                 gold = self.moves.break_tie(&s, g_heads, g_labels, valid)
             self.guide.update(pred, gold, n_feats, feats, 1)
