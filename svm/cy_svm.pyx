@@ -224,6 +224,13 @@ cdef class Perceptron(Model):
             self.n_corr += 1
         self.total += 1
 
+    def global_update(self, pred, gold):
+        feats = set(gold.keys())
+        feats.update(pred.keys())
+        self.model.tick()
+        for feat in feats:
+            self.model.update_single(feat[0], feat[1], gold[feat] - pred[feat])
+
     cdef uint64_t* get_labels(self):
         return self.model.labels
 
