@@ -44,6 +44,19 @@ cdef struct State:
     #bint is_finished
     #bint at_end_of_buffer
 
+cdef struct Continuation:
+    double score
+    size_t clas
+    size_t parent
+
+cdef int cmp_contn(const void *c1, const void *c2):
+    cdef double v1 = c1.score
+    cdef double v2 = c2.score
+    if v1 < v2:
+        return -1
+    elif v1 > v2:
+        return 1
+    return 0
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1
 cdef int del_l_child(State *s, size_t head) except -1

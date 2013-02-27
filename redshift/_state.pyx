@@ -303,3 +303,15 @@ cdef int free_state(State* s):
     free(s.llabel_set)
     free(s.rlabel_set)
     free(s)
+
+
+cdef int cmp_contn(const void *c1, const void *c2):
+    cdef double v1 = c1.score
+    cdef double v2 = c2.score
+    if v1 < v2:
+        return -1
+    elif v1 > v2:
+        return 1
+    return 0
+
+
