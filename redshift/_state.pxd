@@ -14,19 +14,35 @@ cdef struct State:
     size_t stack_len
     size_t top
     size_t second
-    size_t[MAX_SENT_LEN] stack
-    size_t[MAX_SENT_LEN] heads
-    size_t[MAX_SENT_LEN] labels
-    size_t guess_labels[MAX_SENT_LEN][MAX_SENT_LEN]
-    size_t[MAX_SENT_LEN] l_valencies
-    size_t[MAX_SENT_LEN] r_valencies
-    size_t l_children[MAX_SENT_LEN][MAX_VALENCY]
-    size_t r_children[MAX_SENT_LEN][MAX_VALENCY]
-    bint llabel_set[MAX_SENT_LEN][MAX_LABELS]
-    bint rlabel_set[MAX_SENT_LEN][MAX_LABELS]
-    size_t[MAX_TRANSITIONS] history
     bint is_finished
     bint at_end_of_buffer
+    bint is_gold
+
+    size_t* stack
+    size_t* heads
+    size_t* labels
+    size_t** guess_labels
+    size_t* l_valencies
+    size_t* r_valencies
+    size_t** l_children
+    size_t** r_children
+    bint** llabel_set
+    bint** rlabel_set
+    size_t* history
+
+    #size_t[MAX_SENT_LEN] stack
+    #size_t[MAX_SENT_LEN] heads
+    #size_t[MAX_SENT_LEN] labels
+    #size_t guess_labels[MAX_SENT_LEN][MAX_SENT_LEN]
+    #size_t[MAX_SENT_LEN] l_valencies
+    #size_t[MAX_SENT_LEN] r_valencies
+    #size_t l_children[MAX_SENT_LEN][MAX_VALENCY]
+    #size_t r_children[MAX_SENT_LEN][MAX_VALENCY]
+    #bint llabel_set[MAX_SENT_LEN][MAX_LABELS]
+    #bint rlabel_set[MAX_SENT_LEN][MAX_LABELS]
+    #size_t[MAX_TRANSITIONS] history
+    #bint is_finished
+    #bint at_end_of_buffer
 
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1
@@ -51,4 +67,6 @@ cdef bint has_head_in_stack(State *s, size_t word, size_t* heads)
 cdef bint has_head_via_lower(State *s, size_t word, size_t* heads)
 cdef bint has_grandchild_via_lower(State *s, size_t word, size_t* heads)
 
-cdef State init_state(size_t n)
+cdef State* init_state(size_t n)
+cdef int free_state(State* s)
+cdef State* copy_state(State* old)

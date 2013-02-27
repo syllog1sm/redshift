@@ -2,6 +2,8 @@
 import io_parse
 from features cimport N_LABELS
 
+from libc.stdlib cimport malloc, free
+
 DEF MAX_SENT_LEN = 300
 DEF MAX_TRANSITIONS = MAX_SENT_LEN * 2
 DEF MAX_VALENCY = MAX_SENT_LEN / 2
@@ -177,38 +179,122 @@ cdef bint has_grandchild_via_lower(State *s, size_t word, size_t* heads):
     #        return True
     return False
 
-DEF START_ON_STACK = True
 
-cdef State init_state(size_t n):
+cdef State* init_state(size_t n):
     # TODO: Make this more efficient, probably by storing 0'd arrays somewhere,
     # and then copying them
     cdef size_t i, j
-    cdef State s
-    cdef int n_labels = len(io_parse.LABEL_STRS)
-    # Initialise with first word on top of stack
-    assert n >= 3
-    if START_ON_STACK:
-        s = State(n=n, t=0, i=2, top=1, second=0, stack_len=2, is_finished=False,
-                  at_end_of_buffer=n == 3)
-    else:
-        s = State(n=n, t=0, i=1, top=0, second=0, stack_len=1, is_finished=False,
-                  at_end_of_buffer=n == 3)
+    cdef State* s = <State*>malloc(sizeof(State))
+
+    s.n = n
+    s.t = 0
+    s.i = 2
+    s.score = 0
+    s.top = 1
+    s.second = 0
+    s.stack_len = 2
+    s.is_finished = False
+    s.is_gold = True
+    s.at_end_of_buffer = n == 3
+    s.stack = <size_t*>malloc(n * sizeof(size_t))
+    s.heads =  <size_t*>malloc(n * sizeof(size_t))
+    s.labels =  <size_t*>malloc(n * sizeof(size_t))
+    s.l_valencies = <size_t*>malloc(n * sizeof(size_t))
+    s.r_valencies = <size_t*>malloc(n * sizeof(size_t))
+    s.guess_labels = <size_t**>malloc(n * sizeof(size_t*))
+    s.l_children = <size_t**>malloc(n * sizeof(size_t*))
+    s.r_children = <size_t**>malloc(n * sizeof(size_t*))
+    s.llabel_set = <bint**>malloc(n * sizeof(bint*))
+    s.rlabel_set = <bint**>malloc(n * sizeof(bint*))
+    s.history = <size_t*>malloc(n * 2 * sizeof(size_t))
+    cdef size_t n_labels = len(io_parse.LABEL_STRS)
     for i in range(n):
         s.stack[i] = 0
         s.l_valencies[i] = 0
         s.r_valencies[i] = 0
         s.heads[i] = 0 
         s.labels[i] = 0
+        s.guess_labels[i] = <size_t*>malloc(n * sizeof(size_t))
+        s.l_children[i] = <size_t*>malloc(n * sizeof(size_t))
+        s.r_children[i] = <size_t*>malloc(n * sizeof(size_t))
         # Ideally this shouldn't matter, if we use valencies intelligently?
         for j in range(n):
             s.guess_labels[i][j] = 0
             s.l_children[i][j] = 0
             s.r_children[i][j] = 0
+        s.llabel_set[i] = <bint*>malloc(n_labels * sizeof(bint))
+        s.rlabel_set[i] = <bint*>malloc(n_labels * sizeof(bint))
         for j in range(n_labels):
-            s.llabel_set[i][j] = 0
-            s.rlabel_set[i][j] = 0
-    if START_ON_STACK:
-        s.stack[1] = 1
-    for i in range(MAX_TRANSITIONS):
+            s.llabel_set[i][j] = False
+            s.rlabel_set[i][j] = False
+    s.stack[1] = 1
+    for i in range(2 * n):
         s.history[i] = 0
     return s
+
+
+cdef State* copy_state(State* old):
+    cdef size_t i, j
+    cdef State* s = <State*>malloc(sizeof(State))
+    cdef size_t n = old.n
+    s.stack = <size_t*>malloc(n * sizeof(size_t))
+    s.heads =  <size_t*>malloc(n * sizeof(size_t))
+    s.labels =  <size_t*>malloc(n * sizeof(size_t))
+    s.l_valencies = <size_t*>malloc(n * sizeof(size_t))
+    s.r_valencies = <size_t*>malloc(n * sizeof(size_t))
+    s.guess_labels = <size_t**>malloc(n * sizeof(size_t*))
+    s.l_children = <size_t**>malloc(n * sizeof(size_t*))
+    s.r_children = <size_t**>malloc(n * sizeof(size_t*))
+    s.llabel_set = <bint**>malloc(n * sizeof(bint*))
+    s.rlabel_set = <bint**>malloc(n * sizeof(bint*))
+    s.history = <size_t*>malloc(n * 2 * sizeof(size_t))
+
+    s.n = old.n
+    s.t = old.t
+    s.i = old.i
+    s.top = old.top
+    s.second = old.second
+    s.stack_len = old.stack_len
+    s.is_finished = old.is_finished
+    s.at_end_of_buffer = old.at_end_of_buffer
+    s.is_gold = old.is_gold
+    s.score = old.score
+    cdef size_t n_labels = len(io_parse.LABEL_STRS)
+    for i in range(old.n):
+        s.stack[i] = old.stack[i]
+        s.l_valencies[i] = old.l_valencies[i]
+        s.r_valencies[i] = old.r_valencies[i]
+        s.heads[i] = old.heads[i]
+        s.labels[i] = old.labels[i]
+        s.guess_labels[i] = <size_t*>malloc(s.n * sizeof(size_t))
+        s.l_children[i] = <size_t*>malloc(s.n * sizeof(size_t))
+        s.r_children[i] = <size_t*>malloc(s.n * sizeof(size_t))
+        # Ideally this shouldn't matter, if we use valencies intelligently?
+        for j in range(s.n):
+            s.guess_labels[i][j] = old.guess_labels[i][j]
+            s.l_children[i][j] = old.l_children[i][j]
+            s.r_children[i][j] = old.r_children[i][j]
+        s.llabel_set[i] = <bint*>malloc(n_labels * sizeof(bint))
+        s.rlabel_set[i] = <bint*>malloc(n_labels * sizeof(bint))
+        for j in range(n_labels):
+            s.llabel_set[i][j] = old.llabel_set[i][j]
+            s.rlabel_set[i][j] = old.rlabel_set[i][j]
+    for i in range(2 * s.n):
+        s.history[i] = old.history[i]
+    return s
+
+cdef int free_state(State* s):
+    cdef size_t i
+    free(s.stack)
+    free(s.heads)
+    free(s.labels)
+    free(s.l_valencies)
+    free(s.r_valencies)
+    free(s.history)
+    for i in range(s.n):
+        free(s.guess_labels[i])
+        free(s.l_children[i])
+        free(s.r_children[i])
+        free(s.llabel_set[i])
+        free(s.rlabel_set[i])
+    free(s)

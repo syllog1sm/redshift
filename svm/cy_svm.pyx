@@ -228,8 +228,9 @@ cdef class Perceptron(Model):
         feats = set(gold.keys())
         feats.update(pred.keys())
         self.model.tick()
-        for feat in feats:
-            self.model.update_single(feat[0], feat[1], gold[feat] - pred[feat])
+        for f in feats:
+            if f[1] != 0:
+                self.model.update_single(f[0], f[1], gold.get(f, 0) - pred.get(f, 0))
 
     cdef uint64_t* get_labels(self):
         return self.model.labels
