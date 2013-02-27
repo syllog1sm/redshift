@@ -307,11 +307,14 @@ cdef class Parser:
                 self.moves.transition(gold, s)
         free_state(s)
 
-    def add_parses(self, Sentences sents, Sentences gold=None):
+    def add_parses(self, Sentences sents, Sentences gold=None, k=1):
         cdef:
             size_t i
         for i in range(sents.length):
-            self.parse(&sents.s[i])
+            if k == 1:
+                self.parse(&sents.s[i])
+            else:
+                self.beam_parse(&sents.s[i], k)
         if gold is not None:
             return sents.evaluate(gold)
 
@@ -339,6 +342,33 @@ cdef class Parser:
             sent.parse.heads[i] = s.heads[i]
             sent.parse.labels[i] = s.labels[i]
         free_state(s)
+
+    cdef int beam_parse(self, Sentence* sent, size_t k) except -1:
+        cdef State* s
+        cdef State* new
+        cdef Beam beam = Beam(k, sent.length)
+        sent.parse.n_moves = 0
+        while not beam.beam[0].is_finished:
+            move_scores = self._get_move_scores(sent, beam.w, beam.beam)
+            for score, c, clas in move_scores:
+                s = beam.beam[c]
+                new = copy_state(s)
+                new.is_gold = False
+                new.score = score
+                self.moves.transition(clas, new)
+                beam.add(new)
+                if beam.is_full:
+                    break
+            beam.refresh()
+        s = beam.best_p()
+        sent.parse.n_moves = s.t
+        for i in range(s.t):
+            sent.parse.moves[i] = s.history[i]
+        # No need to copy heads for root and start symbols
+        for i in range(1, sent.length - 1):
+            assert s.heads[i] != 0
+            sent.parse.heads[i] = s.heads[i]
+            sent.parse.labels[i] = s.labels[i]
 
     cdef int predict(self, uint64_t n_preds, uint64_t* feats, bint* valid,
                      size_t* rlabel) except -1:
@@ -491,6 +521,8 @@ cdef class Beam:
             self.gold = s
             self.has_gold = True
             self.g_idx = -1
+        else:
+            free_state(s)
 
     cdef State* best_p(self):
         if self._w != 0:
