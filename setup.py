@@ -42,6 +42,12 @@ exts = [
         runtime_library_dirs=[os.path.join(pwd, 'svm', 'lib')],
         library_dirs=[os.path.join(pwd, 'svm', 'lib')],
         extra_objects=[os.path.join(pwd, 'svm', 'lib', 'liblinear.so.1')]
+    ),
+    Extension(
+        "index.hashes",
+        ["hashes.pyx", "MurmurHash2.cpp", "MurmurHash3.cpp"],
+        language="c++",
+        include_dirs=[numpy.get_include(), os.path.join(virtual_env, 'include')]
     )
 ]
 
