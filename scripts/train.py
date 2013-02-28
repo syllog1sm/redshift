@@ -26,12 +26,13 @@ USE_HELD_OUT = False
     allow_reduce=("Allow reduce when no head is set", "flag", "d", bool),
     profile=("Run profiler (slow)", "flag", None, bool),
     debug=("Set debug flag to True.", "flag", None, bool),
-    seed=("Set random seed", "option", "s", int)
+    seed=("Set random seed", "option", "s", int),
+    beam_width=("Beam width", "option", "k", int),
 )
 def main(train_loc, model_loc, train_alg="online", n_iter=15,
          add_extra_feats=False, label_set="Stanford", feat_thresh=1,
          allow_reattach=False, allow_reduce=False,
-         profile=False, debug=False, seed=0):
+         profile=False, debug=False, seed=0, beam_width=1):
     random.seed(seed)
     train_loc = Path(train_loc)
     model_loc = Path(model_loc)
@@ -42,7 +43,8 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
     parser = redshift.parser.Parser(model_loc, clean=True,
                                     train_alg=train_alg, add_extra=add_extra_feats,
                                     label_set=label_set, feat_thresh=feat_thresh,
-                                    allow_reattach=allow_reattach, allow_reduce=allow_reduce)
+                                    allow_reattach=allow_reattach, allow_reduce=allow_reduce,
+                                    beam_width=beam_width)
     if USE_HELD_OUT:
         train_sent_strs = train_loc.open().read().strip().split('\n\n')
         split_point = len(train_sent_strs)/20
