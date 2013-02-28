@@ -17,7 +17,7 @@ USE_HELD_OUT = False
 
 @plac.annotations(
     train_loc=("Training location", "positional"),
-    train_alg=("Learning algorithm [static, online]", "option", "a", str),
+    train_alg=("Learning algorithm [static, online, beam]", "option", "a", str),
     n_iter=("Number of Perceptron iterations", "option", "i", int),
     label_set=("Name of label set to use.", "option", "l", str),
     add_extra_feats=("Add extra features", "flag", "x", bool),

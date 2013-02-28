@@ -1,3 +1,4 @@
+# cython: profile=True
 import sys
 import math
 
