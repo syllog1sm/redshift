@@ -111,6 +111,7 @@ cdef class Parser:
             shifty = params.get('shifty') == 'True'
             l_labels = params['left_labels']
             r_labels = params['right_labels']
+            beam_width = params['beam_width']
         if allow_reattach and allow_reduce:
             print 'NM L+D'
         elif allow_reattach:
@@ -126,6 +127,7 @@ cdef class Parser:
         self.label_set = label_set
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
+        self.beam_width = beam_width
         if clean == True:
             self.new_idx(self.model_dir, self.n_preds)
         else:
@@ -175,7 +177,7 @@ cdef class Parser:
             random.shuffle(indices)
             for sent_id, i in enumerate(indices):
                 if self.train_alg == 'beam':
-                    self.train_beam(n, &sents.s[i], 5, sents.strings[i][0])
+                    self.train_beam(n, &sents.s[i], self.beam_width, sents.strings[i][0])
                 else:
                     self.train_one(n, &sents.s[i], self.train_alg == 'online', sents.strings[i][0])
             move_acc = (float(self.guide.n_corr) / self.guide.total+1e-100) * 100
@@ -305,9 +307,11 @@ cdef class Parser:
                 self.moves.transition(gold, s)
         free_state(s)
 
-    def add_parses(self, Sentences sents, Sentences gold=None, k=1):
+    def add_parses(self, Sentences sents, Sentences gold=None, k=None):
         cdef:
             size_t i
+        if k == None:
+            k = self.beam_width
         for i in range(sents.length):
             if k == 1:
                 self.parse(&sents.s[i])
@@ -343,16 +347,16 @@ cdef class Parser:
 
     
     cdef int beam_parse(self, Sentence* sent, size_t k) except -1:
-        cdef size_t i, n_valid
+        cdef size_t i, c, n_valid
         cdef State* s
         cdef State* new
         cdef Cont* cont
-        cdef Beam beam = Beam(k, sent.length)
+        cdef Beam beam = Beam(k, sent.length, self.guide.nr_class)
         while not beam.best_p().is_finished:
             beam.refresh()
             n_valid = self._fill_move_scores(sent, beam.psize, beam.parents, beam.next_moves,
                                              beam.nr_moves)
-            beam.sort_next_moves()
+            beam.sort_moves()
             for c in range(n_valid):
                 cont = &beam.next_moves[c]
                 s = beam.add(cont.parent, cont.score, False)
@@ -432,6 +436,7 @@ cdef class Parser:
             cfg.write(u'allow_reduce\t%s\n' % self.moves.allow_reduce)
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
+            cfg.write(u'beam_width\t%d\n' % ','.join(self.moves.beam_width))
         
     def get_best_moves(self, Sentences sents, Sentences gold):
         """Get a list of move taken/oracle move pairs for output"""
