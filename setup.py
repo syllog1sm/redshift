@@ -32,7 +32,10 @@ exts = [
     Extension('redshift._state', ["redshift/_state.pyx"],
               include_dirs=[numpy.get_include(), os.path.join(virtual_env, 'include')]),
     Extension('redshift.io_parse', ["redshift/io_parse.pyx"], language="c++"),
-    Extension('redshift.features', ["redshift/features.pyx"], language="c++"),
+    Extension('redshift.features', ["redshift/features.pyx"], language="c++",
+        
+        include_dirs=[numpy.get_include(), os.path.join(virtual_env, 'include')]
+        ),
     Extension('svm.multitron', ['svm/multitron.pyx'], language="c++",
             include_dirs=[os.path.join('ext', LIBLINEAR), numpy.get_include(), os.path.join(virtual_env, 'include')], ),
     Extension("svm.cy_svm", ["svm/cy_svm.pyx"], language="c++", libraries=['linear'],
@@ -45,7 +48,7 @@ exts = [
     ),
     Extension(
         "index.hashes",
-        ["hashes.pyx", "MurmurHash2.cpp", "MurmurHash3.cpp"],
+        ["index/hashes.pyx", "index/MurmurHash2.cpp", "index/MurmurHash3.cpp"],
         language="c++",
         include_dirs=[numpy.get_include(), os.path.join(virtual_env, 'include')]
     )
