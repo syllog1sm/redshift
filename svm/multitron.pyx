@@ -1,3 +1,4 @@
+# cython: profile=True
 import sys
 import math
 
@@ -163,7 +164,16 @@ cdef class MultitronParameters:
             self.W[f].n_upd += 1
             update_param(self.W[f], pred_i, self.now, weight * -1)
             update_param(self.W[f], gold_i, self.now, weight)
-       
+    
+    cdef int update_single(self, uint64_t label, uint64_t f, double weight) except -1:
+
+        cdef uint64_t i = self.lookup_label(label)
+        if f != 0 and weight != 0:
+            if f >= self.max_param or not self.seen[f]:
+                self.add_feature(f)
+            self.W[f].n_upd += 1
+            update_param(self.W[f], i, self.now, weight)
+
     cdef double* get_scores(self, uint64_t n_feats, uint64_t* features):
         cdef uint64_t i, f, j
         cdef Param* param

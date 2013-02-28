@@ -30,9 +30,10 @@ def get_pos(conll_str):
 @plac.annotations(
     use_gold=("Gold-formatted test data", "flag", "g", bool),
     profile=("Do profiling", "flag", "p", bool),
+    k=("Beam width", "option", "k", int),
     debug=("Set debug", "flag", "d", bool)
 )
-def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False, debug=False):
+def main(parser_dir, text_loc, out_dir, use_gold=False, k=1, profile=False, debug=False):
     if debug:
         redshift.parser.set_debug(debug)
     parser_dir = Path(parser_dir)
@@ -58,7 +59,7 @@ def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False, debug=Fal
     else:
 
         t1 = time.time()
-        print parser.add_parses(sentences, gold=gold_sents)
+        print parser.add_parses(sentences, gold=gold_sents, k=k)
         t2 = time.time()
         print '%d sents took %0.3f ms' % (sentences.length, (t2-t1)*1000.0)
     

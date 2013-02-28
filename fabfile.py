@@ -46,12 +46,15 @@ def draxx_baseline(name):
     repo = str(REMOTE_REPO)
     train_str = _train(pjoin(data, 'train.txt'), model)
     parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'))
-    eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.text'))
+    eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.txt'))
     script = _pbsify(repo, [train_str, parse_str, eval_str])
     script_loc = pjoin(repo, 'pbs', '%s_draxx_baseline.pbs' % name)
     with cd(repo):
         put(StringIO(script), script_loc)
-        #run('qsub -N %s_bl %s' % (name, script_loc))
+        run('qsub -N %s_bl %s' % (name, script_loc))
+
+def qstat():
+    run("qstat -na | grep mhonn")
 
 def test1k(model="baseline", dbg=False):
     with lcd(str(LOCAL_REPO)):
@@ -84,7 +87,7 @@ def _parse(model, data, out, gold=False):
     return template.format(model=model, data=data, out=out)
 
 def _evaluate(test, gold):
-    return './scripts/evaluate.py %s %s' % (test, gold)
+    return './scripts/evaluate.py %s %s > %s' % (test, gold, test.replace('parses', 'acc'))
 
 def avg_accs(exp_name, test=False):
     exp_dir = pjoin(str(REMOTE_PARSERS), exp_name)

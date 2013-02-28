@@ -117,7 +117,6 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, size_t n2,
     context[S0w] = words[s0]
     context[S0p] = pos[s0]
     context[S0l] = labels[s0]
-
     context[S0hw] = words[heads[s0]]
     context[S0hp] = pos[heads[s0]]
     context[S0hl] = labels[heads[s0]]
@@ -135,7 +134,6 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, size_t n2,
     context[S1lw] = words[s1_lkids[0]]
     context[S1lp] = pos[s1_lkids[0]]
     context[S1ll] = labels[s1_lkids[0]]
-    
     # The "right edge feature refers to the child before S0. If S0 is
     # attached to S1, then "right edge" is the second right-most child
     # of s.second. If S0 is not a child of S1, then it's the _rightmost_
@@ -149,23 +147,19 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, size_t n2,
         context[S1re_dist] = 5
     else:
         context[S1re_dist] = s0 - s1_re
-
     context[S0lv] = l_vals[s0]
     context[S0rv] = r_vals[s0]
     context[N0lv] = l_vals[n0]
-    
-    t = s0_lkids[l_vals[s0] - 1]
+    t = s0_lkids[l_vals[s0] - 1] if l_vals[s0] > 0 else 0
     context[S0lw] = words[t]
     context[S0lp] = pos[t]
     context[S0ll] = labels[t]
-    
-    t = s0_rkids[r_vals[s0] - 1]
+    t = s0_rkids[r_vals[s0] - 1] if r_vals[s0] > 0 else 0
     context[S0rw] = words[t]
     context[S0rp] = pos[t]
     context[S0rl] = labels[t]
-    
     if l_vals[s0] > 1:
-        t = s0_lkids[l_vals[s0] - 2]
+        t = s0_lkids[l_vals[s0] - 2] 
     else:
         t = 0
     context[S0l2w] = words[t]
@@ -210,7 +204,6 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, size_t n2,
         context[S0llabs] += (s0_llabels[(N_LABELS - 1) - j] << j)
         context[S0rlabs] += (s0_rlabels[(N_LABELS - 1) - j] << j)
         context[N0llabs] += (n0_llabels[(N_LABELS - 1) - j] << j)
-
     d = n0 - s0
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
@@ -431,8 +424,10 @@ cdef int extract(size_t* context, uint64_t* hashed,
     cdef size_t out
     cdef Predicate predicate
     global predicates
-    cdef size_t s0_re = get_right_edge(s, s.top)
-    cdef size_t s1_re = get_right_edge(s, s.second)
+    #cdef size_t s0_re = get_right_edge(s, s.top)
+    #cdef size_t s1_re = get_right_edge(s, s.second)
+    cdef size_t s0_re = 0
+    cdef size_t s1_re = 0
     fill_context(context, s.i, s.i + 1, s.i + 2,
                  s.top, s.second, s0_re, s1_re, s.stack_len,
                  sent.words, sent.pos, sent.browns,
@@ -441,7 +436,6 @@ cdef int extract(size_t* context, uint64_t* hashed,
                  s.l_children[s.second], s.r_children[s.second],
                  s.l_children[s.i],
                  s.llabel_set[s.top], s.rlabel_set[s.top], s.llabel_set[s.i])
-
     cdef bint seen_non_zero
     for i in range(N_PREDICATES):
         predicate = predicates[i]
