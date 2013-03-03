@@ -162,6 +162,12 @@ cdef class FeatIndex(Index):
     cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value):
         self.tables[i][hashed] = value
 
+    cpdef save(self):
+        if self.save_entries:
+            self.out_file.close()
+        self.save_entries = False
+
+
     def __dealloc__(self):
         if self.save_entries:
             self.out_file.close()
@@ -184,9 +190,9 @@ cdef class ScoresCache:
         self.pool_size = pool_size
         self.scores_size = scores_size
         
-    cdef double* lookup(self, size_t n, size_t* feats, bint* is_hit):
+    cdef double* lookup(self, size_t size, void* kernel, bint* is_hit):
         cdef double** resized
-        cdef uint64_t hashed = MurmurHash64A(feats, n * sizeof(size_t), 0)
+        cdef uint64_t hashed = MurmurHash64A(kernel, size, 0)
         cdef size_t addr = self._cache[hashed]
         if addr != 0:
             self.n_hit += 1

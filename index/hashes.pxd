@@ -105,7 +105,7 @@ cdef class ScoresCache:
     cdef size_t n_hit
     cdef size_t n_miss
 
-    cdef double* lookup(self, size_t n, size_t* feats, bint* success)
+    cdef double* lookup(self, size_t size, void* kernel, bint* success)
     cdef int _resize(self, size_t new_size)
 
 
