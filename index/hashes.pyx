@@ -8,6 +8,7 @@ from libc.stdint cimport uint64_t
 from libc.stdlib cimport malloc, free
 from libc.string cimport memcpy
 
+
 cdef class Index:
     cpdef set_path(self, path):
         self.path = path
@@ -71,6 +72,11 @@ cdef class PruningFeatIndex(Index):
         self.i = 1
         self.p_i = 1
 
+    cpdef set_path(self, path):
+        self.path = path
+        self.out_file = open(str(path), 'w')
+        self.save_entries = True
+
     def set_n_predicates(self, uint64_t n):
         cdef uint64_t i
         self.n = n
@@ -101,10 +107,7 @@ cdef class PruningFeatIndex(Index):
         if self.freqs[value] == self.threshold:
             self.tables[i][hashed] = self.p_i
             if self.save_entries:
-                py_feat = []
-                for j in range(length):
-                    py_feat.append(str(feature[j]))
-                self.save_entry(i, '_'.join(py_feat), hashed, self.p_i)
+                self.out_file.write('%d\t_\t%d\t%d\n' % (i, hashed, value))
             self.p_i += 1
         return value
 
@@ -128,6 +131,11 @@ cdef class FeatIndex(Index):
         self.tables = vector[dense_hash_map[uint64_t, uint64_t]]()
         self.i = 1
 
+    cpdef set_path(self, path):
+        self.path = path
+        self.out_file = open(str(path), 'w')
+        self.save_entries = True
+
     def set_n_predicates(self, uint64_t n):
         cdef uint64_t i
         self.n = n
@@ -147,10 +155,7 @@ cdef class FeatIndex(Index):
             value = self.i
             self.tables[i][hashed] = value
             if self.save_entries:
-                py_feat = []
-                for j in range(length):
-                    py_feat.append(str(feature[j]))
-                self.save_entry(i, '_'.join(py_feat), hashed, self.i)
+                self.out_file.write('%d\t_\t%d\t%d\n' % (i, hashed, value))
             self.i += 1
         return value
 
