@@ -9,6 +9,7 @@ from pathlib import Path
 from collections import defaultdict
 import sh
 import sys
+from itertools import izip
 
 from _state cimport *
 cimport io_parse
@@ -80,11 +81,12 @@ def _parse_labels_str(labels_str):
 
 cdef class Parser:
     cdef size_t n_features
-    cdef Model guide
+    cdef Perceptron guide
     cdef object model_dir
     cdef Sentence* sentence
     cdef int n_preds
     cdef size_t* _context
+    cdef size_t beam_width
     cdef uint64_t* _hashed_feats
     cdef TransitionSystem moves
     cdef InstanceCounter inst_counts
@@ -96,7 +98,7 @@ cdef class Parser:
     def __cinit__(self, model_dir, clean=False, train_alg='static',
                   add_extra=True, label_set='MALT', feat_thresh=5,
                   allow_reattach=False, allow_reduce=False,
-                  reuse_idx=False, shifty=False):
+                  reuse_idx=False, shifty=False, beam_width=1):
         model_dir = Path(model_dir)
         if not clean:
             params = dict([line.split() for line in model_dir.join('parser.cfg').open()])
@@ -111,7 +113,7 @@ cdef class Parser:
             shifty = params.get('shifty') == 'True'
             l_labels = params['left_labels']
             r_labels = params['right_labels']
-            beam_width = params['beam_width']
+            beam_width = int(params['beam_width'])
         if allow_reattach and allow_reduce:
             print 'NM L+D'
         elif allow_reattach:
@@ -175,30 +177,38 @@ cdef class Parser:
         indices = range(sents.length)
         for n in range(n_iter):
             random.shuffle(indices)
-            for sent_id, i in enumerate(indices):
-                if self.train_alg == 'beam':
-                    self.train_beam(n, &sents.s[i], self.beam_width, sents.strings[i][0])
-                else:
-                    self.train_one(n, &sents.s[i], self.train_alg == 'online', sents.strings[i][0])
+            # Group indices into minibatches of fixed size
+            for minibatch in izip(*[iter(indices)] * 1):
+                deltas = []
+                for i in minibatch:
+                    if self.beam_width >= 1:
+                        deltas.append(self.decode_beam(&sents.s[i], self.beam_width))
+                    else:
+                        self.train_one(n, &sents.s[i], sents.strings[i][0])
+                for weights in deltas:
+                    self.guide.batch_update(weights)
             move_acc = (float(self.guide.n_corr) / self.guide.total+1e-100) * 100
             print "#%d: Moves %d/%d=%.2f" % (n, self.guide.n_corr,
                                              self.guide.total, move_acc)
+            print '%d cache hit, %d cache miss' % (self.guide.cache.n_hit, self.guide.cache.n_miss)
             if self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
             self.guide.n_corr = 0
             self.guide.total = 0
         self.guide.train()
 
-    cdef int train_beam(self, int iter_num, Sentence* sent, size_t k,
-                        py_words) except -1:
+    cdef dict decode_beam(self, Sentence* sent, size_t k):
         cdef bint is_gold
-        cdef size_t oracle
+        cdef size_t one_best
+        cdef bint* zero_costs
         cdef size_t* g_heads = sent.parse.heads
         cdef size_t* g_labels = sent.parse.labels
         cdef State * s
         cdef Cont* cont
         cdef State* parent
         cdef Beam beam = Beam(k, sent.length, self.guide.nr_class)
+        self.guide.cache.flush()
+        cdef bint use_static = self.train_alg == 'static'
         while not beam.gold().is_finished:
             beam.refresh()
             n_valid = self._fill_move_scores(sent, beam.psize, beam.parents,
@@ -208,8 +218,12 @@ cdef class Parser:
                 cont = &beam.next_moves[i]
                 parent = beam.parents[cont.parent]
                 if parent.is_gold:
-                    oracle = self.moves.break_tie(parent, g_heads, g_labels)
-                    is_gold = cont.clas == oracle
+                    if use_static:
+                        one_best = self.moves.break_tie(parent, g_heads, g_labels)
+                        is_gold = cont.clas == one_best
+                    else:
+                        zero_costs = self.moves.get_oracle(parent, g_heads, g_labels)
+                        is_gold = zero_costs[cont.clas]
                 else:
                     is_gold = False
                 if is_gold or not beam.is_full:
@@ -227,9 +241,9 @@ cdef class Parser:
         p = beam.best_p()
         assert g.t == p.t
         if g.score <= p.score and g is not p:
-            pred_counts = self._count_feats(sent, p.t, p.history)
-            gold_counts = self._count_feats(sent, g.t, g.history)
-            self.guide.global_update(pred_counts, gold_counts)
+            return self._count_feats(sent, p.t, p.history, g.history)
+        else:
+            return {}
 
     cdef int _fill_move_scores(self, Sentence* sent, size_t k, State** parents,
             Cont* next_moves, size_t nr_moves) except -1:
@@ -239,13 +253,19 @@ cdef class Parser:
         cdef uint64_t* feats = self._hashed_feats
         cdef size_t n_feats = self.n_preds
         cdef uint64_t* labels = self.guide.get_labels()
+        cdef bint cache_hit = False
         cdef size_t c = 0
         cdef size_t n_valid = 0
+        # TODO: Fix this ugly hard-coding
+        cdef size_t[21] kernel
         for i in range(k):
             s = parents[i]
-            features.extract(context, feats, sent, s)
+            features.fill_kernel(s, kernel)
+            scores = self.guide.cache.lookup(21, kernel, &cache_hit)
+            if not cache_hit:
+                features.extract(context, feats, sent, s)
+                self.guide.model.get_scores(n_feats, feats, scores)
             valid = self.moves.get_valid(s)
-            scores = self.guide.predict_scores(n_feats, feats)
             for j in range(self.guide.nr_class):
                 next_moves[c].parent = i
                 next_moves[c].clas = labels[j]
@@ -257,26 +277,42 @@ cdef class Parser:
                 c += 1
         return n_valid
 
-    cdef dict _count_feats(self, Sentence* sent, size_t t, size_t* history):
+    cdef dict _count_feats(self, Sentence* sent, size_t t, size_t* phist, size_t* ghist):
         cdef size_t* context = self._context
         cdef uint64_t* feats = self._hashed_feats
         cdef size_t n_feats = self.n_preds
-        cdef State* state = init_state(sent.length)
-        pred_counts = {}
-        for i in range(t):
-            features.extract(context, feats, sent, state)
-            clas = history[i]
+        cdef size_t diverged = 0
+        cdef dict counts = {}
+        cdef State* gold_state = init_state(sent.length)
+        # Find where the states diverge
+        for d in range(t):
+            if ghist[d] == phist[d]:
+                self.moves.transition(ghist[d], gold_state)
+            else:
+                break
+        cdef State* pred_state = init_state(sent.length)
+        copy_state(pred_state, gold_state)
+        for i in range(d, t):
+            features.extract(context, feats, sent, gold_state)
+            clas = ghist[i]
+            fcounts = counts.setdefault(clas, {})
             for f in range(n_feats):
-                key = (clas, feats[f])
-                if key not in pred_counts:
-                    pred_counts[key] = 1
-                else:
-                    pred_counts[key] += 1
-            self.moves.transition(clas, state)
-        free_state(state)
-        return pred_counts
+                fcounts.setdefault(feats[f], 0)
+                fcounts[feats[f]] += 1
+            self.moves.transition(clas, gold_state)
+        free_state(gold_state)
+        for i in range(d, t):
+            features.extract(context, feats, sent, pred_state)
+            clas = phist[i]
+            fcounts = counts.setdefault(clas, {})
+            for f in range(n_feats):
+                fcounts.setdefault(feats[f], 0)
+                fcounts[feats[f]] -= 1
+            self.moves.transition(clas, pred_state)
+        free_state(pred_state)
+        return counts
 
-    cdef int train_one(self, int iter_num, Sentence* sent, bint online, py_words) except -1:
+    cdef int train_one(self, int iter_num, Sentence* sent, py_words) except -1:
         cdef bint* valid
         cdef bint* oracle
         cdef size_t* g_labels = sent.parse.labels
@@ -289,6 +325,7 @@ cdef class Parser:
         cdef size_t move = 0
         cdef size_t label = 0
         cdef size_t _ = 0
+        cdef bint online = self.train_alg == 'online'
         if DEBUG:
             print ' '.join(py_words)
         while not s.is_finished:
@@ -352,6 +389,7 @@ cdef class Parser:
         cdef State* new
         cdef Cont* cont
         cdef Beam beam = Beam(k, sent.length, self.guide.nr_class)
+        self.guide.cache.flush()
         while not beam.best_p().is_finished:
             beam.refresh()
             n_valid = self._fill_move_scores(sent, beam.psize, beam.parents, beam.next_moves,
@@ -436,7 +474,7 @@ cdef class Parser:
             cfg.write(u'allow_reduce\t%s\n' % self.moves.allow_reduce)
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
-            cfg.write(u'beam_width\t%d\n' % ','.join(self.moves.beam_width))
+            cfg.write(u'beam_width\t%d\n' % self.beam_width)
         
     def get_best_moves(self, Sentences sents, Sentences gold):
         """Get a list of move taken/oracle move pairs for output"""
