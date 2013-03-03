@@ -4,7 +4,6 @@ import index.hashes
 
 from pathlib import Path
 
-from features cimport set_n_labels
 DEF MAX_SENT_LEN = 300
 DEF MAX_TRANSITIONS = 300 / 2
 
@@ -31,7 +30,7 @@ def set_labels(name):
     print "Loaded %s labels" % name
     ROOT_LABEL = STR_TO_LABEL['ROOT']
     PUNCT_LABEL = STR_TO_LABEL['P']
-    set_n_labels(len(LABEL_STRS))
+    return LABEL_STRS
 
 
 def set_moves(moves):

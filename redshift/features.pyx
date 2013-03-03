@@ -2,7 +2,7 @@
 """
 Handle parser features
 """
-from libc.stdlib cimport malloc, free
+from libc.stdlib cimport malloc, free, calloc
 from libc.stdint cimport uint64_t
 
 from io_parse cimport Sentence
@@ -13,13 +13,6 @@ from _state cimport State, get_left_edge, get_right_edge, get_l, get_r, get_l2, 
 cimport redshift._state
 
 DEF CONTEXT_SIZE = 60
-
-# There must be a way to keep this in synch??
-N_LABELS = 0
-
-cdef set_n_labels(int n):
-    global N_LABELS
-    N_LABELS = n
 
 # Context elements
 # Ensure _context_size is always last; it ensures our compile-time setting
@@ -91,7 +84,7 @@ cdef enum:
     _context_size
 assert CONTEXT_SIZE == _context_size, "Set CONTEXT_SIZE to %d in features.pyx" % _context_size
 
-cdef int fill_context(size_t* context, size_t n0, size_t n1, size_t n2,
+cdef int fill_context(size_t* context, size_t nr_label, size_t n0, size_t n1, size_t n2,
                       size_t s0, size_t s1,
                       size_t s0_re, size_t s1_re,
                       size_t stack_len,
@@ -198,12 +191,12 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, size_t n2,
     context[S0llabs] = 0
     context[S0rlabs] = 0
     context[N0llabs] = 0
-    for j in range(N_LABELS):
+    for j in range(nr_label):
         # Decode the binary arrays representing the label sets into integers
         # Iterate in reverse, incrementing by the bit shifted by the idx
-        context[S0llabs] += (s0_llabels[(N_LABELS - 1) - j] << j)
-        context[S0rlabs] += (s0_rlabels[(N_LABELS - 1) - j] << j)
-        context[N0llabs] += (n0_llabels[(N_LABELS - 1) - j] << j)
+        context[S0llabs] += (s0_llabels[(nr_label - 1) - j] << j)
+        context[S0rlabs] += (s0_rlabels[(nr_label - 1) - j] << j)
+        context[N0llabs] += (n0_llabels[(nr_label - 1) - j] << j)
     d = n0 - s0
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
@@ -217,273 +210,237 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, size_t n2,
         context[depth] = stack_len
     return 1
 
-# Kernels:
-# Fastest:
-# i, S0, heads, labels
-#
-# Best grouping:
-# i, S0, S0lv, S0rv, S0l, S0r, S0l2, S0r2, N0l, N0l2, S0llabs, S0rlabs, S0ll, S0rl,
-# S0h, S0h2
-cdef Predicate* predicates
-cdef int make_predicates(bint add_extra, bint add_labels) except 0:
-    global N_PREDICATES, predicates
-    cdef object feats, feat
-    from_single = (
-        (S0w, S0p),
-        (S0w,),
-        (S0p,),
-        (N0w, N0p),
-        (N0w,),
-        (N0p,),
-        (N1w, N1p),
-        (N1w,),
-        (N1p,),
-        (N2w, N2p),
-        (N2w,),
-        (N2p,)
-    )
 
-    from_word_pairs = (
-        (S0w, S0p, N0w, N0p),
-        (S0w, S0p, N0w),
-        (S0w, N0w, N0p),
-        (S0w, S0p, N0p),
-        (S0p, N0w, N0p),
-        (S0w, N0w),
-        (S0p, N0p),
-        (N0p, N1p)
-    )
+cdef class FeatureSet:
+    def __cinit__(self, nr_label, bint add_extra=False):
+        self.nr_label = nr_label
+        self.n = self._make_predicates(add_extra)
+        self.feat_idx = get_feat_idx()
+        self.context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
+        self.features = <uint64_t*>calloc(self.n, sizeof(uint64_t))
 
-    from_three_words = (
-        (N0p, N1p, N2p),
-        (S0p, N0p, N1p),
-        (S0hp, S0p, N0p),
-        (S0p, S0lp, N0p),
-        (S0p, S0rp, N0p),
-        (S0p, N0p, N0lp)
-    )
 
-    distance = (
-        (dist, S0w),
-        (dist, S0p),
-        (dist, N0w),
-        (dist, N0p),
-        (dist, S0w, N0w),
-        (dist, S0p, N0p),
-    )
+    cdef uint64_t* extract(self, Sentence* sent, State* s) except NULL:
+        cdef int i, j
+        cdef size_t* context = self.context
+        cdef uint64_t* hashed = self.features
+        #cdef FeatIndex feat_idx = self.feat_idx
+        cdef size_t s0_re = 0
+        cdef size_t s1_re = 0
+        fill_context(context, self.nr_label, s.i, s.i + 1, s.i + 2,
+                     s.top, s.second, s0_re, s1_re, s.stack_len,
+                     sent.words, sent.pos, sent.browns,
+                     s.heads, s.labels, s.l_valencies, s.r_valencies,
+                     s.l_children[s.top], s.r_children[s.top],
+                     s.l_children[s.second], s.r_children[s.second],
+                     s.l_children[s.i],
+                     s.llabel_set[s.top], s.rlabel_set[s.top], s.llabel_set[s.i])
+        cdef bint seen_non_zero
+        cdef Predicate* preds = self.predicates
+        cdef int* args
+        cdef uint64_t* raws
+        cdef size_t n
+        for i in range(self.n):
+            raws = preds[i].raws
+            args = preds[i].args
+            n = preds[i].n
+            if n == 1:
+                hashed[i] = self.feat_idx.encode(<uint64_t*>&context[args[0]], 1, i)
+            else:
+                seen_non_zero = False
+                for j in range(n):
+                    raws[j] = context[args[j]]
+                    if not seen_non_zero and raws[j] != 0:
+                        seen_non_zero = True
+                if seen_non_zero:
+                    hashed[i] = self.feat_idx.encode(raws, n, i)
+                else:
+                    hashed[i] = 0
+        return hashed
 
-    valency = (
-        (S0w, S0rv),
-        (S0p, S0rv),
-        (S0w, S0lv),
-        (S0p, S0lv),
-        (N0w, N0lv),
-        (N0p, N0lv),
-    )
+    cdef int _make_predicates(self, bint add_extra) except 0:
+        cdef object feats, feat
+        from_single = (
+            (S0w, S0p),
+            (S0w,),
+            (S0p,),
+            (N0w, N0p),
+            (N0w,),
+            (N0p,),
+            (N1w, N1p),
+            (N1w,),
+            (N1p,),
+            (N2w, N2p),
+            (N2w,),
+            (N2p,)
+        )
 
-    unigrams = (
-        (S0hw,),
-        (S0hp,),
-        (S0lw,),
-        (S0lp,),
-        (S0rw,),
-        (S0rp,),
-        (N0lw,),
-        (N0lp,),
-    )
+        from_word_pairs = (
+            (S0w, S0p, N0w, N0p),
+            (S0w, S0p, N0w),
+            (S0w, N0w, N0p),
+            (S0w, S0p, N0p),
+            (S0p, N0w, N0p),
+            (S0w, N0w),
+            (S0p, N0p),
+            (N0p, N1p)
+        )
 
-    third_order = (
-        (S0h2w,),
-        (S0h2p,),
-        (S0l2w,),
-        (S0l2p,),
-        (S0r2w,),
-        (S0r2p,),
-        (N0l2w,),
-        (N0l2p,),
-        (S0p, S0lp, S0l2p),
-        (S0p, S0rp, S0r2p),
-        (S0p, S0hp, S0h2p),
-        (N0p, N0lp, N0l2p)
-    )
+        from_three_words = (
+            (N0p, N1p, N2p),
+            (S0p, N0p, N1p),
+            (S0hp, S0p, N0p),
+            (S0p, S0lp, N0p),
+            (S0p, S0rp, N0p),
+            (S0p, N0p, N0lp)
+        )
 
-    labels = (
-        (S0l,),
-        (S0ll,),
-        (S0rl,),
-        (N0ll,),
-        (S0hl,),
-        (S0l2l,),
-        (S0r2l,),
-        (N0l2l,),
-    )
-    label_sets = (
-        (S0w, S0rlabs),
-        (S0p, S0rlabs),
-        (S0w, S0llabs),
-        (S0p, S0llabs),
-        (N0w, N0llabs),
-        (N0p, N0llabs),
-    )
+        distance = (
+            (dist, S0w),
+            (dist, S0p),
+            (dist, N0w),
+            (dist, N0p),
+            (dist, S0w, N0w),
+            (dist, S0p, N0p),
+        )
 
-    # Extra
-    stack_second = (
-        # For reattach. We need these because if we left-clobber, we need to
-        # know what will be our head
-        (S1w,),
-        (S1p,),
-        (S1w, S1p),
-        (S1w, N0w),
-        (S1w, N0p),
-        (S1p, N0w),
-        (S1p, N0p),
-        (S1w, N1w),
-        (S1w, N1p),
-        (S1p, N1p),
-        (S1p, N1w),
-        (dist, S1w, N1w),
-        (dist, S1p, N0p, N1p),
-        # For right-raise (and others)
-        #(S1p, S0p, N0p),
-        #(S1w, S0w, N0w),
-        #(S1w, S0p, N0p),
-        #(depth, S1w, N1w),
-        # For right/left unshift
-        #(S0hp, S0w, S0p, S1w, S1p, S1l),
-        (S0hp, S0p, S1w),
-        (S0hp, S0w, S1p),
-        # For left-invert
-        (S0ll, S0w, N0w),
-        (S0ll, S0w, N0p),
-        (S0ll, S0p, N0w),
-        (S0lw, N0w),
-        (S0lp, N0p),
-        (S0lp, S0p, N0p),
-        (S0w, N0lv),
-        (S0p, N0lv),
-        # For right-lower
-        #(S1rep, S0w, N0w),
-        #(S1rew, S0w, N0p),
-        #(S1rew, N0w),
-        #(S1rew, S0w),
-        #(S1re_dist,),
-        #(S1re_dist, S0w),
-        #(S1rep, S0p),
-        # For "low-edge"
-        #(S0rew, N0w),
-        #(S0rep, N0w),
-        #(S0rew, N0p),
-        # Found by accident
-        # For new right lower
-        (S0r2w, S0rw),
-        (S0r2p, S0rp),
-        (S0r2w, S0rp),
-        (S0r2p, S0rw),
-        (S0w, S0rw),
-        (S0w, S0rp),
-        (S0p, S0rp),
-        (S0p, S0rw),
-        (S0p, S0rp),
-        (S0p, S0r2w, S0rw),
-        (S0p, S0r2p, S0rp),
-        (S0p, S0rp, N0w),
-        (S0p, S0rp, N0p),
-        (S0w, S0rp, N0p),
-    )
+        valency = (
+            (S0w, S0rv),
+            (S0p, S0rv),
+            (S0w, S0lv),
+            (S0p, S0lv),
+            (N0w, N0lv),
+            (N0p, N0lv),
+        )
 
-    feats = from_single + from_word_pairs + from_three_words + distance + valency + unigrams + third_order
-    if add_labels:
+        unigrams = (
+            (S0hw,),
+            (S0hp,),
+            (S0lw,),
+            (S0lp,),
+            (S0rw,),
+            (S0rp,),
+            (N0lw,),
+            (N0lp,),
+        )
+
+        third_order = (
+            (S0h2w,),
+            (S0h2p,),
+            (S0l2w,),
+            (S0l2p,),
+            (S0r2w,),
+            (S0r2p,),
+            (N0l2w,),
+            (N0l2p,),
+            (S0p, S0lp, S0l2p),
+            (S0p, S0rp, S0r2p),
+            (S0p, S0hp, S0h2p),
+            (N0p, N0lp, N0l2p)
+        )
+
+        labels = (
+            (S0l,),
+            (S0ll,),
+            (S0rl,),
+            (N0ll,),
+            (S0hl,),
+            (S0l2l,),
+            (S0r2l,),
+            (N0l2l,),
+        )
+        label_sets = (
+            (S0w, S0rlabs),
+            (S0p, S0rlabs),
+            (S0w, S0llabs),
+            (S0p, S0llabs),
+            (N0w, N0llabs),
+            (N0p, N0llabs),
+        )
+
+        # Extra
+        stack_second = (
+            # For reattach. We need these because if we left-clobber, we need to
+            # know what will be our head
+            (S1w,),
+            (S1p,),
+            (S1w, S1p),
+            (S1w, N0w),
+            (S1w, N0p),
+            (S1p, N0w),
+            (S1p, N0p),
+            (S1w, N1w),
+            (S1w, N1p),
+            (S1p, N1p),
+            (S1p, N1w),
+            (dist, S1w, N1w),
+            (dist, S1p, N0p, N1p),
+            # For right-raise (and others)
+            #(S1p, S0p, N0p),
+            #(S1w, S0w, N0w),
+            #(S1w, S0p, N0p),
+            #(depth, S1w, N1w),
+            # For right/left unshift
+            #(S0hp, S0w, S0p, S1w, S1p, S1l),
+            (S0hp, S0p, S1w),
+            (S0hp, S0w, S1p),
+            # For left-invert
+            (S0ll, S0w, N0w),
+            (S0ll, S0w, N0p),
+            (S0ll, S0p, N0w),
+            (S0lw, N0w),
+            (S0lp, N0p),
+            (S0lp, S0p, N0p),
+            (S0w, N0lv),
+            (S0p, N0lv),
+            # For right-lower
+            #(S1rep, S0w, N0w),
+            #(S1rew, S0w, N0p),
+            #(S1rew, N0w),
+            #(S1rew, S0w),
+            #(S1re_dist,),
+            #(S1re_dist, S0w),
+            #(S1rep, S0p),
+            # For "low-edge"
+            #(S0rew, N0w),
+            #(S0rep, N0w),
+            #(S0rew, N0p),
+            # Found by accident
+            # For new right lower
+            (S0r2w, S0rw),
+            (S0r2p, S0rp),
+            (S0r2w, S0rp),
+            (S0r2p, S0rw),
+            (S0w, S0rw),
+            (S0w, S0rp),
+            (S0p, S0rp),
+            (S0p, S0rw),
+            (S0p, S0rp),
+            (S0p, S0r2w, S0rw),
+            (S0p, S0r2p, S0rp),
+            (S0p, S0rp, N0w),
+            (S0p, S0rp, N0p),
+            (S0w, S0rp, N0p),
+        )
+
+        feats = from_single + from_word_pairs + from_three_words + distance + valency + unigrams + third_order
         feats += labels
         feats += label_sets
-    if add_extra:
-        print "Using stack-second features"
-        feats += stack_second
-    N_PREDICATES = len(feats)
-    predicates = <Predicate*>malloc(N_PREDICATES * sizeof(Predicate))
-    for i, feat in enumerate(feats):
-        predicates[i] = make_predicate(i, feat)
-    return N_PREDICATES
+        if add_extra:
+            print "Using stack-second features"
+            feats += stack_second
+        n_preds = len(feats)
+        print n_preds
+        self.predicates = <Predicate*>malloc(n_preds * sizeof(Predicate))
+        cdef Predicate pred
+        for id_, args in enumerate(feats):
+            pred = Predicate(id=id_, n=len(args))
+            pred.raws = <uint64_t*>malloc(len(args) * sizeof(uint64_t))
+            pred.args = <int*>malloc(len(args) * sizeof(int))
+            for i, element in enumerate(args):
+                pred.args[i] = element
+            # TODO: Add estimates for each feature type
+            pred.expected_size = 1000
+            self.predicates[id_] = pred
+        return n_preds
 
-
-cdef Predicate make_predicate(int id, object args):
-    cdef int element
-    cdef Predicate pred = Predicate(id=id, n=len(args))
-    pred.raws = <uint64_t*>malloc(len(args) * sizeof(uint64_t))
-    pred.args = <int*>malloc(len(args) * sizeof(int))
-    for i, element in enumerate(args):
-        pred.args[i] = element
-    # TODO: Add estimates for each feature type
-    pred.expected_size = 1000
-    return pred
-
-
-cdef size_t* init_context():
-    return <size_t*>malloc(CONTEXT_SIZE * sizeof(size_t))
-
-
-cdef uint64_t* init_hashed_features():
-    return <uint64_t*>malloc(N_PREDICATES * sizeof(uint64_t))
-
-cdef int fill_kernel(State* s, size_t* kernel) except -1:
-    # TODO: Adapt this to swap for multiple feature sets. Or maybe just use a different
-    # function?
-    # Kernel for Zhang:
-    # i, S0, S0lv, S0rv, S0l, S0r, S0l2, S0r2, N0l, N0l2, S0llabs, S0rlabs,
-    # S0ll, S0rl, S0h, S0h2
-    kernel[0] = s.i
-    kernel[1] = s.n
-    kernel[2] = s.top
-    kernel[3] = s.second
-    kernel[4] = s.l_valencies[s.top]
-    kernel[5] = s.r_valencies[s.top]
-    kernel[6] = get_l(s, s.top)
-    kernel[7] = get_r(s, s.top)
-    kernel[8] = get_l2(s, s.top)
-    kernel[9] = get_r2(s, s.top)
-    kernel[10] = get_l(s, s.i)
-    kernel[11] = get_l2(s, s.i)
-    kernel[12] = s.heads[s.top]
-    kernel[13] = s.heads[s.heads[s.top]]
-    kernel[14] = s.labels[s.top]
-    # Actually the whole label set matters for s.top and s.i, but this should do
-    kernel[15] = s.labels[get_l(s, s.top)]
-    kernel[16] = s.labels[get_r(s, s.top)]
-    kernel[17] = s.labels[get_l2(s, s.top)]
-    kernel[18] = s.labels[get_r2(s, s.top)]
-    kernel[19] = s.labels[s.l_children[s.top][0]]
-    kernel[20] = s.labels[s.r_children[s.top][0]]
-    kernel[21] = s.labels[get_l(s, s.i)]
-
-
-cdef int extract(size_t* context, uint64_t* hashed,
-        Sentence* sent, State* s) except -1:
-    cdef int i, j
-    cdef size_t out
-    cdef Predicate predicate
-    global predicates
-    #cdef size_t s0_re = get_right_edge(s, s.top)
-    #cdef size_t s1_re = get_right_edge(s, s.second)
-    cdef size_t s0_re = 0
-    cdef size_t s1_re = 0
-    fill_context(context, s.i, s.i + 1, s.i + 2,
-                 s.top, s.second, s0_re, s1_re, s.stack_len,
-                 sent.words, sent.pos, sent.browns,
-                 s.heads, s.labels, s.l_valencies, s.r_valencies,
-                 s.l_children[s.top], s.r_children[s.top],
-                 s.l_children[s.second], s.r_children[s.second],
-                 s.l_children[s.i],
-                 s.llabel_set[s.top], s.rlabel_set[s.top], s.llabel_set[s.i])
-    cdef bint seen_non_zero
-    cdef FeatIndex feat_idx = get_feat_idx()
-    for i in range(N_PREDICATES):
-        predicate = predicates[i]
-        seen_non_zero = False
-        for j in range(predicate.n):
-            predicate.raws[j] = context[predicate.args[j]]
-            if not seen_non_zero and predicate.raws[j] != 0:
-                seen_non_zero = True
-        if seen_non_zero or predicate.n == 1:
-            out = feat_idx.encode(predicate.raws, predicate.n, i)
-            hashed[i] = out
-        else:
-            hashed[i] = 0

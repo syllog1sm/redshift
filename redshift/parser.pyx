@@ -4,7 +4,7 @@ MALT-style dependency parser
 """
 cimport cython
 import random
-from libc.stdlib cimport malloc, free
+from libc.stdlib cimport malloc, free, calloc
 from pathlib import Path
 from collections import defaultdict
 import sh
@@ -18,18 +18,18 @@ from io_parse cimport Sentence
 from io_parse cimport Sentences
 from io_parse cimport make_sentence
 cimport features
+from features cimport FeatureSet
 
 from io_parse import LABEL_STRS, STR_TO_LABEL
 
 import index.hashes
-from index.hashes cimport InstanceCounter
+from index.hashes cimport InstanceCounter, FeatIndex
+cimport index.hashes
 
 from svm.cy_svm cimport Model, LibLinear, Perceptron
 
 from libc.stdint cimport uint64_t, int64_t
 from libc.stdlib cimport qsort
-
-cdef int CONTEXT_SIZE = features.CONTEXT_SIZE
 
 from _state cimport *
 
@@ -80,14 +80,10 @@ def _parse_labels_str(labels_str):
 
 
 cdef class Parser:
-    cdef size_t n_features
+    cdef FeatureSet features
     cdef Perceptron guide
     cdef object model_dir
-    cdef Sentence* sentence
-    cdef int n_preds
-    cdef size_t* _context
     cdef size_t beam_width
-    cdef uint64_t* _hashed_feats
     cdef TransitionSystem moves
     cdef InstanceCounter inst_counts
     cdef object add_extra
@@ -98,7 +94,7 @@ cdef class Parser:
     def __cinit__(self, model_dir, clean=False, train_alg='static',
                   add_extra=True, label_set='MALT', feat_thresh=5,
                   allow_reattach=False, allow_reduce=False,
-                  reuse_idx=False, shifty=False, beam_width=1):
+                  reuse_idx=False, beam_width=1):
         model_dir = Path(model_dir)
         if not clean:
             params = dict([line.split() for line in model_dir.join('parser.cfg').open()])
@@ -110,7 +106,6 @@ cdef class Parser:
             feat_thresh = int(params['feat_thresh'])
             allow_reattach = params['allow_reattach'] == 'True'
             allow_reduce = params['allow_reduce'] == 'True'
-            shifty = params.get('shifty') == 'True'
             l_labels = params['left_labels']
             r_labels = params['right_labels']
             beam_width = int(params['beam_width'])
@@ -123,26 +118,24 @@ cdef class Parser:
         else:
             print 'Baseline'
         self.model_dir = self.setup_model_dir(model_dir, clean)
-        io_parse.set_labels(label_set)
-        self.n_preds = features.make_predicates(add_extra, True)
+        labels = io_parse.set_labels(label_set)
+        self.features = FeatureSet(len(labels), add_extra)
         self.add_extra = add_extra
         self.label_set = label_set
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
         self.beam_width = beam_width
         if clean == True:
-            self.new_idx(self.model_dir, self.n_preds)
+            self.new_idx(self.model_dir, self.features.n)
         else:
-            self.load_idx(self.model_dir, self.n_preds)
-        self.moves = TransitionSystem(io_parse.LABEL_STRS, allow_reattach=allow_reattach,
-                                      allow_reduce=allow_reduce, shifty=shifty)
+            self.load_idx(self.model_dir, self.features.n)
+        self.moves = TransitionSystem(labels, allow_reattach=allow_reattach,
+                                      allow_reduce=allow_reduce)
         if not clean:
             self.moves.set_labels(_parse_labels_str(l_labels), _parse_labels_str(r_labels))
         guide_loc = self.model_dir.join('model')
         n_labels = len(io_parse.LABEL_STRS)
-        self.guide = Perceptron(self.moves.n_class, guide_loc)
-        self._context = features.init_context()
-        self._hashed_feats = features.init_hashed_features()
+        self.guide = Perceptron(self.moves.max_class, guide_loc)
         self.inst_counts = InstanceCounter()
 
     def setup_model_dir(self, loc, clean):
@@ -172,7 +165,7 @@ cdef class Parser:
                 else:
                     seen_r_labels.add(label)
         move_classes = self.moves.set_labels(seen_l_labels, seen_r_labels)
-        self.guide.set_classes(move_classes)
+        self.guide.set_classes(range(move_classes))
         self.write_cfg(self.model_dir.join('parser.cfg'))
         indices = range(sents.length)
         for n in range(n_iter):
@@ -188,9 +181,14 @@ cdef class Parser:
                 for weights in deltas:
                     self.guide.batch_update(weights)
             move_acc = (float(self.guide.n_corr) / self.guide.total+1e-100) * 100
-            print "#%d: Moves %d/%d=%.2f" % (n, self.guide.n_corr,
-                                             self.guide.total, move_acc)
-            print '%d cache hit, %d cache miss' % (self.guide.cache.n_hit, self.guide.cache.n_miss)
+            cache_hits = self.guide.cache.n_hit
+            total = self.guide.cache.n_hit + self.guide.cache.n_miss
+            cache_use = (float(cache_hits) / total)*100
+            print "#%d: Moves %d/%d=%.2f. %.1f% cache use" % (n, self.guide.n_corr,
+                                             self.guide.total, move_acc, cache_use)
+            if move_acc > 99.5:
+                print "Converged!"
+                break
             if self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
             self.guide.n_corr = 0
@@ -249,26 +247,22 @@ cdef class Parser:
             Cont* next_moves, size_t nr_moves) except -1:
         cdef size_t i, j
         cdef State* s
-        cdef size_t* context = self._context
-        cdef uint64_t* feats = self._hashed_feats
-        cdef size_t n_feats = self.n_preds
-        cdef uint64_t* labels = self.guide.get_labels()
+        cdef uint64_t* feats
+        cdef size_t n_feats = self.features.n
         cdef bint cache_hit = False
         cdef size_t c = 0
         cdef size_t n_valid = 0
-        # TODO: Fix this ugly hard-coding
-        cdef size_t[21] kernel
         for i in range(k):
             s = parents[i]
-            features.fill_kernel(s, kernel)
-            scores = self.guide.cache.lookup(21, kernel, &cache_hit)
+            fill_kernel(s)
+            scores = self.guide.cache.lookup(sizeof(s.kernel), <void*>&s.kernel, &cache_hit)
             if not cache_hit:
-                features.extract(context, feats, sent, s)
+                feats = self.features.extract(sent, s)
                 self.guide.model.get_scores(n_feats, feats, scores)
             valid = self.moves.get_valid(s)
             for j in range(self.guide.nr_class):
                 next_moves[c].parent = i
-                next_moves[c].clas = labels[j]
+                next_moves[c].clas = j
                 if valid[next_moves[c].clas]:
                     s.nr_kids += 1
                     next_moves[c].score = scores[j] + s.score
@@ -279,9 +273,8 @@ cdef class Parser:
         return n_valid
 
     cdef dict _count_feats(self, Sentence* sent, size_t t, size_t* phist, size_t* ghist):
-        cdef size_t* context = self._context
-        cdef uint64_t* feats = self._hashed_feats
-        cdef size_t n_feats = self.n_preds
+        cdef size_t n_feats = self.features.n
+        cdef uint64_t* feats
         cdef size_t diverged = 0
         cdef dict counts = {}
         cdef State* gold_state = init_state(sent.length)
@@ -294,7 +287,7 @@ cdef class Parser:
         cdef State* pred_state = init_state(sent.length)
         copy_state(pred_state, gold_state)
         for i in range(d, t):
-            features.extract(context, feats, sent, gold_state)
+            feats = self.features.extract(sent, gold_state)
             clas = ghist[i]
             fcounts = counts.setdefault(clas, {})
             for f in range(n_feats):
@@ -303,7 +296,7 @@ cdef class Parser:
             self.moves.transition(clas, gold_state)
         free_state(gold_state)
         for i in range(d, t):
-            features.extract(context, feats, sent, pred_state)
+            feats = self.features.extract(sent, pred_state)
             clas = phist[i]
             fcounts = counts.setdefault(clas, {})
             for f in range(n_feats):
@@ -319,18 +312,17 @@ cdef class Parser:
         cdef size_t* g_labels = sent.parse.labels
         cdef size_t* g_heads = sent.parse.heads
 
-        cdef size_t* context = self._context
-        cdef uint64_t* feats = self._hashed_feats
-        cdef size_t n_feats = self.n_preds
+        cdef size_t n_feats = self.features.n
         cdef State* s = init_state(sent.length)
         cdef size_t move = 0
         cdef size_t label = 0
         cdef size_t _ = 0
         cdef bint online = self.train_alg == 'online'
+        cdef FeatIndex feat_idx = index.hashes.get_feat_idx()
         if DEBUG:
             print ' '.join(py_words)
         while not s.is_finished:
-            features.extract(context, feats, sent, s)
+            feats = self.features.extract(sent, s)
             valid = self.moves.get_valid(s)
             pred = self.predict(n_feats, feats, valid, &s.guess_labels[s.i])
             if online:
@@ -363,14 +355,13 @@ cdef class Parser:
         cdef size_t move = 0
         cdef size_t label = 0
         cdef size_t clas
-        cdef size_t n_preds = self.n_preds
-        cdef size_t* context = self._context
-        cdef uint64_t* feats = self._hashed_feats
+        cdef size_t n_preds = self.features.n
+        cdef uint64_t* feats
         cdef double* scores
         s = init_state(sent.length)
         sent.parse.n_moves = 0
         while not s.is_finished:
-            features.extract(context, feats, sent, s)
+            feats = self.features.extract(sent, s)
             clas = self.predict(n_preds, feats, self.moves.get_valid(s),
                                   &s.guess_labels[s.i])
             sent.parse.moves[s.t] = clas
@@ -446,10 +437,6 @@ cdef class Parser:
     def load(self):
         self.guide.load(self.model_dir.join('model'))
 
-    def __dealloc__(self):
-        free(self._context)
-        free(self._hashed_feats)
-
     def new_idx(self, model_dir, size_t n_predicates):
         index.hashes.init_feat_idx(n_predicates, model_dir.join('features'))
         index.hashes.init_word_idx(model_dir.join('words'))
@@ -471,7 +458,6 @@ cdef class Parser:
             cfg.write(u'label_set\t%s\n' % self.label_set)
             cfg.write(u'feat_thresh\t%d\n' % self.feat_thresh)
             cfg.write(u'allow_reattach\t%s\n' % self.moves.allow_reattach)
-            cfg.write(u'shifty\t%s\n' % self.moves.shifty)
             cfg.write(u'allow_reduce\t%s\n' % self.moves.allow_reduce)
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
@@ -501,18 +487,18 @@ cdef class Parser:
                 oracle = self.moves.get_oracle(s, g_heads, g_labels)
                 best_strs = []
                 best_ids = set()
-                for clas in range(self.moves.n_class):
+                for clas in range(self.moves.nr_class):
                     if oracle[clas]:
-                        move = self.moves.class_to_move(clas)
-                        label = self.moves.class_to_label(clas)
+                        move = self.moves.moves[clas]
+                        label = self.moves.labels[clas]
                         if move not in best_ids:
                             best_strs.append(lmove_to_str(move, label))
                         best_ids.add(move)
                 best_strs = ','.join(best_strs)
                 best_id_str = ','.join(map(str, sorted(best_ids)))
                 parse_class = sent.parse.moves[s.t]
-                state_str = transition_to_str(s, self.moves.class_to_move(parse_class),
-                                              self.moves.class_to_label(parse_class),
+                state_str = transition_to_str(s, self.moves.moves[parse_class],
+                                              self.moves.labels[parse_class],
                                               tokens)
                 parse_move_str = lmove_to_str(move, label)
                 if move not in best_ids:
@@ -632,94 +618,73 @@ cdef class Beam:
 cdef class TransitionSystem:
     cdef bint allow_reattach
     cdef bint allow_reduce
-    cdef bint shifty
     cdef size_t n_labels
     cdef object py_labels
-    cdef size_t[N_MOVES] offsets
     cdef bint* _oracle
-    cdef bint* right_arcs
-    cdef bint* left_arcs
-    cdef list left_labels
-    cdef list right_labels
-    cdef size_t n_l_classes
-    cdef size_t n_r_classes
+    cdef size_t* labels
+    cdef size_t* moves
     cdef size_t* l_classes
     cdef size_t* r_classes
-    cdef size_t n_class
+    cdef list left_labels
+    cdef list right_labels
+    cdef size_t nr_class
+    cdef size_t max_class
     cdef size_t s_id
     cdef size_t d_id
     cdef size_t l_start
     cdef size_t l_end
     cdef size_t r_start
     cdef size_t r_end
-    cdef size_t w_start
-    cdef size_t w_end
-    cdef size_t v_id
-    cdef int n_lmoves
 
     def __cinit__(self, object labels, allow_reattach=False,
-                  allow_reduce=False, shifty=False):
+                  allow_reduce=False):
         self.n_labels = len(labels)
         self.py_labels = labels
         self.allow_reattach = allow_reattach
         self.allow_reduce = allow_reduce
-        self.shifty = shifty
-        self.n_class = N_MOVES * self.n_labels
-        self._oracle = <bint*>malloc(self.n_class * sizeof(bint))
-        self.right_arcs = <bint*>malloc(self.n_class * sizeof(bint))
-        self.left_arcs = <bint*>malloc(self.n_class * sizeof(bint))
-        self.s_id = SHIFT * self.n_labels
-        self.d_id = REDUCE * self.n_labels
-        self.l_start = LEFT * self.n_labels
-        self.l_end = (LEFT + 1) * self.n_labels
-        self.r_start = RIGHT * self.n_labels
-        self.r_end = (RIGHT + 1) * self.n_labels
-        for i in range(self.n_class):
-            self._oracle[i] = False
-            self.right_arcs[i] = False
-            self.left_arcs[i] = False
-        for i in range(self.r_start, self.r_end):
-            self.right_arcs[i] = True
-        for i in range(self.l_start, self.l_end):
-            self.left_arcs[i] = True
+        self.nr_class = 0
+        max_classes = N_MOVES * len(labels)
+        self.max_class = max_classes
+        self._oracle = <bint*>calloc(max_classes, sizeof(bint))
+        self.labels = <size_t*>calloc(max_classes, sizeof(size_t))
+        self.moves = <size_t*>calloc(max_classes, sizeof(size_t))
+        self.l_classes = <size_t*>calloc(self.n_labels, sizeof(size_t))
+        self.r_classes = <size_t*>calloc(self.n_labels, sizeof(size_t))
+        self.s_id = 0
+        self.d_id = 1
+        self.l_start = 2
+        self.l_end = 0
+        self.r_start = 0
+        self.r_end = 0
 
     def set_labels(self, left_labels, right_labels):
         self.left_labels = [self.py_labels[l] for l in sorted(left_labels)]
         self.right_labels = [self.py_labels[l] for l in sorted(right_labels)]
-        self.l_classes = <size_t*>malloc(len(left_labels) * sizeof(size_t))
-        self.r_classes = <size_t*>malloc(len(right_labels) * sizeof(size_t))
-        self.n_l_classes = len(left_labels)
-        self.n_r_classes = len(right_labels)
-        valid_classes = [self.d_id]
-        valid_classes.append(self.s_id)
-        for i in range(self.n_class):
-            self.right_arcs[i] = False
-            self.left_arcs[i] = False
-        for i, label in enumerate(left_labels):
-            clas = self.pack_class(label, LEFT)
-            valid_classes.append(clas)
-            self.l_classes[i] = clas
-            self.left_arcs[clas] = True
-        for i, label in enumerate(right_labels):
-            clas = self.pack_class(label, RIGHT)
-            valid_classes.append(clas)
-            self.right_arcs[clas] = True
-            self.r_classes[i] = clas
-        return valid_classes
-
-    cdef size_t pack_class(self, size_t label, size_t move):
-        return move * self.n_labels + label
-
-    cdef size_t class_to_move(self, size_t clas):
-        return clas / self.n_labels
-
-    cdef size_t class_to_label(self, size_t clas):
-        return clas % self.n_labels
-
+        self.labels[self.s_id] = 0
+        self.labels[self.d_id] = 0
+        self.moves[self.s_id] = <int>SHIFT
+        self.moves[self.d_id] = <int>REDUCE
+        clas = self.l_start
+        for label in left_labels:
+            self.moves[clas] = <int>LEFT
+            self.labels[clas] = label
+            self.l_classes[label] = clas
+            clas += 1
+        self.l_end = clas
+        self.r_start = clas
+        for label in right_labels:
+            self.moves[clas] = <int>RIGHT
+            self.labels[clas] = label
+            self.r_classes[label] = clas
+            clas += 1
+        self.r_end = clas
+        self.nr_class = clas
+        return clas
+        
     cdef int transition(self, size_t clas, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc, move, label
-        move = self.class_to_move(clas)
-        label = self.class_to_label(clas)
+        move = self.moves[clas]
+        label = self.labels[clas]
         s.history[s.t] = clas
         s.t += 1 
         if move == SHIFT:
@@ -744,7 +709,7 @@ cdef class TransitionSystem:
             add_dep(s, head, child, label)
             push_stack(s)
         else:
-            raise StandardError(lmove_to_str(move, label))
+            raise StandardError(clas)
         if s.i == (s.n - 1):
             s.at_end_of_buffer = True
         if s.at_end_of_buffer and s.stack_len == 1:
@@ -753,7 +718,7 @@ cdef class TransitionSystem:
     cdef bint* get_oracle(self, State* s, size_t* heads, size_t* labels) except NULL:
         cdef size_t i
         cdef bint* oracle = self._oracle
-        for i in range(self.n_class):
+        for i in range(self.nr_class):
             oracle[i] = False
         if s.stack_len == 1 and not s.at_end_of_buffer:
             oracle[self.s_id] = True
@@ -769,18 +734,18 @@ cdef class TransitionSystem:
     cdef bint* get_valid(self, State* s):
         cdef size_t i
         cdef bint* valid = self._oracle
-        for i in range(self.n_class):
+        for i in range(self.nr_class):
             valid[i] = False
         if not s.at_end_of_buffer:
             valid[self.s_id] = True
             if s.stack_len == 1:
                 return valid
-            for i in range(self.n_r_classes):
-                valid[self.r_classes[i]] = True
+            for i in range(self.r_start, self.r_end):
+                valid[i] = True
         if s.stack_len != 1:
             valid[self.d_id] = s.heads[s.top] != 0
-            for i in range(self.n_l_classes):
-                valid[self.l_classes[i]] = self.allow_reattach or s.heads[s.top] == 0
+            for i in range(self.l_start, self.l_end):
+                valid[i] = self.allow_reattach or s.heads[s.top] == 0
         if s.stack_len >= 3 and self.allow_reduce:
             valid[self.d_id] = True
         return valid  
@@ -789,9 +754,9 @@ cdef class TransitionSystem:
         if s.stack_len == 1:
             return self.s_id
         elif not s.at_end_of_buffer and heads[s.i] == s.top:
-            return self.pack_class(labels[s.i], RIGHT)
+            return self.r_classes[labels[s.i]]
         elif heads[s.top] == s.i and (self.allow_reattach or s.heads[s.top] == 0):
-            return self.pack_class(labels[s.top], LEFT)
+            return self.l_classes[labels[s.top]]
         elif self.d_oracle(s, heads, labels, self._oracle):
             return self.d_id
         elif not s.at_end_of_buffer and self.s_oracle(s, heads, labels, self._oracle):
@@ -813,7 +778,7 @@ cdef class TransitionSystem:
                        bint* oracle):
         cdef size_t i, buff_i, stack_i
         if heads[s.i] == s.top:
-            oracle[self.pack_class(labels[s.i], RIGHT)] = True
+            oracle[self.r_classes[labels[s.i]]] = True
             return True
         if has_head_in_buffer(s, s.i, heads):
             return False
@@ -821,8 +786,8 @@ cdef class TransitionSystem:
             return False
         if has_head_in_stack(s, s.i, heads):
             return False
-        for i in range(self.n_r_classes):
-            oracle[self.r_classes[i]] = True
+        for i in range(self.r_start, self.r_end):
+            oracle[i] = True
         return True
 
     cdef bint d_oracle(self, State *s, size_t* g_heads, size_t* g_labels,
@@ -845,7 +810,7 @@ cdef class TransitionSystem:
         if s.heads[s.top] != 0 and not self.allow_reattach:
             return False
         if heads[s.top] == s.i:
-            oracle[self.pack_class(labels[s.top], LEFT)] = True
+            oracle[self.l_classes[labels[s.top]]] = True
             return True
         if has_head_in_buffer(s, s.top, heads):
             return False
@@ -855,8 +820,8 @@ cdef class TransitionSystem:
             return False
         if self.allow_reduce and heads[s.top] == s.second:
             return False
-        for i in range(self.n_l_classes):
-            oracle[self.l_classes[i]] = True
+        for i in range(self.l_start, self.l_end):
+            oracle[i] = True
         return True
 
 

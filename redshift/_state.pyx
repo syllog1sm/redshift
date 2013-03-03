@@ -1,6 +1,5 @@
 # cython: profile=True
 import io_parse
-from features cimport N_LABELS
 
 from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy
@@ -76,6 +75,28 @@ cdef size_t pop_stack(State *s) except 0:
     assert popped != 0
     return popped
 
+cdef int fill_kernel(State *s) except -1:
+    s.kernel.i = s.i
+    s.kernel.s0 = s.top
+    s.kernel.hs0 = s.heads[s.top]
+    s.kernel.h2s0 = s.heads[s.heads[s.top]]
+    s.kernel.s0_lv = s.l_valencies[s.top]
+    s.kernel.s0_rv = s.r_valencies[s.top]
+    s.kernel.s0l = get_l(s, s.top)
+    s.kernel.s0r = get_r(s, s.top)
+    s.kernel.s0l2 = get_l2(s, s.top)
+    s.kernel.s0r2 = get_r2(s, s.top)
+    s.kernel.Ls0 = s.labels[s.top]
+    s.kernel.Ls0l = s.labels[get_l(s, s.top)]
+    s.kernel.Ls0r = s.labels[get_r(s, s.top)]
+    s.kernel.Ls0l2 = s.labels[get_l2(s, s.top)]
+    s.kernel.Ls0r2 = s.labels[get_r2(s, s.top)]
+    s.kernel.Ls0l0 = s.labels[s.l_children[s.top][0]]
+    s.kernel.Ls0r0 = s.labels[s.r_children[s.top][0]]
+    s.kernel.n0l = get_l(s, s.i)
+    s.kernel.n0l2 = get_l2(s, s.i)
+    s.kernel.Ln0l = s.labels[get_l(s, s.i)]
+    s.kernel.Ls0l2 = s.labels[get_l2(s, s.i)]
 
 cdef int push_stack(State *s) except -1:
     s.second = s.top
@@ -85,22 +106,22 @@ cdef int push_stack(State *s) except -1:
     assert s.top <= s.n
     s.i += 1
 
-cdef int get_l(State *s, size_t head) except -1:
+cdef size_t get_l(State *s, size_t head):
     if s.l_valencies[head] == 0:
         return 0
     return s.l_children[head][s.l_valencies[head] - 1]
 
-cdef int get_l2(State *s, size_t head) except -1:
+cdef size_t get_l2(State *s, size_t head):
     if s.l_valencies[head] < 2:
         return 0
     return s.l_children[head][s.l_valencies[head] - 2]
 
-cdef int get_r(State *s, size_t head) except -1:
+cdef size_t get_r(State *s, size_t head):
     if s.r_valencies[head] == 0:
         return 0
     return s.r_children[head][s.r_valencies[head] - 1]
 
-cdef int get_r2(State *s, size_t head) except -1:
+cdef size_t get_r2(State *s, size_t head):
     if s.r_valencies[head] < 2:
         return 0
     return s.r_children[head][s.r_valencies[head] - 2]
