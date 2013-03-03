@@ -42,7 +42,7 @@ cdef class MultitronParameters:
                         uint64_t n_feats, uint64_t* features, double weight) except -1
 
     cdef int update_single(self, uint64_t label, uint64_t f, double weight) except -1
-    cdef double* get_scores(self, uint64_t n_feats, uint64_t* features)
+    cdef int get_scores(self, uint64_t n_feats, uint64_t* features, double* scores) except -1
     cdef uint64_t predict_best_class(self, uint64_t n_feats, uint64_t* features)
     cdef int64_t finalize(self) except -1
 

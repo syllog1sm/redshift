@@ -1,7 +1,9 @@
 from libc.stdlib cimport malloc, free
+from libc.string cimport memcpy
 import os
 import sys
 from libc.stdint cimport uint64_t, int64_t
+cimport index.hashes
 
 from pathlib import Path
 
@@ -182,8 +184,6 @@ cdef class Model:
     def load(self, path):
         raise NotImplemented
 
-# If this is a problem we can get the client to specify it
-MAX_FEATS = 10000000
 cdef class Perceptron(Model):
     def __cinit__(self, max_classes, model_loc, int64_t solver_type=14, float C=1,
                   float eps=0.01, clean=False):
@@ -197,6 +197,8 @@ cdef class Perceptron(Model):
         self.solver_type = solver_type
         self.n_corr = 0.0
         self.total = 0.0
+        self.use_cache = True
+        self.cache = index.hashes.ScoresCache(max_classes) 
 
     def set_nr_class(self, nr_class):
         self.nr_class = nr_class
@@ -224,13 +226,13 @@ cdef class Perceptron(Model):
             self.n_corr += 1
         self.total += 1
 
-    def global_update(self, pred, gold):
-        feats = set(gold.keys())
-        feats.update(pred.keys())
+    def batch_update(self, deltas):
+        
         self.model.tick()
-        for f in feats:
-            if f[1] != 0:
-                self.model.update_single(f[0], f[1], gold.get(f, 0) - pred.get(f, 0))
+        for clas, feats in deltas.items():
+            for f, d in feats.items():
+                if f != 0:
+                    self.model.update_single(clas, f, d)
 
     cdef uint64_t* get_labels(self):
         return self.model.labels
@@ -241,6 +243,9 @@ cdef class Perceptron(Model):
     def prune(self, thresh):
         self.model.prune_rares(thresh)
 
+    def flush_cache(self):
+        self.cache.flush()
+
     cdef int predict_from_ints(self, int n, uint64_t* feats, bint* valid_classes) except -1:
         cdef:
             uint64_t i
@@ -249,7 +254,8 @@ cdef class Perceptron(Model):
             double score, best_score
             uint64_t* labels
         cdef bint seen_valid = False
-        cdef double* scores = self.model.get_scores(n, feats)
+        self.model.get_scores(n, feats, self.model.scores)
+        cdef double* scores = self.model.scores
         labels = self.model.labels
         best_score = 0
         best_class = 0
@@ -264,7 +270,8 @@ cdef class Perceptron(Model):
         return best_class
 
     cdef double* predict_scores(self, int n, uint64_t* feats):
-        return self.model.get_scores(n, feats)
+        self.model.get_scores(n, feats, self.model.scores)
+        return self.model.scores
 
     cdef int predict_single(self, int n, uint64_t* feats) except -1:
         return self.model.predict_best_class(n, feats)

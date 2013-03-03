@@ -174,10 +174,9 @@ cdef class MultitronParameters:
             self.W[f].n_upd += 1
             update_param(self.W[f], i, self.now, weight)
 
-    cdef double* get_scores(self, uint64_t n_feats, uint64_t* features):
+    cdef int get_scores(self, uint64_t n_feats, uint64_t* features, double* scores) except -1:
         cdef uint64_t i, f, j
         cdef Param* param
-        cdef double* scores = self.scores
         cdef uint64_t max_param = self.max_param
         cdef Feature* feat
 
@@ -190,17 +189,16 @@ cdef class MultitronParameters:
                 for j in range(feat.n_class):
                     param = feat.params[j]
                     scores[param.clas] += param.w
-        return scores
 
     cdef uint64_t predict_best_class(self, uint64_t n_feats, uint64_t* features):
         cdef uint64_t i
-        cdef double* scores = self.get_scores(n_feats, features)
+        self.get_scores(n_feats, features, self.scores)
         cdef int best_i = 0
-        cdef double best = scores[0]
+        cdef double best = self.scores[0]
         for i in range(self.n_classes):
-            if best < scores[i]:
+            if best < self.scores[i]:
                 best_i = i
-                best = scores[i]
+                best = self.scores[i]
         return self.labels[best_i]
 
     cdef int64_t finalize(self) except -1:

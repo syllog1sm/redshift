@@ -1,5 +1,6 @@
 from libc.stdint cimport uint64_t, int64_t
 cimport svm.multitron
+cimport index.hashes
 
 cdef extern from "linear.h":
     cdef struct feature_node:
@@ -49,6 +50,7 @@ cdef extern from "linear.h":
 
     cdef bint check_probability_model(model*)
 
+
 cdef class Problem:
     cdef problem *thisptr
     cdef int i
@@ -89,6 +91,8 @@ cdef class Model:
     #def train(self)
 
 cdef class Perceptron(Model):
+    cdef index.hashes.ScoresCache cache
+    cdef bint use_cache
     cdef svm.multitron.MultitronParameters model
 
     cdef int add_instance(self, int64_t label, double weight, int n_feats, uint64_t* feats) except -1
