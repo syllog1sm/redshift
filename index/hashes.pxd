@@ -96,7 +96,22 @@ cdef class FeatIndex(Index):
     cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value)
 
 
+cdef class ScoresCache:
+    cdef uint64_t i
+    cdef uint64_t pool_size
+    cdef size_t scores_size
+    cdef double** _pool
+    cdef dense_hash_map[uint64_t, size_t] _cache
+    cdef size_t n_hit
+    cdef size_t n_miss
+
+    cdef double* lookup(self, size_t n, size_t* feats, bint* success)
+    cdef int _resize(self, size_t new_size)
+
+
 cdef uint64_t encode_feat(uint64_t* feature, uint64_t length, uint64_t i)
+
+cdef FeatIndex get_feat_idx()
 
 cdef class InstanceCounter:
     cdef uint64_t n

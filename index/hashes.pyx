@@ -1,9 +1,12 @@
+# cython: profile=True
 from pathlib import Path
 
 DEF VOCAB_SIZE = 1e6
 DEF TAG_SET_SIZE = 100
 
 from libc.stdint cimport uint64_t
+from libc.stdlib cimport malloc, free
+from libc.string cimport memcpy
 
 cdef class Index:
     cpdef set_path(self, path):
@@ -165,6 +168,55 @@ cdef class FeatIndex(Index):
         self.threshold = threshold
 
 
+cdef class ScoresCache:
+    def __cinit__(self, size_t scores_size, size_t pool_size=500):
+        self._cache = dense_hash_map[uint64_t, size_t]()
+        self._cache.set_empty_key(0)
+        self._pool = <double**>malloc(pool_size * sizeof(double*))
+        for i in range(pool_size):
+            self._pool[i] = <double*>malloc(scores_size * sizeof(double))
+        self.i = 0
+        self.pool_size = pool_size
+        self.scores_size = scores_size
+        
+    cdef double* lookup(self, size_t n, size_t* feats, bint* is_hit):
+        cdef double** resized
+        cdef uint64_t hashed = MurmurHash64A(feats, n * sizeof(size_t), 0)
+        cdef size_t addr = self._cache[hashed]
+        if addr != 0:
+            self.n_hit += 1
+            is_hit[0] = True
+            return <double*>addr
+        else:
+            if self.i == self.pool_size:
+                self._resize(self.pool_size * 2)
+            addr = <size_t>self._pool[self.i]
+            self.i += 1
+            self._cache[hashed] = addr
+            self.n_miss += 1
+            is_hit[0] = False
+            return <double*>addr
+    
+    def flush(self):
+        self.i = 0
+        self._cache.clear_no_resize()
+
+    cdef int _resize(self, size_t new_size):
+        cdef size_t i
+        print "Resizing cache to %d" % new_size
+        self.pool_size = new_size
+        resized = <double**>malloc(self.pool_size * sizeof(double*))
+        memcpy(resized, self._pool, self.i * sizeof(double*))
+        for i in range(self.i, self.pool_size):
+            resized[i] = <double*>malloc(self.scores_size * sizeof(double))
+        free(self._pool)
+        self._pool = resized
+
+    def __dealloc__(self):
+        for i in range(self.pool_size):
+            free(self._pool[i])
+        free(self._pool)
+
 
 cdef class InstanceCounter:
     def __cinit__(self):
@@ -263,3 +315,5 @@ cdef uint64_t encode_feat(uint64_t* feature, uint64_t length, uint64_t i):
     cdef FeatIndex idx = _feat_idx
     return idx.encode(feature, length, i)
 
+cdef FeatIndex get_feat_idx():
+    return _feat_idx
