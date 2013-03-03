@@ -23,6 +23,8 @@ cdef size_t* init_context()
 
 cdef uint64_t* init_hashed_features()
 
+cdef int fill_kernel(State* s, size_t* kernel) except -1
+
 cdef int fill_context(size_t* context, size_t n0, size_t n1, size_t n2,
                       size_t, size_t s1,
                       size_t s0_re, size_t s1_re,

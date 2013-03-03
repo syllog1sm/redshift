@@ -6,9 +6,9 @@ from libc.stdlib cimport malloc, free
 from libc.stdint cimport uint64_t
 
 from io_parse cimport Sentence
-from index.hashes cimport encode_feat
+from index.hashes cimport encode_feat, FeatIndex, get_feat_idx
 
-from _state cimport State, get_left_edge, get_right_edge
+from _state cimport State, get_left_edge, get_right_edge, get_l, get_r, get_l2, get_r2
 
 cimport redshift._state
 
@@ -217,7 +217,13 @@ cdef int fill_context(size_t* context, size_t n0, size_t n1, size_t n2,
         context[depth] = stack_len
     return 1
 
-
+# Kernels:
+# Fastest:
+# i, S0, heads, labels
+#
+# Best grouping:
+# i, S0, S0lv, S0rv, S0l, S0r, S0l2, S0r2, N0l, N0l2, S0llabs, S0rlabs, S0ll, S0rl,
+# S0h, S0h2
 cdef Predicate* predicates
 cdef int make_predicates(bint add_extra, bint add_labels) except 0:
     global N_PREDICATES, predicates
@@ -418,6 +424,37 @@ cdef size_t* init_context():
 cdef uint64_t* init_hashed_features():
     return <uint64_t*>malloc(N_PREDICATES * sizeof(uint64_t))
 
+cdef int fill_kernel(State* s, size_t* kernel) except -1:
+    # TODO: Adapt this to swap for multiple feature sets. Or maybe just use a different
+    # function?
+    # Kernel for Zhang:
+    # i, S0, S0lv, S0rv, S0l, S0r, S0l2, S0r2, N0l, N0l2, S0llabs, S0rlabs,
+    # S0ll, S0rl, S0h, S0h2
+    kernel[0] = s.i
+    kernel[1] = s.n
+    kernel[2] = s.top
+    kernel[3] = s.second
+    kernel[4] = s.l_valencies[s.top]
+    kernel[5] = s.r_valencies[s.top]
+    kernel[6] = get_l(s, s.top)
+    kernel[7] = get_r(s, s.top)
+    kernel[8] = get_l2(s, s.top)
+    kernel[9] = get_r2(s, s.top)
+    kernel[10] = get_l(s, s.i)
+    kernel[11] = get_l2(s, s.i)
+    kernel[12] = s.heads[s.top]
+    kernel[13] = s.heads[s.heads[s.top]]
+    kernel[14] = s.labels[s.top]
+    # Actually the whole label set matters for s.top and s.i, but this should do
+    kernel[15] = s.labels[get_l(s, s.top)]
+    kernel[16] = s.labels[get_r(s, s.top)]
+    kernel[17] = s.labels[get_l2(s, s.top)]
+    kernel[18] = s.labels[get_r2(s, s.top)]
+    kernel[19] = s.labels[s.l_children[s.top][0]]
+    kernel[20] = s.labels[s.r_children[s.top][0]]
+    kernel[21] = s.labels[get_l(s, s.i)]
+
+
 cdef int extract(size_t* context, uint64_t* hashed,
         Sentence* sent, State* s) except -1:
     cdef int i, j
@@ -437,15 +474,16 @@ cdef int extract(size_t* context, uint64_t* hashed,
                  s.l_children[s.i],
                  s.llabel_set[s.top], s.rlabel_set[s.top], s.llabel_set[s.i])
     cdef bint seen_non_zero
+    cdef FeatIndex feat_idx = get_feat_idx()
     for i in range(N_PREDICATES):
         predicate = predicates[i]
         seen_non_zero = False
         for j in range(predicate.n):
             predicate.raws[j] = context[predicate.args[j]]
-            if predicate.raws[j] != 0:
+            if not seen_non_zero and predicate.raws[j] != 0:
                 seen_non_zero = True
         if seen_non_zero or predicate.n == 1:
-            out = encode_feat(predicate.raws, predicate.n, i)
+            out = feat_idx.encode(predicate.raws, predicate.n, i)
             hashed[i] = out
         else:
             hashed[i] = 0
