@@ -2,7 +2,8 @@
 import io_parse
 from features cimport N_LABELS
 
-from libc.stdlib cimport malloc, free
+from libc.stdlib cimport malloc, free, calloc
+from libc.string cimport memcpy
 
 DEF MAX_SENT_LEN = 200
 DEF MAX_TRANSITIONS = MAX_SENT_LEN * 2
@@ -158,8 +159,6 @@ cdef bint has_head_in_stack(State *s, size_t word, size_t* heads):
 
 
 cdef State* init_state(size_t n):
-    # TODO: Make this more efficient, probably by storing 0'd arrays somewhere,
-    # and then copying them
     cdef size_t i, j
     cdef State* s = <State*>malloc(sizeof(State))
     s.n = n
@@ -173,41 +172,29 @@ cdef State* init_state(size_t n):
     s.is_gold = True
     s.at_end_of_buffer = n == 3
     n = n + 5
-    s.stack = <size_t*>malloc(n * sizeof(size_t))
-    s.heads = <size_t*>malloc(n * sizeof(size_t))
-    s.labels = <size_t*>malloc(n * sizeof(size_t))
-    s.guess_labels = <size_t*>malloc(n * sizeof(size_t))
-    s.l_valencies = <size_t*>malloc(n * sizeof(size_t))
-    s.r_valencies = <size_t*>malloc(n * sizeof(size_t))
+    s.stack = <size_t*>calloc(n, sizeof(size_t))
+    s.heads = <size_t*>calloc(n, sizeof(size_t))
+    s.labels = <size_t*>calloc(n, sizeof(size_t))
+    s.guess_labels = <size_t*>calloc(n, sizeof(size_t))
+    s.l_valencies = <size_t*>calloc(n, sizeof(size_t))
+    s.r_valencies = <size_t*>calloc(n, sizeof(size_t))
+
     s.l_children = <size_t**>malloc(n * sizeof(size_t*))
     s.r_children = <size_t**>malloc(n * sizeof(size_t*))
     s.llabel_set = <bint**>malloc(n * sizeof(bint*))
     s.rlabel_set = <bint**>malloc(n * sizeof(bint*))
     cdef size_t n_labels = len(io_parse.LABEL_STRS)
     for i in range(n):
-        s.stack[i] = 0
-        s.l_valencies[i] = 0
-        s.r_valencies[i] = 0
-        s.heads[i] = 0 
-        s.labels[i] = 0
-        s.guess_labels[i] = 0
-        s.l_children[i] = <size_t*>malloc(n * sizeof(size_t))
-        s.r_children[i] = <size_t*>malloc(n * sizeof(size_t))
-        for j in range(n):
-            s.l_children[i][j] = 0
-            s.r_children[i][j] = 0
-        s.llabel_set[i] = <bint*>malloc(n_labels * sizeof(bint))
-        s.rlabel_set[i] = <bint*>malloc(n_labels * sizeof(bint))
-        for j in range(n_labels):
-            s.llabel_set[i][j] = False
-            s.rlabel_set[i][j] = False
+        s.l_children[i] = <size_t*>calloc(n, sizeof(size_t))
+        s.r_children[i] = <size_t*>calloc(n, sizeof(size_t))
+        s.llabel_set[i] = <bint*>calloc(n_labels, sizeof(bint))
+        s.rlabel_set[i] = <bint*>calloc(n_labels, sizeof(bint))
     s.stack[1] = 1
-    s.history = <size_t*>malloc(n * 2 * sizeof(size_t))
-    for i in range(n * 2):
-        s.history[i] = 0
+    s.history = <size_t*>calloc(n * 2, sizeof(size_t))
     return s
 
 cdef copy_state(State* s, State* old):
+    cdef size_t i, j
     s.n = old.n
     s.t = old.t
     s.i = old.i
@@ -218,56 +205,39 @@ cdef copy_state(State* s, State* old):
     s.is_finished = old.is_finished
     s.is_gold = old.is_gold
     s.at_end_of_buffer = old.at_end_of_buffer
+    cdef size_t nbytes = (old.n + 5) * sizeof(size_t)
+    memcpy(s.stack, old.stack, nbytes)
+    memcpy(s.l_valencies, old.l_valencies, nbytes)
+    memcpy(s.r_valencies, old.r_valencies, nbytes)
+    memcpy(s.heads, old.heads, nbytes)
+    memcpy(s.labels, old.labels, nbytes)
+    memcpy(s.guess_labels, old.guess_labels, nbytes)
+    memcpy(s.history, old.history, nbytes * 2)
     cdef size_t n_labels = len(io_parse.LABEL_STRS)
     for i in range(old.n + 5):
-        s.stack[i] = old.stack[i]
-        s.l_valencies[i] = old.l_valencies[i]
-        s.r_valencies[i] = old.r_valencies[i]
-        s.heads[i] = old.heads[i]
-        s.labels[i] = old.labels[i]
-        s.guess_labels[i] = old.guess_labels[i]
-        for j in range(old.n + 5):
-            s.l_children[i][j] = old.l_children[i][j]
-            s.r_children[i][j] = old.r_children[i][j]
-        for j in range(n_labels):
-            s.llabel_set[i][j] = old.llabel_set[i][j]
-            s.rlabel_set[i][j] = old.rlabel_set[i][j]
-    for i in range((old.n + 5) * 2):
-        s.history[i] = old.history[i]
+        memcpy(s.l_children[i], old.l_children[i], nbytes)
+        memcpy(s.r_children[i], old.r_children[i], nbytes)
+        memcpy(s.llabel_set[i], old.llabel_set[i], n_labels * sizeof(bint))
+        memcpy(s.rlabel_set[i], old.rlabel_set[i], n_labels * sizeof(bint))
 
 
 cdef free_state(State* s):
-    #s.stack = <size_t*>malloc(n * sizeof(size_t))
     free(s.stack)
-    #s.heads = <size_t*>malloc(n * sizeof(size_t))
     free(s.heads)
-    #s.labels = <size_t*>malloc(n * sizeof(size_t))
     free(s.labels)
-    #s.guess_labels = <size_t*>malloc(n * sizeof(size_t))
     free(s.guess_labels)
-    #s.l_valencies = <size_t*>malloc(n * sizeof(size_t))
     free(s.l_valencies)
-    #s.r_valencies = <size_t*>malloc(n * sizeof(size_t))
     free(s.r_valencies)
     cdef size_t n_labels = len(io_parse.LABEL_STRS)
     for i in range(s.n + 5):
-        #s.l_children[i] = <size_t*>malloc(n * sizeof(size_t))
-        #s.r_children[i] = <size_t*>malloc(n * sizeof(size_t))
         free(s.l_children[i])
         free(s.r_children[i])
-        #s.llabel_set[i] = <size_t*>malloc(n * sizeof(size_t))
-        #s.rlabel_set[i] = <size_t*>malloc(n * sizeof(size_t))
         free(s.llabel_set[i])
         free(s.rlabel_set[i])
-    #s.l_children = <size_t**>malloc(n * sizeof(size_t*))
-    #s.r_children = <size_t**>malloc(n * sizeof(size_t*))
-    #s.llabel_set = <size_t**>malloc(n * sizeof(size_t*))
-    #s.rlabel_set = <size_t**>malloc(n * sizeof(size_t*))
     free(s.l_children)
     free(s.r_children)
     free(s.llabel_set)
     free(s.rlabel_set)
-    #s.history = <size_t*>malloc(n * 2 * sizeof(size_t))
     free(s.history)
     free(s)
 
