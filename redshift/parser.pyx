@@ -270,6 +270,7 @@ cdef class Parser:
                 next_moves[c].parent = i
                 next_moves[c].clas = labels[j]
                 if valid[next_moves[c].clas]:
+                    s.nr_kids += 1
                     next_moves[c].score = scores[j] + s.score
                     n_valid += 1
                 else:
@@ -564,17 +565,29 @@ cdef class Beam:
         qsort(<void*>self.next_moves, self.nr_moves, sizeof(Cont), cmp_contn)
 
     cdef State* add(self, size_t par_idx, double score, bint is_gold):
+        cdef State* parent = self.parents[par_idx]
         assert par_idx < self.psize
         if self.is_full:
             assert is_gold and not self.has_gold
-            copy_state(self._gold, self.parents[par_idx])
+            if parent.nr_kids > 1:
+                copy_state(self._gold, self.parents[par_idx])
+            else:
+                self.parents[par_idx] = self._gold
+                self._gold = parent
+                parent.nr_kids -= 1
             self._gold.score = score
             self._gold.is_gold = True
             self.g_idx = -1
             self.has_gold = True
             return self._gold
+
+        if parent.nr_kids > 1:
+            copy_state(self.beam[self.bsize], parent)
+        else:
+            self.parents[par_idx] = self.beam[self.bsize]
+            self.beam[self.bsize] = parent
+            parent.nr_kids -= 1
         cdef State* ext = self.beam[self.bsize]
-        copy_state(ext, self.parents[par_idx])
         ext.score = score
         ext.is_gold = is_gold
         if is_gold and not self.has_gold:

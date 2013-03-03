@@ -168,6 +168,7 @@ cdef State* init_state(size_t n):
     s.top = 1
     s.second = 0
     s.stack_len = 2
+    s.nr_kids = 0
     s.is_finished = False
     s.is_gold = True
     s.at_end_of_buffer = n == 3
@@ -195,6 +196,8 @@ cdef State* init_state(size_t n):
 
 cdef copy_state(State* s, State* old):
     cdef size_t i, j
+    # Don't copy number of children, as this refers to the state object itself
+    s.nr_kids = 0
     s.n = old.n
     s.t = old.t
     s.i = old.i
