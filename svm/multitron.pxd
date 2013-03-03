@@ -5,6 +5,7 @@ from libc.stdint cimport int64_t, uint64_t
 
 DEF MAX_PARAMS = 15000000
 
+#cdef extern from "predict.h":
 cdef struct Param:
     double w
     double acc
@@ -17,6 +18,7 @@ cdef struct Feature:
     size_t n_upd
     size_t n_class
     size_t max_class
+
 
 cdef void update_param(Feature* feat, uint64_t clas, uint64_t now, double weight)
 

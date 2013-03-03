@@ -83,7 +83,6 @@ cdef class MultitronParameters:
         free(self.scores)
         free(self.labels)
         free(self.label_to_i)
-        # TODO: Freeing
         for f in range(self.n_params):
             if self.seen[f]:
                 free_feat(self.W[f])
@@ -91,7 +90,7 @@ cdef class MultitronParameters:
         free(self.seen)
 
     cdef int64_t lookup_label(self, uint64_t label) except -1:
-        assert label < self.max_classes
+        assert label < self.max_classes, '%d must be < %d' % (label, self.max_classes)
         if self.label_to_i[label] >= 0:
             return self.label_to_i[label]
         else:
@@ -174,8 +173,8 @@ cdef class MultitronParameters:
             self.W[f].n_upd += 1
             update_param(self.W[f], i, self.now, weight)
 
-    cdef int get_scores(self, uint64_t n_feats, uint64_t* features, double* scores) except -1:
-        cdef uint64_t i, f, j
+    cdef inline int get_scores(self, uint64_t n_feats, uint64_t* features, double* scores) except -1:
+        cdef uint64_t i, f, j, c
         cdef Param* param
         cdef uint64_t max_param = self.max_param
         cdef Feature* feat
