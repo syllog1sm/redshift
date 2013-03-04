@@ -74,6 +74,8 @@ cdef struct Cont:
     double score
     size_t clas
     size_t parent
+    bint is_gold
+    bint is_valid
 
 cdef int cmp_contn(const_void *c1, const_void *c2) nogil
 cdef int fill_kernel(State* s) except -1
