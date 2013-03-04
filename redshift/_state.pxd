@@ -78,7 +78,7 @@ cdef struct Cont:
     bint is_valid
 
 cdef int cmp_contn(const_void *c1, const_void *c2) nogil
-cdef int fill_kernel(State* s) except -1
+cdef int fill_kernel(State* s)
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1
 cdef int del_l_child(State *s, size_t head) except -1
@@ -87,10 +87,10 @@ cdef int del_r_child(State *s, size_t head) except -1
 cdef size_t pop_stack(State *s) except 0
 cdef int push_stack(State *s) except -1
 
-cdef size_t get_l(State *s, size_t head)
-cdef size_t get_l2(State *s, size_t head)
-cdef size_t get_r(State *s, size_t head)
-cdef size_t get_r2(State *s, size_t head)
+cdef inline size_t get_l(State *s, size_t head)
+cdef inline size_t get_l2(State *s, size_t head)
+cdef inline size_t get_r(State *s, size_t head)
+cdef inline size_t get_r2(State *s, size_t head)
 
 cdef int get_left_edge(State *s, size_t head) except -1
 cdef int get_right_edge(State *s, size_t head) except -1
@@ -100,6 +100,6 @@ cdef bint has_head_in_buffer(State *s, size_t word, size_t* heads)
 cdef bint has_child_in_stack(State *s, size_t word, size_t* heads)
 cdef bint has_head_in_stack(State *s, size_t word, size_t* heads)
 
-cdef State* init_state(size_t n)
+cdef State* init_state(size_t n, size_t n_labels)
 cdef free_state(State* s)
-cdef copy_state(State* s, State* old)
+cdef copy_state(State* s, State* old, size_t n_labels)

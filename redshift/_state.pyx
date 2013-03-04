@@ -1,6 +1,3 @@
-# cython: profile=True
-import io_parse
-
 from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy
 
@@ -75,7 +72,7 @@ cdef size_t pop_stack(State *s) except 0:
     assert popped != 0
     return popped
 
-cdef int fill_kernel(State *s) except -1:
+cdef int fill_kernel(State *s):
     s.kernel.i = s.i
     s.kernel.s0 = s.top
     s.kernel.hs0 = s.heads[s.top]
@@ -106,22 +103,22 @@ cdef int push_stack(State *s) except -1:
     assert s.top <= s.n
     s.i += 1
 
-cdef size_t get_l(State *s, size_t head):
+cdef inline size_t get_l(State *s, size_t head):
     if s.l_valencies[head] == 0:
         return 0
     return s.l_children[head][s.l_valencies[head] - 1]
 
-cdef size_t get_l2(State *s, size_t head):
+cdef inline size_t get_l2(State *s, size_t head):
     if s.l_valencies[head] < 2:
         return 0
     return s.l_children[head][s.l_valencies[head] - 2]
 
-cdef size_t get_r(State *s, size_t head):
+cdef inline size_t get_r(State *s, size_t head):
     if s.r_valencies[head] == 0:
         return 0
     return s.r_children[head][s.r_valencies[head] - 1]
 
-cdef size_t get_r2(State *s, size_t head):
+cdef inline size_t get_r2(State *s, size_t head):
     if s.r_valencies[head] < 2:
         return 0
     return s.r_children[head][s.r_valencies[head] - 2]
@@ -179,7 +176,7 @@ cdef bint has_head_in_stack(State *s, size_t word, size_t* heads):
     return False
 
 
-cdef State* init_state(size_t n):
+cdef State* init_state(size_t n, size_t n_labels):
     cdef size_t i, j
     cdef State* s = <State*>malloc(sizeof(State))
     s.n = n
@@ -205,7 +202,6 @@ cdef State* init_state(size_t n):
     s.r_children = <size_t**>malloc(n * sizeof(size_t*))
     s.llabel_set = <bint**>malloc(n * sizeof(bint*))
     s.rlabel_set = <bint**>malloc(n * sizeof(bint*))
-    cdef size_t n_labels = len(io_parse.LABEL_STRS)
     for i in range(n):
         s.l_children[i] = <size_t*>calloc(n, sizeof(size_t))
         s.r_children[i] = <size_t*>calloc(n, sizeof(size_t))
@@ -215,7 +211,7 @@ cdef State* init_state(size_t n):
     s.history = <size_t*>calloc(n * 2, sizeof(size_t))
     return s
 
-cdef copy_state(State* s, State* old):
+cdef copy_state(State* s, State* old, size_t n_labels):
     cdef size_t i, j
     # Don't copy number of children, as this refers to the state object itself
     s.nr_kids = 0
@@ -237,7 +233,6 @@ cdef copy_state(State* s, State* old):
     memcpy(s.labels, old.labels, nbytes)
     memcpy(s.guess_labels, old.guess_labels, nbytes)
     memcpy(s.history, old.history, nbytes * 2)
-    cdef size_t n_labels = len(io_parse.LABEL_STRS)
     for i in range(old.n + 5):
         memcpy(s.l_children[i], old.l_children[i], nbytes)
         memcpy(s.r_children[i], old.r_children[i], nbytes)
@@ -252,7 +247,6 @@ cdef free_state(State* s):
     free(s.guess_labels)
     free(s.l_valencies)
     free(s.r_valencies)
-    cdef size_t n_labels = len(io_parse.LABEL_STRS)
     for i in range(s.n + 5):
         free(s.l_children[i])
         free(s.r_children[i])
