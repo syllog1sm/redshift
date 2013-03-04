@@ -317,8 +317,8 @@ cdef class Parser:
         cdef size_t diverged = 0
         cdef dict counts = {}
         cdef size_t clas
-        cdef State* gold_state = init_state(sent.length)
-        cdef State* pred_state = init_state(sent.length)
+        cdef State* gold_state = init_state(sent.length, self.moves.n_labels)
+        cdef State* pred_state = init_state(sent.length, self.moves.n_labels)
         # Find where the states diverge
         for d in range(t):
             if ghist[d] == phist[d]:
@@ -353,7 +353,7 @@ cdef class Parser:
         cdef size_t* g_heads = sent.parse.heads
 
         cdef size_t n_feats = self.features.n
-        cdef State* s = init_state(sent.length)
+        cdef State* s = init_state(sent.length, self.moves.n_labels)
         cdef size_t move = 0
         cdef size_t label = 0
         cdef size_t _ = 0
@@ -398,7 +398,7 @@ cdef class Parser:
         cdef size_t n_preds = self.features.n
         cdef uint64_t* feats
         cdef double* scores
-        s = init_state(sent.length)
+        s = init_state(sent.length, self.moves.n_labels)
         sent.parse.n_moves = 0
         while not s.is_finished:
             feats = self.features.extract(sent, s)
@@ -523,7 +523,7 @@ cdef class Parser:
             g_labels = gold.s[i].parse.labels
             g_heads = gold.s[i].parse.heads
             n = sent.length
-            s = init_state(n)
+            s = init_state(n, self.moves.n_labels)
             sent_moves = []
             tokens = sents.strings[i][0]
             while not s.is_finished:
@@ -560,6 +560,7 @@ cdef class Beam:
     cdef State** beam
     cdef Cont* next_moves
     cdef State* gold
+    cdef size_t n_labels
     cdef size_t nr_class
     cdef size_t k
     cdef size_t bsize
@@ -579,14 +580,15 @@ cdef class Beam:
         cdef size_t i
         cdef Cont* cont
         cdef State* s
+        self.n_labels = len(io_parse.LABEL_STRS)
         self.k = k
         self.parents = <State**>malloc(k * sizeof(State*))
         self.beam = <State**>malloc(k * sizeof(State*))
         for i in range(k):
-            self.parents[i] = init_state(length)
+            self.parents[i] = init_state(length, self.n_labels)
         for i in range(k):
-            self.beam[i] = init_state(length)
-        self.gold = init_state(length)
+            self.beam[i] = init_state(length, self.n_labels)
+        self.gold = init_state(length, self.n_labels)
         self.bsize = 1
         self.psize = 0
         self.is_full = self.bsize >= self.k
@@ -629,7 +631,7 @@ cdef class Beam:
         # If there are no more children coming, use the same state object instead
         # of cloning it
         #if parent.nr_kids > 1:
-        copy_state(self.beam[self.bsize], parent)
+        copy_state(self.beam[self.bsize], parent, self.n_labels)
         #else:
         #    self.parents[par_idx] = self.beam[self.bsize]
         #    self.beam[self.bsize] = parent
@@ -676,12 +678,13 @@ cdef class Beam:
             raise StandardError
 
     cdef refresh(self):
+        cdef size_t i
         for i in range(self.nr_class):
             for j in range(N_MOVES):
                 self.seen_moves[i][j] = False
 
         for i in range(self.bsize):
-            copy_state(self.parents[i], self.beam[i])
+            copy_state(self.parents[i], self.beam[i], self.n_labels)
         self.psize = self.bsize
         self.is_full = False
         self.bsize = 0
@@ -817,7 +820,6 @@ cdef class TransitionSystem:
         elif move == LEFT:
             child = pop_stack(s)
             if s.heads[child] != 0:
-                assert get_r(s, s.heads[child]) == child, get_r(s, s.heads[child])
                 del_r_child(s, s.heads[child])
             head = s.i
             add_dep(s, head, child, label)
