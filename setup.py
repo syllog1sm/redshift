@@ -29,7 +29,7 @@ virtual_env = os.environ.get('VIRTUAL_ENV', '')
 exts = [
     Extension('redshift.parser', ["redshift/parser.pyx"], language="c++",
               include_dirs=[numpy.get_include(), pjoin(virtual_env, 'include')]),
-    Extension('redshift._state', ["redshift/_state.pyx"],
+    Extension('redshift._state', ["redshift/_state.pyx"], language="c++",
               include_dirs=[numpy.get_include(), os.path.join(virtual_env, 'include')]),
     Extension('redshift.io_parse', ["redshift/io_parse.pyx"], language="c++"),
     Extension('redshift.features', ["redshift/features.pyx"], language="c++",
