@@ -430,7 +430,6 @@ cdef class FeatureSet:
             print "Using stack-second features"
             feats += stack_second
         n_preds = len(feats)
-        print n_preds
         self.predicates = <Predicate*>malloc(n_preds * sizeof(Predicate))
         cdef Predicate pred
         for id_, args in enumerate(feats):
