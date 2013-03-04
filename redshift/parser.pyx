@@ -92,10 +92,14 @@ cdef class Parser:
     cdef object train_alg
     cdef int feat_thresh
 
+    cdef bint label_beam
+    cdef object upd_strat
+
     def __cinit__(self, model_dir, clean=False, train_alg='static',
                   add_extra=True, label_set='MALT', feat_thresh=5,
                   allow_reattach=False, allow_reduce=False,
-                  reuse_idx=False, beam_width=1):
+                  reuse_idx=False, beam_width=1, upd_strat="early", 
+                  label_beam=True):
         model_dir = Path(model_dir)
         if not clean:
             params = dict([line.split() for line in model_dir.join('parser.cfg').open()])
@@ -110,14 +114,16 @@ cdef class Parser:
             l_labels = params['left_labels']
             r_labels = params['right_labels']
             beam_width = int(params['beam_width'])
+            upd_strat = params['upd_strat']
+            label_beam = params['label_beam'] == 'True'
         if allow_reattach and allow_reduce:
             print 'NM L+D'
         elif allow_reattach:
             print 'NM L'
         elif allow_reduce:
             print 'NM D'
-        else:
-            print 'Baseline'
+        beam_settings = (beam_width, upd_strat, label_beam)
+        print 'Beam settings: k=%d; upd_strat=%s; label_beam=%s' % beam_settings
         self.model_dir = self.setup_model_dir(model_dir, clean)
         labels = io_parse.set_labels(label_set)
         self.features = FeatureSet(len(labels), add_extra)
@@ -126,6 +132,8 @@ cdef class Parser:
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
         self.beam_width = beam_width
+        self.upd_strat = upd_strat
+        self.label_beam = label_beam
         if clean == True:
             self.new_idx(self.model_dir, self.features.n)
         else:
@@ -197,9 +205,8 @@ cdef class Parser:
         self.guide.train()
 
     cdef dict decode_beam(self, Sentence* sent, size_t k):
-        cdef size_t i, j
+        cdef size_t i
         cdef bint is_gold
-        cdef size_t one_best
         cdef bint* zero_costs
         cdef size_t* g_heads = sent.parse.heads
         cdef size_t* g_labels = sent.parse.labels
@@ -207,17 +214,12 @@ cdef class Parser:
         cdef State* parent
         cdef Cont* cont
         cdef Violation violn
-        cdef bint label_beam = False
-        cdef bint early_upd = True
         cdef bint halt = False
-        cdef Beam beam = Beam(k, sent.length, self.guide.nr_class, upd_strat='early')
-        cdef bint seen_moves[100][N_MOVES]
+        cdef Beam beam = Beam(k, sent.length, self.guide.nr_class,
+                              upd_strat=self.upd_strat, add_labels=self.label_beam)
         self.guide.cache.flush()
         while not beam.gold.is_finished:
             beam.refresh()
-            for i in range(self.moves.nr_class):
-                for j in range(N_MOVES):
-                    seen_moves[i][j] = False
             n_valid = self._fill_move_scores(sent, beam.psize, beam.parents,
                                              beam.next_moves)
             beam.sort_moves()
@@ -226,9 +228,8 @@ cdef class Parser:
                 cont = &beam.next_moves[i]
                 if not cont.is_valid:
                     continue
-                if seen_moves[cont.parent][self.moves.moves[cont.clas]] and not label_beam:
+                if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
                     continue
-                seen_moves[cont.parent][self.moves.moves[cont.clas]] = True
                 parent = beam.parents[cont.parent]
                 if self.train_alg == 'static':
                     is_gold = cont.clas == self.moves.break_tie(parent, g_heads, g_labels)
@@ -428,6 +429,8 @@ cdef class Parser:
             beam.sort_moves()
             for c in range(n_valid):
                 cont = &beam.next_moves[c]
+                if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
+                    continue
                 s = beam.add(cont.parent, cont.score, False)
                 self.moves.transition(cont.clas, s)
                 if beam.is_full:
@@ -501,6 +504,8 @@ cdef class Parser:
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
             cfg.write(u'beam_width\t%d\n' % self.beam_width)
+            cfg.write(u'upd_strat\t%s\n' % self.upd_strat)
+            cfg.write(u'label_beam\t%s\n' % self.label_beam)
         
     def get_best_moves(self, Sentences sents, Sentences gold):
         """Get a list of move taken/oracle move pairs for output"""
@@ -556,7 +561,7 @@ cdef class Beam:
     cdef State** beam
     cdef Cont* next_moves
     cdef State* gold
-    cdef size_t nr_moves
+    cdef size_t nr_class
     cdef size_t k
     cdef size_t bsize
     cdef size_t psize
@@ -565,8 +570,11 @@ cdef class Beam:
     cdef bint early_upd
     cdef bint max_violn
     cdef bint late_upd
+    cdef bint add_labels
+    cdef bint** seen_moves
 
-    def __cinit__(self, size_t k, size_t length, size_t nr_class, upd_strat='early'):
+    def __cinit__(self, size_t k, size_t length, size_t nr_class, upd_strat='early',
+                  add_labels=True):
         cdef size_t i
         cdef Cont* cont
         cdef State* s
@@ -581,12 +589,15 @@ cdef class Beam:
         self.bsize = 1
         self.psize = 0
         self.is_full = self.bsize >= self.k
-        self.nr_moves = nr_class * k
-        self.next_moves = <Cont*>malloc(self.nr_moves * sizeof(Cont))
-        for i in range(self.nr_moves):
+        self.nr_class = nr_class * k
+        self.next_moves = <Cont*>malloc(self.nr_class * sizeof(Cont))
+        self.seen_moves = <bint**>malloc(self.nr_class * sizeof(bint*))
+        for i in range(self.nr_class):
             self.next_moves[i] = Cont(score=-10000, clas=0, parent=0, is_gold=True)
+            self.seen_moves[i] = <bint*>calloc(N_MOVES, sizeof(bint))
         self.violations = []
         self.early_upd = False
+        self.add_labels = True
         self.late_upd = False
         self.max_violn = False
         if upd_strat == 'early':
@@ -599,7 +610,13 @@ cdef class Beam:
             raise StandardError, upd_strat
 
     cdef sort_moves(self):
-        qsort(<void*>self.next_moves, self.nr_moves, sizeof(Cont), cmp_contn)
+        qsort(<void*>self.next_moves, self.nr_class, sizeof(Cont), cmp_contn)
+
+    cdef bint accept(self, size_t parent, size_t move, double score):
+        if self.seen_moves[parent][move] and not self.add_labels:
+            return False
+        self.seen_moves[parent][move] = True
+        return True
 
     cdef State* add(self, size_t par_idx, double score, bint is_gold) except NULL:
         cdef State* parent = self.parents[par_idx]
@@ -665,6 +682,10 @@ cdef class Beam:
             raise StandardError
 
     cdef refresh(self):
+        for i in range(self.nr_class):
+            for j in range(N_MOVES):
+                self.seen_moves[i][j] = False
+
         for i in range(self.bsize):
             copy_state(self.parents[i], self.beam[i])
         self.psize = self.bsize
@@ -676,10 +697,13 @@ cdef class Beam:
             free_state(self.beam[i])
         for i in range(self.k):
             free_state(self.parents[i])
+        for i in range(self.nr_class):
+            free(self.seen_moves[i])
         free(self.next_moves)
         free(self.beam)
         free(self.parents)
         free_state(self.gold)
+
 
 cdef class Violation:
     """
