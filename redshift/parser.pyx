@@ -660,6 +660,7 @@ cdef class Beam:
                     self.max_violn = violn
                 elif self.max_violn.delta < violn.delta:
                     self.max_violn = violn
+                return out_of_beam and self.early_upd
 
     cdef Violation pick_violation(self):
         if self.early_upd:
