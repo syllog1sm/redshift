@@ -247,9 +247,8 @@ cdef class Parser:
                 self.guide.n_corr += 1
         assert beam.gold.t == beam.beam[0].t
         self.guide.total += beam.gold.t
-        cdef int viol_i = beam.pick_violation()
-        if viol_i != -1:
-            violn = beam.violations[viol_i]
+        if beam.first_violn is not None:
+            violn = beam.pick_violation()
             return self._count_feats(sent, violn.t, violn.phist, violn.ghist)
         else:
             return {}
@@ -422,7 +421,7 @@ cdef class Parser:
         cdef Cont* cont
         cdef Beam beam = Beam(k, sent.length, self.guide.nr_class)
         self.guide.cache.flush()
-        while not beam.best_p().is_finished:
+        while not beam.beam[0].is_finished:
             beam.refresh()
             n_valid = self._fill_move_scores(sent, beam.psize, beam.parents,
                                              beam.next_moves)
@@ -565,10 +564,12 @@ cdef class Beam:
     cdef size_t k
     cdef size_t bsize
     cdef size_t psize
-    cdef list violations
+    cdef Violation first_violn
+    cdef Violation max_violn
+    cdef Violation last_violn
     cdef bint is_full
     cdef bint early_upd
-    cdef bint max_violn
+    cdef bint max_upd
     cdef bint late_upd
     cdef bint add_labels
     cdef bint** seen_moves
@@ -595,17 +596,19 @@ cdef class Beam:
         for i in range(self.nr_class):
             self.next_moves[i] = Cont(score=-10000, clas=0, parent=0, is_gold=True)
             self.seen_moves[i] = <bint*>calloc(N_MOVES, sizeof(bint))
-        self.violations = []
+        self.first_violn = None
+        self.max_violn = None
+        self.last_violn = None
         self.early_upd = False
-        self.add_labels = True
+        self.add_labels = add_labels
         self.late_upd = False
-        self.max_violn = False
+        self.max_upd = False
         if upd_strat == 'early':
             self.early_upd = True
         elif upd_strat == 'late':
             self.late_upd = True
         elif upd_strat == 'max':
-            self.max_violn = True
+            self.max_upd = True
         else:
             raise StandardError, upd_strat
 
@@ -622,6 +625,9 @@ cdef class Beam:
         cdef State* parent = self.parents[par_idx]
         assert par_idx < self.psize
         assert not self.is_full
+        # TODO: Why's this broken?
+        # If there are no more children coming, use the same state object instead
+        # of cloning it
         #if parent.nr_kids > 1:
         copy_state(self.beam[self.bsize], parent)
         #else:
@@ -640,40 +646,28 @@ cdef class Beam:
         cdef bint out_of_beam
         if self.bsize < self.k:
             return False
-        assert self.gold.t == self.beam[self.k - 1].t
-        assert self.gold.t == self.beam[0].t
         if not self.beam[0].is_gold:
             if self.gold.score <= self.beam[0].score:
                 out_of_beam = not self.beam[self.k - 1].is_gold and \
                         self.gold.score <= self.beam[self.k - 1].score
                 violn = Violation()
                 violn.set(self.beam[0], self.gold, out_of_beam)
-                self.violations.append(violn)
-                if self.early_upd:
-                    return out_of_beam
-        return False
+                self.last_violn = violn
+                if self.first_violn == None:
+                    self.first_violn = violn
+                    self.max_violn = violn
+                elif self.max_violn.delta < violn.delta:
+                    self.max_violn = violn
 
-    cdef int pick_violation(self):
-        cdef Violation v
-        if not self.violations:
-            return -1
+    cdef Violation pick_violation(self):
         if self.early_upd:
-            for i, v in enumerate(self.violations):
-                if v.out_of_beam:
-                    return i
-            return -1
-        elif self.latest_upd:
-            return len(self.violations) - 1
-        v = self.violations[0]
-        cdef double max_score = v.delta
-        cdef size_t best_i = 0
-        if self.max_upd:
-            for i, v in enumerate(self.violations):
-                if v.delta >= max_score:
-                    best_i = i
-            return best_i
+            return self.first_violn
+        elif self.max_upd:
+            return self.max_violn
+        elif self.late_upd:
+            return self.last_violn
         else:
-            raise StandardError
+            raise StandardError, self.upd_strat
 
     cdef State* best_p(self) except NULL:
         if self.bsize != 0:
