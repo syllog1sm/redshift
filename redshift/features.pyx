@@ -8,9 +8,6 @@ from libc.stdint cimport uint64_t
 from io_parse cimport Sentence
 from index.hashes cimport encode_feat, FeatIndex, get_feat_idx
 
-from _state cimport State, get_left_edge, get_right_edge, get_l, get_r, get_l2, get_r2
-
-cimport redshift._state
 
 DEF CONTEXT_SIZE = 60
 
