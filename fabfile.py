@@ -30,8 +30,8 @@ def clean():
 def make():
     with lcd(str(LOCAL_REPO)):
         err = local('python setup.py build_ext --inplace', capture=True).stderr
-        for line in err:
-            if 'error: ' in line:
+        for line in err.split('\n'):
+            if 'warning: ' not in line:
                 print line
 
 def deploy():
@@ -52,6 +52,26 @@ def draxx_baseline(name):
     with cd(repo):
         put(StringIO(script), script_loc)
         run('qsub -N %s_bl %s' % (name, script_loc))
+
+def draxx_beam(name, k=5, i=20, add_feats=False):
+    model = pjoin(str(REMOTE_PARSERS), name)
+    data = str(REMOTE_STANFORD)
+    repo = str(REMOTE_REPO)
+    train_str = _train(pjoin(data, 'train.txt'), model, k=int(k), i=int(i),
+                             add_feats=bool(add_feats))
+    parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'))
+    eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.txt'))
+    script = _pbsify(repo, [train_str, parse_str, eval_str])
+    script_loc = pjoin(repo, 'pbs', '%s_draxx_baseline.pbs' % name)
+    with cd(repo):
+        put(StringIO(script), script_loc)
+        run('qsub -N %s_bl %s' % (name, script_loc))
+
+
+def make_batches(data_set, nbatches):
+    pass
+
+
 
 def qstat():
     run("qstat -na | grep mhonn")
@@ -74,11 +94,15 @@ export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/lib64:/usr/lib64/:/usr/local/lib64/:/us
 cd {repo}"""
     return header.format(repo=repo) + '\n' + '\n'.join(command_strs)
 
-def _train(data, model, debug=False):
-    template = './scripts/train.py {data} {model}'
+def _train(data, model, debug=False, k=1, add_feats=False, i=15):
+    if add_feats:
+        feat_str = '-x'
+    else:
+        feat_str = ''
+    template = './scripts/train.py -i {i} -k {k} {feat_str} {data} {model}'
     if debug:
         template += ' -debug'
-    return template.format(data=data, model=model)
+    return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i)
 
 def _parse(model, data, out, gold=False):
     template = './scripts/parse.py {model} {data} {out} '
