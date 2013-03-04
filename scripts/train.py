@@ -28,11 +28,14 @@ USE_HELD_OUT = False
     debug=("Set debug flag to True.", "flag", None, bool),
     seed=("Set random seed", "option", "s", int),
     beam_width=("Beam width", "option", "k", int),
+    movebeam=("Add labels to beams", "flag"),
+    upd_strat=("Strategy for global updates [early, late, max]", "option", "u")
 )
 def main(train_loc, model_loc, train_alg="online", n_iter=15,
          add_extra_feats=False, label_set="Stanford", feat_thresh=1,
          allow_reattach=False, allow_reduce=False,
-         profile=False, debug=False, seed=0, beam_width=1):
+         profile=False, debug=False, seed=0, beam_width=1, movebeam=False,
+         upd_strat="early"):
     random.seed(seed)
     train_loc = Path(train_loc)
     model_loc = Path(model_loc)
@@ -44,7 +47,8 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
                                     train_alg=train_alg, add_extra=add_extra_feats,
                                     label_set=label_set, feat_thresh=feat_thresh,
                                     allow_reattach=allow_reattach, allow_reduce=allow_reduce,
-                                    beam_width=beam_width)
+                                    beam_width=beam_width, label_beam=not movebeam,
+                                    upd_strat=upd_strat)
     if USE_HELD_OUT:
         train_sent_strs = train_loc.open().read().strip().split('\n\n')
         split_point = len(train_sent_strs)/20
