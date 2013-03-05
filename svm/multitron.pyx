@@ -222,6 +222,9 @@ cdef class MultitronParameters:
         cdef uint64_t c
         cdef Feature* feat
         cdef Param* param
+        for f in range(self.max_dense * self.true_nr_class):
+            self.acc[f] += (self.now - self.last_upd[f]) * self.w[f]
+            self.w[f] = self.acc[f] / self.now
         # average
         for f in range(self.max_param):
             if not self.seen[f]:
@@ -246,12 +249,12 @@ cdef class MultitronParameters:
         out.write(u'w\n')
         zeroes = '0 ' * self.n_classes
         # Break LibSVM compatibility for now to be a bit more disk-friendly
-        for f in range(1, self.max_dense, self.true_nr_class):
+        for f in range(0, self.max_dense * self.true_nr_class, self.true_nr_class):
             non_zeroes = []
             for c in range(self.true_nr_class):
                 if self.w[f + c] != 0:
-                    non_zeroes.append(u'%d=%s' % (self.labels[c], self.w[f + c]))
-            out.write(u'%d\t%s' % (f, u' '.join(non_zeroes)))
+                    non_zeroes.append(u'%d=%s' % (c, self.w[f + c]))
+            out.write(u'%d\t%s\n' % (f / self.true_nr_class, u' '.join(non_zeroes)))
         for f in range(self.max_dense, self.max_param):
             if not self.seen[f] or self.W[f].n_upd < MIN_UPD:
                 continue
@@ -267,6 +270,7 @@ cdef class MultitronParameters:
     def load(self, in_):
         cdef Feature* feat
         cdef size_t i
+        print 'load'
         #cdef uint64_t f, clas, idx
         for line in in_:
             if line.startswith('label'):
@@ -291,7 +295,7 @@ cdef class MultitronParameters:
                     raw_label, w = param_str.split('=')
                     i = self.label_to_i[int(raw_label)]
                     assert i != -1
-                    self.w[(f * self.true_nr_class) + i] = float(w) 
+                    self.w[(f * self.true_nr_class) + int(raw_label)] = float(w) 
                 continue
             self.add_feature(f)
             feat = self.W[f]
@@ -310,5 +314,5 @@ cdef class MultitronParameters:
                 feat.params[feat.n_class].clas = i
                 feat.index[i] = feat.n_class
                 feat.n_class += 1
-
+        print 'done'
         print 'Read %d/%d non-zero features' % (unpruned, n_feats)
