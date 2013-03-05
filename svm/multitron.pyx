@@ -10,7 +10,9 @@ cimport cython
 
 cdef size_t MIN_UPD = 2
 
-DEF MAX_PARAM = 15000000
+DEF MAX_PARAM = 10000000
+
+DEF MAX_DENSE = 500000
 
 cdef void resize_feat(Feature* feat, size_t n):
     cdef size_t i
@@ -44,6 +46,13 @@ cdef inline void update_param(Feature* feat, uint64_t clas, uint64_t now, double
         feat.params[i].clas = clas
         feat.n_class += 1
 
+cdef inline void update_dense(size_t now, size_t nr_class, uint64_t f, uint64_t clas,
+                              double weight, double* w, double* acc, size_t* last_upd):
+    cdef uint64_t i = (f * nr_class) + clas
+    acc[i] += (now - last_upd[i]) * w[i]
+    w[i] += weight
+    last_upd[i] = now
+
 
 cdef void free_feat(Feature* feat):
     cdef size_t i
@@ -63,10 +72,12 @@ cdef class MultitronParameters:
     def __cinit__(self, max_classes, feat_thresh=0):
         cdef uint64_t i
         self.scores = <double *>malloc(max_classes * sizeof(double))
+        self.max_dense = MAX_DENSE
+        self.seen = <bint*>calloc(MAX_PARAM, sizeof(int64_t))
+        self.w = <double*>calloc(MAX_DENSE * max_classes, sizeof(double))
+        self.acc = <double*>calloc(MAX_DENSE * max_classes, sizeof(double))
+        self.last_upd = <size_t*>calloc(MAX_DENSE, max_classes * sizeof(size_t))
         self.W = <Feature**>malloc(MAX_PARAM * sizeof(Feature*))
-        self.seen = <bint*>malloc(MAX_PARAM * sizeof(int64_t))
-        for i in range(MAX_PARAM):
-            self.seen[i] = False
         self.max_param = 0
         self.n_params = 0
         self.max_classes = max_classes
@@ -88,6 +99,9 @@ cdef class MultitronParameters:
                 free_feat(self.W[f])
         free(self.W)
         free(self.seen)
+        free(self.w)
+        free(self.acc)
+        free(self.last_upd)
 
     cdef int64_t lookup_label(self, uint64_t label) except -1:
         assert label < self.max_classes, '%d must be < %d' % (label, self.max_classes)
@@ -143,41 +157,38 @@ cdef class MultitronParameters:
 
     cdef int64_t update(self, uint64_t pred_label, uint64_t gold_label,
                     uint64_t n_feats, uint64_t* features, double weight) except -1:
-        cdef double* w
-        cdef double* acc
-        cdef size_t* last_upd
+        cdef size_t i
         cdef uint64_t f
-        cdef int64_t idx
         self.tick()
         cdef uint64_t gold_i = self.lookup_label(gold_label)
         cdef uint64_t pred_i = self.lookup_label(pred_label)
         if gold_i == pred_i:
             return 0
-        assert weight > 0
         for i in range(n_feats):
             f = features[i]
             if f == 0:
-                continue
-            if f >= self.max_param or not self.seen[f]:
-                self.add_feature(f)
-            self.W[f].n_upd += 1
-            update_param(self.W[f], pred_i, self.now, weight * -1)
-            update_param(self.W[f], gold_i, self.now, weight)
+                break
+            self.update_single(gold_i, f, weight)
+            self.update_single(pred_i, f, -weight)
     
     cdef int update_single(self, uint64_t label, uint64_t f, double weight) except -1:
-
         cdef uint64_t i = self.lookup_label(label)
         if f != 0 and weight != 0:
-            if f >= self.max_param or not self.seen[f]:
-                self.add_feature(f)
-            self.W[f].n_upd += 1
-            update_param(self.W[f], i, self.now, weight)
+            if f < self.max_dense:
+                update_dense(self.now, self.true_nr_class, f, i, weight,
+                             self.w, self.acc, self.last_upd)
+            else:
+                if f >= self.max_param or not self.seen[f]:
+                    self.add_feature(f)
+                self.W[f].n_upd += 1
+                update_param(self.W[f], i, self.now, weight)
 
     cdef inline int get_scores(self, uint64_t n_feats, uint64_t* features, double* scores) except -1:
         cdef uint64_t i, f, j, c
         cdef Param* param
         cdef uint64_t max_param = self.max_param
         cdef Feature* feat
+        cdef uint64_t idx
 
         for c in range(self.true_nr_class):
             scores[c] = 0
@@ -185,7 +196,11 @@ cdef class MultitronParameters:
             f = features[i]
             if f == 0:
                 break
-            if f < max_param and self.seen[f]:
+            elif f < self.max_dense:
+                idx = f * self.true_nr_class
+                for c in range(self.true_nr_class):
+                    scores[c] += self.w[idx + c]
+            elif f < max_param and self.seen[f]:
                 feat = self.W[f]
                 for j in range(feat.n_class):
                     param = feat.params[j]
@@ -231,7 +246,13 @@ cdef class MultitronParameters:
         out.write(u'w\n')
         zeroes = '0 ' * self.n_classes
         # Break LibSVM compatibility for now to be a bit more disk-friendly
-        for f in range(1, self.max_param):
+        for f in range(1, self.max_dense, self.true_nr_class):
+            non_zeroes = []
+            for c in range(self.true_nr_class):
+                if self.w[f + c] != 0:
+                    non_zeroes.append(u'%d=%s' % (self.labels[c], self.w[f + c]))
+            out.write(u'%d\t%s' % (f, u' '.join(non_zeroes)))
+        for f in range(self.max_dense, self.max_param):
             if not self.seen[f] or self.W[f].n_upd < MIN_UPD:
                 continue
             feat = self.W[f]
@@ -242,18 +263,6 @@ cdef class MultitronParameters:
             if non_zeroes:
                 out.write(u'%d\t%s\n' % (f, ' '.join(non_zeroes)))
         out.close()
-        #for f in range(1, self.max_param):
-        #    if not self.seen[f] or self.W[f].n_upd < MIN_UPD:
-        #        out.write(zeroes + u'\n')
-        #        continue
-        #    feat = self.W[f]
-        #    for c in xrange(self.n_classes):
-        #        if c < self.true_nr_class:
-        #            out.write(u" %s" % get_weight(feat, c))
-        #        else:
-        #            out.write(u" 0")
-        #    out.write(u"\n")
-        #out.close()
 
     def load(self, in_):
         cdef Feature* feat
@@ -277,6 +286,13 @@ cdef class MultitronParameters:
             unpruned += 1
             f, weights = line.split('\t')
             f = int(f)
+            if f < self.max_dense:
+                for param_str in weights.split():
+                    raw_label, w = param_str.split('=')
+                    i = self.label_to_i[int(raw_label)]
+                    assert i != -1
+                    self.w[(f * self.true_nr_class) + i] = float(w) 
+                continue
             self.add_feature(f)
             feat = self.W[f]
             classes = []
@@ -295,14 +311,4 @@ cdef class MultitronParameters:
                 feat.index[i] = feat.n_class
                 feat.n_class += 1
 
-            #weights = [float(w) for w in line.strip().split()]
-            #if any(w != 0 for w in weights):
-            #    unpruned += 1
-            #    self.add_feature(f + 1)
-            #    feat = self.W[f + 1]
-            #    for clas, w in enumerate(weights):
-            #        feat.seen[clas] = True
-            #        feat.params[clas] = <Param*>malloc(sizeof(Param))
-            #        feat.params[clas].w = w
-            #    feat.n_upd = MIN_UPD + 1
         print 'Read %d/%d non-zero features' % (unpruned, n_feats)

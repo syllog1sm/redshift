@@ -5,6 +5,8 @@ from libc.stdint cimport int64_t, uint64_t
 
 DEF MAX_PARAMS = 15000000
 
+DEF MAX_DENSE = 1000000
+
 #cdef extern from "predict.h":
 cdef struct Param:
     double w
@@ -21,6 +23,8 @@ cdef struct Feature:
 
 
 cdef void update_param(Feature* feat, uint64_t clas, uint64_t now, double weight)
+cdef void update_dense(size_t now, size_t nr_class, uint64_t f, uint64_t clas,
+                       double weight, double* w, double* acc, size_t* last_upd)
 
 
 cdef class MultitronParameters:
@@ -28,8 +32,12 @@ cdef class MultitronParameters:
     cdef uint64_t n_params
     cdef uint64_t max_classes
     cdef uint64_t max_param
+    cdef uint64_t max_dense
     cdef uint64_t true_nr_class
     cdef uint64_t now
+    cdef double* w
+    cdef double* acc
+    cdef size_t* last_upd
     cdef Feature** W
     cdef bint* seen
     cdef double* scores
