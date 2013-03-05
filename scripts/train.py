@@ -28,7 +28,7 @@ USE_HELD_OUT = False
     debug=("Set debug flag to True.", "flag", None, bool),
     seed=("Set random seed", "option", "s", int),
     beam_width=("Beam width", "option", "k", int),
-    movebeam=("Add labels to beams", "flag"),
+    movebeam=("Add labels to beams", "flag", "m", bool),
     upd_strat=("Strategy for global updates [early, late, max]", "option", "u")
 )
 def main(train_loc, model_loc, train_alg="online", n_iter=15,
