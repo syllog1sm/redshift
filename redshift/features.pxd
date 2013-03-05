@@ -1,6 +1,7 @@
 from libc.stdint cimport uint64_t
 from _state cimport State
 from index.hashes cimport FeatIndex
+from io_parse cimport Sentence
 
 cdef struct Predicate:
     int id, n, expected_size

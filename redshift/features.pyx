@@ -15,8 +15,6 @@ DEF CONTEXT_SIZE = 60
 # Ensure _context_size is always last; it ensures our compile-time setting
 # is in synch with the enum
 
-PAD_SIZE = 4
-
 cdef enum:
     N0w
     N0p
@@ -237,22 +235,23 @@ cdef class FeatureSet:
         cdef int* args
         cdef uint64_t* raws
         cdef size_t n
+        cdef uint64_t value
+        cdef size_t f = 0
         for i in range(self.n):
             raws = preds[i].raws
             args = preds[i].args
             n = preds[i].n
-            if n == 1:
-                hashed[i] = self.feat_idx.encode(<uint64_t*>&context[args[0]], 1, i)
-            else:
-                seen_non_zero = False
-                for j in range(n):
-                    raws[j] = context[args[j]]
-                    if not seen_non_zero and raws[j] != 0:
-                        seen_non_zero = True
-                if seen_non_zero:
-                    hashed[i] = self.feat_idx.encode(raws, n, i)
-                else:
-                    hashed[i] = 0
+            seen_non_zero = False
+            for j in range(n):
+                raws[j] = context[args[j]]
+                if not seen_non_zero and raws[j] != 0:
+                    seen_non_zero = True
+            if seen_non_zero:
+                value = self.feat_idx.encode(raws, n, i)
+                hashed[f] = value
+                f += 1
+        for i in range(f, self.n):
+            hashed[i] = 0
         return hashed
 
     cdef int _make_predicates(self, bint add_extra) except 0:

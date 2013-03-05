@@ -331,6 +331,8 @@ cdef class Parser:
             clas = ghist[i]
             fcounts = counts.setdefault(clas, {})
             for f in range(n_feats):
+                if feats[f] == 0:
+                    break
                 fcounts.setdefault(feats[f], 0)
                 fcounts[feats[f]] += 1
             self.moves.transition(clas, gold_state)
@@ -340,6 +342,8 @@ cdef class Parser:
             clas = phist[i]
             fcounts = counts.setdefault(clas, {})
             for f in range(n_feats):
+                if feats[f] == 0:
+                    break
                 fcounts.setdefault(feats[f], 0)
                 fcounts[feats[f]] -= 1
             self.moves.transition(clas, pred_state)
