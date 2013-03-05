@@ -183,7 +183,9 @@ cdef class MultitronParameters:
             scores[c] = 0
         for i in range(n_feats):
             f = features[i]
-            if f != 0 and f < max_param and self.seen[f]:
+            if f == 0:
+                break
+            if f < max_param and self.seen[f]:
                 feat = self.W[f]
                 for j in range(feat.n_class):
                     param = feat.params[j]
