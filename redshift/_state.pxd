@@ -13,6 +13,7 @@ cdef struct Kernel:
     size_t h2s0
     size_t s0_lv
     size_t s0_rv
+    size_t n0_lv
     size_t s0l
     size_t s0r
     size_t s0l2

@@ -79,6 +79,7 @@ cdef int fill_kernel(State *s):
     s.kernel.h2s0 = s.heads[s.heads[s.top]]
     s.kernel.s0_lv = s.l_valencies[s.top]
     s.kernel.s0_rv = s.r_valencies[s.top]
+    s.kernel.n0_lv = s.l_valencies[s.i]
     s.kernel.s0l = get_l(s, s.top)
     s.kernel.s0r = get_r(s, s.top)
     s.kernel.s0l2 = get_l2(s, s.top)
@@ -93,7 +94,7 @@ cdef int fill_kernel(State *s):
     s.kernel.n0l = get_l(s, s.i)
     s.kernel.n0l2 = get_l2(s, s.i)
     s.kernel.Ln0l = s.labels[get_l(s, s.i)]
-    s.kernel.Ls0l2 = s.labels[get_l2(s, s.i)]
+    s.kernel.Ln0l2 = s.labels[get_l2(s, s.i)]
 
 cdef int push_stack(State *s) except -1:
     s.second = s.top
