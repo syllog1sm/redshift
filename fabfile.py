@@ -34,11 +34,26 @@ def make():
             if 'warning: ' not in line:
                 print line
 
+def qstat():
+    run("qstat -na | grep mhonn")
+
+
 def deploy():
     clean()
     make()
     with cd(REMOTE_REPO):
         run('git pull')
+
+
+def test1k(model="baseline", dbg=False):
+    with lcd(str(LOCAL_REPO)):
+        local(_train('~/work_data/stanford/1k_train.txt',  '~/work_data/parsers/tmp',
+                    debug=dbg))
+        local(_parse('~/work_data/parsers/tmp', '~/work_data/stanford/dev_auto_pos.parse',
+                     '/tmp/parse', gold=True))
+
+
+
 
 def draxx_baseline(name):
     model = pjoin(str(REMOTE_PARSERS), name)
@@ -53,13 +68,20 @@ def draxx_baseline(name):
         put(StringIO(script), script_loc)
         run('qsub -N %s_bl %s' % (name, script_loc))
 
-def draxx_beam(name, k=5, i=20, add_feats=False):
-    model = pjoin(str(REMOTE_PARSERS), name)
+def draxx_beam(name, model=None, k=5, i=10, add_feats=False, upd='early', alg='static',
+              movebeam=False, train_size="train.txt"):
+    if name is not None:
+        assert model is None
+        model = pjoin(str(REMOTE_PARSERS), name)
+    else:
+        pieces = model.split('/')
+        name = '%s_%s' % (pieces[-2], pieces[-1])
     data = str(REMOTE_STANFORD)
     repo = str(REMOTE_REPO)
-    train_str = _train(pjoin(data, 'train.txt'), model, k=int(k), i=int(i),
-                             add_feats=bool(add_feats))
-    parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'))
+    train_str = _train(pjoin(data, train_size), model, k=int(k), i=int(i),
+                             add_feats=bool(add_feats), upd=upd, train_alg=alg,
+                             movebeam=bool(movebeam))
+    parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'), k=k)
     eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.txt'))
     script = _pbsify(repo, [train_str, parse_str, eval_str])
     script_loc = pjoin(repo, 'pbs', '%s_draxx_baseline.pbs' % name)
@@ -67,51 +89,121 @@ def draxx_beam(name, k=5, i=20, add_feats=False):
         put(StringIO(script), script_loc)
         run('qsub -N %s_bl %s' % (name, script_loc))
 
+def beam_isolate(name, size="1k_train.txt"):
+    work_dir = pjoin(str(REMOTE_PARSERS), name)
+    with cd(str(REMOTE_PARSERS)):
+        for n in ['baseline', 'features', 'max_violation', 'feat_viol']:
+            d = pjoin(work_dir, n)
+            if not exists(d):
+                run('mkdir -p %s' % d)
+    #i_vals = [5, 10, 15, 30]
+    #k_vals = [5, 10, 15, 30]
+    i_vals = [10, 30, 50, 100, 150]
+    k_vals = [5, 15, 25, 50]
+    for i_val in i_vals:
+        for k_val in k_vals:
+            exp_dir = pjoin(work_dir, 'baseline', 'k%d_i%d' % (k_val, i_val))
+            # Baseline
+            draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=False, upd="early",
+                       alg="static", movebeam=False, train_size=size)
+            # BL w/ Feats
+            exp_dir = pjoin(work_dir, 'features', 'k%d_i%d' % (k_val, i_val))
+            draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=True, upd="early",
+                       alg="static", movebeam=False, train_size=size)
+            # BL w/ Max-violation training
+            exp_dir = pjoin(work_dir, 'max_violation', 'k%d_i%d' % (k_val, i_val))
+            draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=False, upd="max",
+                       alg="static", movebeam=False, train_size=size)
+            # w/ online
+            #exp_dir = pjoin(work_dir, 'dynamic_oracle', 'k%d_i%d' % (k_val, i_val))
+            #draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=False, upd="early",
+            #           alg="online", movebeam=False, train_size=size)
+            # w/ movebeam
+            #exp_dir = pjoin(work_dir, 'moves_in_beam', 'k%d_i%d' % (k_val, i_val))
+            #draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=False, upd="early",
+            #           alg="static", movebeam=True, train_size=size)
+            # w/ all
+            exp_dir = pjoin(work_dir, 'feat_viol', 'k%d_i%d' % (k_val, i_val))
+            draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=True, upd="max",
+                       alg="static", movebeam=False, train_size=size)
 
-def make_batches(data_set, nbatches):
-    pass
+
+def beam_table(name):
+    systems = ['baseline', 'features', 'max_violation', 'dynamic_oracle',
+             'moves_in_beam', 'combined']
+    table_names = ['Baseline', 'Features', 'Max. Violation', 'Dynamic Oracle', 'Prefer Moves', 'Combined']
+    i_vals = [5, 10, 15, 30, 45]
+    k_vals = [5, 10, 15, 25]
+    print r"\documentclass{article}"
+    print r"\begin{document}"
+ 
+    print r"\begin{table}\begin{tabular}{l|%s}" % ('r' * len(i_vals))
+    for k in k_vals:
+        print r"\hline \hline \multicolumn{%s}{c}{ k = %s}  \\ \hline" % (len(i_vals), k)
+        print ' & ' + ' & '.join(str(i) for i in i_vals) + r'\\'
+        print r"\hline"
+        for tn, system in zip(table_names, systems):
+            print tn + '\t&\t',
+            sys_dir = pjoin(str(REMOTE_PARSERS), name, system)
+            accs = []
+            for i in i_vals:
+                exp_dir = pjoin(sys_dir, 'k%d_i%d' % (k, i))
+                with cd(exp_dir):
+                    if not exists(exp_dir):
+                        accs.append(0)
+                        continue
+                    try:
+                        text = run("cat dev/acc", quiet=True).stdout
+                        accs.append(_get_acc(text, score='U'))
+                    except:
+                        accs.append(0)
+                        continue
+            print ' & '.join(fmt_pc(a) for a in accs) + r'\\'
+            print "\hline"
+    print r"\end{tabular}\end{table}"
+    print r"\end{document}"
+
+ 
+
+def fmt_pc(pc):
+    if pc < 1:
+        pc *= 100
+    return '%.1f' % pc
 
 
+def _train(data, model, debug=False, k=1, add_feats=False, i=15, upd='early',
+           movebeam=False, train_alg="online"):
+    feat_str = '-x' if add_feats else ''
+    move_str = '-m' if movebeam else ''
+    template = './scripts/train.py -i {i} -a {alg} -k {k} -u {upd} {movebeam} {feat_str} {data} {model}'
+    if debug:
+        template += ' -debug'
+    return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i,
+                          upd=upd, movebeam=move_str, alg=train_alg)
 
-def qstat():
-    run("qstat -na | grep mhonn")
 
-def test1k(model="baseline", dbg=False):
-    with lcd(str(LOCAL_REPO)):
-        local(_train('~/work_data/stanford/1k_train.txt',  '~/work_data/parsers/tmp',
-                    debug=dbg))
-        local(_parse('~/work_data/parsers/tmp', '~/work_data/stanford/dev_auto_pos.parse',
-                     '/tmp/parse', gold=True))
+def _parse(model, data, out, gold=False, k=1):
+    template = './scripts/parse.py -k {k} {model} {data} {out} '
+    if gold:
+        template += '-g'
+    return template.format(model=model, data=data, out=out, k=k)
 
+
+def _evaluate(test, gold):
+    return './scripts/evaluate.py %s %s > %s' % (test, gold, test.replace('parses', 'acc'))
 
 
 def _pbsify(repo, command_strs):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=8gb,nodes=1:ppn=5
+#PBS -l walltime=20:00:00,mem=8gb,nodes=1:ppn=8
 source /home/mhonniba/py27/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/lib64:/usr/lib64/:/usr/local/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
 cd {repo}"""
     return header.format(repo=repo) + '\n' + '\n'.join(command_strs)
 
-def _train(data, model, debug=False, k=1, add_feats=False, i=15):
-    if add_feats:
-        feat_str = '-x'
-    else:
-        feat_str = ''
-    template = './scripts/train.py -i {i} -k {k} {feat_str} {data} {model}'
-    if debug:
-        template += ' -debug'
-    return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i)
 
-def _parse(model, data, out, gold=False):
-    template = './scripts/parse.py {model} {data} {out} '
-    if gold:
-        template += '-g'
-    return template.format(model=model, data=data, out=out)
 
-def _evaluate(test, gold):
-    return './scripts/evaluate.py %s %s > %s' % (test, gold, test.replace('parses', 'acc'))
 
 def avg_accs(exp_name, test=False):
     exp_dir = pjoin(str(REMOTE_PARSERS), exp_name)
