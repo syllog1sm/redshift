@@ -1,6 +1,5 @@
 from libc.stdint cimport uint64_t
 from _state cimport State
-from io_parse cimport Sentence
 from index.hashes cimport FeatIndex
 
 cdef struct Predicate:
@@ -19,7 +18,6 @@ cdef class FeatureSet:
 
     cdef int _make_predicates(self, bint add_extra) except 0
     
-
 
 cdef int CONTEXT_SIZE
 

@@ -261,13 +261,12 @@ cdef free_state(State* s):
 
 
 
-cdef int cmp_contn(const_void *c1, const_void *c2) nogil:
-    cdef Cont* v1 = <Cont*>c1
-    cdef Cont* v2 = <Cont*>c2
-    # Reverse order
-    if v1.score > v2.score:
+cdef int cmp_contn(const void* v1, const void* v2) nogil:
+    cdef const Cont* c1 = <Cont*>v1
+    cdef const Cont* c2 = <Cont*>v2
+    if c1.score > c2.score:
         return -1
-    elif v1.score < v2.score:
+    elif c1.score < c2.score:
         return 1
     return 0
 
