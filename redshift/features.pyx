@@ -432,7 +432,7 @@ cdef class FeatureSet:
             pred = Predicate(id=id_, n=len(args))
             pred.raws = <uint64_t*>malloc(len(args) * sizeof(uint64_t))
             pred.args = <int*>malloc(len(args) * sizeof(int))
-            for i, element in enumerate(args):
+            for i, element in enumerate(sorted(args)):
                 pred.args[i] = element
             # TODO: Add estimates for each feature type
             pred.expected_size = 1000
