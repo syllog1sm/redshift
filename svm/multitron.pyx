@@ -12,7 +12,7 @@ cdef size_t MIN_UPD = 2
 
 DEF MAX_PARAM = 10000000
 
-DEF MAX_DENSE = 500000
+DEF MAX_DENSE = 1000000
 
 cdef void resize_feat(Feature* feat, size_t n):
     cdef size_t i
