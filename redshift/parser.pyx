@@ -24,7 +24,6 @@ from features cimport FeatureSet
 from io_parse import LABEL_STRS, STR_TO_LABEL
 
 import index.hashes
-from index.hashes cimport InstanceCounter, FeatIndex
 cimport index.hashes
 
 from svm.cy_svm cimport Model, LibLinear, Perceptron
@@ -86,7 +85,6 @@ cdef class Parser:
     cdef object model_dir
     cdef size_t beam_width
     cdef TransitionSystem moves
-    cdef InstanceCounter inst_counts
     cdef object add_extra
     cdef object label_set
     cdef object train_alg
@@ -146,7 +144,6 @@ cdef class Parser:
         guide_loc = self.model_dir.join('model')
         n_labels = len(io_parse.LABEL_STRS)
         self.guide = Perceptron(self.moves.max_class, guide_loc)
-        self.inst_counts = InstanceCounter()
 
     def setup_model_dir(self, loc, clean):
         if clean and loc.exists():
@@ -180,6 +177,7 @@ cdef class Parser:
         indices = range(sents.length)
         if self.beam_width >= 1:
             self.guide.use_cache = True
+        self.features.save_entries = True
         for n in range(n_iter):
             random.shuffle(indices)
             # Group indices into minibatches of fixed size
@@ -358,7 +356,6 @@ cdef class Parser:
         cdef size_t label = 0
         cdef size_t _ = 0
         cdef bint online = self.train_alg == 'online'
-        cdef FeatIndex feat_idx = index.hashes.get_feat_idx()
         if DEBUG:
             print ' '.join(py_words)
         while not s.is_finished:
@@ -472,12 +469,13 @@ cdef class Parser:
 
     def save(self):
         self.guide.save(self.model_dir.join('model'))
+        self.features.save(self.model_dir.join('features'))
 
     def load(self):
         self.guide.load(self.model_dir.join('model'))
 
     def new_idx(self, model_dir, size_t n_predicates):
-        index.hashes.init_feat_idx(n_predicates, model_dir.join('features'))
+        #index.hashes.init_feat_idx(n_predicates, model_dir.join('features'))
         index.hashes.init_word_idx(model_dir.join('words'))
         index.hashes.init_pos_idx(model_dir.join('pos'))
 
@@ -485,7 +483,8 @@ cdef class Parser:
         model_dir = Path(model_dir)
         index.hashes.load_word_idx(model_dir.join('words'))
         index.hashes.load_pos_idx(model_dir.join('pos'))
-        index.hashes.load_feat_idx(n_predicates, model_dir.join('features'))
+        self.features.load(model_dir.join('features'))
+        #index.hashes.load_feat_idx(n_predicates, model_dir.join('features'))
    
     def write_cfg(self, loc):
         with loc.open('w') as cfg:
