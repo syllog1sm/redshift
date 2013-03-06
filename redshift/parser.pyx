@@ -189,15 +189,8 @@ cdef class Parser:
                         self.train_one(n, &sents.s[i], sents.strings[i][0])
                 for weights in deltas:
                     self.guide.batch_update(weights)
-            move_acc = (float(self.guide.n_corr) / self.guide.total+1e-100) * 100
-            cache_hits = self.guide.cache.n_hit
-            total = self.guide.cache.n_hit + self.guide.cache.n_miss
-            cache_use = (float(cache_hits) / total)*100
-            print "#%d: Moves %d/%d=%.2f. %.1f cache use" % (n, self.guide.n_corr,
-                                             self.guide.total, move_acc, cache_use)
-            if move_acc > 99.5:
-                print "Converged!"
-                break
+            print_train_msg(n, self.guide.n_corr, self.guide.total,
+                            self.guide.cache.n_hit, self.guide.cache.n_miss)
             if self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
             self.guide.n_corr = 0
@@ -459,21 +452,19 @@ cdef class Parser:
         cdef size_t right_move = 0
         cdef double valid_score = -1000000
         cdef double right_score = -1000000
-        cdef uint64_t* labels = self.guide.get_labels()
         scores = self.guide.predict_scores(n_preds, feats)
         seen_valid = False
-        for i in range(self.guide.nr_class):
-            score = scores[i]
-            clas = labels[i]
+        for clas in range(self.guide.nr_class):
+            score = scores[clas]
             if valid[clas] and score > valid_score:
                 best_valid = clas
                 valid_score = score
                 seen_valid = True
-            if self.moves.right_arcs[clas] and score > right_score:
+            if self.moves.r_end > clas > self.moves.r_start and score > right_score:
                 best_right = clas
                 right_score = score
         assert seen_valid
-        rlabel[0] = self.moves.class_to_label(best_right)
+        rlabel[0] = self.moves.labels[best_right]
         return best_valid
 
     def save(self):
@@ -964,3 +955,12 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
             head = s.top
             child = s.i if s.i < len(tokens) else 0
         return u'%s(%s)' % (tokens[head], tokens[child])
+
+def print_train_msg(n, n_corr, n_move, n_hit, n_miss):
+    move_acc = (float(n_corr) / n_move+1e-100) * 100
+    cache_use = float(n_hit) / (n_hit + n_miss + 1e100)
+    msg = "#%d: Moves %d/%d=%.2f" % (n, n_corr, n_move, move_acc)
+    if cache_use != 0:
+        msg += '. Cache use %.1f' % cache_use
+    print msg
+
