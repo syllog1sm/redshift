@@ -124,23 +124,6 @@ cdef inline size_t get_r2(State *s, size_t head):
         return 0
     return s.r_children[head][s.r_valencies[head] - 2]
 
-
-cdef int get_left_edge(State *s, size_t node) except -1:
-    if s.l_valencies[node] == 0:
-        return 0
-    node = s.l_children[node][s.l_valencies[node] - 1]
-    while s.l_valencies[node] != 0:
-        node = s.l_children[node][s.l_valencies[node] - 1]
-    return node
-
-cdef int get_right_edge(State *s, size_t node) except -1:
-    if s.r_valencies[node] == 0:
-        return 0
-    node = s.r_children[node][s.r_valencies[node] - 1]
-    while s.r_valencies[node] != 0:
-        node = s.r_children[node][s.r_valencies[node] - 1]
-    return node
-
 cdef bint has_child_in_buffer(State *s, size_t word, size_t* heads):
     assert word != 0
     cdef size_t buff_i

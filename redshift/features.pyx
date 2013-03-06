@@ -9,7 +9,7 @@ from io_parse cimport Sentence
 from index.hashes cimport encode_feat, FeatIndex, get_feat_idx
 
 
-DEF CONTEXT_SIZE = 60
+DEF CONTEXT_SIZE = 53
 
 # Context elements
 # Ensure _context_size is always last; it ensures our compile-time setting
@@ -44,9 +44,6 @@ cdef enum:
     S0rw
     S0rp
     S0rl
-    S0rew
-    S0rep
-    S0rel
     S0l2w
     S0l2p
     S0l2l
@@ -68,10 +65,6 @@ cdef enum:
     S1lw
     S1lp
     S1ll
-    S1rew
-    S1rep
-    S1rel
-    S1re_dist
     S0llabs
     S0rlabs
     N0llabs
@@ -108,11 +101,6 @@ cdef int fill_context(size_t* context, size_t nr_label, size_t n0, size_t n1, si
     context[S0hw] = words[heads[s0]]
     context[S0hp] = pos[heads[s0]]
     context[S0hl] = labels[heads[s0]]
-
-    # The 'right edge' is the right-most branch of S0
-    context[S0rew] = words[s0_re]
-    context[S0rep] = pos[s0_re]
-    context[S0rel] = labels[s0_re]
 
     context[S1w] = words[s1]
     context[S1p] = pos[s1]
@@ -216,43 +204,39 @@ cdef class FeatureSet:
 
 
     cdef uint64_t* extract(self, Sentence* sent, State* s) except NULL:
-        cdef int i, j
         cdef size_t* context = self.context
-        cdef uint64_t* hashed = self.features
         #cdef FeatIndex feat_idx = self.feat_idx
-        cdef size_t s0_re = 0
-        cdef size_t s1_re = 0
-        fill_context(context, self.nr_label, s.i, s.i + 1, s.i + 2,
-                     s.top, s.second, s0_re, s1_re, s.stack_len,
+        fill_context(context, s.i, s.i + 1, s.i + 2,
+                     s.top, s.second, s.stack_len,
                      sent.words, sent.pos, sent.browns,
-                     s.heads, s.labels, s.l_valencies, s.r_valencies,
+                     s.heads, s.labels,
+                     s.l_valencies[s.top], s.r_valencies[s.top],
+                     s.l_valencies[s.second], s.r_valencies[s.second],
+                     s.l_valencies[s.i],
                      s.l_children[s.top], s.r_children[s.top],
                      s.l_children[s.second], s.r_children[s.second],
-                     s.l_children[s.i],
-                     s.llabel_set[s.top], s.rlabel_set[s.top], s.llabel_set[s.i])
+                     s.l_children[s.i])
+        cdef size_t i, j
         cdef bint seen_non_zero
-        cdef Predicate* preds = self.predicates
-        cdef int* args
-        cdef uint64_t* raws
+        cdef Predicate* pred
         cdef size_t n
-        cdef uint64_t value
+        cdef uint64_t feat
         cdef size_t f = 0
+        cdef uint64_t* features = self.features
         for i in range(self.n):
-            raws = preds[i].raws
-            args = preds[i].args
-            n = preds[i].n
+            pred = &self.predicates[i]
             seen_non_zero = False
-            for j in range(n):
-                raws[j] = context[args[j]]
-                if not seen_non_zero and raws[j] != 0:
+            for j in range(pred.n):
+                value = context[pred.args[j]]
+                pred.raws[j] = value
+                if value != 0:
                     seen_non_zero = True
             if seen_non_zero:
-                value = self.feat_idx.encode(raws, n, i)
-                hashed[f] = value
+                feat = self.feat_idx.encode(pred.raws, pred.n, i)
+                features[f] = feat
                 f += 1
-        for i in range(f, self.n):
-            hashed[i] = 0
-        return hashed
+        features[f] = 0
+        return features
 
     cdef int _make_predicates(self, bint add_extra) except 0:
         cdef object feats, feat
