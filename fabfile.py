@@ -29,10 +29,7 @@ def clean():
 
 def make():
     with lcd(str(LOCAL_REPO)):
-        err = local('python setup.py build_ext --inplace', capture=True).stderr
-        for line in err.split('\n'):
-            if 'warning: ' not in line:
-                print line
+        local('python setup.py build_ext --inplace')
 
 def qstat():
     run("qstat -na | grep mhonn")
