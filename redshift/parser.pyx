@@ -122,8 +122,9 @@ cdef class Parser:
             print 'NM L'
         elif allow_reduce:
             print 'NM D'
-        beam_settings = (beam_width, upd_strat, label_beam)
-        print 'Beam settings: k=%d; upd_strat=%s; label_beam=%s' % beam_settings
+        if beam_width >= 1:
+            beam_settings = (beam_width, upd_strat, label_beam)
+            print 'Beam settings: k=%d; upd_strat=%s; label_beam=%s' % beam_settings
         self.model_dir = self.setup_model_dir(model_dir, clean)
         labels = io_parse.set_labels(label_set)
         self.features = FeatureSet(len(labels), add_extra)
@@ -177,6 +178,8 @@ cdef class Parser:
         self.guide.set_classes(range(move_classes))
         self.write_cfg(self.model_dir.join('parser.cfg'))
         indices = range(sents.length)
+        if self.beam_width >= 1:
+            self.guide.use_cache = True
         for n in range(n_iter):
             random.shuffle(indices)
             # Group indices into minibatches of fixed size
@@ -208,9 +211,9 @@ cdef class Parser:
         cdef Cont* cont
         cdef Violation violn
         cdef bint halt = False
+        self.guide.cache.flush()
         cdef Beam beam = Beam(k, sent.length, self.guide.nr_class,
                               upd_strat=self.upd_strat, add_labels=self.label_beam)
-        self.guide.cache.flush()
         while not beam.gold.is_finished:
             beam.refresh()
             n_valid = self._fill_move_scores(sent, beam.psize, beam.parents,
@@ -380,7 +383,7 @@ cdef class Parser:
         if k == None:
             k = self.beam_width
         for i in range(sents.length):
-            if k == 1:
+            if k <= 1:
                 self.parse(&sents.s[i])
             else:
                 self.beam_parse(&sents.s[i], k)
@@ -460,7 +463,7 @@ cdef class Parser:
                 best_valid = clas
                 valid_score = score
                 seen_valid = True
-            if self.moves.r_end > clas > self.moves.r_start and score > right_score:
+            if self.moves.r_end > clas >= self.moves.r_start and score > right_score:
                 best_right = clas
                 right_score = score
         assert seen_valid
