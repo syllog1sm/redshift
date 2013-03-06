@@ -1,13 +1,16 @@
-# cython: profile=True
 """
 Handle parser features
 """
 from libc.stdlib cimport malloc, free, calloc
 from libc.stdint cimport uint64_t
+from libcpp.pair cimport pair
+from cython.operator cimport dereference as deref, preincrement as inc
+
 
 from io_parse cimport Sentence
-from index.hashes cimport encode_feat, FeatIndex, get_feat_idx
+#from index.hashes cimport encode_feat
 
+from libcpp.vector cimport vector
 
 DEF CONTEXT_SIZE = 53
 
@@ -72,15 +75,13 @@ cdef enum:
     _context_size
 assert CONTEXT_SIZE == _context_size, "Set CONTEXT_SIZE to %d in features.pyx" % _context_size
 
-cdef int fill_context(size_t* context, size_t nr_label, size_t n0, size_t n1, size_t n2,
-                      size_t s0, size_t s1,
-                      size_t s0_re, size_t s1_re,
-                      size_t stack_len,
+cdef void fill_context(size_t* context, size_t nr_label, size_t n0, size_t n1, size_t n2,
+                      size_t s0, size_t s1, size_t stack_len,
                       size_t* words, size_t* pos, size_t* browns,
                       size_t* heads, size_t* labels, size_t* l_vals, size_t* r_vals,
                       size_t* s0_lkids, size_t* s0_rkids, size_t* s1_lkids, size_t* s1_rkids,
                       size_t* n0_lkids,
-                      bint* s0_llabels, bint* s0_rlabels, bint* n0_llabels) except -1:
+                      bint* s0_llabels, bint* s0_rlabels, bint* n0_llabels):
     cdef uint64_t t, d, j
 
     context[N0w] = words[n0]
@@ -110,19 +111,6 @@ cdef int fill_context(size_t* context, size_t nr_label, size_t n0, size_t n1, si
     context[S1lw] = words[s1_lkids[0]]
     context[S1lp] = pos[s1_lkids[0]]
     context[S1ll] = labels[s1_lkids[0]]
-    # The "right edge feature refers to the child before S0. If S0 is
-    # attached to S1, then "right edge" is the second right-most child
-    # of s.second. If S0 is not a child of S1, then it's the _rightmost_
-    # child.
-    # E.g. (S1 (S1re ) ) (S0) vs (S1 (S1re ) (S0))
-    context[S1rew] = words[s1_re]
-    context[S1rep] = pos[s1_re]
-    context[S1rel] = labels[s1_re]
-    # Token distance between S0 and its right neighbour
-    if (s0 - s1_re) >= 5:
-        context[S1re_dist] = 5
-    else:
-        context[S1re_dist] = s0 - s1_re
     context[S0lv] = l_vals[s0]
     context[S0rv] = r_vals[s0]
     context[N0lv] = l_vals[n0]
@@ -191,39 +179,68 @@ cdef int fill_context(size_t* context, size_t nr_label, size_t n0, size_t n1, si
         context[depth] = 5
     else:
         context[depth] = stack_len
-    return 1
 
 
 cdef class FeatureSet:
     def __cinit__(self, nr_label, bint add_extra=False):
         self.nr_label = nr_label
-        self.n = self._make_predicates(add_extra)
-        self.feat_idx = get_feat_idx()
+        # Sets predicates, n, nr_multi, nr_uni
+        self._make_predicates(add_extra)
         self.context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
         self.features = <uint64_t*>calloc(self.n, sizeof(uint64_t))
+        cdef dense_hash_map[uint64_t, uint64_t] *table
+        self.i = 1
+        self.save_entries = False
+        self.unigrams = dense_hash_map[uint64_t, uint64_t]()
+        self.unigrams.set_empty_key(0)
+        self.tables = vector[dense_hash_map[uint64_t, uint64_t]]()
+        cdef uint64_t i
+        for i in range(self.nr_multi):
+            table = new dense_hash_map[uint64_t, uint64_t]()
+            self.tables.push_back(table[0])
+            self.tables[i].set_empty_key(0)
 
+    def __dealloc__(self):
+        free(self.context)
+        free(self.features)
+        free(self.predicates)
 
-    cdef uint64_t* extract(self, Sentence* sent, State* s) except NULL:
+    cdef uint64_t* extract(self, Sentence* sent, State* s):
         cdef size_t* context = self.context
-        #cdef FeatIndex feat_idx = self.feat_idx
-        fill_context(context, s.i, s.i + 1, s.i + 2,
+        fill_context(context, self.nr_label, s.i, s.i + 1, s.i + 2,
                      s.top, s.second, s.stack_len,
                      sent.words, sent.pos, sent.browns,
-                     s.heads, s.labels,
-                     s.l_valencies[s.top], s.r_valencies[s.top],
-                     s.l_valencies[s.second], s.r_valencies[s.second],
-                     s.l_valencies[s.i],
+                     s.heads, s.labels, s.l_valencies, s.r_valencies,
                      s.l_children[s.top], s.r_children[s.top],
                      s.l_children[s.second], s.r_children[s.second],
-                     s.l_children[s.i])
-        cdef size_t i, j
+                     s.l_children[s.i], s.llabel_set[s.top], s.rlabel_set[s.top],
+                     s.llabel_set[s.i])
+        cdef size_t f = 0
+        cdef size_t i
+        cdef uint64_t hashed
+        cdef uint64_t feat
+        cdef uint64_t value
+        cdef uint64_t* features = self.features
+        for i in range(self.nr_uni):
+            value = context[self.uni_feats[i]]
+            if value == 0:
+                continue
+            hashed = (value * self.nr_uni) + i
+            feat = self.unigrams[hashed]
+            if feat != 0:
+                self.features[f] = feat
+                f += 1
+            elif self.save_entries:
+                self.unigrams[hashed] = self.i
+                self.features[f] = self.i
+                f += 1
+                self.i += 1
+
+        cdef uint64_t j
         cdef bint seen_non_zero
         cdef Predicate* pred
         cdef size_t n
-        cdef uint64_t feat
-        cdef size_t f = 0
-        cdef uint64_t* features = self.features
-        for i in range(self.n):
+        for i in range(self.nr_multi):
             pred = &self.predicates[i]
             seen_non_zero = False
             for j in range(pred.n):
@@ -232,14 +249,51 @@ cdef class FeatureSet:
                 if value != 0:
                     seen_non_zero = True
             if seen_non_zero:
-                feat = self.feat_idx.encode(pred.raws, pred.n, i)
-                features[f] = feat
-                f += 1
+                hashed = MurmurHash64A(pred.raws, <uint64_t>pred.n * sizeof(uint64_t), i)
+                feat = self.tables[i][hashed]
+                if feat != 0:
+                    features[f] = feat
+                    f += 1
+                elif self.save_entries:
+                    self.tables[i][hashed] = self.i
+                    features[f] = self.i
+                    self.i += 1
+                    f += 1
         features[f] = 0
         return features
+   
+    def save(self, path):
+        cdef pair[uint64_t, uint64_t] data
+        cdef dense_hash_map[uint64_t, uint64_t].iterator it
+        out = open(str(path), 'w')
+        it = self.unigrams.begin()
+        while it != self.unigrams.end():
+            data = deref(it)
+            out.write('u\t%d\t%d\n' % (data.first, data.second))
+            inc(it)
+        for i in range(self.nr_multi):
+            it = self.tables[i].begin()
+            while it != self.tables[i].end():
+                data = deref(it)
+                out.write('%d\t%d\t%d\n' % (i, data.first, data.second))
+                inc(it)
+        out.close()
+                
+    def load(self, path):
+        cdef uint64_t hashed
+        cdef uint64_t value
+        for line in open(str(path)):
+            fields = line.strip().split()
+            i = fields[0]
+            hashed = int(fields[1])
+            value = int(fields[2])
+            if i == 'u':
+                self.unigrams[hashed] = value
+            else:
+                self.tables[int(i)][hashed] = value
 
-    cdef int _make_predicates(self, bint add_extra) except 0:
-        cdef object feats, feat
+
+    def _make_predicates(self, bint add_extra):
         from_single = (
             (S0w, S0p),
             (S0w,),
@@ -409,10 +463,18 @@ cdef class FeatureSet:
         if add_extra:
             print "Using stack-second features"
             feats += stack_second
-        n_preds = len(feats)
-        self.predicates = <Predicate*>malloc(n_preds * sizeof(Predicate))
+        assert len(set(feats)) == len(feats)
+        self.n = len(feats)
+        uni_feats = list(sorted([f for f in feats if len(f) == 1]))
+        multi_feats = list(sorted([f for f in feats if len(f) > 1]))
+        self.nr_uni = len(uni_feats)
+        self.uni_feats = <size_t*>malloc(self.nr_uni * sizeof(size_t))
+        for i, feat in enumerate(uni_feats):
+            self.uni_feats[i] = feat[0]
+        self.nr_multi = len(multi_feats)
+        self.predicates = <Predicate*>malloc(self.nr_multi * sizeof(Predicate))
         cdef Predicate pred
-        for id_, args in enumerate(feats):
+        for id_, args in enumerate(multi_feats):
             pred = Predicate(id=id_, n=len(args))
             pred.raws = <uint64_t*>malloc(len(args) * sizeof(uint64_t))
             pred.args = <int*>malloc(len(args) * sizeof(int))
@@ -421,5 +483,4 @@ cdef class FeatureSet:
             # TODO: Add estimates for each feature type
             pred.expected_size = 1000
             self.predicates[id_] = pred
-        return n_preds
 
