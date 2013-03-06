@@ -59,18 +59,6 @@ cdef struct State:
     size_t* history
     Kernel kernel
 
-    #size_t[MAX_SENT_LEN] stack
-    #size_t[MAX_SENT_LEN] heads
-    #size_t[MAX_SENT_LEN] labels
-    #size_t guess_labels[MAX_SENT_LEN]
-    #size_t[MAX_SENT_LEN] l_valencies
-    #size_t[MAX_SENT_LEN] r_valencies
-    #size_t l_children[MAX_SENT_LEN][MAX_VALENCY]
-    #size_t r_children[MAX_SENT_LEN][MAX_VALENCY]
-    #bint llabel_set[MAX_SENT_LEN][MAX_LABELS]
-    #bint rlabel_set[MAX_SENT_LEN][MAX_LABELS]
-    #size_t[MAX_TRANSITIONS] history
-
 cdef struct Cont:
     double score
     size_t clas
@@ -92,9 +80,6 @@ cdef inline size_t get_l(State *s, size_t head)
 cdef inline size_t get_l2(State *s, size_t head)
 cdef inline size_t get_r(State *s, size_t head)
 cdef inline size_t get_r2(State *s, size_t head)
-
-cdef int get_left_edge(State *s, size_t head) except -1
-cdef int get_right_edge(State *s, size_t head) except -1
 
 cdef bint has_child_in_buffer(State *s, size_t word, size_t* heads)
 cdef bint has_head_in_buffer(State *s, size_t word, size_t* heads)
