@@ -4,6 +4,7 @@ Handle parser features
 from libc.stdlib cimport malloc, free, calloc
 from libc.stdint cimport uint64_t
 from libcpp.pair cimport pair
+import index.hashes
 from cython.operator cimport dereference as deref, preincrement as inc
 
 
@@ -184,17 +185,19 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t n0, size_t n1, s
 cdef class FeatureSet:
     def __cinit__(self, nr_label, bint add_extra=False):
         self.nr_label = nr_label
-        # Sets predicates, n, nr_multi, nr_uni
+        # Sets predicates, n, nr_multi, nr_uni. Allocates unigram arrays
         self._make_predicates(add_extra)
         self.context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
         self.features = <uint64_t*>calloc(self.n, sizeof(uint64_t))
         cdef dense_hash_map[uint64_t, uint64_t] *table
         self.i = 1
         self.save_entries = False
-        self.unigrams = dense_hash_map[uint64_t, uint64_t]()
-        self.unigrams.set_empty_key(0)
+        self.unigrams = vector[dense_hash_map[uint64_t, uint64_t]]()
+        for i in range(self.nr_uni):
+            table = new dense_hash_map[uint64_t, uint64_t]()
+            self.unigrams.push_back(table[0])
+            self.unigrams[i].set_empty_key(0)
         self.tables = vector[dense_hash_map[uint64_t, uint64_t]]()
-        cdef uint64_t i
         for i in range(self.nr_multi):
             table = new dense_hash_map[uint64_t, uint64_t]()
             self.tables.push_back(table[0])
@@ -225,13 +228,12 @@ cdef class FeatureSet:
             value = context[self.uni_feats[i]]
             if value == 0:
                 continue
-            hashed = (value * self.nr_uni) + i
-            feat = self.unigrams[hashed]
+            feat = self.unigrams[i][value]
             if feat != 0:
                 features[f] = feat
                 f += 1
             elif self.save_entries:
-                self.unigrams[hashed] = self.i
+                self.unigrams[i][value] = self.i
                 features[f] = self.i
                 f += 1
                 self.i += 1
@@ -266,11 +268,12 @@ cdef class FeatureSet:
         cdef pair[uint64_t, uint64_t] data
         cdef dense_hash_map[uint64_t, uint64_t].iterator it
         out = open(str(path), 'w')
-        it = self.unigrams.begin()
-        while it != self.unigrams.end():
-            data = deref(it)
-            out.write('u\t%d\t%d\n' % (data.first, data.second))
-            inc(it)
+        for i in range(self.nr_uni):
+            it = self.unigrams[i].begin()
+            while it != self.unigrams[i].end():
+                data = deref(it)
+                out.write('u\t%d,%d\t%d\n' % (i, data.first, data.second))
+                inc(it)
         for i in range(self.nr_multi):
             it = self.tables[i].begin()
             while it != self.tables[i].end():
@@ -280,135 +283,162 @@ cdef class FeatureSet:
         out.close()
                 
     def load(self, path):
-        cdef uint64_t hashed
         cdef uint64_t value
         for line in open(str(path)):
             fields = line.strip().split()
             i = fields[0]
-            hashed = int(fields[1])
+            hashed = fields[1]
             value = int(fields[2])
             if i == 'u':
-                self.unigrams[hashed] = value
+                i, hashed = hashed.split(',')
+                self.unigrams[int(i)][int(hashed)] = <size_t>value
             else:
-                self.tables[int(i)][hashed] = value
+                self.tables[int(i)][int(hashed)] = value
 
 
     def _make_predicates(self, bint add_extra):
+        # For multi-part features, we want expected sizes, as the table will
+        # resize
+        wp = 50000
+        wwpp = 100000
+        wwp = 100000
+        wpp = 100000
+        ww = 100000
+        pp = 2500
+        pw = 50000
+        ppp = 10000
+        vw = 60000
+        vp = 200
+        lwp = 110000
+        lww = 110000
+        lw = 80000
+        lp = 500
+        dp = 500
+        dw = 50000
+        dppp = 10000
+        dpp = 30000
+        dww = 60000
+        # For unigrams we need max values
+        w = 20000
+        p = 100
+        l = 100
+
+
         from_single = (
-            (S0w, S0p),
-            (S0w,),
-            (S0p,),
-            (N0w, N0p),
-            (N0w,),
-            (N0p,),
-            (N1w, N1p),
-            (N1w,),
-            (N1p,),
-            (N2w, N2p),
-            (N2w,),
-            (N2p,)
+            (wp, S0w, S0p),
+            (w, S0w,),
+            (p, S0p,),
+            (wp, N0w, N0p),
+            (w, N0w,),
+            (p, N0p,),
+            (wp, N1w, N1p),
+            (w, N1w,),
+            (p, N1p,),
+            (wp, N2w, N2p),
+            (w, N2w,),
+            (p, N2p,)
         )
 
         from_word_pairs = (
-            (S0w, S0p, N0w, N0p),
-            (S0w, S0p, N0w),
-            (S0w, N0w, N0p),
-            (S0w, S0p, N0p),
-            (S0p, N0w, N0p),
-            (S0w, N0w),
-            (S0p, N0p),
-            (N0p, N1p)
+            (wwpp, S0w, S0p, N0w, N0p),
+            (wwp, S0w, S0p, N0w),
+            (wwp, S0w, N0w, N0p),
+            (wpp, S0w, S0p, N0p),
+            (wpp, S0p, N0w, N0p),
+            (ww, S0w, N0w),
+            (pp, S0p, N0p),
+            (pp, N0p, N1p)
         )
 
         from_three_words = (
-            (N0p, N1p, N2p),
-            (S0p, N0p, N1p),
-            (S0hp, S0p, N0p),
-            (S0p, S0lp, N0p),
-            (S0p, S0rp, N0p),
-            (S0p, N0p, N0lp)
+            (ppp, N0p, N1p, N2p),
+            (ppp, S0p, N0p, N1p),
+            (ppp, S0hp, S0p, N0p),
+            (ppp, S0p, S0lp, N0p),
+            (ppp, S0p, S0rp, N0p),
+            (ppp, S0p, N0p, N0lp)
         )
 
         distance = (
-            (dist, S0w),
-            (dist, S0p),
-            (dist, N0w),
-            (dist, N0p),
-            (dist, S0w, N0w),
-            (dist, S0p, N0p),
+            (dw, dist, S0w),
+            (dp, dist, S0p),
+            (dw, dist, N0w),
+            (dp, dist, N0p),
+            (dww, dist, S0w, N0w),
+            (dpp, dist, S0p, N0p),
         )
 
         valency = (
-            (S0w, S0rv),
-            (S0p, S0rv),
-            (S0w, S0lv),
-            (S0p, S0lv),
-            (N0w, N0lv),
-            (N0p, N0lv),
+            (vw, S0w, S0rv),
+            (vp, S0p, S0rv),
+            (vw, S0w, S0lv),
+            (vp, S0p, S0lv),
+            (vw, N0w, N0lv),
+            (vp, N0p, N0lv),
         )
 
         unigrams = (
-            (S0hw,),
-            (S0hp,),
-            (S0lw,),
-            (S0lp,),
-            (S0rw,),
-            (S0rp,),
-            (N0lw,),
-            (N0lp,),
+            (w, S0hw,),
+            (p, S0hp,),
+            (w, S0lw,),
+            (p, S0lp,),
+            (w, S0rw,),
+            (p, S0rp,),
+            (w, N0lw,),
+            (p, N0lp,),
         )
 
         third_order = (
-            (S0h2w,),
-            (S0h2p,),
-            (S0l2w,),
-            (S0l2p,),
-            (S0r2w,),
-            (S0r2p,),
-            (N0l2w,),
-            (N0l2p,),
-            (S0p, S0lp, S0l2p),
-            (S0p, S0rp, S0r2p),
-            (S0p, S0hp, S0h2p),
-            (N0p, N0lp, N0l2p)
+            (w, S0h2w,),
+            (p, S0h2p,),
+            (w, S0l2w,),
+            (p, S0l2p,),
+            (w, S0r2w,),
+            (p, S0r2p,),
+            (w, N0l2w,),
+            (p, N0l2p,),
+            (ppp, S0p, S0lp, S0l2p),
+            (ppp, S0p, S0rp, S0r2p),
+            (ppp, S0p, S0hp, S0h2p),
+            (ppp, N0p, N0lp, N0l2p)
         )
 
         labels = (
-            (S0l,),
-            (S0ll,),
-            (S0rl,),
-            (N0ll,),
-            (S0hl,),
-            (S0l2l,),
-            (S0r2l,),
-            (N0l2l,),
+            (l, S0l,),
+            (l, S0ll,),
+            (l, S0rl,),
+            (l, N0ll,),
+            (l, S0hl,),
+            (l, S0l2l,),
+            (l, S0r2l,),
+            (l, N0l2l,),
         )
         label_sets = (
-            (S0w, S0rlabs),
-            (S0p, S0rlabs),
-            (S0w, S0llabs),
-            (S0p, S0llabs),
-            (N0w, N0llabs),
-            (N0p, N0llabs),
+            (lw, S0w, S0rlabs),
+            (lp, S0p, S0rlabs),
+            (lw, S0w, S0llabs),
+            (lp, S0p, S0llabs),
+            (lw, N0w, N0llabs),
+            (lp, N0p, N0llabs),
         )
 
         # Extra
         stack_second = (
             # For reattach. We need these because if we left-clobber, we need to
             # know what will be our head
-            (S1w,),
-            (S1p,),
-            (S1w, S1p),
-            (S1w, N0w),
-            (S1w, N0p),
-            (S1p, N0w),
-            (S1p, N0p),
-            (S1w, N1w),
-            (S1w, N1p),
-            (S1p, N1p),
-            (S1p, N1w),
-            (dist, S1w, N1w),
-            (dist, S1p, N0p, N1p),
+            (w, S1w,),
+            (p, S1p,),
+            (wp, S1w, S1p),
+            (ww, S1w, N0w),
+            (wp, S1w, N0p),
+            (wp, S1p, N0w),
+            (pp, S1p, N0p),
+            (ww, S1w, N1w),
+            (wp, S1w, N1p),
+            (pp, S1p, N1p),
+            (pw, S1p, N1w),
+            (dww, dist, S1w, N1w),
+            (dppp, dist, S1p, N0p, N1p),
             # For right-raise (and others)
             #(S1p, S0p, N0p),
             #(S1w, S0w, N0w),
@@ -416,17 +446,17 @@ cdef class FeatureSet:
             #(depth, S1w, N1w),
             # For right/left unshift
             #(S0hp, S0w, S0p, S1w, S1p, S1l),
-            (S0hp, S0p, S1w),
-            (S0hp, S0w, S1p),
+            (wpp, S0hp, S0p, S1w),
+            (wpp, S0hp, S0w, S1p),
             # For left-invert
-            (S0ll, S0w, N0w),
-            (S0ll, S0w, N0p),
-            (S0ll, S0p, N0w),
-            (S0lw, N0w),
-            (S0lp, N0p),
-            (S0lp, S0p, N0p),
-            (S0w, N0lv),
-            (S0p, N0lv),
+            (lww, S0ll, S0w, N0w),
+            (lww, S0ll, S0w, N0p),
+            (lwp, S0ll, S0p, N0w),
+            (ww, S0lw, N0w),
+            (pp, S0lp, N0p),
+            (ppp, S0lp, S0p, N0p),
+            (vw, S0w, N0lv),
+            (vp, S0p, N0lv),
             # For right-lower
             #(S1rep, S0w, N0w),
             #(S1rew, S0w, N0p),
@@ -441,20 +471,20 @@ cdef class FeatureSet:
             #(S0rew, N0p),
             # Found by accident
             # For new right lower
-            (S0r2w, S0rw),
-            (S0r2p, S0rp),
-            (S0r2w, S0rp),
-            (S0r2p, S0rw),
-            (S0w, S0rw),
-            (S0w, S0rp),
-            (S0p, S0rp),
-            (S0p, S0rw),
-            (S0p, S0rp),
-            (S0p, S0r2w, S0rw),
-            (S0p, S0r2p, S0rp),
-            (S0p, S0rp, N0w),
-            (S0p, S0rp, N0p),
-            (S0w, S0rp, N0p),
+            (ww, S0r2w, S0rw),
+            (pp, S0r2p, S0rp),
+            (wp, S0r2w, S0rp),
+            (wp, S0r2p, S0rw),
+            (ww, S0w, S0rw),
+            (pw, S0w, S0rp),
+            (pp, S0p, S0rp),
+            (pp, S0p, S0rw),
+            (pp, S0p, S0rp),
+            (wwp, S0p, S0r2w, S0rw),
+            (ppp, S0p, S0r2p, S0rp),
+            (wpp, S0p, S0rp, N0w),
+            (ppp, S0p, S0rp, N0p),
+            (wpp, S0w, S0rp, N0p),
         )
 
         feats = from_single + from_word_pairs + from_three_words + distance + valency + unigrams + third_order
@@ -465,22 +495,26 @@ cdef class FeatureSet:
             feats += stack_second
         assert len(set(feats)) == len(feats)
         self.n = len(feats)
-        uni_feats = list(sorted([f for f in feats if len(f) == 1]))
-        multi_feats = list(sorted([f for f in feats if len(f) > 1]))
+        uni_feats = list(sorted([f for f in feats if len(f) == 2], key=lambda i: i[1]))
+        multi_feats = list(sorted([f for f in feats if len(f) > 2], key=lambda i: i[1]))
         self.nr_uni = len(uni_feats)
+        #self.unigrams = <uint64_t**>malloc(self.nr_uni * sizeof(uint64_t*))
         self.uni_feats = <size_t*>malloc(self.nr_uni * sizeof(size_t))
+        #self.uni_lens = <size_t*>malloc(self.nr_uni * sizeof(size_t))
         for i, feat in enumerate(uni_feats):
-            self.uni_feats[i] = feat[0]
+        #    self.unigrams[i] = <uint64_t*>calloc(feat[0], sizeof(uint64_t))
+        #    self.uni_lens[i] = feat[0]
+            self.uni_feats[i] = feat[1]
         self.nr_multi = len(multi_feats)
         self.predicates = <Predicate*>malloc(self.nr_multi * sizeof(Predicate))
         cdef Predicate pred
         for id_, args in enumerate(multi_feats):
-            pred = Predicate(id=id_, n=len(args))
+            size = args[0]
+            args = args[1:]
+            pred = Predicate(id=id_, n=len(args), expected_size = size)
             pred.raws = <uint64_t*>malloc(len(args) * sizeof(uint64_t))
             pred.args = <int*>malloc(len(args) * sizeof(int))
             for i, element in enumerate(sorted(args)):
                 pred.args[i] = element
-            # TODO: Add estimates for each feature type
-            pred.expected_size = 1000
             self.predicates[id_] = pred
 

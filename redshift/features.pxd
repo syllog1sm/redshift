@@ -78,9 +78,11 @@ cdef class FeatureSet:
     cdef uint64_t threshold
     cdef size_t nr_uni
     cdef size_t nr_multi
+    #cdef size_t max_context
     cdef size_t* uni_feats
+    #cdef size_t* uni_lens
 
-    cdef dense_hash_map[uint64_t, uint64_t] unigrams
+    cdef vector[dense_hash_map[uint64_t, uint64_t]] unigrams
     cdef vector[dense_hash_map[uint64_t, uint64_t]] tables
 
 

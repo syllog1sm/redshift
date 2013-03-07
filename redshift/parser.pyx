@@ -226,11 +226,13 @@ cdef class Parser:
                 if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
                     continue
                 parent = beam.parents[cont.parent]
-                if self.train_alg == 'static':
+                if parent.is_gold and self.train_alg == 'static':
                     is_gold = cont.clas == self.moves.break_tie(parent, g_heads, g_labels)
-                else:
+                elif parent.is_gold:
                     zero_costs = self.moves.get_oracle(parent, g_heads, g_labels)
                     is_gold = zero_costs[cont.clas]
+                else:
+                    is_gold = False
                 s = beam.add(cont.parent, cont.score, is_gold)
                 self.moves.transition(cont.clas, s)
                 if beam.is_full:
@@ -962,9 +964,9 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
 
 def print_train_msg(n, n_corr, n_move, n_hit, n_miss):
     move_acc = (float(n_corr) / n_move+1e-100) * 100
-    cache_use = float(n_hit) / (n_hit + n_miss + 1e100)
+    cache_use = float(n_hit) / (n_hit + n_miss + 1e-100)
     msg = "#%d: Moves %d/%d=%.2f" % (n, n_corr, n_move, move_acc)
     if cache_use != 0:
-        msg += '. Cache use %.1f' % cache_use
+        msg += '. Cache use %.1f' % (cache_use*100)
     print msg
 
