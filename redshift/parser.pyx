@@ -212,6 +212,7 @@ cdef class Parser:
         self.guide.cache.flush()
         cdef Beam beam = Beam(k, sent.length, self.guide.nr_class,
                               upd_strat=self.upd_strat, add_labels=self.label_beam)
+
         while not beam.gold.is_finished:
             beam.refresh()
             n_valid = self._fill_move_scores(sent, beam.psize, beam.parents,
@@ -234,16 +235,18 @@ cdef class Parser:
                 self.moves.transition(cont.clas, s)
                 if beam.is_full:
                     break
+            assert beam.bsize <= beam.k, beam.bsize
             halt = beam.check_violation()
             if halt:
                 break
             elif beam.beam[0].is_gold:
                 self.guide.n_corr += 1
-        assert beam.gold.t == beam.beam[0].t
+        assert beam.gold.t == beam.beam[0].t, '%d vs %d' % (beam.gold.t, beam.beam[0].t)
         self.guide.total += beam.gold.t
         if beam.first_violn is not None:
             violn = beam.pick_violation()
-            return self._count_feats(sent, violn.t, violn.phist, violn.ghist)
+            counted = self._count_feats(sent, violn.t, violn.phist, violn.ghist)
+            return counted
         else:
             return {}
 
@@ -308,8 +311,6 @@ cdef class Parser:
         cdef size_t d, i, f
         cdef size_t n_feats = self.features.n
         cdef uint64_t* feats
-        cdef size_t diverged = 0
-        cdef dict counts = {}
         cdef size_t clas
         cdef State* gold_state = init_state(sent.length, self.moves.n_labels)
         cdef State* pred_state = init_state(sent.length, self.moves.n_labels)
@@ -320,26 +321,27 @@ cdef class Parser:
                 self.moves.transition(phist[d], pred_state)
             else:
                 break
+        cdef dict counts = {}
         for i in range(d, t):
             feats = self.features.extract(sent, gold_state)
             clas = ghist[i]
-            fcounts = counts.setdefault(clas, {})
+            counts.setdefault(clas, {})
             for f in range(n_feats):
                 if feats[f] == 0:
                     break
-                fcounts.setdefault(feats[f], 0)
-                fcounts[feats[f]] += 1
+                counts[clas].setdefault(feats[f], 0)
+                counts[clas][feats[f]] += 1
             self.moves.transition(clas, gold_state)
         free_state(gold_state)
         for i in range(d, t):
             feats = self.features.extract(sent, pred_state)
             clas = phist[i]
-            fcounts = counts.setdefault(clas, {})
+            counts.setdefault(clas, {})
             for f in range(n_feats):
                 if feats[f] == 0:
                     break
-                fcounts.setdefault(feats[f], 0)
-                fcounts[feats[f]] -= 1
+                counts[clas].setdefault(feats[f], 0)
+                counts[clas][feats[f]] -= 1
             self.moves.transition(clas, pred_state)
         free_state(pred_state)
         return counts
@@ -647,7 +649,7 @@ cdef class Beam:
             return False
         if not self.beam[0].is_gold:
             if self.gold.score <= self.beam[0].score:
-                out_of_beam = not self.beam[self.k - 1].is_gold and \
+                out_of_beam = (not self.beam[self.k - 1].is_gold) and \
                         self.gold.score <= self.beam[self.k - 1].score
                 violn = Violation()
                 violn.set(self.beam[0], self.gold, out_of_beam)
@@ -889,7 +891,7 @@ cdef class TransitionSystem:
         elif not s.at_end_of_buffer and self.s_oracle(s, heads, labels):
             return self.s_id
         else:
-            return 0
+            raise StandardError
 
     cdef bint s_oracle(self, State *s, size_t* heads, size_t* labels):
         cdef size_t i, stack_i

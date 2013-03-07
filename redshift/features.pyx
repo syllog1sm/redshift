@@ -228,11 +228,11 @@ cdef class FeatureSet:
             hashed = (value * self.nr_uni) + i
             feat = self.unigrams[hashed]
             if feat != 0:
-                self.features[f] = feat
+                features[f] = feat
                 f += 1
             elif self.save_entries:
                 self.unigrams[hashed] = self.i
-                self.features[f] = self.i
+                features[f] = self.i
                 f += 1
                 self.i += 1
 
