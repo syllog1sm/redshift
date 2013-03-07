@@ -66,7 +66,7 @@ cdef struct Cont:
     bint is_gold
     bint is_valid
 
-cdef int cmp_contn(const void* v1, const void* v2) nogil
+cdef int cmp_contn(const_void* v1, const_void* v2) nogil
 cdef int fill_kernel(State* s)
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1
