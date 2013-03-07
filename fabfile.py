@@ -95,8 +95,8 @@ def beam_isolate(name, size="1k_train.txt"):
                 run('mkdir -p %s' % d)
     #i_vals = [5, 10, 15, 30]
     #k_vals = [5, 10, 15, 30]
-    i_vals = [10, 30, 50, 100, 150]
-    k_vals = [5, 15, 25, 50]
+    i_vals = [10, 15, 30, 70]
+    k_vals = [5, 15, 25]
     for i_val in i_vals:
         for k_val in k_vals:
             exp_dir = pjoin(work_dir, 'baseline', 'k%d_i%d' % (k_val, i_val))
@@ -104,9 +104,9 @@ def beam_isolate(name, size="1k_train.txt"):
             draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=False, upd="early",
                        alg="static", movebeam=False, train_size=size)
             # BL w/ Feats
-            exp_dir = pjoin(work_dir, 'features', 'k%d_i%d' % (k_val, i_val))
-            draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=True, upd="early",
-                       alg="static", movebeam=False, train_size=size)
+            #exp_dir = pjoin(work_dir, 'features', 'k%d_i%d' % (k_val, i_val))
+            #draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=True, upd="early",
+            #           alg="static", movebeam=False, train_size=size)
             # BL w/ Max-violation training
             exp_dir = pjoin(work_dir, 'max_violation', 'k%d_i%d' % (k_val, i_val))
             draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=False, upd="max",
