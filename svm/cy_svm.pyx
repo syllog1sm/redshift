@@ -231,8 +231,8 @@ cdef class Perceptron(Model):
         self.model.tick()
         for clas, feats in deltas.items():
             for f, d in feats.items():
-                if f != 0:
-                    self.model.update_single(clas, f, d)
+                assert f != 0
+                self.model.update_single(clas, f, d)
 
     cdef uint64_t* get_labels(self):
         return self.model.labels
