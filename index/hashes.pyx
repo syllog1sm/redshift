@@ -321,6 +321,11 @@ def encode_pos(object pos):
     raw_pos = py_pos
     return idx.encode(raw_pos)
 
+def get_max_context():
+    global _word_idx
+    cdef StrIndex idx = _word_idx
+    return idx.i + 1
+
 #cdef uint64_t encode_feat(uint64_t* feature, uint64_t length, uint64_t i):
 #    global _feat_idx
 #    cdef FeatIndex idx = _feat_idx
