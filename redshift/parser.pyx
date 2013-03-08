@@ -178,6 +178,7 @@ cdef class Parser:
         if self.beam_width >= 1:
             self.guide.use_cache = True
         self.features.save_entries = True
+        stats = defaultdict(int)
         for n in range(n_iter):
             random.shuffle(indices)
             # Group indices into minibatches of fixed size
@@ -185,20 +186,22 @@ cdef class Parser:
                 deltas = []
                 for i in minibatch:
                     if self.beam_width >= 1:
-                        deltas.append(self.decode_beam(&sents.s[i], self.beam_width))
+                        deltas.append(self.decode_beam(&sents.s[i], self.beam_width,
+                                      stats))
                     else:
                         self.train_one(n, &sents.s[i], sents.strings[i][0])
                 for weights in deltas:
                     self.guide.batch_update(weights)
             print_train_msg(n, self.guide.n_corr, self.guide.total,
-                            self.guide.cache.n_hit, self.guide.cache.n_miss)
+                            self.guide.cache.n_hit, self.guide.cache.n_miss,
+                            stats)
             if self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
             self.guide.n_corr = 0
             self.guide.total = 0
         self.guide.train()
 
-    cdef dict decode_beam(self, Sentence* sent, size_t k):
+    cdef dict decode_beam(self, Sentence* sent, size_t k, object stats):
         cdef size_t i
         cdef bint is_gold
         cdef bint* zero_costs
@@ -212,7 +215,7 @@ cdef class Parser:
         self.guide.cache.flush()
         cdef Beam beam = Beam(k, sent.length, self.guide.nr_class,
                               upd_strat=self.upd_strat, add_labels=self.label_beam)
-
+        stats['sents'] += 1
         while not beam.gold.is_finished:
             beam.refresh()
             n_valid = self._fill_move_scores(sent, beam.psize, beam.parents,
@@ -226,13 +229,11 @@ cdef class Parser:
                 if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
                     continue
                 parent = beam.parents[cont.parent]
-                if parent.is_gold and self.train_alg == 'static':
+                if self.train_alg == 'static':
                     is_gold = cont.clas == self.moves.break_tie(parent, g_heads, g_labels)
-                elif parent.is_gold:
+                else:
                     zero_costs = self.moves.get_oracle(parent, g_heads, g_labels)
                     is_gold = zero_costs[cont.clas]
-                else:
-                    is_gold = False
                 s = beam.add(cont.parent, cont.score, is_gold)
                 self.moves.transition(cont.clas, s)
                 if beam.is_full:
@@ -240,9 +241,17 @@ cdef class Parser:
             assert beam.bsize <= beam.k, beam.bsize
             halt = beam.check_violation()
             if halt:
+                stats['early'] += 1
                 break
             elif beam.beam[0].is_gold:
                 self.guide.n_corr += 1
+        stats['moves'] += beam.gold.t
+        #for i in range(beam.gold.t):
+        #    print beam.gold.history[i],
+        #print
+        #for i in range(beam.beam[0].t):
+        #    print beam.beam[0].history[i],
+        #print
         assert beam.gold.t == beam.beam[0].t, '%d vs %d' % (beam.gold.t, beam.beam[0].t)
         self.guide.total += beam.gold.t
         if beam.first_violn is not None:
@@ -597,7 +606,7 @@ cdef class Beam:
         self.next_moves = <Cont*>malloc(self.nr_class * sizeof(Cont))
         self.seen_moves = <bint**>malloc(self.nr_class * sizeof(bint*))
         for i in range(self.nr_class):
-            self.next_moves[i] = Cont(score=-10000, clas=0, parent=0, is_gold=True)
+            self.next_moves[i] = Cont(score=-10000, clas=0, parent=0, is_gold=True, is_valid=True)
             self.seen_moves[i] = <bint*>calloc(N_MOVES, sizeof(bint))
         self.first_violn = None
         self.max_violn = None
@@ -728,9 +737,6 @@ cdef class Violation:
         self.phist = <size_t*>malloc(self.t * sizeof(size_t))
         memcpy(self.phist, p.history, self.t * sizeof(size_t))
         self.out_of_beam = out_of_beam
-
-    def __cmp__(self, Violation other):
-        return cmp(self.score, other.score)
 
     def __dealloc__(self):
         free(self.ghist)
@@ -962,11 +968,15 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
             child = s.i if s.i < len(tokens) else 0
         return u'%s(%s)' % (tokens[head], tokens[child])
 
-def print_train_msg(n, n_corr, n_move, n_hit, n_miss):
-    move_acc = (float(n_corr) / n_move+1e-100) * 100
-    cache_use = float(n_hit) / (n_hit + n_miss + 1e-100)
-    msg = "#%d: Moves %d/%d=%.2f" % (n, n_corr, n_move, move_acc)
+def print_train_msg(n, n_corr, n_move, n_hit, n_miss, stats):
+    pc = lambda a, b: '%.1f' % ((float(a) / b) * 100)
+    move_acc = pc(n_corr, n_move)
+    cache_use = pc(n_hit, n_hit + n_miss + 1e-100)
+    msg = "#%d: Moves %d/%d=%s" % (n, n_corr, n_move, move_acc)
     if cache_use != 0:
-        msg += '. Cache use %.1f' % (cache_use*100)
+        msg += '. Cache use %s' % cache_use
+    if stats['early'] != 0:
+        msg += '. Early %s' % pc(stats['early'], stats['sents'])
+    msg += '. %.2f moves per sentence' % (float(stats['moves']) / stats['sents'])
     print msg
 
