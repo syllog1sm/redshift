@@ -245,29 +245,25 @@ cdef class Parser:
                 break
             elif beam.beam[0].is_gold:
                 self.guide.n_corr += 1
-        stats['moves'] += beam.gold.t
-        #for i in range(beam.gold.t):
-        #    print beam.gold.history[i],
-        #print
-        #for i in range(beam.beam[0].t):
-        #    print beam.beam[0].history[i],
-        #print
         assert beam.gold.t == beam.beam[0].t, '%d vs %d' % (beam.gold.t, beam.beam[0].t)
         self.guide.total += beam.gold.t
         if beam.first_violn is not None:
             violn = beam.pick_violation()
+            stats['moves'] += violn.t
             counted = self._count_feats(sent, violn.t, violn.phist, violn.ghist)
             return counted
         else:
+            stats['moves'] += beam.gold.t
             return {}
 
     cdef int _advance_gold(self, State* s, Sentence* sent, bint use_static) except -1:
         cdef:
-            size_t oracle
+            size_t oracle, i
             bint* zero_costs
             uint64_t* feats
             double* scores
             bint cache_hit
+            double best_score
         fill_kernel(s)
         scores = self.guide.cache.lookup(sizeof(s.kernel), <void*>&s.kernel, &cache_hit)
         if not cache_hit:
@@ -277,11 +273,12 @@ cdef class Parser:
             oracle = self.moves.break_tie(s, sent.parse.heads, sent.parse.labels)
         else:
             zero_costs = self.moves.get_oracle(s, sent.parse.heads, sent.parse.labels)
-            for oracle in range(self.moves.nr_class):
-                if zero_costs[oracle]:
-                    break
-            else:
-                raise StandardError
+            best_score = -10000
+            for i in range(self.moves.nr_class):
+                if zero_costs[i] and scores[i] > best_score:
+                    oracle = i
+                    best_score = scores[i]
+            assert best_score > -10000
         s.score += scores[oracle]
         self.moves.transition(oracle, s)
 
@@ -899,7 +896,7 @@ cdef class TransitionSystem:
         elif not s.at_end_of_buffer and self.s_oracle(s, heads, labels):
             return self.s_id
         else:
-            raise StandardError
+            return self.nr_class + 1
 
     cdef bint s_oracle(self, State *s, size_t* heads, size_t* labels):
         cdef size_t i, stack_i
