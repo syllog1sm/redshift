@@ -218,11 +218,10 @@ cdef class Parser:
         stats['sents'] += 1
         while not beam.gold.is_finished:
             beam.refresh()
-            n_valid = self._fill_move_scores(sent, beam.psize, beam.parents,
-                                             beam.next_moves)
+            self._fill_move_scores(sent, beam.psize, beam.parents, beam.next_moves)
             beam.sort_moves()
             self._advance_gold(beam.gold, sent, self.train_alg == 'static')
-            for i in range(n_valid):
+            for i in range(beam.nr_class):
                 cont = &beam.next_moves[i]
                 if not cont.is_valid:
                     continue
@@ -238,6 +237,9 @@ cdef class Parser:
                 self.moves.transition(cont.clas, s)
                 if beam.is_full:
                     break
+            assert beam.bsize
+            if beam.bsize:
+                assert beam.gold.t == beam.beam[0].t, '%d vs %d (%d)'
             assert beam.bsize <= beam.k, beam.bsize
             halt = beam.check_violation()
             if halt:
@@ -245,7 +247,8 @@ cdef class Parser:
                 break
             elif beam.beam[0].is_gold:
                 self.guide.n_corr += 1
-        assert beam.gold.t == beam.beam[0].t, '%d vs %d' % (beam.gold.t, beam.beam[0].t)
+            for i in range(beam.bsize):
+                assert beam.beam[i].t == beam.gold.t, '%d vs %d' % (beam.beam[i].t, beam.gold.t)
         self.guide.total += beam.gold.t
         if beam.first_violn is not None:
             violn = beam.pick_violation()
@@ -668,8 +671,10 @@ cdef class Beam:
                 elif self.max_violn.delta < violn.delta:
                     self.max_violn = violn
                 return out_of_beam and self.early_upd
+        return False
 
     cdef Violation pick_violation(self):
+        assert self.first_violn is not None
         if self.early_upd:
             return self.first_violn
         elif self.max_upd:
