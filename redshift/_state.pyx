@@ -124,41 +124,42 @@ cdef inline size_t get_r2(State *s, size_t head):
         return 0
     return s.r_children[head][s.r_valencies[head] - 2]
 
-cdef bint has_child_in_buffer(State *s, size_t word, size_t* heads):
+cdef int has_child_in_buffer(State *s, size_t word, size_t* heads):
     assert word != 0
     cdef size_t buff_i
+    cdef int n = 0
     for buff_i in range(s.i, s.n):
         if heads[buff_i] == word:
-            return True
-    return False
+            n += 1
+    return n
 
-cdef bint has_head_in_buffer(State *s, size_t word, size_t* heads):
+cdef int has_head_in_buffer(State *s, size_t word, size_t* heads):
     assert word != 0
     cdef size_t buff_i
     for buff_i in range(s.i, s.n):
         if heads[word] == buff_i:
-            return True
-    return False
+            return 1
+    return 0
 
-cdef bint has_child_in_stack(State *s, size_t word, size_t* heads):
+cdef int has_child_in_stack(State *s, size_t word, size_t* heads):
     assert word != 0
     cdef size_t i, stack_i
+    cdef int n = 0
     for i in range(1, s.stack_len):
         stack_i = s.stack[i]
         # Should this be sensitie to whether the word has a head already?
         if heads[stack_i] == word:
-            return True
-    return False
+            n += 1
+    return n
 
-cdef bint has_head_in_stack(State *s, size_t word, size_t* heads):
+cdef int has_head_in_stack(State *s, size_t word, size_t* heads):
     assert word != 0
     cdef size_t i, stack_i
     for i in range(1, s.stack_len):
         stack_i = s.stack[i]
         if heads[word] == stack_i:
-            return True
-    return False
-
+            return 1
+    return 0
 
 cdef State* init_state(size_t n, size_t n_labels):
     cdef size_t i, j
@@ -166,6 +167,7 @@ cdef State* init_state(size_t n, size_t n_labels):
     s.n = n
     s.t = 0
     s.i = 2
+    s.cost = 0
     s.score = 0
     s.top = 1
     s.second = 0
@@ -202,6 +204,7 @@ cdef copy_state(State* s, State* old, size_t n_labels):
     s.n = old.n
     s.t = old.t
     s.i = old.i
+    s.cost = old.cost
     s.score = old.score
     s.top = old.top
     s.second = old.second

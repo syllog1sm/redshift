@@ -45,6 +45,7 @@ cdef struct State:
     bint is_finished
     bint at_end_of_buffer
     bint is_gold
+    int cost
 
     size_t* stack
     size_t* heads
@@ -81,10 +82,10 @@ cdef inline size_t get_l2(State *s, size_t head)
 cdef inline size_t get_r(State *s, size_t head)
 cdef inline size_t get_r2(State *s, size_t head)
 
-cdef bint has_child_in_buffer(State *s, size_t word, size_t* heads)
-cdef bint has_head_in_buffer(State *s, size_t word, size_t* heads)
-cdef bint has_child_in_stack(State *s, size_t word, size_t* heads)
-cdef bint has_head_in_stack(State *s, size_t word, size_t* heads)
+cdef int has_child_in_buffer(State *s, size_t word, size_t* heads)
+cdef int has_head_in_buffer(State *s, size_t word, size_t* heads)
+cdef int has_child_in_stack(State *s, size_t word, size_t* heads)
+cdef int has_head_in_stack(State *s, size_t word, size_t* heads)
 
 cdef State* init_state(size_t n, size_t n_labels)
 cdef free_state(State* s)

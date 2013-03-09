@@ -203,8 +203,8 @@ cdef class Parser:
 
     cdef dict decode_beam(self, Sentence* sent, size_t k, object stats):
         cdef size_t i
-        cdef bint is_gold
-        cdef bint* zero_costs
+        cdef int* costs
+        cdef int cost
         cdef size_t* g_heads = sent.parse.heads
         cdef size_t* g_labels = sent.parse.labels
         cdef State * s
@@ -229,11 +229,12 @@ cdef class Parser:
                     continue
                 parent = beam.parents[cont.parent]
                 if self.train_alg == 'static':
-                    is_gold = cont.clas == self.moves.break_tie(parent, g_heads, g_labels)
+                    cost = cont.clas != self.moves.break_tie(parent, g_heads, g_labels)
                 else:
-                    zero_costs = self.moves.get_oracle(parent, g_heads, g_labels)
-                    is_gold = zero_costs[cont.clas]
-                s = beam.add(cont.parent, cont.score, is_gold)
+                    costs = self.moves.get_costs(parent, g_heads, g_labels)
+                    cost = costs[cont.clas]
+                    assert cost != -1
+                s = beam.add(cont.parent, cont.score, cost)
                 self.moves.transition(cont.clas, s)
                 if beam.is_full:
                     break
@@ -262,7 +263,7 @@ cdef class Parser:
     cdef int _advance_gold(self, State* s, Sentence* sent, bint use_static) except -1:
         cdef:
             size_t oracle, i
-            bint* zero_costs
+            int* costs
             uint64_t* feats
             double* scores
             bint cache_hit
@@ -275,10 +276,10 @@ cdef class Parser:
         if use_static:
             oracle = self.moves.break_tie(s, sent.parse.heads, sent.parse.labels)
         else:
-            zero_costs = self.moves.get_oracle(s, sent.parse.heads, sent.parse.labels)
+            costs = self.moves.get_costs(s, sent.parse.heads, sent.parse.labels)
             best_score = -10000
             for i in range(self.moves.nr_class):
-                if zero_costs[i] and scores[i] > best_score:
+                if costs[i] == 0 and scores[i] > best_score:
                     oracle = i
                     best_score = scores[i]
             assert best_score > -10000
@@ -290,7 +291,7 @@ cdef class Parser:
         cdef size_t parent_idx, child_idx
         cdef State* parent
         cdef uint64_t* feats
-        cdef bint* valid
+        cdef int* valid
         cdef size_t n_feats = self.features.n
         cdef bint cache_hit = False
         cdef size_t move_idx = 0
@@ -307,7 +308,7 @@ cdef class Parser:
             for child_idx in range(self.guide.nr_class):
                 next_moves[move_idx].parent = parent_idx
                 next_moves[move_idx].clas = child_idx
-                if valid[child_idx]:
+                if valid[child_idx] == 1:
                     parent.nr_kids += 1
                     next_moves[move_idx].score = scores[child_idx] + parent.score
                     next_moves[move_idx].is_valid = True
@@ -316,6 +317,7 @@ cdef class Parser:
                     next_moves[move_idx].score = -10001
                     next_moves[move_idx].is_valid = False
                 move_idx += 1
+        assert n_valid != 0
         return n_valid
 
     cdef dict _count_feats(self, Sentence* sent, size_t t, size_t* phist, size_t* ghist):
@@ -358,8 +360,8 @@ cdef class Parser:
         return counts
 
     cdef int train_one(self, int iter_num, Sentence* sent, py_words) except -1:
-        cdef bint* valid
-        cdef bint* oracle
+        cdef int* valid
+        cdef int* costs
         cdef size_t* g_labels = sent.parse.labels
         cdef size_t* g_heads = sent.parse.heads
 
@@ -376,8 +378,8 @@ cdef class Parser:
             valid = self.moves.get_valid(s)
             pred = self.predict(n_feats, feats, valid, &s.guess_labels[s.i])
             if online:
-                oracle = self.moves.get_oracle(s, g_heads, g_labels)
-                gold = self.predict(n_feats, feats, oracle, &_) if not oracle[pred] else pred
+                costs = self.moves.get_costs(s, g_heads, g_labels)
+                gold = self.predict(n_feats, feats, costs, &_) if costs[pred] != 0 else pred
             else:
                 gold = self.moves.break_tie(s, g_heads, g_labels)
             self.guide.update(pred, gold, n_feats, feats, 1)
@@ -524,6 +526,7 @@ cdef class Parser:
         cdef size_t label = 0
         cdef object best_moves
         cdef size_t i
+        cdef int* costs
         cdef size_t* g_labels
         cdef size_t* g_heads
         cdef size_t clas, parse_class
@@ -537,11 +540,11 @@ cdef class Parser:
             sent_moves = []
             tokens = sents.strings[i][0]
             while not s.is_finished:
-                oracle = self.moves.get_oracle(s, g_heads, g_labels)
+                costs = self.moves.get_costs(s, g_heads, g_labels)
                 best_strs = []
                 best_ids = set()
                 for clas in range(self.moves.nr_class):
-                    if oracle[clas]:
+                    if costs[clas] == 0:
                         move = self.moves.moves[clas]
                         label = self.moves.labels[clas]
                         if move not in best_ids:
@@ -578,10 +581,12 @@ cdef class Beam:
     cdef Violation first_violn
     cdef Violation max_violn
     cdef Violation last_violn
+    cdef Violation cost_violn
     cdef bint is_full
     cdef bint early_upd
     cdef bint max_upd
     cdef bint late_upd
+    cdef bint cost_upd
     cdef bint add_labels
     cdef bint** seen_moves
 
@@ -612,15 +617,19 @@ cdef class Beam:
         self.max_violn = None
         self.last_violn = None
         self.early_upd = False
+        self.cost_upd = False
         self.add_labels = add_labels
         self.late_upd = False
         self.max_upd = False
+        self.cost_upd = False
         if upd_strat == 'early':
             self.early_upd = True
         elif upd_strat == 'late':
             self.late_upd = True
         elif upd_strat == 'max':
             self.max_upd = True
+        elif upd_strat == 'cost':
+            self.cost_upd = True
         else:
             raise StandardError, upd_strat
 
@@ -633,7 +642,7 @@ cdef class Beam:
         self.seen_moves[parent][move] = True
         return True
 
-    cdef State* add(self, size_t par_idx, double score, bint is_gold) except NULL:
+    cdef State* add(self, size_t par_idx, double score, int cost) except NULL:
         cdef State* parent = self.parents[par_idx]
         assert par_idx < self.psize
         assert not self.is_full
@@ -648,7 +657,8 @@ cdef class Beam:
         #    parent.nr_kids -= 1
         cdef State* ext = self.beam[self.bsize]
         ext.score = score
-        ext.is_gold = ext.is_gold and is_gold
+        ext.is_gold = ext.is_gold and cost == 0
+        ext.cost += cost
         self.bsize += 1
         self.is_full = self.bsize >= self.k
         return ext
@@ -668,8 +678,14 @@ cdef class Beam:
                 if self.first_violn == None:
                     self.first_violn = violn
                     self.max_violn = violn
-                elif self.max_violn.delta < violn.delta:
-                    self.max_violn = violn
+                    self.cost_violn = violn
+                else:
+                    if self.cost_violn.cost < violn.cost:
+                        self.cost_violn = violn
+                    if self.max_violn.delta <= violn.delta:
+                        self.max_violn = violn
+                        if self.cost_violn.cost == violn.cost:
+                            self.cost_violn = violn
                 return out_of_beam and self.early_upd
         return False
 
@@ -681,6 +697,8 @@ cdef class Beam:
             return self.max_violn
         elif self.late_upd:
             return self.last_violn
+        elif self.cost_upd:
+            return self.cost_violn
         else:
             raise StandardError, self.upd_strat
 
@@ -723,15 +741,19 @@ cdef class Violation:
     cdef size_t* ghist
     cdef size_t* phist
     cdef double delta
+    cdef int cost
     cdef bint out_of_beam
 
     def __cinit__(self):
         self.out_of_beam = False
         self.t = 0
         self.delta = 0.0
+        self.cost = 0
 
     cdef int set(self, State* p, State* g, bint out_of_beam) except -1:
         self.delta = p.score - g.score
+        self.cost = p.cost
+
         assert g.t == p.t, '%d vs %d' % (g.t, p.t)
         self.t = g.t
         self.ghist = <size_t*>malloc(self.t * sizeof(size_t))
@@ -751,7 +773,7 @@ cdef class TransitionSystem:
     cdef bint allow_reduce
     cdef size_t n_labels
     cdef object py_labels
-    cdef bint* _oracle
+    cdef int* _costs
     cdef size_t* labels
     cdef size_t* moves
     cdef size_t* l_classes
@@ -776,7 +798,7 @@ cdef class TransitionSystem:
         self.nr_class = 0
         max_classes = N_MOVES * len(labels)
         self.max_class = max_classes
-        self._oracle = <bint*>calloc(max_classes, sizeof(bint))
+        self._costs = <bint*>calloc(max_classes, sizeof(bint))
         self.labels = <size_t*>calloc(max_classes, sizeof(size_t))
         self.moves = <size_t*>calloc(max_classes, sizeof(size_t))
         self.l_classes = <size_t*>calloc(self.n_labels, sizeof(size_t))
@@ -845,48 +867,51 @@ cdef class TransitionSystem:
         if s.at_end_of_buffer and s.stack_len == 1:
             s.is_finished = True
   
-    cdef bint* get_oracle(self, State* s, size_t* heads, size_t* labels) except NULL:
+    cdef int* get_costs(self, State* s, size_t* heads, size_t* labels) except NULL:
         cdef size_t i
-        cdef bint* oracle = self._oracle
+        cdef int* costs = self._costs
         for i in range(self.nr_class):
-            oracle[i] = False
+            costs[i] = -1
         if s.stack_len == 1 and not s.at_end_of_buffer:
-            oracle[self.s_id] = True
+            costs[self.s_id] = 0
         if not s.at_end_of_buffer:
-            oracle[self.s_id] = self.s_oracle(s, heads, labels)
-            if self.r_oracle(s, heads, labels):
-                if heads[s.i] == s.top:
-                    oracle[self.r_classes[labels[s.i]]] = True
+            costs[self.s_id] = self.s_cost(s, heads, labels)
+            r_cost = self.r_cost(s, heads, labels)
+            for i in range(self.r_start, self.r_end):
+                if heads[s.i] == s.top and self.labels[i] != labels[s.i]:
+                    costs[i] = r_cost + 1
                 else:
-                    for i in range(self.r_start, self.r_end):
-                        oracle[i] = True
+                    costs[i] = r_cost
         if s.stack_len >= 2:
-            oracle[self.d_id] = self.d_oracle(s, heads, labels)
-            if self.l_oracle(s, heads, labels):
-                if heads[s.top] == s.i:
-                    oracle[self.l_classes[labels[s.top]]] = True
+            costs[self.d_id] = self.d_cost(s, heads, labels)
+            l_cost = self.l_cost(s, heads, labels)
+            for i in range(self.l_start, self.l_end):
+                if heads[s.top] == s.i and self.labels[i] != labels[s.top]:
+                    costs[i] = l_cost + 1
                 else:
-                    for i in range(self.l_start, self.l_end):
-                        oracle[i] = True
-        return oracle
+                    costs[i] = l_cost
+        return costs
 
-    cdef bint* get_valid(self, State* s):
+    cdef int* get_valid(self, State* s):
         cdef size_t i
-        cdef bint* valid = self._oracle
+        cdef int* valid = self._costs
         for i in range(self.nr_class):
-            valid[i] = False
+            valid[i] = -1
         if not s.at_end_of_buffer:
-            valid[self.s_id] = True
+            valid[self.s_id] = 1
             if s.stack_len == 1:
                 return valid
-            for i in range(self.r_start, self.r_end):
-                valid[i] = True
+            else:
+                for i in range(self.r_start, self.r_end):
+                    valid[i] = 1
         if s.stack_len != 1:
-            valid[self.d_id] = s.heads[s.top] != 0
-            for i in range(self.l_start, self.l_end):
-                valid[i] = self.allow_reattach or s.heads[s.top] == 0
+            if s.heads[s.top] != 0:
+                valid[self.d_id] = 1
+            if self.allow_reattach or s.heads[s.top] == 0:
+                for i in range(self.l_start, self.l_end):
+                    valid[i] = 1
         if s.stack_len >= 3 and self.allow_reduce:
-            valid[self.d_id] = True
+            valid[self.d_id] = 1
         return valid  
 
     cdef int break_tie(self, State* s, size_t* heads, size_t* labels) except -1:
@@ -896,61 +921,55 @@ cdef class TransitionSystem:
             return self.r_classes[labels[s.i]]
         elif heads[s.top] == s.i and (self.allow_reattach or s.heads[s.top] == 0):
             return self.l_classes[labels[s.top]]
-        elif self.d_oracle(s, heads, labels):
+        elif self.d_cost(s, heads, labels) == 0:
             return self.d_id
-        elif not s.at_end_of_buffer and self.s_oracle(s, heads, labels):
+        elif not s.at_end_of_buffer and self.s_cost(s, heads, labels) == 0:
             return self.s_id
         else:
             return self.nr_class + 1
 
-    cdef bint s_oracle(self, State *s, size_t* heads, size_t* labels):
+    cdef int s_cost(self, State *s, size_t* heads, size_t* labels):
+        cdef int cost = 0
         cdef size_t i, stack_i
-        if has_child_in_stack(s, s.i, heads):
-            return False
-        if has_head_in_stack(s, s.i, heads):
-            return False
-        return True
+        cost += has_child_in_stack(s, s.i, heads)
+        cost += has_head_in_stack(s, s.i, heads)
+        return cost
 
-    cdef bint r_oracle(self, State *s, size_t* heads, size_t* labels):
+    cdef int r_cost(self, State *s, size_t* heads, size_t* labels):
+        cdef int cost = 0
         cdef size_t i, buff_i, stack_i
         if heads[s.i] == s.top:
-            return True
-        if has_head_in_buffer(s, s.i, heads):
-            return False
-        if has_child_in_stack(s, s.i, heads):
-            return False
-        if has_head_in_stack(s, s.i, heads):
-            return False
-        return True
+            return 0
+        cost += has_head_in_buffer(s, s.i, heads)
+        cost += has_child_in_stack(s, s.i, heads)
+        cost += has_head_in_stack(s, s.i, heads)
+        return cost
 
-    cdef bint d_oracle(self, State *s, size_t* g_heads, size_t* g_labels):
-        if s.heads[s.top] == 0 and (s.stack_len == 2 or not self.allow_reattach):
-            return False
-        if has_child_in_buffer(s, s.top, g_heads):
-            return False
-        if has_head_in_buffer(s, s.top, g_heads):
-            if self.allow_reattach:
-                return False
-            if self.allow_reduce and s.heads[s.top] == 0:
-                return False
-        return True
+    cdef int d_cost(self, State *s, size_t* g_heads, size_t* g_labels):
+        cdef int cost = 0
+        if s.heads[s.top] == 0 and not self.allow_reduce:
+            return -1
+        if g_heads[s.top] == 0 and (s.stack_len == 2 or not self.allow_reattach):
+            cost += 1
+        cost += has_child_in_buffer(s, s.top, g_heads)
+        if self.allow_reattach:
+            cost += has_head_in_buffer(s, s.top, g_heads)
+        return cost
 
-    cdef bint l_oracle(self, State *s, size_t* heads, size_t* labels):
+    cdef int l_cost(self, State *s, size_t* heads, size_t* labels):
         cdef size_t buff_i, i
-
+        cdef int cost = 0
         if s.heads[s.top] != 0 and not self.allow_reattach:
-            return False
+            return -1
         if heads[s.top] == s.i:
-            return True
-        if has_head_in_buffer(s, s.top, heads):
-            return False
-        if has_child_in_buffer(s, s.top, heads):
-            return False
+            return 0
+        cost +=  has_head_in_buffer(s, s.top, heads)
+        cost +=  has_child_in_buffer(s, s.top, heads)
         if self.allow_reattach and heads[s.top] == s.heads[s.top]:
-            return False
+            cost += 1
         if self.allow_reduce and heads[s.top] == s.second:
-            return False
-        return True
+            cost += 1
+        return cost
 
 
 cdef transition_to_str(State* s, size_t move, label, object tokens):
