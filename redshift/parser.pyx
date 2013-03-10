@@ -455,7 +455,7 @@ cdef class Parser:
             sent.parse.heads[i] = s.heads[i]
             sent.parse.labels[i] = s.labels[i]
 
-    cdef int predict(self, uint64_t n_preds, uint64_t* feats, bint* valid,
+    cdef int predict(self, uint64_t n_preds, uint64_t* feats, int* valid,
                      size_t* rlabel) except -1:
         cdef:
             size_t i
@@ -470,7 +470,7 @@ cdef class Parser:
         seen_valid = False
         for clas in range(self.guide.nr_class):
             score = scores[clas]
-            if valid[clas] and score > valid_score:
+            if valid[clas] == 1 and score > valid_score:
                 best_valid = clas
                 valid_score = score
                 seen_valid = True
