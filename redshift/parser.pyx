@@ -211,6 +211,7 @@ cdef class Parser:
         cdef Cont* cont
         cdef Violation violn
         cdef bint halt = False
+        cdef int* valid
         self.guide.cache.flush()
         cdef Beam beam = Beam(k, sent.length, self.guide.nr_class,
                               upd_strat=self.upd_strat, add_labels=self.label_beam)
@@ -224,6 +225,8 @@ cdef class Parser:
                 cont = &beam.next_moves[i]
                 if not cont.is_valid:
                     continue
+                if cont.score <= -10000:
+                    break
                 if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
                     continue
                 parent = beam.parents[cont.parent]
@@ -232,7 +235,7 @@ cdef class Parser:
                 else:
                     costs = self.moves.get_costs(parent, g_heads, g_labels)
                     cost = costs[cont.clas]
-                    assert cost != -1
+                    assert cost != -1, cont.clas
                 s = beam.add(cont.parent, cont.score, cost)
                 self.moves.transition(cont.clas, s)
                 if beam.is_full:
@@ -411,6 +414,7 @@ cdef class Parser:
         cdef double* scores
         s = init_state(sent.length, self.moves.n_labels)
         sent.parse.n_moves = 0
+        self.guide.cache.flush()
         while not s.is_finished:
             feats = self.features.extract(sent, s)
             clas = self.predict(n_preds, feats, self.moves.get_valid(s),
@@ -606,7 +610,7 @@ cdef class Beam:
         self.next_moves = <Cont*>malloc(self.nr_class * sizeof(Cont))
         self.seen_moves = <bint**>malloc(self.nr_class * sizeof(bint*))
         for i in range(self.nr_class):
-            self.next_moves[i] = Cont(score=-10000, clas=0, parent=0, is_gold=True, is_valid=True)
+            self.next_moves[i] = Cont(score=-10000, clas=0, parent=0, is_gold=False, is_valid=False)
             self.seen_moves[i] = <bint*>calloc(N_MOVES, sizeof(bint))
         self.first_violn = None
         self.max_violn = None
@@ -727,7 +731,6 @@ cdef class Beam:
         free(self.parents)
         free_state(self.gold)
 
-
 cdef class Violation:
     """
     A gold/prediction pair where the g.score < p.score
@@ -748,7 +751,6 @@ cdef class Violation:
     cdef int set(self, State* p, State* g, bint out_of_beam) except -1:
         self.delta = p.score - g.score
         self.cost = p.cost
-
         assert g.t == p.t, '%d vs %d' % (g.t, p.t)
         self.t = g.t
         self.ghist = <size_t*>malloc(self.t * sizeof(size_t))
@@ -761,6 +763,52 @@ cdef class Violation:
         free(self.ghist)
         free(self.phist)
 
+
+#cdef struct EquivClass:
+#    bint has_head
+#    bint at_end_of_buffer
+#    size_t stack_len
+#    size_t n
+#    EquivClass* backptrs
+#
+
+#cdef class DynBeam:
+#    cdef EquivClass** gss   
+#    cdef Cont* next_moves
+#    cdef State* gold
+#    cdef size_t n_labels
+#    cdef size_t nr_class
+#    cdef size_t k
+#    cdef size_t bsize
+#    cdef size_t psize
+#    cdef Violation first_violn
+#    cdef Violation max_violn
+#    cdef Violation last_violn
+#    cdef Violation cost_violn
+#    cdef bint is_full
+#    cdef bint early_upd
+#    cdef bint max_upd
+#    cdef bint late_upd
+#    cdef bint cost_upd
+#    cdef bint add_labels
+#    cdef bint** paths
+#
+#    cdef add_state(self, size_t idx, size_t clas, size_t move, double score, int cost):
+#        # 1. At move t, two different transitions can never be equivalent
+#        # 2. Once merged into an equivalence class, states cannot be divided until
+#        # at least as many pop moves have been applied as push moves
+#        # 3. That means the Shift and Right moves cannot split class's children
+#        # 4. Once N hits zero we must divide the state, otherwise why wasn't it merged
+#        # before?
+#        if move == SHIFT or move == RIGHT:
+#            self.gss[idx].n += 1
+#        elif self.gss[idx].n >= 1:
+#            self.gss[idx].n -= 1
+#            if self.paths[idx][move]:
+#                self.add_to_path(idx, move, clas, score, cost)
+#            else:
+#                self.new_path(idx, move, clas, score, cost)
+#
 
 
 cdef class TransitionSystem:
@@ -793,7 +841,7 @@ cdef class TransitionSystem:
         self.nr_class = 0
         max_classes = N_MOVES * len(labels)
         self.max_class = max_classes
-        self._costs = <bint*>calloc(max_classes, sizeof(bint))
+        self._costs = <int*>calloc(max_classes, sizeof(int))
         self.labels = <size_t*>calloc(max_classes, sizeof(size_t))
         self.moves = <size_t*>calloc(max_classes, sizeof(size_t))
         self.l_classes = <size_t*>calloc(self.n_labels, sizeof(size_t))
@@ -856,6 +904,8 @@ cdef class TransitionSystem:
             add_dep(s, head, child, label)
             push_stack(s)
         else:
+            print move
+            print label
             raise StandardError(clas)
         if s.i == (s.n - 1):
             s.at_end_of_buffer = True
@@ -872,19 +922,21 @@ cdef class TransitionSystem:
         if not s.at_end_of_buffer:
             costs[self.s_id] = self.s_cost(s, heads, labels)
             r_cost = self.r_cost(s, heads, labels)
-            for i in range(self.r_start, self.r_end):
-                if heads[s.i] == s.top and self.labels[i] != labels[s.i]:
-                    costs[i] = r_cost + 1
-                else:
-                    costs[i] = r_cost
+            if r_cost != -1:
+                for i in range(self.r_start, self.r_end):
+                    if heads[s.i] == s.top and self.labels[i] != labels[s.i]:
+                        costs[i] = r_cost + 1
+                    else:
+                        costs[i] = r_cost
         if s.stack_len >= 2:
             costs[self.d_id] = self.d_cost(s, heads, labels)
             l_cost = self.l_cost(s, heads, labels)
-            for i in range(self.l_start, self.l_end):
-                if heads[s.top] == s.i and self.labels[i] != labels[s.top]:
-                    costs[i] = l_cost + 1
-                else:
-                    costs[i] = l_cost
+            if l_cost != -1:
+                for i in range(self.l_start, self.l_end):
+                    if heads[s.top] == s.i and self.labels[i] != labels[s.top]:
+                        costs[i] = l_cost + 1
+                    else:
+                        costs[i] = l_cost
         return costs
 
     cdef int* get_valid(self, State* s):
@@ -899,6 +951,8 @@ cdef class TransitionSystem:
             else:
                 for i in range(self.r_start, self.r_end):
                     valid[i] = 1
+        else:
+            valid[self.s_id] = -1
         if s.stack_len != 1:
             if s.heads[s.top] != 0:
                 valid[self.d_id] = 1
@@ -993,6 +1047,7 @@ def print_train_msg(n, n_corr, n_move, n_hit, n_miss, stats):
         msg += '. Cache use %s' % cache_use
     if stats['early'] != 0:
         msg += '. Early %s' % pc(stats['early'], stats['sents'])
-    msg += '. %.2f moves per sentence' % (float(stats['moves']) / stats['sents'])
+    if 'moves' in stats:
+        msg += '. %.2f moves per sentence' % (float(stats['moves']) / stats['sents'])
     print msg
 
