@@ -3,9 +3,9 @@ from libcpp.utility cimport pair
 
 from libc.stdint cimport int64_t, uint64_t
 
-DEF MAX_PARAMS = 15000000
+DEF MAX_PARAMS = 5000000
 
-DEF MAX_DENSE = 1000000
+DEF MAX_DENSE = 100000
 
 #cdef extern from "predict.h":
 cdef struct Param:

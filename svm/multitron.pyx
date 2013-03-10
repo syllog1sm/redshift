@@ -10,9 +10,6 @@ cimport cython
 
 cdef size_t MIN_UPD = 2
 
-DEF MAX_PARAM = 10000000
-
-DEF MAX_DENSE = 500000
 
 cdef void resize_feat(Feature* feat, size_t n):
     cdef size_t i
@@ -47,11 +44,14 @@ cdef inline void update_param(Feature* feat, uint64_t clas, uint64_t now, double
         feat.n_class += 1
 
 cdef inline void update_dense(size_t now, size_t nr_class, uint64_t f, uint64_t clas,
-                              double weight, double* w, double* acc, size_t* last_upd):
+                              double weight, double* w, double* acc, size_t* last_upd,
+                              size_t* n_upd):
     cdef uint64_t i = (f * nr_class) + clas
     acc[i] += (now - last_upd[i]) * w[i]
     w[i] += weight
     last_upd[i] = now
+    n_upd[i] += 1
+    
 
 
 cdef void free_feat(Feature* feat):
@@ -76,7 +76,8 @@ cdef class MultitronParameters:
         self.seen = <bint*>calloc(MAX_PARAM, sizeof(int64_t))
         self.w = <double*>calloc(MAX_DENSE * max_classes, sizeof(double))
         self.acc = <double*>calloc(MAX_DENSE * max_classes, sizeof(double))
-        self.last_upd = <size_t*>calloc(MAX_DENSE, max_classes * sizeof(size_t))
+        self.last_upd = <size_t*>calloc(MAX_DENSE * max_classes, sizeof(size_t))
+        self.n_upd = <size_t*>calloc(MAX_DENSE, sizeof(size_t))
         self.W = <Feature**>malloc(MAX_PARAM * sizeof(Feature*))
         self.max_param = 0
         self.n_params = 0
@@ -137,7 +138,16 @@ cdef class MultitronParameters:
         cdef Feature* feat
         cdef uint64_t new_max = 0
         self.n_params = 0
-        for f in range(1, self.max_param):
+        for f in range(self.max_dense):
+            if self.n_upd[f] < thresh:
+                for clas in range(self.true_nr_class):
+                    idx = (f * self.true_nr_class) + clas
+                    self.w[idx] = 0.0
+                    self.acc[idx] = 0.0
+                    self.last_upd = 0
+                    self.n_upd = 0
+                    n_pruned += 1
+        for f in range(self.max_dense, self.max_param):
             if not self.seen[f]:
                 continue
             feat = W[f]
