@@ -117,12 +117,14 @@ cdef class MultitronParameters:
 
     cdef int64_t prune_rares(self, size_t thresh) except -1:
         cdef uint64_t f
-        cdef uint64_t n_pruned = 0
+        cdef uint64_t n_kept = 0
+        cdef uint64_t n_seen = 0
         cdef Feature* feat
         cdef pair[uint64_t, size_t] data
         cdef dense_hash_map[uint64_t, size_t].iterator it
+        cdef size_t a
 
-
+        self.W.set_deleted_key(1)
         it = self.W.begin()
         while it != self.W.end():
             data = deref(it)
@@ -133,8 +135,15 @@ cdef class MultitronParameters:
                     a += abs(<int>feat.params[i].w)
                 if a < thresh:
                     free_feat(feat)
-                    self.W[data.first] = 0
+                    self.W.erase(it)
+                    #self.W[data.first] = 0
+                else:
+                    n_kept += 1
+            n_seen += 1
             inc(it)
+        self.W.clear_deleted_key()
+        self.W.resize(n_kept * 2)
+        print "%d/%d features kept" % (n_kept, n_seen)
 
     cdef tick(self):
         self.now = self.now + 1
