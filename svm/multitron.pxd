@@ -7,6 +7,51 @@ DEF MAX_PARAMS = 5000000
 
 DEF MAX_DENSE = 100000
 
+
+cdef extern from "sparsehash/dense_hash_map" namespace "google":
+    cdef cppclass dense_hash_map[K, D]:
+        K& key_type
+        D& data_type
+        pair[K, D]& value_type
+        uint64_t size_type
+        cppclass iterator:
+            pair[K, D]& operator*() nogil
+            iterator operator++() nogil
+            iterator operator--() nogil
+            bint operator==(iterator) nogil
+            bint operator!=(iterator) nogil
+        iterator begin()
+        iterator end()
+        uint64_t size()
+        uint64_t max_size()
+        bint empty()
+        uint64_t bucket_count()
+        uint64_t bucket_size(uint64_t i)
+        uint64_t bucket(K& key)
+        double max_load_factor()
+        void max_load_vactor(double new_grow)
+        double min_load_factor()
+        double min_load_factor(double new_grow)
+        void set_resizing_parameters(double shrink, double grow)
+        void resize(uint64_t n)
+        void rehash(uint64_t n)
+        dense_hash_map()
+        dense_hash_map(uint64_t n)
+        void swap(dense_hash_map&)
+        pair[iterator, bint] insert(pair[K, D]) nogil
+        void set_empty_key(K&)
+        void set_deleted_key(K& key)
+        void clear_deleted_key()
+        void erase(iterator pos)
+        uint64_t erase(K& k)
+        void erase(iterator first, iterator last)
+        void clear()
+        void clear_no_resize()
+        pair[iterator, iterator] equal_range(K& k)
+        D& operator[](K&) nogil
+
+
+
 #cdef extern from "predict.h":
 cdef struct Param:
     double w
@@ -17,7 +62,6 @@ cdef struct Param:
 cdef struct Feature:
     Param** params
     int* index
-    size_t n_upd
     size_t n_class
     size_t max_class
 
@@ -35,11 +79,7 @@ cdef class MultitronParameters:
     cdef uint64_t max_dense
     cdef uint64_t true_nr_class
     cdef uint64_t now
-    cdef double* w
-    cdef double* acc
-    cdef size_t* last_upd
-    cdef Feature** W
-    cdef bint* seen
+    cdef dense_hash_map[uint64_t, size_t] W
     cdef double* scores
     cdef uint64_t* labels
     cdef int64_t* label_to_i

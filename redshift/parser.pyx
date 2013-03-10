@@ -177,7 +177,6 @@ cdef class Parser:
         indices = range(sents.length)
         if self.beam_width >= 1:
             self.guide.use_cache = True
-        self.features.save_entries = True
         stats = defaultdict(int)
         for n in range(n_iter):
             random.shuffle(indices)
@@ -484,13 +483,11 @@ cdef class Parser:
 
     def save(self):
         self.guide.save(self.model_dir.join('model'))
-        self.features.save(self.model_dir.join('features'))
 
     def load(self):
         self.guide.load(self.model_dir.join('model'))
 
     def new_idx(self, model_dir, size_t n_predicates):
-        #index.hashes.init_feat_idx(n_predicates, model_dir.join('features'))
         index.hashes.init_word_idx(model_dir.join('words'))
         index.hashes.init_pos_idx(model_dir.join('pos'))
 
@@ -498,8 +495,6 @@ cdef class Parser:
         model_dir = Path(model_dir)
         index.hashes.load_word_idx(model_dir.join('words'))
         index.hashes.load_pos_idx(model_dir.join('pos'))
-        self.features.load(model_dir.join('features'))
-        #index.hashes.load_feat_idx(n_predicates, model_dir.join('features'))
    
     def write_cfg(self, loc):
         with loc.open('w') as cfg:

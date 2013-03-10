@@ -189,19 +189,6 @@ cdef class FeatureSet:
         self._make_predicates(add_extra)
         self.context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
         self.features = <uint64_t*>calloc(self.n, sizeof(uint64_t))
-        cdef dense_hash_map[uint64_t, uint64_t] *table
-        self.i = 1
-        self.save_entries = False
-        self.unigrams = vector[dense_hash_map[uint64_t, uint64_t]]()
-        for i in range(self.nr_uni):
-            table = new dense_hash_map[uint64_t, uint64_t]()
-            self.unigrams.push_back(table[0])
-            self.unigrams[i].set_empty_key(0)
-        self.tables = vector[dense_hash_map[uint64_t, uint64_t]]()
-        for i in range(self.nr_multi):
-            table = new dense_hash_map[uint64_t, uint64_t]()
-            self.tables.push_back(table[0])
-            self.tables[i].set_empty_key(0)
 
     def __dealloc__(self):
         free(self.context)
@@ -218,31 +205,14 @@ cdef class FeatureSet:
                      s.l_children[s.second], s.r_children[s.second],
                      s.l_children[s.i], s.llabel_set[s.top], s.rlabel_set[s.top],
                      s.llabel_set[s.i])
-        cdef size_t f = 0
-        cdef size_t i
+        cdef size_t i, j
         cdef uint64_t hashed
-        cdef uint64_t feat
         cdef uint64_t value
         cdef uint64_t* features = self.features
-        for i in range(self.nr_uni):
-            value = context[self.uni_feats[i]]
-            if value == 0:
-                continue
-            feat = self.unigrams[i][value]
-            if feat != 0:
-                features[f] = feat
-                f += 1
-            elif self.save_entries:
-                self.unigrams[i][value] = self.i
-                features[f] = self.i
-                f += 1
-                self.i += 1
-
-        cdef uint64_t j
         cdef bint seen_non_zero
         cdef Predicate* pred
-        cdef size_t n
-        for i in range(self.nr_multi):
+        cdef size_t f = 0
+        for i in range(self.n):
             pred = &self.predicates[i]
             seen_non_zero = False
             for j in range(pred.n):
@@ -251,50 +221,12 @@ cdef class FeatureSet:
                 if value != 0:
                     seen_non_zero = True
             if seen_non_zero:
-                hashed = MurmurHash64A(pred.raws, <uint64_t>pred.n * sizeof(uint64_t), i)
-                feat = self.tables[i][hashed]
-                if feat != 0:
-                    features[f] = feat
-                    f += 1
-                elif self.save_entries:
-                    self.tables[i][hashed] = self.i
-                    features[f] = self.i
-                    self.i += 1
-                    f += 1
+                pred.raws[pred.n] = pred.id
+                hashed = MurmurHash64A(pred.raws, (pred.n + 1) * sizeof(uint64_t), i)
+                features[f] = hashed
+                f += 1
         features[f] = 0
         return features
-   
-    def save(self, path):
-        cdef pair[uint64_t, uint64_t] data
-        cdef dense_hash_map[uint64_t, uint64_t].iterator it
-        out = open(str(path), 'w')
-        for i in range(self.nr_uni):
-            it = self.unigrams[i].begin()
-            while it != self.unigrams[i].end():
-                data = deref(it)
-                out.write('u\t%d,%d\t%d\n' % (i, data.first, data.second))
-                inc(it)
-        for i in range(self.nr_multi):
-            it = self.tables[i].begin()
-            while it != self.tables[i].end():
-                data = deref(it)
-                out.write('%d\t%d\t%d\n' % (i, data.first, data.second))
-                inc(it)
-        out.close()
-                
-    def load(self, path):
-        cdef uint64_t value
-        for line in open(str(path)):
-            fields = line.strip().split()
-            i = fields[0]
-            hashed = fields[1]
-            value = int(fields[2])
-            if i == 'u':
-                i, hashed = hashed.split(',')
-                self.unigrams[int(i)][int(hashed)] = <size_t>value
-            else:
-                self.tables[int(i)][int(hashed)] = value
-
 
     def _make_predicates(self, bint add_extra):
         # For multi-part features, we want expected sizes, as the table will
@@ -495,26 +427,14 @@ cdef class FeatureSet:
             feats += stack_second
         assert len(set(feats)) == len(feats)
         self.n = len(feats)
-        uni_feats = list(sorted([f for f in feats if len(f) == 2], key=lambda i: i[1]))
-        multi_feats = list(sorted([f for f in feats if len(f) > 2], key=lambda i: i[1]))
-        self.nr_uni = len(uni_feats)
-        #self.unigrams = <uint64_t**>malloc(self.nr_uni * sizeof(uint64_t*))
-        self.uni_feats = <size_t*>malloc(self.nr_uni * sizeof(size_t))
-        #self.uni_lens = <size_t*>malloc(self.nr_uni * sizeof(size_t))
-        for i, feat in enumerate(uni_feats):
-        #    self.unigrams[i] = <uint64_t*>calloc(feat[0], sizeof(uint64_t))
-        #    self.uni_lens[i] = feat[0]
-            self.uni_feats[i] = feat[1]
-        self.nr_multi = len(multi_feats)
-        self.predicates = <Predicate*>malloc(self.nr_multi * sizeof(Predicate))
+        self.predicates = <Predicate*>malloc(self.n * sizeof(Predicate))
         cdef Predicate pred
-        for id_, args in enumerate(multi_feats):
+        for id_, args in enumerate(feats):
             size = args[0]
             args = args[1:]
             pred = Predicate(id=id_, n=len(args), expected_size = size)
-            pred.raws = <uint64_t*>malloc(len(args) * sizeof(uint64_t))
+            pred.raws = <uint64_t*>malloc((len(args) + 1) * sizeof(uint64_t))
             pred.args = <int*>malloc(len(args) * sizeof(int))
             for i, element in enumerate(sorted(args)):
                 pred.args[i] = element
             self.predicates[id_] = pred
-
