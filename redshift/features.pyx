@@ -409,13 +409,10 @@ cdef class FeatureSet:
             (wp, S0r2p, S0rw),
             (ww, S0w, S0rw),
             (pw, S0w, S0rp),
-            (pp, S0p, S0rp),
             (pp, S0p, S0rw),
             (pp, S0p, S0rp),
             (wwp, S0p, S0r2w, S0rw),
-            (ppp, S0p, S0r2p, S0rp),
             (wpp, S0p, S0rp, N0w),
-            (ppp, S0p, S0rp, N0p),
             (wpp, S0w, S0rp, N0p),
         )
 
@@ -425,7 +422,7 @@ cdef class FeatureSet:
         if add_extra:
             print "Using stack-second features"
             feats += stack_second
-        assert len(set(feats)) == len(feats)
+        assert len(set(feats)) == len(feats), '%d vs %d' % (len(set(feats)), len(feats))
         self.n = len(feats)
         self.predicates = <Predicate*>malloc(self.n * sizeof(Predicate))
         cdef Predicate pred
