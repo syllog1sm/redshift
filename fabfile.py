@@ -89,20 +89,20 @@ def draxx_beam(name, model=None, k=5, i=10, add_feats=False, upd='early', alg='s
 def beam_isolate(name, size="1k_train.txt"):
     work_dir = pjoin(str(REMOTE_PARSERS), name)
     with cd(str(REMOTE_PARSERS)):
-        for n in ['baseline', 'features', 'max_violation', 'feat_viol']:
+        for n in ['baseline', 'max_violation', 'feat_viol']:
             d = pjoin(work_dir, n)
             if not exists(d):
                 run('mkdir -p %s' % d)
     #i_vals = [5, 10, 15, 30]
     #k_vals = [5, 10, 15, 30]
     i_vals = [10, 15, 30, 70]
-    k_vals = [5, 15, 25]
+    k_vals = [5, 10, 25]
     for i_val in i_vals:
         for k_val in k_vals:
             exp_dir = pjoin(work_dir, 'baseline', 'k%d_i%d' % (k_val, i_val))
             # Baseline
-            draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=False, upd="early",
-                       alg="static", movebeam=False, train_size=size)
+            #draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=False, upd="early",
+            #           alg="static", movebeam=False, train_size=size)
             # BL w/ Feats
             #exp_dir = pjoin(work_dir, 'features', 'k%d_i%d' % (k_val, i_val))
             #draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=True, upd="early",
