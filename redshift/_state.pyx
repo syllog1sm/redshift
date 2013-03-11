@@ -14,7 +14,6 @@ cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
         assert s.l_children[head][s.l_valencies[head]] == 0
         s.l_children[head][s.l_valencies[head]] = child
         s.l_valencies[head] += 1
-        s.llabel_set[head][label] = 1
     else:
         assert s.r_valencies[head] < MAX_VALENCY, s.r_valencies[head]
         r = get_r(s, head)
@@ -22,7 +21,6 @@ cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
             assert r < child, r
         s.r_children[head][s.r_valencies[head]] = child
         s.r_valencies[head] += 1
-        s.rlabel_set[head][label] = 1
     return 1
 
 cdef int del_r_child(State *s, size_t head) except -1:
@@ -31,12 +29,6 @@ cdef int del_r_child(State *s, size_t head) except -1:
     assert child > 0
     s.r_children[head][s.r_valencies[head] - 1] = 0
     s.r_valencies[head] -= 1
-    old_label = s.labels[child]
-    for i in range(s.r_valencies[head]):
-        if s.labels[s.r_children[head][i]] == old_label:
-            break
-    else:
-        s.rlabel_set[head][old_label] = 0
     s.heads[child] = 0
     s.labels[child] = 0
 
@@ -49,12 +41,6 @@ cdef int del_l_child(State *s, size_t head) except -1:
     child = get_l(s, head)
     s.l_children[head][s.l_valencies[head] - 1] = 0
     s.l_valencies[head] -= 1
-    old_label = s.labels[child]
-    for i in range(s.l_valencies[head]):
-        if s.labels[s.l_children[head][i]] == old_label:
-            break
-    else:
-        s.llabel_set[head][old_label] = 0
     s.heads[child] = 0
     s.labels[child] = 0
 
@@ -89,12 +75,16 @@ cdef int fill_kernel(State *s):
     s.kernel.Ls0r = s.labels[get_r(s, s.top)]
     s.kernel.Ls0l2 = s.labels[get_l2(s, s.top)]
     s.kernel.Ls0r2 = s.labels[get_r2(s, s.top)]
-    s.kernel.Ls0l0 = s.labels[s.l_children[s.top][0]]
-    s.kernel.Ls0r0 = s.labels[s.r_children[s.top][0]]
+    s.kernel.Ls0le0 = s.labels[s.l_children[s.top][0]]
+    s.kernel.Ls0le1 = s.labels[s.l_children[s.top][1]]
+    s.kernel.Ls0re0 = s.labels[s.r_children[s.top][0]]
+    s.kernel.Ls0re1 = s.labels[s.r_children[s.top][1]]
     s.kernel.n0l = get_l(s, s.i)
     s.kernel.n0l2 = get_l2(s, s.i)
     s.kernel.Ln0l = s.labels[get_l(s, s.i)]
     s.kernel.Ln0l2 = s.labels[get_l2(s, s.i)]
+    s.kernel.Ln0le0 = s.labels[s.l_children[s.i][0]]
+    s.kernel.Ln0le1 = s.labels[s.l_children[s.i][1]]
 
 cdef int push_stack(State *s) except -1:
     s.second = s.top
@@ -104,22 +94,22 @@ cdef int push_stack(State *s) except -1:
     assert s.top <= s.n
     s.i += 1
 
-cdef inline size_t get_l(State *s, size_t head):
+cdef size_t get_l(State *s, size_t head):
     if s.l_valencies[head] == 0:
         return 0
     return s.l_children[head][s.l_valencies[head] - 1]
 
-cdef inline size_t get_l2(State *s, size_t head):
+cdef size_t get_l2(State *s, size_t head):
     if s.l_valencies[head] < 2:
         return 0
     return s.l_children[head][s.l_valencies[head] - 2]
 
-cdef inline size_t get_r(State *s, size_t head):
+cdef size_t get_r(State *s, size_t head):
     if s.r_valencies[head] == 0:
         return 0
     return s.r_children[head][s.r_valencies[head] - 1]
 
-cdef inline size_t get_r2(State *s, size_t head):
+cdef size_t get_r2(State *s, size_t head):
     if s.r_valencies[head] < 2:
         return 0
     return s.r_children[head][s.r_valencies[head] - 2]
@@ -186,13 +176,9 @@ cdef State* init_state(size_t n, size_t n_labels):
 
     s.l_children = <size_t**>malloc(n * sizeof(size_t*))
     s.r_children = <size_t**>malloc(n * sizeof(size_t*))
-    s.llabel_set = <bint**>malloc(n * sizeof(bint*))
-    s.rlabel_set = <bint**>malloc(n * sizeof(bint*))
     for i in range(n):
         s.l_children[i] = <size_t*>calloc(n, sizeof(size_t))
         s.r_children[i] = <size_t*>calloc(n, sizeof(size_t))
-        s.llabel_set[i] = <bint*>calloc(n_labels, sizeof(bint))
-        s.rlabel_set[i] = <bint*>calloc(n_labels, sizeof(bint))
     s.stack[1] = 1
     s.history = <size_t*>calloc(n * 2, sizeof(size_t))
     return s
@@ -223,8 +209,6 @@ cdef copy_state(State* s, State* old, size_t n_labels):
     for i in range(old.n + 5):
         memcpy(s.l_children[i], old.l_children[i], nbytes)
         memcpy(s.r_children[i], old.r_children[i], nbytes)
-        memcpy(s.llabel_set[i], old.llabel_set[i], n_labels * sizeof(bint))
-        memcpy(s.rlabel_set[i], old.rlabel_set[i], n_labels * sizeof(bint))
 
 
 cdef free_state(State* s):
@@ -237,12 +221,8 @@ cdef free_state(State* s):
     for i in range(s.n + 5):
         free(s.l_children[i])
         free(s.r_children[i])
-        free(s.llabel_set[i])
-        free(s.rlabel_set[i])
     free(s.l_children)
     free(s.r_children)
-    free(s.llabel_set)
-    free(s.rlabel_set)
     free(s.history)
     free(s)
 

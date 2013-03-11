@@ -23,12 +23,16 @@ cdef struct Kernel:
     size_t Ls0r
     size_t Ls0l2
     size_t Ls0r2
-    size_t Ls0l0
-    size_t Ls0r0
+    size_t Ls0le0
+    size_t Ls0le1
+    size_t Ls0re0
+    size_t Ls0re1
     size_t n0l
     size_t n0l2
     size_t Ln0l
     size_t Ln0l2
+    size_t Ln0le0
+    size_t Ln0le1
 
 
 # With low MAX_SENT_LEN most of these can be reduced to char instead of size_t,
@@ -55,8 +59,6 @@ cdef struct State:
     size_t* r_valencies
     size_t** l_children
     size_t** r_children
-    bint** llabel_set
-    bint** rlabel_set
     size_t* history
     Kernel kernel
 
@@ -77,10 +79,10 @@ cdef int del_r_child(State *s, size_t head) except -1
 cdef size_t pop_stack(State *s) except 0
 cdef int push_stack(State *s) except -1
 
-cdef inline size_t get_l(State *s, size_t head)
-cdef inline size_t get_l2(State *s, size_t head)
-cdef inline size_t get_r(State *s, size_t head)
-cdef inline size_t get_r2(State *s, size_t head)
+cdef size_t get_l(State *s, size_t head)
+cdef size_t get_l2(State *s, size_t head)
+cdef size_t get_r(State *s, size_t head)
+cdef size_t get_r2(State *s, size_t head)
 
 cdef int has_child_in_buffer(State *s, size_t word, size_t* heads)
 cdef int has_head_in_buffer(State *s, size_t word, size_t* heads)

@@ -6,14 +6,12 @@ from libc.stdint cimport uint64_t
 from libcpp.pair cimport pair
 import index.hashes
 from cython.operator cimport dereference as deref, preincrement as inc
-
+from _state cimport get_l, get_l2, get_r, get_r2
 
 from io_parse cimport Sentence
 #from index.hashes cimport encode_feat
 
 from libcpp.vector cimport vector
-
-DEF CONTEXT_SIZE = 53
 
 # Context elements
 # Ensure _context_size is always last; it ensures our compile-time setting
@@ -59,133 +57,114 @@ cdef enum:
     S0h2w
     S0h2p
     S0h2l
-    S0h2b
     S0lv
     S0rv
     dist
-    S1w
-    S1p
-    S1l
-    S1lw
-    S1lp
-    S1ll
     S0llabs
     S0rlabs
     N0llabs
-    depth
-    _context_size
-assert CONTEXT_SIZE == _context_size, "Set CONTEXT_SIZE to %d in features.pyx" % _context_size
+    CONTEXT_SIZE
 
-cdef void fill_context(size_t* context, size_t nr_label, size_t n0, size_t n1, size_t n2,
-                      size_t s0, size_t s1, size_t stack_len,
-                      size_t* words, size_t* pos, size_t* browns,
-                      size_t* heads, size_t* labels, size_t* l_vals, size_t* r_vals,
-                      size_t* s0_lkids, size_t* s0_rkids, size_t* s1_lkids, size_t* s1_rkids,
-                      size_t* n0_lkids,
-                      bint* s0_llabels, bint* s0_rlabels, bint* n0_llabels):
-    cdef uint64_t t, d, j
+
+cdef void fill_context(size_t* context, size_t nr_label,
+                       size_t* words, size_t* pos,
+                       size_t n0, size_t s0,
+                       size_t* labels,
+                       size_t h_s0, size_t h_h_s0,
+                       size_t s0_lval, size_t s0_rval, size_t n0_lval,
+                       size_t l_s0, l2_s0, size_t r_s0, r2_s0,
+                       size_t le0_s0, size_t le1_s0,
+                       size_t re0_s0, size_t re1_s0,
+                       size_t l_n0, size_t l2_n0,
+                       size_t le0_n0, size_t le1_n0):
 
     context[N0w] = words[n0]
     context[N0p] = pos[n0]
     context[N0l] = labels[n0]
 
-    context[N1w] = words[n1]
-    context[N1p] = pos[n1]
-    context[N1l] = labels[n1]
+    context[N1w] = words[n0 + 1]
+    context[N1p] = pos[n0 + 1]
+    context[N1l] = labels[n0 + 1]
 
-    context[N2w] = words[n2]
-    context[N2p] = pos[n2]
-    context[N2l] = labels[n2]
+    context[N2w] = words[n0 + 2]
+    context[N2p] = pos[n0 + 2]
+    context[N2l] = labels[n0 + 2]
 
     context[S0w] = words[s0]
     context[S0p] = pos[s0]
     context[S0l] = labels[s0]
-    context[S0hw] = words[heads[s0]]
-    context[S0hp] = pos[heads[s0]]
-    context[S0hl] = labels[heads[s0]]
+    
+    context[S0hw] = words[h_s0]
+    context[S0hp] = pos[h_s0]
+    context[S0hl] = labels[h_s0]
 
-    context[S1w] = words[s1]
-    context[S1p] = pos[s1]
-    context[S1l] = labels[s1]
-    
-    # Should this be leftmost??
-    context[S1lw] = words[s1_lkids[0]]
-    context[S1lp] = pos[s1_lkids[0]]
-    context[S1ll] = labels[s1_lkids[0]]
-    context[S0lv] = l_vals[s0]
-    context[S0rv] = r_vals[s0]
-    context[N0lv] = l_vals[n0]
-    t = s0_lkids[l_vals[s0] - 1] if l_vals[s0] > 0 else 0
-    context[S0lw] = words[t]
-    context[S0lp] = pos[t]
-    context[S0ll] = labels[t]
-    t = s0_rkids[r_vals[s0] - 1] if r_vals[s0] > 0 else 0
-    context[S0rw] = words[t]
-    context[S0rp] = pos[t]
-    context[S0rl] = labels[t]
-    if l_vals[s0] > 1:
-        t = s0_lkids[l_vals[s0] - 2] 
-    else:
-        t = 0
-    context[S0l2w] = words[t]
-    context[S0l2p] = pos[t]
-    context[S0l2l] = labels[t]
-    
-    if r_vals[s0] > 1:
-        t = s0_rkids[r_vals[s0] - 2]
-    else:
-        t = 0
-    context[S0r2w] = words[t]
-    context[S0r2p] = pos[t]
-    context[S0r2l] = labels[t]
+    context[S0h2w] = words[h_h_s0]
+    context[S0h2p] = pos[h_h_s0]
+    context[S0h2l] = labels[h_h_s0]
+ 
+    context[S0lv] = s0_lval
+    context[S0rv] = s0_rval
+    context[N0lv] = n0_lval
 
-    if l_vals[n0] > 0:
-        t = n0_lkids[l_vals[n0] - 1]
-    else:
-        t = 0
-    context[N0lw] = words[t]
-    context[N0lp] = pos[t]
-    context[N0ll] = labels[t]
+    context[S0lw] = words[l_s0]
+    context[S0lp] = pos[l_s0]
+    context[S0ll] = labels[l_s0]
     
-    if l_vals[n0] > 1:
-        t = n0_lkids[l_vals[n0] - 2]
-    else:
-        t = 0
-    context[N0l2w] = words[t]
-    context[N0l2p] = pos[t]
-    context[N0l2l] = labels[t]
+    context[S0rw] = words[r_s0]
+    context[S0rp] = pos[r_s0]
+    context[S0rl] = labels[r_s0]
     
-    t = heads[heads[s0]]
-    context[S0h2w] = words[t]
-    context[S0h2p] = pos[t]
-    context[S0h2l] = labels[t]
+    context[S0l2w] = words[l2_s0]
+    context[S0l2p] = pos[l2_s0]
+    context[S0l2l] = labels[l2_s0]
     
+    context[S0r2w] = words[r2_s0]
+    context[S0r2p] = pos[r2_s0]
+    context[S0r2l] = labels[r2_s0]
+
+    context[N0lw] = words[l_n0]
+    context[N0lp] = pos[l_n0]
+    context[N0ll] = labels[l_n0]
+    
+    context[N0l2w] = words[l2_n0]
+    context[N0l2p] = pos[l2_n0]
+    context[N0l2l] = labels[l2_n0]
+   
     context[S0llabs] = 0
     context[S0rlabs] = 0
     context[N0llabs] = 0
-    for j in range(nr_label):
-        # Decode the binary arrays representing the label sets into integers
-        # Iterate in reverse, incrementing by the bit shifted by the idx
-        context[S0llabs] += (s0_llabels[(nr_label - 1) - j] << j)
-        context[S0rlabs] += (s0_rlabels[(nr_label - 1) - j] << j)
-        context[N0llabs] += (n0_llabels[(nr_label - 1) - j] << j)
-    d = n0 - s0
+    context[S0llabs] += labels[l_s0] << (nr_label - labels[l_s0])
+    context[S0llabs] += labels[l2_s0] << (nr_label - labels[l2_s0])
+    if le0_s0 != l2_s0:
+        context[S0llabs] += labels[le0_s0] << (nr_label - labels[le0_s0])
+    if le1_s0 != l2_s0:
+        context[S0llabs] += labels[le1_s0] << (nr_label - labels[le1_s0])
+
+    context[S0rlabs] += labels[r_s0] << (nr_label - labels[r_s0])
+    context[S0rlabs] += labels[r2_s0] << (nr_label - labels[r2_s0])
+    if re0_s0 != r2_s0:
+        context[S0rlabs] += labels[re0_s0] << (nr_label - labels[re0_s0])
+    if re1_s0 != r2_s0:
+        context[S0rlabs] += labels[re1_s0] << (nr_label - labels[re1_s0])
+    
+    context[N0llabs] += labels[l_n0] << (nr_label - labels[l_n0])
+    context[N0llabs] += labels[l2_n0] << (nr_label - labels[l2_n0])
+    if le0_n0 != l2_n0:
+        context[N0llabs] += labels[le0_n0] << (nr_label - labels[le0_n0])
+    if le1_n0 != l2_n0:
+        context[N0llabs] += labels[le1_n0] << (nr_label - labels[le1_n0])
+ 
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
     if s0 != 0:
-        context[dist] = d
+        context[dist] = n0 - s0
     else:
         context[dist] = 0
-    if stack_len >= 5:
-        context[depth] = 5
-    else:
-        context[depth] = stack_len
 
 
 cdef class FeatureSet:
     def __cinit__(self, nr_label, bint add_extra=False):
         self.nr_label = nr_label
-        # Sets predicates, n, nr_multi, nr_uni. Allocates unigram arrays
         self._make_predicates(add_extra)
         self.context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
         self.features = <uint64_t*>calloc(self.n, sizeof(uint64_t))
@@ -196,22 +175,19 @@ cdef class FeatureSet:
         free(self.features)
         free(self.predicates)
 
-    def set_minimal(self):
-        self.min_feats = True
-
-    def set_full(self):
-        self.min_feats = False
-
     cdef uint64_t* extract(self, Sentence* sent, State* s):
         cdef size_t* context = self.context
-        fill_context(context, self.nr_label, s.i, s.i + 1, s.i + 2,
-                     s.top, s.second, s.stack_len,
-                     sent.words, sent.pos, sent.browns,
-                     s.heads, s.labels, s.l_valencies, s.r_valencies,
-                     s.l_children[s.top], s.r_children[s.top],
-                     s.l_children[s.second], s.r_children[s.second],
-                     s.l_children[s.i], s.llabel_set[s.top], s.rlabel_set[s.top],
-                     s.llabel_set[s.i])
+        fill_context(context, self.nr_label,
+                     sent.words, sent.pos,
+                     s.i, s.top,
+                     s.labels,
+                     s.heads[s.top], s.heads[s.heads[s.top]],
+                     s.l_valencies[s.top], s.r_valencies[s.top], s.l_valencies[s.i],
+                     get_l(s, s.top), get_l2(s, s.top), get_r(s, s.top), get_r2(s, s.top),
+                     s.l_children[s.top][0], s.l_children[s.top][1],
+                     s.r_children[s.top][0], s.r_children[s.top][1],
+                     get_l(s, s.i), get_l2(s, s.i),
+                     s.l_children[s.i][0], s.l_children[s.i][1])
         cdef size_t i, j
         cdef uint64_t hashed
         cdef uint64_t value
@@ -221,8 +197,6 @@ cdef class FeatureSet:
         cdef size_t f = 0
         for i in range(self.n):
             pred = &self.predicates[i]
-            if self.min_feats and pred.expected_size > 50000:
-                continue
             seen_non_zero = False
             for j in range(pred.n):
                 value = context[pred.args[j]]
@@ -363,74 +337,9 @@ cdef class FeatureSet:
             (lp, N0p, N0llabs),
         )
 
-        # Extra
-        stack_second = (
-            # For reattach. We need these because if we left-clobber, we need to
-            # know what will be our head
-            (w, S1w,),
-            (p, S1p,),
-            (wp, S1w, S1p),
-            (ww, S1w, N0w),
-            (wp, S1w, N0p),
-            (wp, S1p, N0w),
-            (pp, S1p, N0p),
-            (ww, S1w, N1w),
-            (wp, S1w, N1p),
-            (pp, S1p, N1p),
-            (pw, S1p, N1w),
-            (dww, dist, S1w, N1w),
-            (dppp, dist, S1p, N0p, N1p),
-            # For right-raise (and others)
-            #(S1p, S0p, N0p),
-            #(S1w, S0w, N0w),
-            #(S1w, S0p, N0p),
-            #(depth, S1w, N1w),
-            # For right/left unshift
-            #(S0hp, S0w, S0p, S1w, S1p, S1l),
-            (wpp, S0hp, S0p, S1w),
-            (wpp, S0hp, S0w, S1p),
-            # For left-invert
-            (lww, S0ll, S0w, N0w),
-            (lww, S0ll, S0w, N0p),
-            (lwp, S0ll, S0p, N0w),
-            (ww, S0lw, N0w),
-            (pp, S0lp, N0p),
-            (ppp, S0lp, S0p, N0p),
-            (vw, S0w, N0lv),
-            (vp, S0p, N0lv),
-            # For right-lower
-            #(S1rep, S0w, N0w),
-            #(S1rew, S0w, N0p),
-            #(S1rew, N0w),
-            #(S1rew, S0w),
-            #(S1re_dist,),
-            #(S1re_dist, S0w),
-            #(S1rep, S0p),
-            # For "low-edge"
-            #(S0rew, N0w),
-            #(S0rep, N0w),
-            #(S0rew, N0p),
-            # Found by accident
-            # For new right lower
-            (ww, S0r2w, S0rw),
-            (pp, S0r2p, S0rp),
-            (wp, S0r2w, S0rp),
-            (wp, S0r2p, S0rw),
-            (ww, S0w, S0rw),
-            (pw, S0w, S0rp),
-            (pp, S0p, S0rw),
-            (pp, S0p, S0rp),
-            (wwp, S0p, S0r2w, S0rw),
-            (wpp, S0p, S0rp, N0w),
-            (wpp, S0w, S0rp, N0p),
-        )
-
         feats = from_single + from_word_pairs + from_three_words + distance + valency + unigrams + third_order
         feats += labels
         feats += label_sets
-        if add_extra:
-            print "Using stack-second features"
-            feats += stack_second
         assert len(set(feats)) == len(feats), '%d vs %d' % (len(set(feats)), len(feats))
         self.n = len(feats)
         self.predicates = <Predicate*>malloc(self.n * sizeof(Predicate))

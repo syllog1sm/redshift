@@ -74,13 +74,14 @@ cdef class FeatureSet:
     cdef bint min_feats
 
 
-cdef int CONTEXT_SIZE
-
-
-cdef void fill_context(size_t* context, size_t nr_label, size_t n0, size_t n1, size_t n2,
-                      size_t s0, size_t s1, size_t stack_len,
-                      size_t* words, size_t* pos, size_t* browns,
-                      size_t* heads, size_t* labels, size_t* l_vals, size_t* r_vals,
-                      size_t* s0_lkids, size_t* s0_rkids, size_t* s1_lkids, size_t* s1_rkids,
-                      size_t* n0_lkids,
-                      bint* s0_llabels, bint* s0_rlabels, bint* n0_llabels)
+cdef void fill_context(size_t* context, size_t nr_label,
+                       size_t* words, size_t* pos,
+                       size_t n0, size_t s0,
+                       size_t* labels,
+                       size_t h_s0, size_t h_h_s0,
+                       size_t s0_lval, size_t s0_rval, size_t n0_lval,
+                       size_t l_s0, l2_s0, size_t r_s0, r2_s0,
+                       size_t le0_s0, size_t le1_s0,
+                       size_t re0_s0, size_t re1_s0,
+                       size_t l_n0, size_t l2_n0,
+                       size_t le0_n0, size_t le1_n0)
