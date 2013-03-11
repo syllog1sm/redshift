@@ -57,7 +57,7 @@ cdef struct Param:
     size_t clas
     size_t last_upd
 
-cdef struct Feature:
+cdef struct SparseFeature:
     Param** params
     int* index
     size_t n_class
@@ -72,31 +72,24 @@ cdef struct DenseParams:
 
 cdef struct DenseFeature:
     DenseParams* parts    
-
-
-cdef void update_param(Feature* feat, uint64_t clas, uint64_t now, double weight)
-cdef void update_dense(size_t now, size_t nr_class, uint64_t f, uint64_t clas,
-                       double weight, double* w, double* acc, size_t* last_upd)
-
+    bint* seen
 
 cdef class MultitronParameters:
     cdef size_t nr_class
-    cdef size_t nr_label
+    cdef size_t div
     cdef uint64_t now
     cdef dense_hash_map[uint64_t, size_t] W
     cdef double* scores
-    cdef uint64_t* labels
-    cdef int64_t* label_to_i
     
     cdef tick(self)
-    cdef int64_t lookup_label(self, uint64_t label) except -1
-    cdef int64_t add_feature(self, uint64_t f)
+    cdef int add_feature(self, uint64_t f)
+    cdef int _add_sparse_feature(self, uint64_t f)
     cdef int64_t prune_rares(self, size_t thresh)
-    cdef int64_t update(self, uint64_t gold_label, uint64_t pred_label,
+    cdef int64_t update(self, size_t gold_i, size_t pred_i,
                         uint64_t n_feats, uint64_t* features, double weight) except -1
 
-    cdef int update_single(self, uint64_t label, uint64_t f, double weight) except -1
-    cdef int get_scores(self, uint64_t n_feats, uint64_t* features, double* scores) except -1
+    cdef int update_single(self, size_t cls, uint64_t f, double weight) except -1
+    cdef int get_scores(self, size_t n_feats, uint64_t* features, double* scores) except -1
     cdef uint64_t predict_best_class(self, uint64_t n_feats, uint64_t* features)
     cdef int64_t finalize(self) except -1
 

@@ -10,7 +10,7 @@ from cython.operator cimport dereference as deref, preincrement as inc
 
 cimport cython
 
-cdef void resize_feat(Feature* feat, size_t n):
+cdef void resize_feat(SparseFeature* feat, size_t n):
     cdef size_t i
     feat.max_class = n
     cdef Param** new_params = <Param**>malloc(n * sizeof(Param*))
@@ -20,7 +20,7 @@ cdef void resize_feat(Feature* feat, size_t n):
     feat.params = new_params
 
 
-cdef inline void update_param(Feature* feat, uint64_t clas, uint64_t now, double weight):
+cdef inline void update_sparse_param(SparseFeature* feat, uint64_t clas, uint64_t now, double weight):
     cdef size_t i
     cdef Param** new_params
     i = feat.index[clas]
@@ -42,21 +42,46 @@ cdef inline void update_param(Feature* feat, uint64_t clas, uint64_t now, double
         feat.params[i].clas = clas
         feat.n_class += 1
 
-cdef inline void update_dense(size_t now, size_t nr_class, uint64_t f, uint64_t clas,
-                              double weight, double* w, double* acc, size_t* last_upd):
-    cdef uint64_t i = (f * nr_class) + clas
-    acc[i] += (now - last_upd[i]) * w[i]
-    w[i] += weight
-    last_upd[i] = now
+
+cdef inline void update_dense_param(size_t nr_class, size_t div, size_t now, size_t clas,
+        double weight, DenseFeature* feat):
+    cdef DenseParams* params
+    cdef size_t part_idx = clas / div
+    if not feat.seen[part_idx]:
+        params = <DenseParams*>malloc(sizeof(DenseParams))
+        params.w = <double*>calloc(div, sizeof(double))
+        params.acc = <double*>calloc(div, sizeof(double))
+        params.last_upd = <size_t*>calloc(div, sizeof(size_t))
+        feat.parts[part_idx] = params[0]
+        feat.seen[part_idx] = True
+    else:
+        params = &feat.parts[part_idx]
+    cdef size_t i = clas % div
+    params.acc[i] += (now - params.last_upd[i]) * params.w[i]
+    params.w[i] += weight
+    params.last_upd[i] = now
 
 
-cdef void free_feat(Feature* feat):
+cdef void free_sparse_feat(SparseFeature* feat):
     cdef size_t i
     for i in range(feat.n_class):
         if feat.index[i] != -1:
             free(feat.params[i])
     free(feat.params)
     free(feat.index)
+
+
+cdef void free_dense_feat(DenseFeature* feat, size_t div):
+    cdef size_t i
+    for i in range(div):
+        if feat.seen[i]:
+            free(feat.parts[i].w)
+            free(feat.parts[i].acc)
+            free(feat.parts[i].last_upd)
+    free(feat.parts)
+    free(feat.seen)
+    free(feat)
+
 
 cdef class MultitronParameters:
     def __cinit__(self, nr_class, feat_thresh=0):
@@ -65,41 +90,25 @@ cdef class MultitronParameters:
         self.W = dense_hash_map[uint64_t, size_t]()
         self.W.set_empty_key(0)
         self.nr_class = nr_class
-        self.nr_label = 0
+        self.div = <size_t>math.sqrt(nr_class) + 1
         self.now = 0
-        self.labels = <uint64_t*>malloc(nr_class * sizeof(uint64_t))
-        self.label_to_i = <int64_t*>malloc(nr_class * sizeof(int64_t))
-        for i in range(nr_class):
-            self.label_to_i[i] = -1
-            self.labels[i] = 0
 
     def __dealloc__(self):
         cdef pair[uint64_t, size_t] data
         cdef dense_hash_map[uint64_t, size_t].iterator it
         free(self.scores)
-        free(self.labels)
-        free(self.label_to_i)
         it = self.W.begin()
         while it != self.W.end():
             data = deref(it)
             if data.second != 0:
-                feat = <Feature*>data.second
-                free_feat(feat)
+                feat = <DenseFeature*>data.second
+                free_dense_feat(feat, self.div)
             inc(it)
 
-    cdef int64_t lookup_label(self, uint64_t label) except -1:
-        assert label < self.nd_class, '%d must be < %d' % (label, self.nr_class)
-        if self.label_to_i[label] >= 0:
-            return self.label_to_i[label]
-        else:
-            self.label_to_i[label] = self.nr_label
-            self.labels[self.nr_label] = label
-            self.nr_label += 1
-            return self.nr_label - 1
 
-    cdef int64_t add_feature(self, uint64_t f) except -1:
+    cdef int _add_sparse_feature(self, uint64_t f) except -1:
         cdef uint64_t i
-        cdef Feature* feat = <Feature*>malloc(sizeof(Feature))
+        cdef SparseFeature* feat = <SparseFeature*>malloc(sizeof(SparseFeature))
         feat.params = <Param**>malloc(5 * sizeof(Param*))
         feat.index = <bint*>malloc(self.nr_class * sizeof(int))
         for i in range(self.nr_class):
@@ -108,11 +117,19 @@ cdef class MultitronParameters:
         feat.max_class = 5
         self.W[f] = <size_t>feat
 
+    cdef int add_feature(self, uint64_t f) except -1:
+        cdef size_t i
+        cdef DenseFeature* feat = <DenseFeature*>malloc(sizeof(DenseFeature))
+        feat.parts = <DenseParams*>malloc(self.div * sizeof(DenseParams))
+        feat.seen = <bint*>calloc(self.div, sizeof(bint))
+        self.W[f] = <size_t>feat
+
+
     cdef int64_t prune_rares(self, size_t thresh) except -1:
         cdef uint64_t f
         cdef uint64_t n_kept = 0
         cdef uint64_t n_seen = 0
-        cdef Feature* feat
+        cdef DenseFeature* feat
         cdef pair[uint64_t, size_t] data
         cdef dense_hash_map[uint64_t, size_t].iterator it
         cdef size_t a
@@ -122,14 +139,15 @@ cdef class MultitronParameters:
         while it != self.W.end():
             data = deref(it)
             if data.second != 0:
-                feat = <Feature*>data.second
+                feat = <DenseFeature*>data.second
                 a = 0
-                for i in range(feat.n_class):
-                    a += abs(<int>feat.params[i].w)
+                for i in range(self.div):
+                    if feat.seen[i]:
+                        for j in range(self.div):
+                            a += abs(<int>feat.parts[i].w[j])
                 if a < thresh:
-                    free_feat(feat)
+                    free_dense_feat(feat, self.div)
                     self.W.erase(it)
-                    #self.W[data.first] = 0
                 else:
                     n_kept += 1
             n_seen += 1
@@ -141,13 +159,11 @@ cdef class MultitronParameters:
     cdef tick(self):
         self.now = self.now + 1
 
-    cdef int64_t update(self, uint64_t pred_label, uint64_t gold_label,
+    cdef int64_t update(self, size_t pred_i, size_t gold_i,
                     uint64_t n_feats, uint64_t* features, double weight) except -1:
         cdef size_t i
         cdef uint64_t f
         self.tick()
-        cdef uint64_t gold_i = self.lookup_label(gold_label)
-        cdef uint64_t pred_i = self.lookup_label(pred_label)
         if gold_i == pred_i:
             return 0
         for i in range(n_feats):
@@ -157,23 +173,22 @@ cdef class MultitronParameters:
             self.update_single(gold_i, f, weight)
             self.update_single(pred_i, f, -weight)
     
-    cdef int update_single(self, uint64_t label, uint64_t f, double weight) except -1:
+    cdef int update_single(self, size_t cls, uint64_t f, double weight) except -1:
         cdef size_t feat_addr
-        cdef Feature* feat
-        cdef uint64_t i = self.lookup_label(label)
+        cdef DenseFeature* feat
         if f != 0 and weight != 0:
             feat_addr = self.W[f]
             if feat_addr == 0:
                 self.add_feature(f)
-            feat = <Feature*>self.W[f]
-            update_param(feat, i, self.now, weight)
+            feat = <DenseFeature*>self.W[f]
+            update_dense_param(self.nr_class, self.div, self.now, cls, weight, feat)
 
-    cdef inline int get_scores(self, uint64_t n_feats, uint64_t* features, double* scores) except -1:
-        cdef uint64_t i, f, j, c
-        cdef Param* param
+    cdef inline int get_scores(self, size_t n_feats, uint64_t* features, double* scores) except -1:
+        cdef uint64_t i, f, j, k, c
         cdef size_t feat_addr
-        cdef Feature* feat
-        cdef uint64_t idx
+        cdef DenseFeature* feat
+        cdef size_t part_idx
+        cdef double* w
 
         for c in range(self.nr_class):
             scores[c] = 0
@@ -183,110 +198,104 @@ cdef class MultitronParameters:
                 break
             feat_addr = self.W[f]
             if feat_addr != 0:
-                feat = <Feature*>feat_addr
-                for j in range(feat.n_class):
-                    param = feat.params[j]
-                    scores[param.clas] += param.w
+                feat = <DenseFeature*>feat_addr
+                for j in range(self.div):
+                    if feat.seen[j]:
+                        part_idx = j * self.div
+                        w = feat.parts[j].w
+                        for k in range(self.div):
+                            scores[part_idx + k] += w[k]
 
     cdef uint64_t predict_best_class(self, uint64_t n_feats, uint64_t* features):
         cdef uint64_t i
         self.get_scores(n_feats, features, self.scores)
         cdef int best_i = 0
         cdef double best = self.scores[0]
-        for i in range(self.nr_label):
+        for i in range(self.nr_class):
             if best < self.scores[i]:
                 best_i = i
                 best = self.scores[i]
-        return self.labels[best_i]
+        return best_i
 
     cdef int64_t finalize(self) except -1:
         cdef uint64_t f
-        cdef uint64_t c
-        cdef Feature* feat
-        cdef Param* param
+        cdef DenseFeature* feat
+        cdef DenseParams* params
         cdef pair[uint64_t, size_t] data
         cdef dense_hash_map[uint64_t, size_t].iterator it
         it = self.W.begin()
         while it != self.W.end():
             data = deref(it)
             if data.second != 0:
-                feat = <Feature*>data.second
-                for i in range(feat.n_class):
-                    param = feat.params[i]
-                    param.acc += (self.now - param.last_upd) * param.w
-                    param.w = param.acc / self.now
+                feat = <DenseFeature*>data.second
+                for i in range(self.div):
+                    if feat.seen[i]:
+                        params = &feat.parts[i]
+                        for j in range(self.div):
+                            params.acc[j] += (self.now - params.last_upd[j]) * params.w[j]
+                            params.w[j] = params.acc[j] / self.now
             inc(it)
 
     def dump(self, out=sys.stdout):
         cdef uint64_t i
         cdef int64_t f, clas
-        cdef Feature* feat
+        cdef DenseFeature* feat
+        cdef DenseParams* params
         cdef pair[uint64_t, size_t] data
         cdef dense_hash_map[uint64_t, size_t].iterator it
         # Write LibSVM compatible format
-        out.write(u'solver_type L1R_LR\n')
-        out.write(u'nr_class %d\n' % self.nr_label)
-        out.write(u'label %s\n' % ' '.join([str(self.labels[i]) for i in
-                                            range(self.nr_label)]))
-        out.write(u'nr_feature %d\n' % self.max_param)
-        out.write(u'bias -1\n')
-        out.write(u'w\n')
-        zeroes = '0 ' * self.nr_label
+        out.write(u'nr_class %d\n' % (self.nr_class))
+        zeroes = '0 ' * self.nr_class
         # Break LibSVM compatibility for now to be a bit more disk-friendly
         it = self.W.begin()
         while it != self.W.end():
             data = deref(it)
             if data.second != 0:
-                feat = <Feature*>data.second
+                feat = <DenseFeature*>data.second
                 non_zeroes = []
-                for i in range(feat.n_class):
-                    param = feat.params[i]
-                    non_zeroes.append('%d=%s ' % (self.labels[param.clas], param.w))
+                for i in range(self.div):
+                    if feat.seen[i]:
+                        params = &feat.parts[i]
+                        for j in range(self.div):
+                            if params.w[j]:
+                                non_zeroes.append('%d=%s ' % ((i * self.div) + j,
+                                                              params.w[j]))
                 if non_zeroes:
                     out.write(u'%d\t%s\n' % (data.first, ' '.join(non_zeroes)))
             inc(it)
         out.close()
 
     def load(self, in_):
-        cdef Feature* feat
+        cdef DenseFeature* feat
         cdef size_t i
+        nr_feat = 0
+        nr_weight = 0
         #cdef uint64_t f, clas, idx
-        for line in in_:
-            if line.startswith('label'):
-                label_names = line.strip().split()
-                # Remove the word "label"
-                label_names.pop(0)
-            if line == 'w\n':
-                break
-        for label in label_names:
-            self.lookup_label(int(label))
-        self.nr_class = len(label_names)
-        n_feats = 0
-        unpruned = 0
+        header = in_.readline()
+        self.nr_class = int(header.split()[1])
+        self.div = <int>math.sqrt(self.nr_class) + 1
         cdef uint64_t f
-        # Break LibSVM compatibility for now to be a bit more disk-friendly
+        print "Loading %d class..." % self.nr_class,
         for line in in_:
-            n_feats += 1
-            unpruned += 1
-            f_str, weights = line.split('\t')
+            f_str, weights_str = line.split('\t')
             f = int(f_str)
             if f == 0:
                 continue
             self.add_feature(f)
-            feat = <Feature*>self.W[f]
-            classes = []
-            for param_str in weights.split():
-                raw_label, w = param_str.split('=')
-                i = self.label_to_i[int(raw_label)]
-                assert i != -1
-                classes.append((i, w))
-            resize_feat(feat, len(classes))
-            # It's slightly faster if we're accessing the scores array sequentially,
-            # so sort the classes before we index them in our sparse array.
-            for i, w in sorted(classes):
-                feat.params[feat.n_class] = <Param*>malloc(sizeof(Param))
-                feat.params[feat.n_class].w = float(w)
-                feat.params[feat.n_class].clas = i
-                feat.index[i] = feat.n_class
-                feat.n_class += 1
-        print 'Read %d/%d non-zero features' % (unpruned, n_feats)
+            feat = <DenseFeature*>self.W[f]
+            nr_feat += 1
+            for param_str in weights_str.split():
+                cls_str, w = param_str.split('=')
+                i = int(cls_str)
+                part_idx = i / self.div
+                if not feat.seen[part_idx]:
+                    params = <DenseParams*>malloc(sizeof(DenseParams))
+                    params.w = <double*>calloc(self.div, sizeof(double))
+                    params.acc = <double*>calloc(self.div, sizeof(double))
+                    params.last_upd = <size_t*>calloc(self.div, sizeof(size_t))
+                    feat.parts[part_idx] = params[0]
+                    feat.seen[part_idx] = True
+                idx = i % self.div
+                feat.parts[part_idx].w[idx] = float(w)
+                nr_weight += 1
+        print "%d weights for %d features" % (nr_weight, nr_feat)

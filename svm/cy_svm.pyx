@@ -6,6 +6,7 @@ from libc.stdint cimport uint64_t, int64_t
 cimport index.hashes
 
 from pathlib import Path
+import math
 
 cimport cython.operator
 
@@ -200,13 +201,10 @@ cdef class Perceptron(Model):
         self.use_cache = True
         self.cache = index.hashes.ScoresCache(max_classes) 
 
-    def set_nr_class(self, nr_class):
-        self.nr_class = nr_class
-        self.model.true_nr_class = nr_class
-    
     def set_classes(self, labels):
         self.nr_class = len(labels)
-        for label in labels: self.model.lookup_label(label)
+        self.model.nr_class = len(labels)
+        self.model.div = <size_t>math.sqrt(self.nr_class) + 1
 
     def begin_adding_instances(self, uint64_t n_feats):
         pass
@@ -234,9 +232,6 @@ cdef class Perceptron(Model):
                 assert f != 0
                 self.model.update_single(clas, f, d)
 
-    cdef uint64_t* get_labels(self):
-        return self.model.labels
-
     def train(self):
         self.model.finalize()
 
@@ -250,21 +245,17 @@ cdef class Perceptron(Model):
         cdef:
             uint64_t i
             uint64_t best_class
-            uint64_t label
             double score, best_score
-            uint64_t* labels
         cdef bint seen_valid = False
         self.model.get_scores(n, feats, self.model.scores)
         cdef double* scores = self.model.scores
-        labels = self.model.labels
         best_score = 0
         best_class = 0
-        for i in range(self.model.n_classes):
+        for i in range(self.model.nr_class):
             score = scores[i]
-            label = labels[i]
-            if valid_classes[label] and (score > best_score or not seen_valid):
+            if valid_classes[i] and (score > best_score or not seen_valid):
                 best_score = score
-                best_class = label
+                best_class = i
                 seen_valid = True
         assert seen_valid
         return best_class
