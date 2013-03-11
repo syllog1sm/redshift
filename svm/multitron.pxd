@@ -51,8 +51,6 @@ cdef extern from "sparsehash/dense_hash_map" namespace "google":
         D& operator[](K&) nogil
 
 
-
-#cdef extern from "predict.h":
 cdef struct Param:
     double w
     double acc
@@ -66,18 +64,24 @@ cdef struct Feature:
     size_t max_class
 
 
+cdef struct DenseParams:
+    double* w
+    double* acc
+    size_t* last_upd
+
+
+cdef struct DenseFeature:
+    DenseParams* parts    
+
+
 cdef void update_param(Feature* feat, uint64_t clas, uint64_t now, double weight)
 cdef void update_dense(size_t now, size_t nr_class, uint64_t f, uint64_t clas,
                        double weight, double* w, double* acc, size_t* last_upd)
 
 
 cdef class MultitronParameters:
-    cdef uint64_t n_classes
-    cdef uint64_t n_params
-    cdef uint64_t max_classes
-    cdef uint64_t max_param
-    cdef uint64_t max_dense
-    cdef uint64_t true_nr_class
+    cdef size_t nr_class
+    cdef size_t nr_label
     cdef uint64_t now
     cdef dense_hash_map[uint64_t, size_t] W
     cdef double* scores

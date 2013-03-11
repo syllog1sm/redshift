@@ -59,24 +59,17 @@ cdef void free_feat(Feature* feat):
     free(feat.index)
 
 cdef class MultitronParameters:
-    """
-    Labels and features must be non-negative integers with max values
-    max_classes and max_params.
-    The feature value 0 is ignored.
-    """
-    
-    def __cinit__(self, max_classes, feat_thresh=0):
+    def __cinit__(self, nr_class, feat_thresh=0):
         cdef uint64_t i
-        self.scores = <double *>malloc(max_classes * sizeof(double))
+        self.scores = <double *>malloc(nr_class * sizeof(double))
         self.W = dense_hash_map[uint64_t, size_t]()
         self.W.set_empty_key(0)
-        self.max_classes = max_classes
-        self.true_nr_class = max_classes
-        self.n_classes = 0
+        self.nr_class = nr_class
+        self.nr_label = 0
         self.now = 0
-        self.labels = <uint64_t*>malloc(max_classes * sizeof(uint64_t))
-        self.label_to_i = <int64_t*>malloc(max_classes * sizeof(int64_t))
-        for i in range(max_classes):
+        self.labels = <uint64_t*>malloc(nr_class * sizeof(uint64_t))
+        self.label_to_i = <int64_t*>malloc(nr_class * sizeof(int64_t))
+        for i in range(nr_class):
             self.label_to_i[i] = -1
             self.labels[i] = 0
 
@@ -95,21 +88,21 @@ cdef class MultitronParameters:
             inc(it)
 
     cdef int64_t lookup_label(self, uint64_t label) except -1:
-        assert label < self.max_classes, '%d must be < %d' % (label, self.max_classes)
+        assert label < self.nd_class, '%d must be < %d' % (label, self.nr_class)
         if self.label_to_i[label] >= 0:
             return self.label_to_i[label]
         else:
-            self.label_to_i[label] = self.n_classes
-            self.labels[self.n_classes] = label
-            self.n_classes += 1
-            return self.n_classes - 1
+            self.label_to_i[label] = self.nr_label
+            self.labels[self.nr_label] = label
+            self.nr_label += 1
+            return self.nr_label - 1
 
     cdef int64_t add_feature(self, uint64_t f) except -1:
         cdef uint64_t i
         cdef Feature* feat = <Feature*>malloc(sizeof(Feature))
         feat.params = <Param**>malloc(5 * sizeof(Param*))
-        feat.index = <bint*>malloc(self.true_nr_class * sizeof(int))
-        for i in range(self.true_nr_class):
+        feat.index = <bint*>malloc(self.nr_class * sizeof(int))
+        for i in range(self.nr_class):
             feat.index[i] = -1
         feat.n_class = 0
         feat.max_class = 5
@@ -182,7 +175,7 @@ cdef class MultitronParameters:
         cdef Feature* feat
         cdef uint64_t idx
 
-        for c in range(self.true_nr_class):
+        for c in range(self.nr_class):
             scores[c] = 0
         for i in range(n_feats):
             f = features[i]
@@ -200,7 +193,7 @@ cdef class MultitronParameters:
         self.get_scores(n_feats, features, self.scores)
         cdef int best_i = 0
         cdef double best = self.scores[0]
-        for i in range(self.n_classes):
+        for i in range(self.nr_label):
             if best < self.scores[i]:
                 best_i = i
                 best = self.scores[i]
@@ -213,10 +206,6 @@ cdef class MultitronParameters:
         cdef Param* param
         cdef pair[uint64_t, size_t] data
         cdef dense_hash_map[uint64_t, size_t].iterator it
-        #for f in range(self.max_dense * self.true_nr_class):
-        #    self.acc[f] += (self.now - self.last_upd[f]) * self.w[f]
-        #    self.w[f] = self.acc[f] / self.now
-        # average
         it = self.W.begin()
         while it != self.W.end():
             data = deref(it)
@@ -236,13 +225,13 @@ cdef class MultitronParameters:
         cdef dense_hash_map[uint64_t, size_t].iterator it
         # Write LibSVM compatible format
         out.write(u'solver_type L1R_LR\n')
-        out.write(u'nr_class %d\n' % self.n_classes)
+        out.write(u'nr_class %d\n' % self.nr_label)
         out.write(u'label %s\n' % ' '.join([str(self.labels[i]) for i in
-                                            range(self.n_classes)]))
+                                            range(self.nr_label)]))
         out.write(u'nr_feature %d\n' % self.max_param)
         out.write(u'bias -1\n')
         out.write(u'w\n')
-        zeroes = '0 ' * self.n_classes
+        zeroes = '0 ' * self.nr_label
         # Break LibSVM compatibility for now to be a bit more disk-friendly
         it = self.W.begin()
         while it != self.W.end():
@@ -271,7 +260,7 @@ cdef class MultitronParameters:
                 break
         for label in label_names:
             self.lookup_label(int(label))
-        self.true_nr_class = len(label_names)
+        self.nr_class = len(label_names)
         n_feats = 0
         unpruned = 0
         cdef uint64_t f
