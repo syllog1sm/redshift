@@ -71,6 +71,7 @@ cdef class FeatureSet:
     cdef int n
     cdef int nr_label
     cdef uint64_t* extract(self, Sentence* sent, State* state)
+    cdef bint min_feats
 
 
 cdef int CONTEXT_SIZE

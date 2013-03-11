@@ -189,11 +189,18 @@ cdef class FeatureSet:
         self._make_predicates(add_extra)
         self.context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
         self.features = <uint64_t*>calloc(self.n, sizeof(uint64_t))
+        self.min_feats = False
 
     def __dealloc__(self):
         free(self.context)
         free(self.features)
         free(self.predicates)
+
+    def set_minimal(self):
+        self.min_feats = True
+
+    def set_full(self):
+        self.min_feats = False
 
     cdef uint64_t* extract(self, Sentence* sent, State* s):
         cdef size_t* context = self.context
@@ -214,6 +221,8 @@ cdef class FeatureSet:
         cdef size_t f = 0
         for i in range(self.n):
             pred = &self.predicates[i]
+            if self.min_feats and pred.expected_size > 50000:
+                continue
             seen_non_zero = False
             for j in range(pred.n):
                 value = context[pred.args[j]]
