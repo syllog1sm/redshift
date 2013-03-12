@@ -73,15 +73,14 @@ cdef class FeatureSet:
     cdef uint64_t* extract(self, Sentence* sent, State* state)
     cdef bint min_feats
 
-
-cdef void fill_context(size_t* context, size_t nr_label,
-                       size_t* words, size_t* pos,
-                       size_t n0, size_t s0,
-                       size_t* labels,
-                       size_t h_s0, size_t h_h_s0,
-                       size_t s0_lval, size_t s0_rval, size_t n0_lval,
-                       size_t l_s0, l2_s0, size_t r_s0, r2_s0,
-                       size_t le0_s0, size_t le1_s0,
-                       size_t re0_s0, size_t re1_s0,
-                       size_t l_n0, size_t l2_n0,
-                       size_t le0_n0, size_t le1_n0)
+#cdef void fill_context(size_t* context, size_t nr_label,
+#                       size_t* words, size_t* pos,
+#                       size_t n0, size_t s0,
+#                       size_t* labels,
+#                       size_t h_s0, size_t h_h_s0,
+#                       size_t s0_lval, size_t s0_rval, size_t n0_lval,
+#                       size_t l_s0, l2_s0, size_t r_s0, r2_s0,
+#                       size_t le0_s0, size_t le1_s0,
+#                       size_t re0_s0, size_t re1_s0,
+#                       size_t l_n0, size_t l2_n0,
+#                       size_t le0_n0, size_t le1_n0)

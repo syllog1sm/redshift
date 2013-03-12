@@ -6,33 +6,23 @@ DEF MAX_LABELS = 50
 DEF MAX_VALENCY = MAX_SENT_LEN / 2
 
 
+cdef struct Subtree:
+    size_t val
+    size_t[4] lab
+    size_t[4] idx
+
+
 cdef struct Kernel:
     size_t i
     size_t s0
+    size_t Ls0
     size_t hs0
     size_t h2s0
-    size_t s0_lv
-    size_t s0_rv
-    size_t n0_lv
-    size_t s0l
-    size_t s0r
-    size_t s0l2
-    size_t s0r2
-    size_t Ls0
-    size_t Ls0l
-    size_t Ls0r
-    size_t Ls0l2
-    size_t Ls0r2
-    size_t Ls0le0
-    size_t Ls0le1
-    size_t Ls0re0
-    size_t Ls0re1
-    size_t n0l
-    size_t n0l2
-    size_t Ln0l
-    size_t Ln0l2
-    size_t Ln0le0
-    size_t Ln0le1
+    size_t Lhs0
+    size_t Lh2s0
+    Subtree s0l
+    Subtree s0r
+    Subtree n0l
 
 
 # With low MAX_SENT_LEN most of these can be reduced to char instead of size_t,

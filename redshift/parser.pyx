@@ -338,6 +338,7 @@ cdef class Parser:
                 break
         cdef dict counts = {}
         for i in range(d, t):
+            fill_kernel(gold_state)
             feats = self.features.extract(sent, gold_state)
             clas = ghist[i]
             counts.setdefault(clas, {})
@@ -349,6 +350,7 @@ cdef class Parser:
             self.moves.transition(clas, gold_state)
         free_state(gold_state)
         for i in range(d, t):
+            fill_kernel(pred_state)
             feats = self.features.extract(sent, pred_state)
             clas = phist[i]
             counts.setdefault(clas, {})
@@ -376,6 +378,7 @@ cdef class Parser:
         if DEBUG:
             print ' '.join(py_words)
         while not s.is_finished:
+            fill_kernel(s)
             feats = self.features.extract(sent, s)
             valid = self.moves.get_valid(s)
             pred = self.predict(n_feats, feats, valid, &s.guess_labels[s.i])
@@ -416,6 +419,7 @@ cdef class Parser:
         sent.parse.n_moves = 0
         self.guide.cache.flush()
         while not s.is_finished:
+            fill_kernel(s)
             feats = self.features.extract(sent, s)
             clas = self.predict(n_preds, feats, self.moves.get_valid(s),
                                   &s.guess_labels[s.i])
@@ -708,7 +712,7 @@ cdef class Beam:
             raise StandardError
 
     cdef refresh(self):
-        cdef size_t i
+        cdef size_t i, j
         for i in range(self.nr_class):
             for j in range(N_MOVES):
                 self.seen_moves[i][j] = False
@@ -764,51 +768,64 @@ cdef class Violation:
         free(self.phist)
 
 
-#cdef struct EquivClass:
-#    bint has_head
-#    bint at_end_of_buffer
-#    size_t stack_len
-#    size_t n
-#    EquivClass* backptrs
-#
+cdef struct EquivClass:
+    State* s
+    bint* valid
+    bint has_head
+    bint at_end_of_buffer
+    size_t stack_len
+    size_t n
+    double max_score
+    EquivClass* backptrs
 
-#cdef class DynBeam:
-#    cdef EquivClass** gss   
-#    cdef Cont* next_moves
-#    cdef State* gold
-#    cdef size_t n_labels
-#    cdef size_t nr_class
-#    cdef size_t k
-#    cdef size_t bsize
-#    cdef size_t psize
-#    cdef Violation first_violn
-#    cdef Violation max_violn
-#    cdef Violation last_violn
-#    cdef Violation cost_violn
-#    cdef bint is_full
-#    cdef bint early_upd
-#    cdef bint max_upd
-#    cdef bint late_upd
-#    cdef bint cost_upd
-#    cdef bint add_labels
-#    cdef bint** paths
-#
-#    cdef add_state(self, size_t idx, size_t clas, size_t move, double score, int cost):
-#        # 1. At move t, two different transitions can never be equivalent
-#        # 2. Once merged into an equivalence class, states cannot be divided until
-#        # at least as many pop moves have been applied as push moves
-#        # 3. That means the Shift and Right moves cannot split class's children
-#        # 4. Once N hits zero we must divide the state, otherwise why wasn't it merged
-#        # before?
-#        if move == SHIFT or move == RIGHT:
-#            self.gss[idx].n += 1
-#        elif self.gss[idx].n >= 1:
-#            self.gss[idx].n -= 1
-#            if self.paths[idx][move]:
-#                self.add_to_path(idx, move, clas, score, cost)
-#            else:
-#                self.new_path(idx, move, clas, score, cost)
-#
+
+cdef class DynBeam:
+    cdef EquivClass** gss   
+    cdef bint** paths
+    cdef State* gold
+    cdef size_t n_labels
+    cdef size_t nr_class
+    cdef size_t k
+    cdef size_t bsize
+    cdef size_t psize
+
+    cdef Violation first_violn
+    cdef Violation max_violn
+    cdef Violation last_violn
+    cdef Violation cost_violn
+    cdef object upd_strat
+
+    cdef add_state(self, size_t idx, size_t clas, size_t move, double score, int cost):
+        # 1. At move t, two different transitions can never be equivalent
+        # 2. Once merged into an equivalence class, states cannot be divided until
+        # at least as many pop moves have been applied as push moves
+        # 3. That means the Shift and Right moves cannot split class's children
+        # 4. Once N hits zero we must divide the state, otherwise why wasn't it merged
+        # before?
+
+        # In summary, we:
+        # - Start with K equivalence classes
+        # - Score their valid continuations
+        # - Cluster the continuations into equivalence classes
+        # - Find K-best
+
+        # The trick is in "Score their valid continuations". Each equivalence
+        # class stands for P previous states. The Shift and Right moves
+        # cannot divide the class, so there's one Shift continuation, and L Right
+        # continuations (one for each label).
+        # Exactly one of Reduce and Left-Arc will be valid, assuming we have
+        # a stack. 
+        # Iff our "continuation counter" n hits zero, _then_ we can split P
+        # on this pop move.
+        # So we only ever split P on at most one move: Reduce or Left.
+        if move == SHIFT or move == RIGHT:
+            self.gss[idx].n += 1
+        elif self.gss[idx].n >= 1:
+            self.gss[idx].n -= 1
+            if self.paths[idx][move]:
+                self.add_to_path(idx, move, clas, score, cost)
+            else:
+                self.new_path(idx, move, clas, score, cost)
 
 
 cdef class TransitionSystem:
@@ -911,6 +928,7 @@ cdef class TransitionSystem:
             s.at_end_of_buffer = True
         if s.at_end_of_buffer and s.stack_len == 1:
             s.is_finished = True
+
   
     cdef int* get_costs(self, State* s, size_t* heads, size_t* labels) except NULL:
         cdef size_t i

@@ -6,7 +6,7 @@ from libc.stdint cimport uint64_t
 from libcpp.pair cimport pair
 import index.hashes
 from cython.operator cimport dereference as deref, preincrement as inc
-from _state cimport get_l, get_l2, get_r, get_r2
+from _state cimport Kernel, Subtree
 
 from io_parse cimport Sentence
 #from index.hashes cimport encode_feat
@@ -20,7 +20,6 @@ from libcpp.vector cimport vector
 cdef enum:
     N0w
     N0p
-    N0l
     N0lw
     N0lp
     N0ll
@@ -30,10 +29,8 @@ cdef enum:
     N0l2l
     N1w
     N1p
-    N1l
     N2w
     N2p
-    N2l
     S0w
     S0p
     S0l
@@ -66,98 +63,79 @@ cdef enum:
     CONTEXT_SIZE
 
 
-cdef void fill_context(size_t* context, size_t nr_label,
-                       size_t* words, size_t* pos,
-                       size_t n0, size_t s0,
-                       size_t* labels,
-                       size_t h_s0, size_t h_h_s0,
-                       size_t s0_lval, size_t s0_rval, size_t n0_lval,
-                       size_t l_s0, l2_s0, size_t r_s0, r2_s0,
-                       size_t le0_s0, size_t le1_s0,
-                       size_t re0_s0, size_t re1_s0,
-                       size_t l_n0, size_t l2_n0,
-                       size_t le0_n0, size_t le1_n0):
+#cdef void fill_context(size_t* context, size_t nr_label,
+#                       size_t* words, size_t* pos,
+#                       size_t n0, size_t s0,
+#                       size_t* labels,
+#                       size_t h_s0, size_t h_h_s0,
+#                       size_t s0_lval, size_t s0_rval, size_t n0_lval,
+#                       size_t l_s0, l2_s0, size_t r_s0, r2_s0,
+#                       size_t le0_s0, size_t le1_s0,
+#                       size_t re0_s0, size_t re1_s0,
+#                       size_t l_n0, size_t l2_n0,
+#                       size_t le0_n0, size_t le1_n0):
+cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* pos,
+                       Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
+    context[N0w] = words[k.i]
+    context[N0p] = pos[k.i]
 
-    context[N0w] = words[n0]
-    context[N0p] = pos[n0]
-    context[N0l] = labels[n0]
+    context[N1w] = words[k.i + 1]
+    context[N1p] = pos[k.i + 1]
 
-    context[N1w] = words[n0 + 1]
-    context[N1p] = pos[n0 + 1]
-    context[N1l] = labels[n0 + 1]
+    context[N2w] = words[k.i + 2]
+    context[N2p] = pos[k.i + 2]
 
-    context[N2w] = words[n0 + 2]
-    context[N2p] = pos[n0 + 2]
-    context[N2l] = labels[n0 + 2]
-
-    context[S0w] = words[s0]
-    context[S0p] = pos[s0]
-    context[S0l] = labels[s0]
+    context[S0w] = words[k.s0]
+    context[S0p] = pos[k.s0]
+    context[S0l] = k.Ls0
     
-    context[S0hw] = words[h_s0]
-    context[S0hp] = pos[h_s0]
-    context[S0hl] = labels[h_s0]
+    context[S0hw] = words[k.hs0]
+    context[S0hp] = pos[k.hs0]
+    context[S0hl] = k.Lhs0
 
-    context[S0h2w] = words[h_h_s0]
-    context[S0h2p] = pos[h_h_s0]
-    context[S0h2l] = labels[h_h_s0]
+    context[S0h2w] = words[k.h2s0]
+    context[S0h2p] = pos[k.h2s0]
+    context[S0h2l] = k.Lh2s0
  
-    context[S0lv] = s0_lval
-    context[S0rv] = s0_rval
-    context[N0lv] = n0_lval
+    context[S0lv] = s0l.val
+    context[S0rv] = s0r.val
+    context[N0lv] = n0l.val
 
-    context[S0lw] = words[l_s0]
-    context[S0lp] = pos[l_s0]
-    context[S0ll] = labels[l_s0]
-    
-    context[S0rw] = words[r_s0]
-    context[S0rp] = pos[r_s0]
-    context[S0rl] = labels[r_s0]
-    
-    context[S0l2w] = words[l2_s0]
-    context[S0l2p] = pos[l2_s0]
-    context[S0l2l] = labels[l2_s0]
-    
-    context[S0r2w] = words[r2_s0]
-    context[S0r2p] = pos[r2_s0]
-    context[S0r2l] = labels[r2_s0]
+    context[S0lw] = words[s0l.idx[0]]
+    context[S0lp] = pos[s0l.idx[0]]
+    context[S0rw] = words[s0r.idx[0]]
+    context[S0rp] = pos[s0r.idx[0]]
 
-    context[N0lw] = words[l_n0]
-    context[N0lp] = pos[l_n0]
-    context[N0ll] = labels[l_n0]
-    
-    context[N0l2w] = words[l2_n0]
-    context[N0l2p] = pos[l2_n0]
-    context[N0l2l] = labels[l2_n0]
-   
+    context[S0l2w] = words[s0l.idx[1]]
+    context[S0l2p] = pos[s0l.idx[1]]
+    context[S0r2w] = words[s0r.idx[1]]
+    context[S0r2p] = pos[s0r.idx[1]]
+
+    context[N0lw] = words[n0l.idx[0]]
+    context[N0lp] = pos[n0l.idx[0]]
+    context[N0l2w] = words[n0l.idx[1]]
+    context[N0l2p] = pos[n0l.idx[1]]
+
+    context[S0ll] = s0l.lab[0]
+    context[S0l2l] = s0l.lab[1]
+    context[S0rl] = s0r.lab[0]
+    context[S0r2l] = s0r.lab[1]
+    context[N0ll] = n0l.lab[0]
+    context[N0l2l] = n0l.lab[1]
+
     context[S0llabs] = 0
     context[S0rlabs] = 0
     context[N0llabs] = 0
-    context[S0llabs] += labels[l_s0] << (nr_label - labels[l_s0])
-    context[S0llabs] += labels[l2_s0] << (nr_label - labels[l2_s0])
-    if le0_s0 != l2_s0:
-        context[S0llabs] += labels[le0_s0] << (nr_label - labels[le0_s0])
-    if le1_s0 != l2_s0:
-        context[S0llabs] += labels[le1_s0] << (nr_label - labels[le1_s0])
 
-    context[S0rlabs] += labels[r_s0] << (nr_label - labels[r_s0])
-    context[S0rlabs] += labels[r2_s0] << (nr_label - labels[r2_s0])
-    if re0_s0 != r2_s0:
-        context[S0rlabs] += labels[re0_s0] << (nr_label - labels[re0_s0])
-    if re1_s0 != r2_s0:
-        context[S0rlabs] += labels[re1_s0] << (nr_label - labels[re1_s0])
-    
-    context[N0llabs] += labels[l_n0] << (nr_label - labels[l_n0])
-    context[N0llabs] += labels[l2_n0] << (nr_label - labels[l2_n0])
-    if le0_n0 != l2_n0:
-        context[N0llabs] += labels[le0_n0] << (nr_label - labels[le0_n0])
-    if le1_n0 != l2_n0:
-        context[N0llabs] += labels[le1_n0] << (nr_label - labels[le1_n0])
- 
+    cdef size_t i
+    for i in range(4):
+        context[S0llabs] += s0l.lab[i] << (nr_label - s0l.lab[i])
+        context[S0rlabs] += s0r.lab[i] << (nr_label - s0r.lab[i])
+        context[N0llabs] += n0l.lab[i] << (nr_label - n0l.lab[i])
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
-    if s0 != 0:
-        context[dist] = n0 - s0
+    if k.s0 != 0:
+        context[dist] = k.i - k.s0
     else:
         context[dist] = 0
 
@@ -177,17 +155,19 @@ cdef class FeatureSet:
 
     cdef uint64_t* extract(self, Sentence* sent, State* s):
         cdef size_t* context = self.context
-        fill_context(context, self.nr_label,
-                     sent.words, sent.pos,
-                     s.i, s.top,
-                     s.labels,
-                     s.heads[s.top], s.heads[s.heads[s.top]],
-                     s.l_valencies[s.top], s.r_valencies[s.top], s.l_valencies[s.i],
-                     get_l(s, s.top), get_l2(s, s.top), get_r(s, s.top), get_r2(s, s.top),
-                     s.l_children[s.top][0], s.l_children[s.top][1],
-                     s.r_children[s.top][0], s.r_children[s.top][1],
-                     get_l(s, s.i), get_l2(s, s.i),
-                     s.l_children[s.i][0], s.l_children[s.i][1])
+        fill_context(context, self.nr_label, sent.words, sent.pos, &s.kernel,
+                     &s.kernel.s0l, &s.kernel.s0r, &s.kernel.n0l)
+        #fill_context(context, self.nr_label,
+        #             sent.words, sent.pos,
+        #             s.i, s.top,
+        #             s.labels,
+        #             s.heads[s.top], s.heads[s.heads[s.top]],
+        #             s.l_valencies[s.top], s.r_valencies[s.top], s.l_valencies[s.i],
+        #             get_l(s, s.top), get_l2(s, s.top), get_r(s, s.top), get_r2(s, s.top),
+        #             s.l_children[s.top][0], s.l_children[s.top][1],
+        #             s.r_children[s.top][0], s.r_children[s.top][1],
+        #             get_l(s, s.i), get_l2(s, s.i),
+        #             s.l_children[s.i][0], s.l_children[s.i][1])
         cdef size_t i, j
         cdef uint64_t hashed
         cdef uint64_t value

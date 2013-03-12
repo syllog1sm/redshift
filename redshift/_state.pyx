@@ -1,5 +1,5 @@
 from libc.stdlib cimport malloc, free, calloc
-from libc.string cimport memcpy
+from libc.string cimport memcpy, memset
 
 DEF MAX_SENT_LEN = 200
 DEF MAX_TRANSITIONS = MAX_SENT_LEN * 2
@@ -23,6 +23,7 @@ cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
         s.r_valencies[head] += 1
     return 1
 
+
 cdef int del_r_child(State *s, size_t head) except -1:
     child = get_r(s, head)
     assert s.r_valencies[head] >= 1
@@ -31,6 +32,7 @@ cdef int del_r_child(State *s, size_t head) except -1:
     s.r_valencies[head] -= 1
     s.heads[child] = 0
     s.labels[child] = 0
+
 
 cdef int del_l_child(State *s, size_t head) except -1:
     cdef:
@@ -43,6 +45,7 @@ cdef int del_l_child(State *s, size_t head) except -1:
     s.l_valencies[head] -= 1
     s.heads[child] = 0
     s.labels[child] = 0
+
 
 cdef size_t pop_stack(State *s) except 0:
     cdef size_t popped
@@ -58,33 +61,72 @@ cdef size_t pop_stack(State *s) except 0:
     assert popped != 0
     return popped
 
+
+cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, Subtree* tree):
+    tree.val = val
+    cdef size_t i = 0
+    while val != 0 and i < 4:
+        val -= 1
+        tree.idx[i] = kids[val]
+        tree.lab[i] = labs[kids[val]]
+        i += 1
+    for j in range(i, 4):
+        tree.lab[j] = 0
+        tree.idx[j] = 0
+    # Don't use children 3 and 4 atm
+    tree.idx[2] = 0
+    tree.idx[3] = 0
+
+
 cdef int fill_kernel(State *s):
+    cdef size_t i, val
     s.kernel.i = s.i
     s.kernel.s0 = s.top
     s.kernel.hs0 = s.heads[s.top]
     s.kernel.h2s0 = s.heads[s.heads[s.top]]
-    s.kernel.s0_lv = s.l_valencies[s.top]
-    s.kernel.s0_rv = s.r_valencies[s.top]
-    s.kernel.n0_lv = s.l_valencies[s.i]
-    s.kernel.s0l = get_l(s, s.top)
-    s.kernel.s0r = get_r(s, s.top)
-    s.kernel.s0l2 = get_l2(s, s.top)
-    s.kernel.s0r2 = get_r2(s, s.top)
     s.kernel.Ls0 = s.labels[s.top]
-    s.kernel.Ls0l = s.labels[get_l(s, s.top)]
-    s.kernel.Ls0r = s.labels[get_r(s, s.top)]
-    s.kernel.Ls0l2 = s.labels[get_l2(s, s.top)]
-    s.kernel.Ls0r2 = s.labels[get_r2(s, s.top)]
-    s.kernel.Ls0le0 = s.labels[s.l_children[s.top][0]]
-    s.kernel.Ls0le1 = s.labels[s.l_children[s.top][1]]
-    s.kernel.Ls0re0 = s.labels[s.r_children[s.top][0]]
-    s.kernel.Ls0re1 = s.labels[s.r_children[s.top][1]]
-    s.kernel.n0l = get_l(s, s.i)
-    s.kernel.n0l2 = get_l2(s, s.i)
-    s.kernel.Ln0l = s.labels[get_l(s, s.i)]
-    s.kernel.Ln0l2 = s.labels[get_l2(s, s.i)]
-    s.kernel.Ln0le0 = s.labels[s.l_children[s.i][0]]
-    s.kernel.Ln0le1 = s.labels[s.l_children[s.i][1]]
+    s.kernel.Lhs0 = s.labels[s.heads[s.top]]
+    s.kernel.Lh2s0 = s.labels[s.heads[s.heads[s.top]]]
+
+    fill_subtree(s.l_valencies[s.top], s.l_children[s.top], s.labels, &s.kernel.s0l)
+    fill_subtree(s.r_valencies[s.top], s.r_children[s.top], s.labels, &s.kernel.s0r)
+    fill_subtree(s.l_valencies[s.i], s.l_children[s.i], s.labels, &s.kernel.n0l)
+  
+
+cdef int kernel_from_s(Kernel* parent, Kernel* k) except -1:
+    memset(k, 0, sizeof(Kernel))
+    k.i = parent.i + 1
+    k.s0 = parent.i
+    # Parents of s0, e.g. hs0, h2s0, Lhs0 etc all null in Shift
+    memcpy(&k.s0l, &parent.n0l, sizeof(Subtree))
+
+
+cdef int kernel_from_r(Kernel* parent, size_t label, Kernel* k) except -1:
+    kernel_from_s(parent, k)
+    k.Ls0 = label
+    k.hs0 = parent.s0
+    k.h2s0 = parent.hs0
+    k.Lhs0 = parent.Ls0
+    k.Lh2s0 = parent.Lhs0
+
+
+cdef Kernel* kernel_from_d(Kernel* parent, Kernel* grandparent, Kernel* k):
+    memcpy(k, grandparent, sizeof(Kernel))
+    memcpy(&k.n0l, &parent.n0l, sizeof(Subtree))
+
+
+cdef Kernel* kernel_from_l(Kernel* parent, Kernel* grandparent, size_t label, Kernel* k):
+    memcpy(k, grandparent, sizeof(Kernel))
+    k.n0l.val = parent.n0l.val + 1
+    k.n0l.idx[0] = parent.s0
+    k.n0l.idx[1] = parent.n0l.idx[0]
+    k.n0l.idx[2] = 0
+    k.n0l.idx[3] = 0
+    k.n0l.lab[0] = label
+    k.n0l.lab[1] = parent.n0l.idx[0]
+    k.n0l.lab[2] = parent.n0l.idx[1]
+    k.n0l.lab[3] = parent.n0l.idx[2]
+
 
 cdef int push_stack(State *s) except -1:
     s.second = s.top
