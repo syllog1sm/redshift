@@ -77,6 +77,8 @@ cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, Subtree* tree):
     tree.idx[2] = 0
     tree.idx[3] = 0
 
+cdef uint64_t hash_kernel(Kernel* k):
+    return MurmurHash64A(k, sizeof(Kernel), 0)
 
 cdef int fill_kernel(State *s):
     cdef size_t i, val
@@ -93,30 +95,40 @@ cdef int fill_kernel(State *s):
     fill_subtree(s.l_valencies[s.i], s.l_children[s.i], s.labels, &s.kernel.n0l)
   
 
-cdef int kernel_from_s(Kernel* parent, Kernel* k) except -1:
+cdef Kernel* kernel_from_s(Kernel* parent) except NULL:
+    k = <Kernel*>malloc(sizeof(Kernel))
     memset(k, 0, sizeof(Kernel))
     k.i = parent.i + 1
     k.s0 = parent.i
     # Parents of s0, e.g. hs0, h2s0, Lhs0 etc all null in Shift
     memcpy(&k.s0l, &parent.n0l, sizeof(Subtree))
+    return k
 
 
-cdef int kernel_from_r(Kernel* parent, size_t label, Kernel* k) except -1:
-    kernel_from_s(parent, k)
+cdef Kernel* kernel_from_r(Kernel* parent, size_t label) except NULL:
+    cdef Kernel* k = kernel_from_s(parent)
     k.Ls0 = label
     k.hs0 = parent.s0
     k.h2s0 = parent.hs0
     k.Lhs0 = parent.Ls0
     k.Lh2s0 = parent.Lhs0
+    return k
 
 
-cdef Kernel* kernel_from_d(Kernel* parent, Kernel* grandparent, Kernel* k):
+cdef Kernel* kernel_from_d(Kernel* parent, Kernel* grandparent) except NULL:
+    assert parent.s0 >= grandparent.s0
+    k = <Kernel*>malloc(sizeof(Kernel))
     memcpy(k, grandparent, sizeof(Kernel))
     memcpy(&k.n0l, &parent.n0l, sizeof(Subtree))
+    k.i = parent.i
+    return k
 
 
-cdef Kernel* kernel_from_l(Kernel* parent, Kernel* grandparent, size_t label, Kernel* k):
+cdef Kernel* kernel_from_l(Kernel* parent, Kernel* grandparent, size_t label) except NULL:
+    assert parent.s0 >= grandparent.s0
+    k = <Kernel*>malloc(sizeof(Kernel))
     memcpy(k, grandparent, sizeof(Kernel))
+    k.i = parent.i
     k.n0l.val = parent.n0l.val + 1
     k.n0l.idx[0] = parent.s0
     k.n0l.idx[1] = parent.n0l.idx[0]
@@ -126,7 +138,7 @@ cdef Kernel* kernel_from_l(Kernel* parent, Kernel* grandparent, size_t label, Ke
     k.n0l.lab[1] = parent.n0l.idx[0]
     k.n0l.lab[2] = parent.n0l.idx[1]
     k.n0l.lab[3] = parent.n0l.idx[2]
-
+    return k
 
 cdef int push_stack(State *s) except -1:
     s.second = s.top
@@ -193,7 +205,7 @@ cdef int has_head_in_stack(State *s, size_t word, size_t* heads):
             return 1
     return 0
 
-cdef State* init_state(size_t n, size_t n_labels):
+cdef State* init_state(size_t n):
     cdef size_t i, j
     cdef State* s = <State*>malloc(sizeof(State))
     s.n = n
@@ -225,7 +237,7 @@ cdef State* init_state(size_t n, size_t n_labels):
     s.history = <size_t*>calloc(n * 2, sizeof(size_t))
     return s
 
-cdef copy_state(State* s, State* old, size_t n_labels):
+cdef copy_state(State* s, State* old):
     cdef size_t i, j
     # Don't copy number of children, as this refers to the state object itself
     s.nr_kids = 0

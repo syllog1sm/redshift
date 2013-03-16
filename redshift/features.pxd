@@ -1,5 +1,5 @@
 from libc.stdint cimport uint64_t, int64_t
-from _state cimport State
+from _state cimport State, Kernel
 #from index.hashes cimport FeatIndex
 from io_parse cimport Sentence
 from libcpp.vector cimport vector
@@ -70,7 +70,7 @@ cdef class FeatureSet:
     cdef uint64_t* features 
     cdef int n
     cdef int nr_label
-    cdef uint64_t* extract(self, Sentence* sent, State* state)
+    cdef uint64_t* extract(self, Sentence* sent, Kernel* k) except NULL
     cdef bint min_feats
 
 #cdef void fill_context(size_t* context, size_t nr_label,

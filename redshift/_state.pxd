@@ -1,9 +1,15 @@
 from libc.string cimport const_void
+from libc.stdint cimport uint64_t, int64_t
 
 DEF MAX_SENT_LEN = 200
 DEF MAX_TRANSITIONS = MAX_SENT_LEN * 2
 DEF MAX_LABELS = 50
 DEF MAX_VALENCY = MAX_SENT_LEN / 2
+
+cdef extern from "MurmurHash2.h":
+    uint64_t MurmurHash64A(void * key, uint64_t len, int64_t seed)
+    uint64_t MurmurHash64B(void * key, uint64_t len, int64_t seed)
+
 
 
 cdef struct Subtree:
@@ -60,7 +66,13 @@ cdef struct Cont:
     bint is_valid
 
 cdef int cmp_contn(const_void* v1, const_void* v2) nogil
+cdef uint64_t hash_kernel(Kernel* k)
 cdef int fill_kernel(State* s)
+
+cdef Kernel* kernel_from_s(Kernel* parent) except NULL
+cdef Kernel* kernel_from_r(Kernel* parent, size_t label) except NULL
+cdef Kernel* kernel_from_d(Kernel* parent, Kernel* gp) except NULL
+cdef Kernel* kernel_from_l(Kernel* parent, Kernel* gp, size_t label) except NULL
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1
 cdef int del_l_child(State *s, size_t head) except -1
@@ -79,6 +91,6 @@ cdef int has_head_in_buffer(State *s, size_t word, size_t* heads)
 cdef int has_child_in_stack(State *s, size_t word, size_t* heads)
 cdef int has_head_in_stack(State *s, size_t word, size_t* heads)
 
-cdef State* init_state(size_t n, size_t n_labels)
+cdef State* init_state(size_t n)
 cdef free_state(State* s)
-cdef copy_state(State* s, State* old, size_t n_labels)
+cdef copy_state(State* s, State* old)

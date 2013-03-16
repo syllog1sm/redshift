@@ -5,7 +5,7 @@ MALT-style dependency parser
 cimport cython
 import random
 from libc.stdlib cimport malloc, free, calloc
-from libc.string cimport memcpy
+from libc.string cimport memcpy, memset
 from pathlib import Path
 from collections import defaultdict
 import sh
@@ -31,7 +31,55 @@ from svm.cy_svm cimport Model, LibLinear, Perceptron
 from libc.stdint cimport uint64_t, int64_t
 from libc.stdlib cimport qsort
 
-from _state cimport *
+from libcpp.utility cimport pair
+from libcpp.vector cimport vector
+
+
+from cython.operator cimport dereference as deref, preincrement as inc
+
+
+cdef extern from "sparsehash/dense_hash_map" namespace "google":
+    cdef cppclass dense_hash_map[K, D]:
+        K& key_type
+        D& data_type
+        pair[K, D]& value_type
+        uint64_t size_type
+        cppclass iterator:
+            pair[K, D]& operator*() nogil
+            iterator operator++() nogil
+            iterator operator--() nogil
+            bint operator==(iterator) nogil
+            bint operator!=(iterator) nogil
+        iterator begin()
+        iterator end()
+        uint64_t size()
+        uint64_t max_size()
+        bint empty()
+        uint64_t bucket_count()
+        uint64_t bucket_size(uint64_t i)
+        uint64_t bucket(K& key)
+        double max_load_factor()
+        void max_load_vactor(double new_grow)
+        double min_load_factor()
+        double min_load_factor(double new_grow)
+        void set_resizing_parameters(double shrink, double grow)
+        void resize(uint64_t n)
+        void rehash(uint64_t n)
+        dense_hash_map()
+        dense_hash_map(uint64_t n)
+        void swap(dense_hash_map&)
+        pair[iterator, bint] insert(pair[K, D]) nogil
+        void set_empty_key(K&)
+        void set_deleted_key(K& key)
+        void clear_deleted_key()
+        void erase(iterator pos)
+        uint64_t erase(K& k)
+        void erase(iterator first, iterator last)
+        void clear()
+        void clear_no_resize()
+        pair[iterator, iterator] equal_range(K& k)
+        D& operator[](K&) nogil
+
 
 VOCAB_SIZE = 1e6
 TAG_SET_SIZE = 50
@@ -185,10 +233,13 @@ cdef class Parser:
                 deltas = []
                 for i in minibatch:
                     if self.beam_width >= 1:
-                        deltas.append(self.decode_beam(&sents.s[i], self.beam_width,
+                        if DEBUG:
+                            print ' '.join(sents.strings[i][0])
+                        deltas.append(self.decode_dyn_beam(&sents.s[i], self.beam_width,
                                       stats))
                     else:
                         self.train_one(n, &sents.s[i], sents.strings[i][0])
+                break
                 for weights in deltas:
                     self.guide.batch_update(weights)
             print_train_msg(n, self.guide.n_corr, self.guide.total,
@@ -198,6 +249,7 @@ cdef class Parser:
                 self.guide.prune(self.feat_thresh)
             self.guide.n_corr = 0
             self.guide.total = 0
+            break
         self.guide.train()
 
     cdef dict decode_beam(self, Sentence* sent, size_t k, object stats):
@@ -262,6 +314,33 @@ cdef class Parser:
             stats['moves'] += beam.gold.t
             return {}
 
+    cdef dict decode_dyn_beam(self, Sentence* sent, size_t max_width, object stats):
+        cdef bint cache_hit = False
+        cdef Kernel* k
+        cdef double* scores
+        cdef DynBeam beam = DynBeam(max_width, sent.length, self.guide.nr_class)
+        stats['sents'] += 1
+        while not beam.gold.is_finished:
+            self._advance_gold(beam.gold, sent, self.train_alg == 'static')
+            for i in range(beam.bsize):
+                assert <size_t>beam.beam[i] != 0
+                assert <size_t>beam.beam[i].k != 0
+                feats = self.features.extract(sent, beam.beam[i].k)
+                scores = self.guide.predict_scores(self.features.n, feats)
+                for clas in [0, 1, self.moves.l_start, self.moves.r_start]:
+                #for clas in range(self.moves.nr_class):
+                    beam.extend_equiv(i, self.moves.labels[clas], self.moves.moves[clas],
+                                      clas, scores[clas])
+            beam.refresh()
+            if self.upd_strat == 'early' and beam.bsize == max_width:
+                if beam.gold.score <= beam.beam[max_width - 1].path_score:
+                    break
+        cdef size_t t = 0
+        phist = beam.viterbi_path(beam.best, &t)
+        assert beam.gold.t >= t
+        counts = self._count_feats(sent, t, phist, beam.gold.history)
+        return counts
+
     cdef int _advance_gold(self, State* s, Sentence* sent, bint use_static) except -1:
         cdef:
             size_t oracle, i
@@ -273,7 +352,7 @@ cdef class Parser:
         fill_kernel(s)
         scores = self.guide.cache.lookup(sizeof(s.kernel), <void*>&s.kernel, &cache_hit)
         if not cache_hit:
-            feats = self.features.extract(sent, s)
+            feats = self.features.extract(sent, &s.kernel)
             self.guide.model.get_scores(self.features.n, feats, scores)
         if use_static:
             oracle = self.moves.break_tie(s, sent.parse.heads, sent.parse.labels)
@@ -304,7 +383,7 @@ cdef class Parser:
             scores = self.guide.cache.lookup(sizeof(parent.kernel),
                     <void*>&parent.kernel, &cache_hit)
             if not cache_hit:
-                feats = self.features.extract(sent, parent)
+                feats = self.features.extract(sent, &parent.kernel)
                 self.guide.model.get_scores(n_feats, feats, scores)
             valid = self.moves.get_valid(parent)
             for child_idx in range(self.guide.nr_class):
@@ -327,8 +406,8 @@ cdef class Parser:
         cdef size_t n_feats = self.features.n
         cdef uint64_t* feats
         cdef size_t clas
-        cdef State* gold_state = init_state(sent.length, self.moves.n_labels)
-        cdef State* pred_state = init_state(sent.length, self.moves.n_labels)
+        cdef State* gold_state = init_state(sent.length)
+        cdef State* pred_state = init_state(sent.length)
         # Find where the states diverge
         for d in range(t):
             if ghist[d] == phist[d]:
@@ -339,7 +418,7 @@ cdef class Parser:
         cdef dict counts = {}
         for i in range(d, t):
             fill_kernel(gold_state)
-            feats = self.features.extract(sent, gold_state)
+            feats = self.features.extract(sent, &gold_state.kernel)
             clas = ghist[i]
             counts.setdefault(clas, {})
             for f in range(n_feats):
@@ -351,7 +430,7 @@ cdef class Parser:
         free_state(gold_state)
         for i in range(d, t):
             fill_kernel(pred_state)
-            feats = self.features.extract(sent, pred_state)
+            feats = self.features.extract(sent, &pred_state.kernel)
             clas = phist[i]
             counts.setdefault(clas, {})
             for f in range(n_feats):
@@ -360,6 +439,8 @@ cdef class Parser:
                 counts[clas].setdefault(feats[f], 0)
                 counts[clas][feats[f]] -= 1
             self.moves.transition(clas, pred_state)
+            if DEBUG:
+                print pred_state.top, pred_state.heads[pred_state.top], pred_state.i
         free_state(pred_state)
         return counts
 
@@ -370,7 +451,7 @@ cdef class Parser:
         cdef size_t* g_heads = sent.parse.heads
 
         cdef size_t n_feats = self.features.n
-        cdef State* s = init_state(sent.length, self.moves.n_labels)
+        cdef State* s = init_state(sent.length)
         cdef size_t move = 0
         cdef size_t label = 0
         cdef size_t _ = 0
@@ -379,7 +460,7 @@ cdef class Parser:
             print ' '.join(py_words)
         while not s.is_finished:
             fill_kernel(s)
-            feats = self.features.extract(sent, s)
+            feats = self.features.extract(sent, &s.kernel)
             valid = self.moves.get_valid(s)
             pred = self.predict(n_feats, feats, valid, &s.guess_labels[s.i])
             if online:
@@ -415,12 +496,12 @@ cdef class Parser:
         cdef size_t n_preds = self.features.n
         cdef uint64_t* feats
         cdef double* scores
-        s = init_state(sent.length, self.moves.n_labels)
+        s = init_state(sent.length)
         sent.parse.n_moves = 0
         self.guide.cache.flush()
         while not s.is_finished:
             fill_kernel(s)
-            feats = self.features.extract(sent, s)
+            feats = self.features.extract(sent, &s.kernel)
             clas = self.predict(n_preds, feats, self.moves.get_valid(s),
                                   &s.guess_labels[s.i])
             sent.parse.moves[s.t] = clas
@@ -539,7 +620,7 @@ cdef class Parser:
             g_labels = gold.s[i].parse.labels
             g_heads = gold.s[i].parse.heads
             n = sent.length
-            s = init_state(n, self.moves.n_labels)
+            s = init_state(n)
             sent_moves = []
             tokens = sents.strings[i][0]
             while not s.is_finished:
@@ -603,10 +684,10 @@ cdef class Beam:
         self.parents = <State**>malloc(k * sizeof(State*))
         self.beam = <State**>malloc(k * sizeof(State*))
         for i in range(k):
-            self.parents[i] = init_state(length, self.n_labels)
+            self.parents[i] = init_state(length)
         for i in range(k):
-            self.beam[i] = init_state(length, self.n_labels)
-        self.gold = init_state(length, self.n_labels)
+            self.beam[i] = init_state(length)
+        self.gold = init_state(length)
         self.bsize = 1
         self.psize = 0
         self.is_full = self.bsize >= self.k
@@ -653,7 +734,7 @@ cdef class Beam:
         # If there are no more children coming, use the same state object instead
         # of cloning it
         #if parent.nr_kids > 1:
-        copy_state(self.beam[self.bsize], parent, self.n_labels)
+        copy_state(self.beam[self.bsize], parent)
         #else:
         #    self.parents[par_idx] = self.beam[self.bsize]
         #    self.beam[self.bsize] = parent
@@ -718,7 +799,7 @@ cdef class Beam:
                 self.seen_moves[i][j] = False
 
         for i in range(self.bsize):
-            copy_state(self.parents[i], self.beam[i], self.n_labels)
+            copy_state(self.parents[i], self.beam[i])
         self.psize = self.bsize
         self.is_full = False
         self.bsize = 0
@@ -769,64 +850,250 @@ cdef class Violation:
 
 
 cdef struct EquivClass:
-    State* s
-    bint* valid
-    bint has_head
-    bint at_end_of_buffer
-    size_t stack_len
-    size_t n
-    double max_score
-    EquivClass* backptrs
+    size_t nr_ptr
+    double path_score
+    size_t best_p
+    size_t best_gp
+    size_t* moves_from
+    double* scores_from
+    EquivClass** parents
+    EquivClass** stack_parents
+    Kernel* k
 
 
 cdef class DynBeam:
-    cdef EquivClass** gss   
-    cdef bint** paths
     cdef State* gold
-    cdef size_t n_labels
-    cdef size_t nr_class
-    cdef size_t k
     cdef size_t bsize
-    cdef size_t psize
+    cdef size_t max_width
+    cdef size_t sent_len
+    cdef size_t nr_class
+    cdef size_t nr_equiv
+    cdef size_t nr_label
+    cdef double delta
+    cdef dense_hash_map[uint64_t, size_t] table
+    cdef EquivClass** beam
+    cdef EquivClass* best
+    cdef EquivClass* violn
+    cdef size_t* _viterbi_path
+    cdef double max_delta
+    cdef double max_score
 
-    cdef Violation first_violn
-    cdef Violation max_violn
-    cdef Violation last_violn
-    cdef Violation cost_violn
-    cdef object upd_strat
+    def __cinit__(self, size_t k, size_t sent_len, size_t nr_class):
+        self.gold = init_state(sent_len)
+        self.max_width = k
+        self.sent_len = sent_len
+        self.nr_class = nr_class
+        self.nr_label = 50
+        self.delta = -1
+        self.max_score = -10000
+        self.nr_equiv = 0
+        self.beam = <EquivClass**>malloc(self.max_width * sizeof(EquivClass*))
+        self.bsize = 1
+        self.beam[0] = self._init_equiv()
+        self.violn = NULL
+        self.best = self.beam[0]
+        self.table = dense_hash_map[uint64_t, size_t]()
+        self.table.set_empty_key(0)
+        self._viterbi_path = <size_t*>calloc(sent_len * 2, sizeof(size_t))
 
-    cdef add_state(self, size_t idx, size_t clas, size_t move, double score, int cost):
-        # 1. At move t, two different transitions can never be equivalent
-        # 2. Once merged into an equivalence class, states cannot be divided until
-        # at least as many pop moves have been applied as push moves
-        # 3. That means the Shift and Right moves cannot split class's children
-        # 4. Once N hits zero we must divide the state, otherwise why wasn't it merged
-        # before?
+    cdef size_t* viterbi_path(self, EquivClass* eq, size_t* t):
+        cdef size_t par_idx = eq.best_p
+        cdef size_t gp_idx = eq.best_gp
+        memset(self._viterbi_path, 0, self.sent_len * 2)
+        # States start with the first word on the stack, so halt one early to get
+        # the same number of moves
+        cdef size_t i = 0
+        while eq.parents[0].nr_ptr != 0:
+            self._viterbi_path[i] = eq.moves_from[par_idx]
+            gp_idx = eq.best_gp
+            eq = eq.parents[par_idx]
+            par_idx = gp_idx
+            i += 1
+        t[0] = i
+        # Reverse the list
+        for i in range(t[0] / 2):
+            first = self._viterbi_path[i]
+            last = self._viterbi_path[t[0] - (i + 1)]
+            self._viterbi_path[i] = last
+            self._viterbi_path[t[0] - (i + 1)] = first
+        return self._viterbi_path
+    
+    cdef int refresh(self) except -1:
+        cdef dense_hash_map[uint64_t, size_t].iterator it
+        cdef pair[uint64_t, size_t] data
+        cdef size_t addr
+        agenda = []
+        #cdef pair[uint64_t, size_t] data
+        #cdef vector[pair[double, size_t]] agenda
+        it = self.table.begin()
+        table_size = 0
+        while it != self.table.end():
+            data = deref(it)
+            assert data.second != 0
+            addr = <size_t>data.second
+            equiv_class = <EquivClass*>addr
+            agenda.append((equiv_class.path_score, data.second))
+        #    agenda.push_back(pair(equiv_class.path_score, data.second))
+            inc(it)
+            table_size += 1
+        self.table.clear()
+        agenda.sort(reverse=True)
+        for i in range(self.max_width):
+            if i >= len(agenda):
+                break
+            addr = <size_t>agenda[i][1]
+            equiv = <EquivClass*>addr
+            for j in range(equiv.nr_ptr):
+                assert <size_t>equiv.stack_parents[j] != 0
+            self.beam[i] = equiv
+        self.bsize = i
+        self.best = self.beam[0]
+        if DEBUG:
+            print self.best.moves_from[self.best.best_p], self.best.k.s0, self.best.k.hs0, self.best.k.i
+        cdef double delta = self.best.path_score - self.gold.score
+        if delta > self.max_delta:
+            self.max_delta = delta
+            self.violn = self.best
+        #for i in range(self.max_width, self.nr_equiv):
+        #    free(<EquivClass*>agenda[i][1])
+        self.nr_equiv = 0
 
-        # In summary, we:
-        # - Start with K equivalence classes
-        # - Score their valid continuations
-        # - Cluster the continuations into equivalence classes
-        # - Find K-best
+    cdef int extend_equiv(self, size_t i, size_t label, size_t move,
+                          size_t clas, double score) except -1:
+        cdef Kernel* cont
+        cdef EquivClass* eq = self.beam[i]
+        cdef Kernel* k = self.beam[i].k
+        cdef size_t j
+        if move == SHIFT and k.i == self.sent_len:
+            return 0
+        elif move == RIGHT and (k.i == self.sent_len or not k.s0):
+            return 0
+        elif move == REDUCE and (k.s0 == 0 or k.hs0 == 0):
+            return 0
+        elif move == LEFT and (k.hs0 or not k.s0):
+            return 0
+        if move == SHIFT:
+            cont = kernel_from_s(k)
+            assert cont.i == k.i + 1
+            self._push(cont, i, 0, score)
+        elif move == RIGHT:
+            cont = kernel_from_r(k, label)
+            assert cont.i == k.i + 1
+            self._push(cont, i, clas, score)
+        elif move == REDUCE:
+            for j in range(eq.nr_ptr):
+                assert <size_t>eq.stack_parents[j] != 0
+                cont = kernel_from_d(k, eq.stack_parents[j].k)
+                assert cont.i == k.i
+                self._pop(cont, i, j, 1, score)
+        elif move == LEFT:
+            for j in range(eq.nr_ptr):
+                assert <size_t>eq.stack_parents[j] != 0
+                cont = kernel_from_l(k, eq.stack_parents[j].k, label)
+                assert cont.i == k.i
+                self._pop(cont, i, j, clas, score)
 
-        # The trick is in "Score their valid continuations". Each equivalence
-        # class stands for P previous states. The Shift and Right moves
-        # cannot divide the class, so there's one Shift continuation, and L Right
-        # continuations (one for each label).
-        # Exactly one of Reduce and Left-Arc will be valid, assuming we have
-        # a stack. 
-        # Iff our "continuation counter" n hits zero, _then_ we can split P
-        # on this pop move.
-        # So we only ever split P on at most one move: Reduce or Left.
-        if move == SHIFT or move == RIGHT:
-            self.gss[idx].n += 1
-        elif self.gss[idx].n >= 1:
-            self.gss[idx].n -= 1
-            if self.paths[idx][move]:
-                self.add_to_path(idx, move, clas, score, cost)
-            else:
-                self.new_path(idx, move, clas, score, cost)
+    cdef _push(self, Kernel* k, size_t par_idx, size_t clas, double score):
+        cdef size_t addr = self._lookup(k)
+        cdef EquivClass* ext = <EquivClass*>addr
+        cdef EquivClass* parent = self.beam[par_idx]
+        cdef EquivClass* gp
+        assert <size_t>parent != 0
+        ext.parents[ext.nr_ptr] = parent
+        ext.stack_parents[ext.nr_ptr] = parent
+        ext.moves_from[ext.nr_ptr] = clas
+        ext.scores_from[ext.nr_ptr] = score
+        path_score = parent.path_score + score
+        if DEBUG:
+            print 'U %d onto %d via %d at %s' % (<size_t>ext, <size_t>parent, clas, path_score)
+        if path_score > ext.path_score:
+            ext.path_score = path_score
+            ext.best_p = ext.nr_ptr
+            ext.best_gp = parent.best_p
+            if path_score > self.max_score:
+                self.max_score = path_score
+                self.best = ext
+        ext.nr_ptr += 1
 
+    cdef _pop(self, Kernel* k, size_t par_idx, size_t gp_idx, size_t clas, double score):
+        cdef EquivClass* gp 
+        cdef EquivClass* a 
+        cdef EquivClass* ext = <EquivClass*>self._lookup(k)
+        cdef EquivClass* parent = self.beam[par_idx]
+        if parent.nr_ptr:
+            a = parent.stack_parents[gp_idx]
+            gp = a.stack_parents[a.best_p] if a.nr_ptr != 0 else a
+        else:
+            gp = parent
+        assert <size_t>gp != 0, '%d, best %d' % (a.nr_ptr, a.best_p)
+        ext.parents[ext.nr_ptr] = parent
+        ext.stack_parents[ext.nr_ptr] = gp
+        ext.moves_from[ext.nr_ptr] = clas
+        ext.scores_from[ext.nr_ptr] = score
+        # Because we care about the grandparent, we have to recalculate the parent's
+        # path score --- otherwise, it might refer to a path from a different GP
+        path_score = parent.parents[gp_idx].path_score + parent.scores_from[gp_idx] + score
+        if path_score > ext.path_score:
+            ext.path_score = path_score
+            ext.best_p = ext.nr_ptr
+            ext.best_gp = gp_idx
+            if path_score > self.max_score:
+                self.max_score = path_score
+                self.best = ext
+        ext.nr_ptr += 1
+
+    cdef size_t _lookup(self, Kernel* k) except 0:
+        cdef EquivClass* equiv
+        cdef uint64_t hashed = hash_kernel(k)
+        cdef size_t addr = self.table[hashed]
+        if addr == 0:
+            equiv = <EquivClass*>malloc(sizeof(EquivClass))
+            equiv.nr_ptr = 0
+            equiv.path_score = -10000
+            equiv.parents = <EquivClass**>calloc(self.nr_class, sizeof(EquivClass*))
+            equiv.stack_parents = <EquivClass**>calloc(self.nr_class, sizeof(EquivClass*))
+            equiv.moves_from = <size_t*>calloc(self.nr_class, sizeof(size_t))
+            equiv.scores_from = <double*>calloc(self.nr_class, sizeof(double))
+            equiv.k = k
+            addr = <size_t>equiv
+            self.table[hashed] = <size_t>addr
+            self.nr_equiv += 1
+        else:
+            equiv = <EquivClass*>addr
+        assert equiv.nr_ptr < 1000
+        return addr
+
+    cdef EquivClass* _init_equiv(self):
+        cdef EquivClass* first = <EquivClass*>malloc(sizeof(EquivClass))
+        first.nr_ptr = 0
+        first.path_score = 0
+        first.parents = <EquivClass**>calloc(self.nr_class, sizeof(EquivClass*))
+        first.stack_parents = <EquivClass**>calloc(self.nr_class, sizeof(EquivClass*))
+        first.moves_from = <size_t*>calloc(self.nr_class, sizeof(size_t))
+        first.scores_from = <double*>calloc(self.nr_class, sizeof(double))
+        cdef Kernel* k = <Kernel*>malloc(sizeof(Kernel))
+        memset(k, 0, sizeof(Kernel))
+        first.k = k
+        first.k.i = 1
+        cdef EquivClass* second = <EquivClass*>malloc(sizeof(EquivClass))
+        second.nr_ptr = 1
+        second.path_score = 0
+        second.parents = <EquivClass**>calloc(self.nr_class, sizeof(EquivClass*))
+        second.stack_parents = <EquivClass**>calloc(self.nr_class, sizeof(EquivClass*))
+        second.moves_from = <size_t*>calloc(self.nr_class, sizeof(size_t))
+        second.scores_from = <double*>calloc(self.nr_class, sizeof(double))
+        k = <Kernel*>malloc(sizeof(Kernel))
+        memset(k, 0, sizeof(Kernel))
+        second.k = k
+        second.k.i = 2
+        second.k.s0 = 1
+        second.parents[0] = first
+        second.stack_parents[0] = first
+        second.scores_from[0] = 0
+        second.moves_from[0] = 0
+        second.best_p = 0
+        second.best_gp = 0
+        return second
 
 cdef class TransitionSystem:
     cdef bint allow_reattach

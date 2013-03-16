@@ -153,10 +153,11 @@ cdef class FeatureSet:
         free(self.features)
         free(self.predicates)
 
-    cdef uint64_t* extract(self, Sentence* sent, State* s):
+    cdef uint64_t* extract(self, Sentence* sent, Kernel* k) except NULL:
         cdef size_t* context = self.context
-        fill_context(context, self.nr_label, sent.words, sent.pos, &s.kernel,
-                     &s.kernel.s0l, &s.kernel.s0r, &s.kernel.n0l)
+        assert <size_t>k != 0
+        fill_context(context, self.nr_label, sent.words, sent.pos, k,
+                     &k.s0l, &k.s0r, &k.n0l)
         #fill_context(context, self.nr_label,
         #             sent.words, sent.pos,
         #             s.i, s.top,
