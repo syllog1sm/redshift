@@ -239,7 +239,6 @@ cdef class Parser:
                                       stats))
                     else:
                         self.train_one(n, &sents.s[i], sents.strings[i][0])
-                break
                 for weights in deltas:
                     self.guide.batch_update(weights)
             print_train_msg(n, self.guide.n_corr, self.guide.total,
@@ -249,7 +248,6 @@ cdef class Parser:
                 self.guide.prune(self.feat_thresh)
             self.guide.n_corr = 0
             self.guide.total = 0
-            break
         self.guide.train()
 
     cdef dict decode_beam(self, Sentence* sent, size_t k, object stats):
@@ -320,6 +318,8 @@ cdef class Parser:
         cdef double* scores
         cdef DynBeam beam = DynBeam(max_width, sent.length, self.guide.nr_class)
         stats['sents'] += 1
+        self.guide.use_cache = False
+        self.guide.cache.flush()
         while not beam.gold.is_finished:
             self._advance_gold(beam.gold, sent, self.train_alg == 'static')
             for i in range(beam.bsize):
@@ -327,8 +327,7 @@ cdef class Parser:
                 assert <size_t>beam.beam[i].k != 0
                 feats = self.features.extract(sent, beam.beam[i].k)
                 scores = self.guide.predict_scores(self.features.n, feats)
-                for clas in [0, 1, self.moves.l_start, self.moves.r_start]:
-                #for clas in range(self.moves.nr_class):
+                for clas in range(self.moves.nr_class):
                     beam.extend_equiv(i, self.moves.labels[clas], self.moves.moves[clas],
                                       clas, scores[clas])
             beam.refresh()
@@ -358,13 +357,15 @@ cdef class Parser:
             oracle = self.moves.break_tie(s, sent.parse.heads, sent.parse.labels)
         else:
             costs = self.moves.get_costs(s, sent.parse.heads, sent.parse.labels)
-            best_score = -10000
+            best_score = -1000000
             for i in range(self.moves.nr_class):
                 if costs[i] == 0 and scores[i] > best_score:
                     oracle = i
                     best_score = scores[i]
-            assert best_score > -10000
+            assert best_score > -1000000
         s.score += scores[oracle]
+        if DEBUG:
+            print s.t, "Adv gold", oracle, s.stack_len, s.top, s.heads[s.top], s.i
         self.moves.transition(oracle, s)
 
     cdef int _fill_move_scores(self, Sentence* sent, size_t k, State** parents,
@@ -411,10 +412,14 @@ cdef class Parser:
         # Find where the states diverge
         for d in range(t):
             if ghist[d] == phist[d]:
+                if DEBUG:
+                    print "Common:", ghist[d], gold_state.stack_len, gold_state.top, gold_state.heads[gold_state.top], gold_state.i
                 self.moves.transition(ghist[d], gold_state)
                 self.moves.transition(phist[d], pred_state)
             else:
                 break
+        else:
+            return {}
         cdef dict counts = {}
         for i in range(d, t):
             fill_kernel(gold_state)
@@ -426,6 +431,8 @@ cdef class Parser:
                     break
                 counts[clas].setdefault(feats[f], 0)
                 counts[clas][feats[f]] += 1
+            if DEBUG:
+                print "Gold: ", clas, gold_state.stack_len, gold_state.top, gold_state.heads[gold_state.top], gold_state.i
             self.moves.transition(clas, gold_state)
         free_state(gold_state)
         for i in range(d, t):
@@ -438,9 +445,9 @@ cdef class Parser:
                     break
                 counts[clas].setdefault(feats[f], 0)
                 counts[clas][feats[f]] -= 1
-            self.moves.transition(clas, pred_state)
             if DEBUG:
-                print pred_state.top, pred_state.heads[pred_state.top], pred_state.i
+                print 'count', clas, pred_state.top, pred_state.heads[pred_state.top], pred_state.i
+            self.moves.transition(clas, pred_state)
         free_state(pred_state)
         return counts
 
@@ -922,6 +929,7 @@ cdef class DynBeam:
         cdef dense_hash_map[uint64_t, size_t].iterator it
         cdef pair[uint64_t, size_t] data
         cdef size_t addr
+        cdef double score
         agenda = []
         #cdef pair[uint64_t, size_t] data
         #cdef vector[pair[double, size_t]] agenda
@@ -932,24 +940,26 @@ cdef class DynBeam:
             assert data.second != 0
             addr = <size_t>data.second
             equiv_class = <EquivClass*>addr
-            agenda.append((equiv_class.path_score, data.second))
+            score = equiv_class.path_score
+            agenda.append((score, addr))
         #    agenda.push_back(pair(equiv_class.path_score, data.second))
             inc(it)
             table_size += 1
         self.table.clear()
         agenda.sort(reverse=True)
         for i in range(self.max_width):
-            if i >= len(agenda):
-                break
             addr = <size_t>agenda[i][1]
             equiv = <EquivClass*>addr
             for j in range(equiv.nr_ptr):
                 assert <size_t>equiv.stack_parents[j] != 0
             self.beam[i] = equiv
-        self.bsize = i
+            if i == (len(agenda) - 1):
+                break
+        self.bsize = i + 1
         self.best = self.beam[0]
         if DEBUG:
-            print self.best.moves_from[self.best.best_p], self.best.k.s0, self.best.k.hs0, self.best.k.i
+            print 'Current best:', self.beam[0].path_score
+            print 'Refresh', self.best.moves_from[self.best.best_p], self.best.k.s0, self.best.k.hs0, self.best.k.i
         cdef double delta = self.best.path_score - self.gold.score
         if delta > self.max_delta:
             self.max_delta = delta
@@ -1005,7 +1015,7 @@ cdef class DynBeam:
         ext.scores_from[ext.nr_ptr] = score
         path_score = parent.path_score + score
         if DEBUG:
-            print 'U %d onto %d via %d at %s' % (<size_t>ext, <size_t>parent, clas, path_score)
+            print 'U %d onto %d via %d at %s, %s' % (<size_t>ext, <size_t>parent, clas, path_score, score)
         if path_score > ext.path_score:
             ext.path_score = path_score
             ext.best_p = ext.nr_ptr
@@ -1033,6 +1043,9 @@ cdef class DynBeam:
         # Because we care about the grandparent, we have to recalculate the parent's
         # path score --- otherwise, it might refer to a path from a different GP
         path_score = parent.parents[gp_idx].path_score + parent.scores_from[gp_idx] + score
+        if DEBUG:
+            print 'O %d from %d via %d at %s, %s' % (<size_t>ext, <size_t>parent, clas, path_score, score)
+
         if path_score > ext.path_score:
             ext.path_score = path_score
             ext.best_p = ext.nr_ptr
@@ -1049,7 +1062,7 @@ cdef class DynBeam:
         if addr == 0:
             equiv = <EquivClass*>malloc(sizeof(EquivClass))
             equiv.nr_ptr = 0
-            equiv.path_score = -10000
+            equiv.path_score = -1000000
             equiv.parents = <EquivClass**>calloc(self.nr_class, sizeof(EquivClass*))
             equiv.stack_parents = <EquivClass**>calloc(self.nr_class, sizeof(EquivClass*))
             equiv.moves_from = <size_t*>calloc(self.nr_class, sizeof(size_t))
@@ -1060,7 +1073,7 @@ cdef class DynBeam:
             self.nr_equiv += 1
         else:
             equiv = <EquivClass*>addr
-        assert equiv.nr_ptr < 1000
+        assert equiv.nr_ptr < 100000
         return addr
 
     cdef EquivClass* _init_equiv(self):
