@@ -87,6 +87,8 @@ cdef class MultitronParameters:
     def __cinit__(self, nr_class, feat_thresh=0):
         cdef uint64_t i
         self.scores = <double *>malloc(nr_class * sizeof(double))
+        #self.max_dense = 200000
+        #self.w = <DenseFeature*>malloc(self.max_dense * sizeof(DenseFeature))
         self.W = dense_hash_map[uint64_t, size_t]()
         self.W.set_empty_key(0)
         self.nr_class = nr_class
