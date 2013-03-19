@@ -276,6 +276,8 @@ cdef class MultitronParameters:
         header = in_.readline()
         self.nr_class = int(header.split()[1])
         self.div = <int>math.sqrt(self.nr_class) + 1
+        free(self.scores)
+        self.scores = <double *>malloc(self.nr_class * sizeof(double))
         cdef uint64_t f
         print "Loading %d class..." % self.nr_class,
         for line in in_:
@@ -289,6 +291,7 @@ cdef class MultitronParameters:
             for param_str in weights_str.split():
                 cls_str, w = param_str.split('=')
                 i = int(cls_str)
+                assert i < self.nr_class
                 part_idx = i / self.div
                 if not feat.seen[part_idx]:
                     params = <DenseParams*>malloc(sizeof(DenseParams))

@@ -235,11 +235,10 @@ cdef class Parser:
                     if self.beam_width >= 1:
                         if DEBUG:
                             print ' '.join(sents.strings[i][0])
-                        #deltas.append(self.decode_dyn_beam(&sents.s[i], self.beam_width,
+                        #deltas.append(self.decode_beam(&sents.s[i], self.beam_width,
                         #              stats))
                         deltas.append(self.decode_dyn_beam(&sents.s[i], self.beam_width,
                                       stats))
-
                     else:
                         self.train_one(n, &sents.s[i], sents.strings[i][0])
                 for weights in deltas:
@@ -399,7 +398,7 @@ cdef class Parser:
                     next_moves[move_idx].is_valid = True
                     n_valid += 1
                 else:
-                    next_moves[move_idx].score = -10001
+                    next_moves[move_idx].score = -1000001
                     next_moves[move_idx].is_valid = False
                 move_idx += 1
         assert n_valid != 0
@@ -490,6 +489,7 @@ cdef class Parser:
             size_t i
         if k == None:
             k = self.beam_width
+        self.guide.nr_class = self.moves.nr_class
         for i in range(sents.length):
             if k <= 1:
                 self.parse(&sents.s[i])
@@ -533,17 +533,21 @@ cdef class Parser:
         self.guide.cache.flush()
         while not beam.beam[0].is_finished:
             beam.refresh()
+            assert beam.psize
             n_valid = self._fill_move_scores(sent, beam.psize, beam.parents,
                                              beam.next_moves)
             beam.sort_moves()
-            for c in range(n_valid):
+            for c in range(self.moves.nr_class):
                 cont = &beam.next_moves[c]
-                if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
+                #if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
+                #    continue
+                if not cont.is_valid:
                     continue
                 s = beam.add(cont.parent, cont.score, False)
                 self.moves.transition(cont.clas, s)
                 if beam.is_full:
                     break
+            assert beam.bsize != 0
         s = beam.best_p()
         sent.parse.n_moves = s.t
         for i in range(s.t):
@@ -996,19 +1000,19 @@ cdef class DynBeam:
             assert cont.i == k.i + 1
             self._push(cont, i, clas, score)
         elif move == REDUCE and eq.nr_ptr:
-            j = eq.best_p
-            #for j in range(eq.nr_ptr):
-            assert <size_t>eq.stack_parents[j] != 0
-            cont = kernel_from_d(k, eq.stack_parents[j].k)
-            assert cont.i == k.i
-            self._pop(cont, i, j, 1, score)
+            #j = eq.best_p
+            for j in range(eq.nr_ptr):
+                assert <size_t>eq.stack_parents[j] != 0
+                cont = kernel_from_d(k, eq.stack_parents[j].k)
+                assert cont.i == k.i
+                self._pop(cont, i, j, 1, score)
         elif move == LEFT and eq.nr_ptr:
-            j = eq.best_p
-            #for j in range(eq.nr_ptr):
-            assert <size_t>eq.stack_parents[j] != 0
-            cont = kernel_from_l(k, eq.stack_parents[j].k, label)
-            assert cont.i == k.i
-            self._pop(cont, i, j, clas, score)
+            #j = eq.best_p
+            for j in range(eq.nr_ptr):
+                assert <size_t>eq.stack_parents[j] != 0
+                cont = kernel_from_l(k, eq.stack_parents[j].k, label)
+                assert cont.i == k.i
+                self._pop(cont, i, j, clas, score)
 
     cdef int _push(self, Kernel* k, size_t par_idx, size_t clas, double score) except -1:
         cdef size_t addr = self._lookup(k)
