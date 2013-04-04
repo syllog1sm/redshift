@@ -80,6 +80,7 @@ cdef class MultitronParameters:
     cdef uint64_t now
     cdef dense_hash_map[uint64_t, size_t] W
     cdef double* scores
+    cdef object upd_rule
     
     cdef tick(self)
     cdef int add_feature(self, uint64_t f)

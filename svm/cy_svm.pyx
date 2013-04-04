@@ -219,18 +219,31 @@ cdef class Perceptron(Model):
 
     cdef int update(self, uint64_t pred, uint64_t gold, int n, uint64_t* feats,
                     double weight) except -1:
-        self.model.update(pred, gold, n, feats, weight)
+        cdef double gscore = self.model.scores[gold]
+        cdef double pscore = self.model.scores[pred]
+        cdef double margin = pscore - gscore
+        margin += 1
+        self.model.update(pred, gold, n, feats, margin)
         if gold == pred:
             self.n_corr += 1
         self.total += 1
 
-    def batch_update(self, deltas):
-        
+    def batch_update(self, deltas, margin):
         self.model.tick()
+        if self.model.upd_rule == 'mira':
+            norm = 0.0
+            for feats in deltas.values():
+                for value in feats.values():
+                    norm += abs(value)
+            if not norm:
+                return 0
+            weight = margin / (norm*2)
+        else:
+            weight = 1.0
         for clas, feats in deltas.items():
             for f, d in feats.items():
                 assert f != 0
-                self.model.update_single(clas, f, d)
+                self.model.update_single(clas, f, d * weight)
 
     def train(self):
         self.model.finalize()

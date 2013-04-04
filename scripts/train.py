@@ -67,8 +67,8 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
         else:
             parser.train(train, n_iter=n_iter)
         to_parse = redshift.io_parse.read_conll(train_loc.open().read())
-    print 'Train accuracy:'
-    print parser.add_parses(to_parse, gold=train)
+    #print 'Train accuracy:'
+    #print parser.add_parses(to_parse, gold=train)
     parser.save()
 
 

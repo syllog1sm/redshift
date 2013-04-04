@@ -84,7 +84,7 @@ cdef void free_dense_feat(DenseFeature* feat, size_t div):
 
 
 cdef class MultitronParameters:
-    def __cinit__(self, nr_class, feat_thresh=0):
+    def __cinit__(self, nr_class, feat_thresh=0, upd_rule='mira'):
         cdef uint64_t i
         self.scores = <double *>malloc(nr_class * sizeof(double))
         #self.max_dense = 200000
@@ -94,6 +94,7 @@ cdef class MultitronParameters:
         self.nr_class = nr_class
         self.div = <size_t>math.sqrt(nr_class) + 1
         self.now = 0
+        self.upd_rule = upd_rule
 
     def __dealloc__(self):
         cdef pair[uint64_t, size_t] data
@@ -134,7 +135,8 @@ cdef class MultitronParameters:
         cdef DenseFeature* feat
         cdef pair[uint64_t, size_t] data
         cdef dense_hash_map[uint64_t, size_t].iterator it
-        cdef size_t a
+        cdef double a
+        cdef double v
 
         self.W.set_deleted_key(1)
         it = self.W.begin()
@@ -146,7 +148,8 @@ cdef class MultitronParameters:
                 for i in range(self.div):
                     if feat.seen[i]:
                         for j in range(self.div):
-                            a += abs(<int>feat.parts[i].w[j])
+                            v = feat.parts[i].w[j]
+                            a += v if v > 0 else -v
                 if a < thresh:
                     free_dense_feat(feat, self.div)
                     self.W.erase(it)
@@ -162,12 +165,16 @@ cdef class MultitronParameters:
         self.now = self.now + 1
 
     cdef int64_t update(self, size_t pred_i, size_t gold_i,
-                    uint64_t n_feats, uint64_t* features, double weight) except -1:
+                    uint64_t n_feats, uint64_t* features, double margin) except -1:
         cdef size_t i
         cdef uint64_t f
         self.tick()
         if gold_i == pred_i:
             return 0
+        if self.upd_rule == 'mira':
+            weight = margin / (n_feats * 2)
+        else:
+            weight = 1.0
         for i in range(n_feats):
             f = features[i]
             if f == 0:
@@ -220,6 +227,8 @@ cdef class MultitronParameters:
         return best_i
 
     cdef int64_t finalize(self) except -1:
+        if self.upd_rule != 'ap':
+            return 0
         cdef uint64_t f
         cdef DenseFeature* feat
         cdef DenseParams* params
