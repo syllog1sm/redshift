@@ -33,10 +33,10 @@ from libc.stdlib cimport qsort
 
 from libcpp.utility cimport pair
 from libcpp.vector cimport vector
+from libcpp.list cimport list as cpplist
 
 
 from cython.operator cimport dereference as deref, preincrement as inc
-
 
 cdef extern from "sparsehash/dense_hash_map" namespace "google":
     cdef cppclass dense_hash_map[K, D]:
@@ -264,21 +264,23 @@ cdef class Parser:
         cdef Violation violn
         cdef bint halt = False
         cdef int* valid
+        cdef cpplist[pair[double, size_t]].iterator it
+        cdef pair[double, size_t] data
         self.guide.cache.flush()
         cdef Beam beam = Beam(k, sent.length, self.guide.nr_class,
                               upd_strat=self.upd_strat, add_labels=self.label_beam)
         stats['sents'] += 1
         while not beam.gold.is_finished:
             beam.refresh()
-            self._fill_move_scores(sent, beam.psize, beam.parents, beam.next_moves)
+            self._fill_move_scores(sent, beam.psize, beam.parents, beam.conts,
+                                   &beam.next_moves)
             beam.sort_moves()
             self._advance_gold(beam.gold, sent, self.train_alg == 'static')
-            for i in range(beam.nr_class):
-                cont = &beam.next_moves[i]
-                if not cont.is_valid:
-                    continue
-                if cont.score <= -10000:
-                    break
+            it = beam.next_moves.begin()
+            while it != beam.next_moves.end():
+                data = deref(it)
+                cont = <Cont*>data.second
+                inc(it)
                 if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
                     continue
                 parent = beam.parents[cont.parent]
@@ -371,15 +373,16 @@ cdef class Parser:
         self.moves.transition(oracle, s)
 
     cdef int _fill_move_scores(self, Sentence* sent, size_t k, State** parents,
-            Cont* next_moves) except -1:
+            Cont** conts, cpplist[pair[double, size_t]]* next_moves) except -1:
         cdef size_t parent_idx, child_idx
         cdef State* parent
         cdef uint64_t* feats
         cdef int* valid
         cdef size_t n_feats = self.features.n
         cdef bint cache_hit = False
-        cdef size_t move_idx = 0
         cdef size_t n_valid = 0
+        cdef Cont* cont
+        next_moves.clear()
         for parent_idx in range(k):
             parent = parents[parent_idx]
             fill_kernel(parent)
@@ -390,17 +393,21 @@ cdef class Parser:
                 self.guide.model.get_scores(n_feats, feats, scores)
             valid = self.moves.get_valid(parent)
             for child_idx in range(self.guide.nr_class):
-                next_moves[move_idx].parent = parent_idx
-                next_moves[move_idx].clas = child_idx
                 if valid[child_idx] == 0:
+                    score = scores[child_idx] + parent.score
+                    data = new pair[double, size_t]()
+                    data.first = score
+                    cont = conts[n_valid]
+                    cont.score = score
+                    cont.parent = parent_idx
+                    cont.clas = child_idx
+                    cont.is_valid = True
+                    cont.is_gold = False
+                    data.second = <size_t>cont
+                    next_moves.push_back(data[0])
+                    del data
                     parent.nr_kids += 1
-                    next_moves[move_idx].score = scores[child_idx] + parent.score
-                    next_moves[move_idx].is_valid = True
                     n_valid += 1
-                else:
-                    next_moves[move_idx].score = -1000001
-                    next_moves[move_idx].is_valid = False
-                move_idx += 1
         assert n_valid != 0
         return n_valid
 
@@ -529,16 +536,21 @@ cdef class Parser:
         cdef State* s
         cdef State* new
         cdef Cont* cont
+        cdef cpplist[pair[double, size_t]].iterator it
+        cdef pair[double, size_t] data
         cdef Beam beam = Beam(k, sent.length, self.guide.nr_class)
         self.guide.cache.flush()
         while not beam.beam[0].is_finished:
             beam.refresh()
             assert beam.psize
             n_valid = self._fill_move_scores(sent, beam.psize, beam.parents,
-                                             beam.next_moves)
+                                             beam.conts,
+                                             &beam.next_moves)
             beam.sort_moves()
-            for c in range(self.moves.nr_class):
-                cont = &beam.next_moves[c]
+            it = beam.next_moves.begin()
+            while it != beam.next_moves.end():
+                data = deref(it)
+                cont = <Cont*>data.second
                 #if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
                 #    continue
                 if not cont.is_valid:
@@ -669,7 +681,7 @@ cdef class Parser:
 cdef class Beam:
     cdef State** parents
     cdef State** beam
-    cdef Cont* next_moves
+    cdef cpplist[pair[double, size_t]] next_moves
     cdef State* gold
     cdef size_t n_labels
     cdef size_t nr_class
@@ -686,6 +698,7 @@ cdef class Beam:
     cdef bint late_upd
     cdef bint cost_upd
     cdef bint add_labels
+    cdef Cont** conts
     cdef bint** seen_moves
 
     def __cinit__(self, size_t k, size_t length, size_t nr_class, upd_strat='early',
@@ -706,11 +719,12 @@ cdef class Beam:
         self.psize = 0
         self.is_full = self.bsize >= self.k
         self.nr_class = nr_class * k
-        self.next_moves = <Cont*>malloc(self.nr_class * sizeof(Cont))
+        self.next_moves = cpplist[pair[double, size_t]]()
         self.seen_moves = <bint**>malloc(self.nr_class * sizeof(bint*))
+        self.conts = <Cont**>malloc(self.nr_class * sizeof(Cont*))
         for i in range(self.nr_class):
-            self.next_moves[i] = Cont(score=-10000, clas=0, parent=0, is_gold=False, is_valid=False)
             self.seen_moves[i] = <bint*>calloc(N_MOVES, sizeof(bint))
+            self.conts[i] = <Cont*>malloc(sizeof(Cont))
         self.first_violn = None
         self.max_violn = None
         self.last_violn = None
@@ -732,7 +746,8 @@ cdef class Beam:
             raise StandardError, upd_strat
 
     cdef sort_moves(self):
-        qsort(<void*>self.next_moves, self.nr_class, sizeof(Cont), cmp_contn)
+        self.next_moves.sort()
+        self.next_moves.reverse()
 
     cdef bint accept(self, size_t parent, size_t move, double score):
         if self.seen_moves[parent][move] and not self.add_labels:
@@ -825,9 +840,11 @@ cdef class Beam:
             free_state(self.parents[i])
         for i in range(self.nr_class):
             free(self.seen_moves[i])
-        free(self.next_moves)
+            free(self.conts[i])
         free(self.beam)
         free(self.parents)
+        free(self.conts)
+        free(self.seen_moves)
         free_state(self.gold)
 
 cdef class Violation:
