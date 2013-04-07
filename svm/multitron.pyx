@@ -84,7 +84,7 @@ cdef void free_dense_feat(DenseFeature* feat, size_t div):
 
 
 cdef class MultitronParameters:
-    def __cinit__(self, nr_class, feat_thresh=0, upd_rule='mira'):
+    def __cinit__(self, nr_class, feat_thresh=0, upd_rule='ap'):
         cdef uint64_t i
         self.scores = <double *>malloc(nr_class * sizeof(double))
         #self.max_dense = 200000
