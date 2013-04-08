@@ -23,6 +23,21 @@ def set_labels(name):
         LABEL_STRS.extend(('ERR', 'ROOT', 'P'))
     elif name == 'Stanford':
         LABEL_STRS.extend('ERR,ROOT,P,abbrev,acomp,advcl,advmod,amod,appos,attr,aux,auxpass,cc,ccomp,complm,conj,cop,csubj,csubjpass,dep,det,dobj,expl,infmod,iobj,mark,mwe,neg,nn,npadvmod,nsubj,nsubjpass,num,number,parataxis,partmod,pcomp,pobj,poss,preconj,predet,prep,prt,ps,purpcl,quantmod,rcmod,rel,tmod,xcomp'.split(','))
+    elif name.endswith(".conll"):
+        labels_set = set()
+        for line in file(name):
+           line = line.strip().split()
+           if not line: continue
+           labels_set.add(line[-3])
+        LABEL_STRS.extend(labels_set)
+    elif name.endswith(".malt"):
+        labels_set = set()
+        for line in file(name):
+           line = line.strip().split()
+           if not line: continue
+           labels_set.add(line[-1])
+        LABEL_STRS.extend(['ERR','ROOT','P'])
+        LABEL_STRS.extend(labels_set)
     else:
         raise StandardError, "Unrecognised label set: %s" % name
     for i, label in enumerate(LABEL_STRS):

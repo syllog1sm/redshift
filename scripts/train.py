@@ -41,6 +41,8 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
     model_loc = Path(model_loc)
     if label_set == 'None':
         label_set = None
+    elif label_set == 'conll':
+        label_set = train_loc
     if debug:
         redshift.parser.set_debug(True)
     parser = redshift.parser.Parser(model_loc, clean=True,
