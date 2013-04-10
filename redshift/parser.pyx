@@ -382,6 +382,8 @@ cdef class Parser:
         cdef bint cache_hit = False
         cdef size_t n_valid = 0
         cdef Cont* cont
+        cdef size_t n_valid_at_move = 0
+        cdef cpplist[pair[double, size_t]].iterator it
         next_moves.clear()
         for parent_idx in range(k):
             parent = parents[parent_idx]
@@ -498,7 +500,7 @@ cdef class Parser:
             k = self.beam_width
         self.guide.nr_class = self.moves.nr_class
         for i in range(sents.length):
-            if k <= 1:
+            if k == 0:
                 self.parse(&sents.s[i])
             else:
                 self.beam_parse(&sents.s[i], k)
@@ -538,7 +540,8 @@ cdef class Parser:
         cdef Cont* cont
         cdef cpplist[pair[double, size_t]].iterator it
         cdef pair[double, size_t] data
-        cdef Beam beam = Beam(k, sent.length, self.guide.nr_class)
+        cdef Beam beam = Beam(k, sent.length, self.guide.nr_class,
+                              add_labels=self.label_beam)
         self.guide.cache.flush()
         while not beam.beam[0].is_finished:
             beam.refresh()
@@ -551,8 +554,9 @@ cdef class Parser:
             while it != beam.next_moves.end():
                 data = deref(it)
                 cont = <Cont*>data.second
-                #if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
-                #    continue
+                inc(it)
+                if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
+                    continue
                 if not cont.is_valid:
                     continue
                 s = beam.add(cont.parent, cont.score, False)
@@ -1254,6 +1258,7 @@ cdef class TransitionSystem:
                     valid[i] = 0
         if s.stack_len >= 3 and self.allow_reduce:
             valid[self.d_id] = 0
+            assert s.second != 0
         return valid  
 
     cdef int break_tie(self, State* s, size_t* heads, size_t* labels) except -1:
@@ -1296,6 +1301,8 @@ cdef class TransitionSystem:
         cost += has_child_in_buffer(s, s.top, g_heads)
         if self.allow_reattach:
             cost += has_head_in_buffer(s, s.top, g_heads)
+            if cost == 0 and s.second == 0:
+                return -1
         return cost
 
     cdef int l_cost(self, State *s, size_t* heads, size_t* labels):
