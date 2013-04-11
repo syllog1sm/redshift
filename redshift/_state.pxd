@@ -1,10 +1,6 @@
 from libc.string cimport const_void
 from libc.stdint cimport uint64_t, int64_t
 
-DEF MAX_SENT_LEN = 200
-DEF MAX_TRANSITIONS = MAX_SENT_LEN * 2
-DEF MAX_LABELS = 50
-DEF MAX_VALENCY = MAX_SENT_LEN / 2
 
 cdef extern from "MurmurHash2.h":
     uint64_t MurmurHash64A(void * key, uint64_t len, int64_t seed)
@@ -31,8 +27,6 @@ cdef struct Kernel:
     Subtree n0l
 
 
-# With low MAX_SENT_LEN most of these can be reduced to char instead of size_t,
-# but what's the point? We usually only have one state at a time
 cdef struct State:
     double score
     size_t i
@@ -41,7 +35,6 @@ cdef struct State:
     size_t stack_len
     size_t top
     size_t second
-    size_t nr_kids
     bint is_finished
     bint at_end_of_buffer
     bint is_gold
@@ -62,10 +55,7 @@ cdef struct Cont:
     double score
     size_t clas
     size_t parent
-    bint is_gold
-    bint is_valid
 
-cdef int cmp_contn(const_void* v1, const_void* v2) nogil
 cdef uint64_t hash_kernel(Kernel* k)
 cdef int fill_kernel(State* s)
 

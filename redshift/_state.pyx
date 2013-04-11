@@ -1,24 +1,15 @@
 from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
 
-DEF MAX_SENT_LEN = 200
-DEF MAX_TRANSITIONS = MAX_SENT_LEN * 2
-DEF MAX_VALENCY = MAX_SENT_LEN / 2
-
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
     s.heads[child] = head
     s.labels[child] = label
     if child < head:
-        assert s.l_valencies[head] < MAX_VALENCY
-        assert s.l_children[head][s.l_valencies[head]] == 0
         s.l_children[head][s.l_valencies[head]] = child
         s.l_valencies[head] += 1
     else:
-        assert s.r_valencies[head] < MAX_VALENCY, s.r_valencies[head]
         r = get_r(s, head)
-        if r != 0:
-            assert r < child, r
         s.r_children[head][s.r_valencies[head]] = child
         s.r_valencies[head] += 1
     return 1
@@ -26,8 +17,6 @@ cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
 
 cdef int del_r_child(State *s, size_t head) except -1:
     child = get_r(s, head)
-    assert s.r_valencies[head] >= 1
-    assert child > 0
     s.r_children[head][s.r_valencies[head] - 1] = 0
     s.r_valencies[head] -= 1
     s.heads[child] = 0
@@ -39,7 +28,6 @@ cdef int del_l_child(State *s, size_t head) except -1:
         size_t i
         size_t child
         size_t old_label
-    assert s.l_valencies[head] >= 1
     child = get_l(s, head)
     s.l_children[head][s.l_valencies[head] - 1] = 0
     s.l_valencies[head] -= 1
@@ -205,6 +193,8 @@ cdef int has_head_in_stack(State *s, size_t word, size_t* heads):
             return 1
     return 0
 
+DEF PADDING = 4
+
 cdef State* init_state(size_t n):
     cdef size_t i, j
     cdef State* s = <State*>malloc(sizeof(State))
@@ -216,11 +206,10 @@ cdef State* init_state(size_t n):
     s.top = 1
     s.second = 0
     s.stack_len = 2
-    s.nr_kids = 0
     s.is_finished = False
     s.is_gold = True
     s.at_end_of_buffer = n == 3
-    n = n + 5
+    n = n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
     s.heads = <size_t*>calloc(n, sizeof(size_t))
     s.labels = <size_t*>calloc(n, sizeof(size_t))
@@ -238,9 +227,7 @@ cdef State* init_state(size_t n):
     return s
 
 cdef copy_state(State* s, State* old):
-    cdef size_t i, j
     # Don't copy number of children, as this refers to the state object itself
-    s.nr_kids = 0
     s.n = old.n
     s.t = old.t
     s.i = old.i
@@ -252,7 +239,7 @@ cdef copy_state(State* s, State* old):
     s.is_finished = old.is_finished
     s.is_gold = old.is_gold
     s.at_end_of_buffer = old.at_end_of_buffer
-    cdef size_t nbytes = (old.n + 5) * sizeof(size_t)
+    cdef size_t nbytes = (old.n + PADDING) * sizeof(size_t)
     memcpy(s.stack, old.stack, nbytes)
     memcpy(s.l_valencies, old.l_valencies, nbytes)
     memcpy(s.r_valencies, old.r_valencies, nbytes)
@@ -260,7 +247,8 @@ cdef copy_state(State* s, State* old):
     memcpy(s.labels, old.labels, nbytes)
     memcpy(s.guess_labels, old.guess_labels, nbytes)
     memcpy(s.history, old.history, nbytes * 2)
-    for i in range(old.n + 5):
+    cdef size_t i
+    for i in range(old.n + PADDING):
         memcpy(s.l_children[i], old.l_children[i], nbytes)
         memcpy(s.r_children[i], old.r_children[i], nbytes)
 
@@ -272,23 +260,10 @@ cdef free_state(State* s):
     free(s.guess_labels)
     free(s.l_valencies)
     free(s.r_valencies)
-    for i in range(s.n + 5):
+    for i in range(s.n + PADDING):
         free(s.l_children[i])
         free(s.r_children[i])
     free(s.l_children)
     free(s.r_children)
     free(s.history)
     free(s)
-
-
-
-cdef int cmp_contn(const_void* v1, const_void* v2) nogil:
-    cdef Cont* c1 = <Cont*>v1
-    cdef Cont* c2 = <Cont*>v2
-    if c1.score > c2.score:
-        return -1
-    elif c1.score < c2.score:
-        return 1
-    return 0
-
-

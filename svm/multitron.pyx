@@ -193,7 +193,7 @@ cdef class MultitronParameters:
             update_dense_param(self.nr_class, self.div, self.now, cls, weight, feat)
 
     cdef inline int get_scores(self, size_t n_feats, uint64_t* features, double* scores) except -1:
-        cdef uint64_t i, f, j, k, c
+        cdef size_t i, f, j, k, c
         cdef size_t feat_addr
         cdef DenseFeature* feat
         cdef size_t part_idx
