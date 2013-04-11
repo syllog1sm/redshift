@@ -11,7 +11,7 @@ from StringIO import StringIO
 
 env.use_ssh_config = True
 
-from _paths import REMOTE_REPO, REMOTE_MALT, REMOTE_STANFORD, REMOTE_PARSERS
+from _paths import REMOTE_REPO, REMOTE_CONLL, REMOTE_MALT, REMOTE_STANFORD, REMOTE_PARSERS
 from _paths import LOCAL_REPO, LOCAL_MALT, LOCAL_STANFORD, LOCAL_PARSERS
 from _paths import HOSTS, GATEWAY
 
@@ -38,7 +38,7 @@ def qstat():
 def deploy():
     clean()
     make()
-    with cd(REMOTE_REPO):
+    with cd(str(REMOTE_REPO)):
         run('git pull')
 
 
@@ -48,8 +48,6 @@ def test1k(model="baseline", dbg=False):
                     debug=dbg))
         local(_parse('~/work_data/parsers/tmp', '~/work_data/stanford/dev_auto_pos.parse',
                      '/tmp/parse', gold=True))
-
-
 
 
 def draxx_baseline(name):
@@ -64,6 +62,17 @@ def draxx_baseline(name):
     with cd(repo):
         put(StringIO(script), script_loc)
         run('qsub -N %s_bl %s' % (name, script_loc))
+
+
+def k_iters(basename, k=5, movebeam=False):
+    k = int(k)
+    movebeam = bool(movebeam)
+    for i in [5, 7, 10, 12, 15, 17, 20]:
+        name = '%s_k%d_i%d' % (basename, k, i)
+        if movebeam:
+            name += 'm'
+        draxx_beam(name, k=k, i=i, movebeam=movebeam, upd="max", alg="static")
+
 
 def draxx_beam(name, model=None, k=5, i=10, add_feats=False, upd='early', alg='static',
               movebeam=False, train_size="train.txt"):
@@ -160,7 +169,7 @@ def beam_table(name):
     print r"\end{tabular}\end{table}"
     print r"\end{document}"
 
- 
+
 
 def fmt_pc(pc):
     if pc < 1:
@@ -168,15 +177,47 @@ def fmt_pc(pc):
     return '%.1f' % pc
 
 
+def conll(name, lang, n=20, debug=False):
+    """Run the 20 seeds for the baseline and experiment conditions for a conll lang"""
+    data = str(REMOTE_CONLL)
+    repo = str(REMOTE_REPO)
+    eval_pos = '%s.test.pos' % lang
+    eval_parse = '%s.test.malt' % lang
+    train_name = '%s.train.proj.malt' % lang
+    n = int(n)
+    if debug == True: n = 2
+    for condition, arg_str in [('bl', ''), ('exp', '-r -d')]:
+        for i in range(n):
+            exp_name = '%s_%s_%s_%d' % (name, lang, condition, i)
+            model = pjoin(str(REMOTE_PARSERS), exp_name, lang, condition, str(i))
+            run("mkdir -p %s" % model)
+            train_str = _train(pjoin(data, train_name), model, k=0, i=15,
+                               add_feats=False, train_alg='online', seed=i, label="conll",
+                               args=arg_str)
+            parse_str = _parse(model, pjoin(data, eval_pos), pjoin(model, 'dev'), k=0)
+            eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, eval_parse))
+            grep_str = "grep 'U:' %s >> %s" % (pjoin(model, 'dev', 'acc'),
+                                               pjoin(model, 'dev', 'uas')) 
+            script = _pbsify(repo, (train_str, parse_str, eval_str, grep_str))
+            if debug:
+                print script
+                continue
+            script_loc = pjoin(repo, 'pbs', exp_name)
+            with cd(repo):
+                put(StringIO(script), script_loc)
+                run('qsub -N %s_bl %s' % (exp_name, script_loc))
+ 
+
 def _train(data, model, debug=False, k=1, add_feats=False, i=15, upd='early',
-           movebeam=False, train_alg="online"):
+           movebeam=False, train_alg="online", seed=0, args='', label="Stanford"):
     feat_str = '-x' if add_feats else ''
     move_str = '-m' if movebeam else ''
-    template = './scripts/train.py -i {i} -a {alg} -k {k} -u {upd} {movebeam} {feat_str} {data} {model}'
+    template = './scripts/train.py -i {i} -a {alg} -k {k} -u {upd} {movebeam} {feat_str} {data} {model} -s {seed} -l {label} {args}'
     if debug:
         template += ' -debug'
     return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i,
-                          upd=upd, movebeam=move_str, alg=train_alg)
+                          upd=upd, movebeam=move_str, alg=train_alg, seed=seed,
+                          label=label, args=args)
 
 
 def _parse(model, data, out, gold=False, k=1):
@@ -192,10 +233,10 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=8gb,nodes=1:ppn=12
+#PBS -l walltime=20:00:00,mem=8gb,nodes=1:ppn=5
 source /home/mhonniba/py27/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
-export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/lib64:/usr/lib64/:/usr/local/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
 cd {repo}"""
     return header.format(repo=repo) + '\n' + '\n'.join(command_strs)
 
