@@ -193,6 +193,8 @@ cdef int has_head_in_stack(State *s, size_t word, size_t* heads):
             return 1
     return 0
 
+DEF PADDING = 4
+
 cdef State* init_state(size_t n):
     cdef size_t i, j
     cdef State* s = <State*>malloc(sizeof(State))
@@ -204,11 +206,10 @@ cdef State* init_state(size_t n):
     s.top = 1
     s.second = 0
     s.stack_len = 2
-    s.nr_kids = 0
     s.is_finished = False
     s.is_gold = True
     s.at_end_of_buffer = n == 3
-    n = n + 5
+    n = n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
     s.heads = <size_t*>calloc(n, sizeof(size_t))
     s.labels = <size_t*>calloc(n, sizeof(size_t))
@@ -226,9 +227,7 @@ cdef State* init_state(size_t n):
     return s
 
 cdef copy_state(State* s, State* old):
-    cdef size_t i, j
     # Don't copy number of children, as this refers to the state object itself
-    s.nr_kids = 0
     s.n = old.n
     s.t = old.t
     s.i = old.i
@@ -240,7 +239,7 @@ cdef copy_state(State* s, State* old):
     s.is_finished = old.is_finished
     s.is_gold = old.is_gold
     s.at_end_of_buffer = old.at_end_of_buffer
-    cdef size_t nbytes = (old.n + 5) * sizeof(size_t)
+    cdef size_t nbytes = (old.n + PADDING) * sizeof(size_t)
     memcpy(s.stack, old.stack, nbytes)
     memcpy(s.l_valencies, old.l_valencies, nbytes)
     memcpy(s.r_valencies, old.r_valencies, nbytes)
@@ -248,7 +247,8 @@ cdef copy_state(State* s, State* old):
     memcpy(s.labels, old.labels, nbytes)
     memcpy(s.guess_labels, old.guess_labels, nbytes)
     memcpy(s.history, old.history, nbytes * 2)
-    for i in range(old.n + 5):
+    cdef size_t i
+    for i in range(old.n + PADDING):
         memcpy(s.l_children[i], old.l_children[i], nbytes)
         memcpy(s.r_children[i], old.r_children[i], nbytes)
 
@@ -260,7 +260,7 @@ cdef free_state(State* s):
     free(s.guess_labels)
     free(s.l_valencies)
     free(s.r_valencies)
-    for i in range(s.n + 5):
+    for i in range(s.n + PADDING):
         free(s.l_children[i])
         free(s.r_children[i])
     free(s.l_children)

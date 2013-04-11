@@ -664,15 +664,7 @@ cdef class Beam:
         cdef State* parent = self.parents[par_idx]
         assert par_idx < self.psize
         assert not self.is_full
-        # TODO: Why's this broken?
-        # If there are no more children coming, use the same state object instead
-        # of cloning it
-        #if parent.nr_kids > 1:
         copy_state(self.beam[self.bsize], parent)
-        #else:
-        #    self.parents[par_idx] = self.beam[self.bsize]
-        #    self.beam[self.bsize] = parent
-        #    parent.nr_kids -= 1
         cdef State* ext = self.beam[self.bsize]
         ext.score = score
         ext.is_gold = ext.is_gold and cost == 0
@@ -683,25 +675,15 @@ cdef class Beam:
 
     cdef int extend(self, size_t parent_idx, double* scores, int* valid) except -1:
         cdef Cont* cont
-        cdef double score
-        parent = self.parents[parent_idx]
-        cdef double best_score = 0
+        cdef double parent_score = self.parents[parent_idx].score
+        cdef size_t child_idx
         for child_idx in range(self.nr_class):
             if valid[child_idx] == 0:
-                if scores[child_idx] > best_score:
-                    best_score = scores[child_idx]
-                score = scores[child_idx] + parent.score
-                #print scores[child_idx], parent.score
-                data = new pair[double, size_t]()
-                data.first = score
                 cont = self.conts[self.i]
-                cont.score = score
+                cont.score = parent_score + scores[child_idx]
                 cont.parent = parent_idx
                 cont.clas = child_idx
-                data.second = <size_t>cont
-                self.next_moves.push(data[0])
-                del data
-                parent.nr_kids += 1
+                self.next_moves.push(pair[double, size_t](cont.score, <size_t>cont))
                 self.i += 1
 
     cdef bint check_violation(self):

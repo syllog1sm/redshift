@@ -35,7 +35,6 @@ cdef struct State:
     size_t stack_len
     size_t top
     size_t second
-    size_t nr_kids
     bint is_finished
     bint at_end_of_buffer
     bint is_gold
