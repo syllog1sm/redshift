@@ -33,7 +33,7 @@ from libc.stdlib cimport qsort
 
 from libcpp.utility cimport pair
 from libcpp.vector cimport vector
-from libcpp.list cimport list as cpplist
+from libcpp.queue cimport priority_queue
 
 
 from cython.operator cimport dereference as deref, preincrement as inc
@@ -237,8 +237,6 @@ cdef class Parser:
                             print ' '.join(sents.strings[i][0])
                         deltas.append(self.decode_beam(&sents.s[i], self.beam_width,
                                       stats))
-                        #deltas.append(self.decode_dyn_beam(&sents.s[i], self.beam_width,
-                        #              stats))
                     else:
                         self.train_one(n, &sents.s[i], sents.strings[i][0])
                 for weights, margin in deltas:
@@ -264,7 +262,6 @@ cdef class Parser:
         cdef Violation violn
         cdef bint halt = False
         cdef int* valid
-        cdef cpplist[pair[double, size_t]].iterator it
         cdef pair[double, size_t] data
         self.guide.cache.flush()
         cdef Beam beam = Beam(k, sent.length, self.guide.nr_class,
@@ -272,16 +269,13 @@ cdef class Parser:
         stats['sents'] += 1
         while not beam.gold.is_finished:
             beam.refresh()
-            self._fill_move_scores(sent, beam.psize, beam.parents, beam.conts,
-                                   &beam.next_moves)
-            beam.sort_moves()
+            self._fill_move_scores(sent, beam)
             self._advance_gold(beam.gold, sent, self.train_alg == 'static')
-            it = beam.next_moves.begin()
-            while it != beam.next_moves.end():
-                data = deref(it)
+            while not (beam.is_full or beam.next_moves.empty()):
+                data = beam.next_moves.top()
                 cont = <Cont*>data.second
-                inc(it)
                 if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
+                    beam.next_moves.pop()
                     continue
                 parent = beam.parents[cont.parent]
                 if self.train_alg == 'static':
@@ -292,20 +286,13 @@ cdef class Parser:
                     assert cost != -1, cont.clas
                 s = beam.add(cont.parent, cont.score, cost)
                 self.moves.transition(cont.clas, s)
-                if beam.is_full:
-                    break
-            assert beam.bsize
-            if beam.bsize:
-                assert beam.gold.t == beam.beam[0].t, '%d vs %d (%d)'
-            assert beam.bsize <= beam.k, beam.bsize
+                beam.next_moves.pop()
             halt = beam.check_violation()
             if halt:
                 stats['early'] += 1
                 break
             elif beam.beam[0].is_gold:
                 self.guide.n_corr += 1
-            for i in range(beam.bsize):
-                assert beam.beam[i].t == beam.gold.t, '%d vs %d' % (beam.beam[i].t, beam.gold.t)
         self.guide.total += beam.gold.t
         if beam.first_violn is not None:
             violn = beam.pick_violation()
@@ -315,34 +302,6 @@ cdef class Parser:
         else:
             stats['moves'] += beam.gold.t
             return ({}, 0)
-
-    cdef dict decode_dyn_beam(self, Sentence* sent, size_t max_width, object stats):
-        cdef bint cache_hit = False
-        cdef Kernel* k
-        cdef double* scores
-        cdef EquivClass equiv
-        cdef DynBeam beam = DynBeam(max_width, sent.length, self.guide.nr_class)
-        stats['sents'] += 1
-        self.guide.use_cache = False
-        self.guide.cache.flush()
-        while not beam.gold.is_finished:
-            self._advance_gold(beam.gold, sent, self.train_alg == 'static')
-            for i in range(beam.bsize):
-                equiv = beam.beam[i]
-                feats = self.features.extract(sent, equiv.k)
-                scores = self.guide.predict_scores(self.features.n, feats)
-                for clas in range(self.moves.nr_class):
-                    beam.extend_equiv(i, self.moves.labels[clas], self.moves.moves[clas],
-                                      clas, scores[clas])
-            beam.refresh()
-            if self.upd_strat == 'early' and beam.bsize == max_width:
-                if beam.gold.score <= beam.beam[max_width - 1].path_score:
-                    break
-        cdef size_t t = 0
-        phist = beam.viterbi_path(beam.best, &t)
-        assert beam.gold.t >= t
-        counts = self._count_feats(sent, t, phist, beam.gold.history)
-        return counts
 
     cdef int _advance_gold(self, State* s, Sentence* sent, bint use_static) except -1:
         cdef:
@@ -368,50 +327,25 @@ cdef class Parser:
                     best_score = scores[i]
             assert best_score > -1000000
         s.score += scores[oracle]
-        if DEBUG:
-            print s.t, "Adv gold", oracle, s.stack_len, s.top, s.heads[s.top], s.i
         self.moves.transition(oracle, s)
 
-    cdef int _fill_move_scores(self, Sentence* sent, size_t k, State** parents,
-            Cont** conts, cpplist[pair[double, size_t]]* next_moves) except -1:
-        cdef size_t parent_idx, child_idx
+    cdef int _fill_move_scores(self, Sentence* sent, Beam beam) except -1:
+        cdef size_t parent_idx
         cdef State* parent
         cdef uint64_t* feats
         cdef int* valid
-        cdef size_t n_feats = self.features.n
+        cdef double* scores
         cdef bint cache_hit = False
-        cdef size_t n_valid = 0
-        cdef Cont* cont
-        cdef size_t n_valid_at_move = 0
-        cdef cpplist[pair[double, size_t]].iterator it
-        next_moves.clear()
-        for parent_idx in range(k):
-            parent = parents[parent_idx]
+        for parent_idx in range(beam.psize):
+            parent = beam.parents[parent_idx]
             fill_kernel(parent)
             scores = self.guide.cache.lookup(sizeof(parent.kernel),
-                    <void*>&parent.kernel, &cache_hit)
+                                             <void*>&parent.kernel, &cache_hit)
             if not cache_hit:
                 feats = self.features.extract(sent, &parent.kernel)
-                self.guide.model.get_scores(n_feats, feats, scores)
+                self.guide.model.get_scores(self.features.n, feats, scores)
             valid = self.moves.get_valid(parent)
-            for child_idx in range(self.guide.nr_class):
-                if valid[child_idx] == 0:
-                    score = scores[child_idx] + parent.score
-                    data = new pair[double, size_t]()
-                    data.first = score
-                    cont = conts[n_valid]
-                    cont.score = score
-                    cont.parent = parent_idx
-                    cont.clas = child_idx
-                    cont.is_valid = True
-                    cont.is_gold = False
-                    data.second = <size_t>cont
-                    next_moves.push_back(data[0])
-                    del data
-                    parent.nr_kids += 1
-                    n_valid += 1
-        assert n_valid != 0
-        return n_valid
+            beam.extend(parent_idx, scores, valid)
 
     cdef dict _count_feats(self, Sentence* sent, size_t t, size_t* phist, size_t* ghist):
         cdef size_t d, i, f
@@ -423,8 +357,6 @@ cdef class Parser:
         # Find where the states diverge
         for d in range(t):
             if ghist[d] == phist[d]:
-                if DEBUG:
-                    print "Common:", ghist[d], gold_state.stack_len, gold_state.top, gold_state.heads[gold_state.top], gold_state.i
                 self.moves.transition(ghist[d], gold_state)
                 self.moves.transition(phist[d], pred_state)
             else:
@@ -442,8 +374,6 @@ cdef class Parser:
                     break
                 counts[clas].setdefault(feats[f], 0)
                 counts[clas][feats[f]] += 1
-            if DEBUG:
-                print "Gold: ", clas, gold_state.stack_len, gold_state.top, gold_state.heads[gold_state.top], gold_state.i
             self.moves.transition(clas, gold_state)
         free_state(gold_state)
         for i in range(d, t):
@@ -456,8 +386,6 @@ cdef class Parser:
                     break
                 counts[clas].setdefault(feats[f], 0)
                 counts[clas][feats[f]] -= 1
-            if DEBUG:
-                print d, t, 'count', clas, pred_state.top, pred_state.heads[pred_state.top], pred_state.i
             self.moves.transition(clas, pred_state)
         free_state(pred_state)
         return counts
@@ -538,31 +466,21 @@ cdef class Parser:
         cdef State* s
         cdef State* new
         cdef Cont* cont
-        cdef cpplist[pair[double, size_t]].iterator it
         cdef pair[double, size_t] data
         cdef Beam beam = Beam(k, sent.length, self.guide.nr_class,
                               add_labels=self.label_beam)
         self.guide.cache.flush()
         while not beam.beam[0].is_finished:
             beam.refresh()
-            assert beam.psize
-            n_valid = self._fill_move_scores(sent, beam.psize, beam.parents,
-                                             beam.conts,
-                                             &beam.next_moves)
-            beam.sort_moves()
-            it = beam.next_moves.begin()
-            while it != beam.next_moves.end():
-                data = deref(it)
+            self._fill_move_scores(sent, beam)
+            while not beam.is_full and not beam.next_moves.empty():
+                data = beam.next_moves.top()
+                beam.next_moves.pop()
                 cont = <Cont*>data.second
-                inc(it)
                 if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
-                    continue
-                if not cont.is_valid:
                     continue
                 s = beam.add(cont.parent, cont.score, False)
                 self.moves.transition(cont.clas, s)
-                if beam.is_full:
-                    break
             assert beam.bsize != 0
         s = beam.best_p()
         sent.parse.n_moves = s.t
@@ -685,11 +603,14 @@ cdef class Parser:
 cdef class Beam:
     cdef State** parents
     cdef State** beam
-    cdef cpplist[pair[double, size_t]] next_moves
+    cdef priority_queue[pair[double, size_t]]* next_moves
     cdef State* gold
+    cdef object upd_strat
     cdef size_t n_labels
+    cdef size_t max_class
     cdef size_t nr_class
     cdef size_t k
+    cdef size_t i
     cdef size_t bsize
     cdef size_t psize
     cdef Violation first_violn
@@ -697,10 +618,6 @@ cdef class Beam:
     cdef Violation last_violn
     cdef Violation cost_violn
     cdef bint is_full
-    cdef bint early_upd
-    cdef bint max_upd
-    cdef bint late_upd
-    cdef bint cost_upd
     cdef bint add_labels
     cdef Cont** conts
     cdef bint** seen_moves
@@ -710,8 +627,10 @@ cdef class Beam:
         cdef size_t i
         cdef Cont* cont
         cdef State* s
+        self.upd_strat = upd_strat
         self.n_labels = len(io_parse.LABEL_STRS)
         self.k = k
+        self.i = 0
         self.parents = <State**>malloc(k * sizeof(State*))
         self.beam = <State**>malloc(k * sizeof(State*))
         for i in range(k):
@@ -722,36 +641,18 @@ cdef class Beam:
         self.bsize = 1
         self.psize = 0
         self.is_full = self.bsize >= self.k
-        self.nr_class = nr_class * k
-        self.next_moves = cpplist[pair[double, size_t]]()
-        self.seen_moves = <bint**>malloc(self.nr_class * sizeof(bint*))
-        self.conts = <Cont**>malloc(self.nr_class * sizeof(Cont*))
-        for i in range(self.nr_class):
+        self.nr_class = nr_class
+        self.max_class = nr_class * k
+        self.next_moves = new priority_queue[pair[double, size_t]]()
+        self.seen_moves = <bint**>malloc(self.max_class * sizeof(bint*))
+        self.conts = <Cont**>malloc(self.max_class * sizeof(Cont*))
+        for i in range(self.max_class):
             self.seen_moves[i] = <bint*>calloc(N_MOVES, sizeof(bint))
             self.conts[i] = <Cont*>malloc(sizeof(Cont))
         self.first_violn = None
         self.max_violn = None
         self.last_violn = None
-        self.early_upd = False
-        self.cost_upd = False
         self.add_labels = add_labels
-        self.late_upd = False
-        self.max_upd = False
-        self.cost_upd = False
-        if upd_strat == 'early':
-            self.early_upd = True
-        elif upd_strat == 'late':
-            self.late_upd = True
-        elif upd_strat == 'max':
-            self.max_upd = True
-        elif upd_strat == 'cost':
-            self.cost_upd = True
-        else:
-            raise StandardError, upd_strat
-
-    cdef sort_moves(self):
-        self.next_moves.sort()
-        self.next_moves.reverse()
 
     cdef bint accept(self, size_t parent, size_t move, double score):
         if self.seen_moves[parent][move] and not self.add_labels:
@@ -780,6 +681,29 @@ cdef class Beam:
         self.is_full = self.bsize >= self.k
         return ext
 
+    cdef int extend(self, size_t parent_idx, double* scores, int* valid) except -1:
+        cdef Cont* cont
+        cdef double score
+        parent = self.parents[parent_idx]
+        cdef double best_score = 0
+        for child_idx in range(self.nr_class):
+            if valid[child_idx] == 0:
+                if scores[child_idx] > best_score:
+                    best_score = scores[child_idx]
+                score = scores[child_idx] + parent.score
+                #print scores[child_idx], parent.score
+                data = new pair[double, size_t]()
+                data.first = score
+                cont = self.conts[self.i]
+                cont.score = score
+                cont.parent = parent_idx
+                cont.clas = child_idx
+                data.second = <size_t>cont
+                self.next_moves.push(data[0])
+                del data
+                parent.nr_kids += 1
+                self.i += 1
+
     cdef bint check_violation(self):
         cdef Violation violn
         cdef bint out_of_beam
@@ -787,8 +711,8 @@ cdef class Beam:
             return False
         if not self.beam[0].is_gold:
             if self.gold.score <= self.beam[0].score:
-                out_of_beam = (not self.beam[self.k - 1].is_gold) and \
-                        self.gold.score <= self.beam[self.k - 1].score
+                out_of_beam = (not self.beam[self.bsize - 1].is_gold and \
+                               self.gold.score <= self.beam[self.bsize - 1].score)
                 violn = Violation()
                 violn.set(self.beam[0], self.gold, out_of_beam)
                 self.last_violn = violn
@@ -803,18 +727,18 @@ cdef class Beam:
                         self.max_violn = violn
                         if self.cost_violn.cost == violn.cost:
                             self.cost_violn = violn
-                return out_of_beam and self.early_upd
+                return out_of_beam and self.upd_strat == 'early'
         return False
 
     cdef Violation pick_violation(self):
         assert self.first_violn is not None
-        if self.early_upd:
+        if self.upd_strat == 'early':
             return self.first_violn
-        elif self.max_upd:
+        elif self.upd_strat == 'max':
             return self.max_violn
-        elif self.late_upd:
+        elif self.upd_strat == 'last':
             return self.last_violn
-        elif self.cost_upd:
+        elif self.upd_strat == 'cost':
             return self.cost_violn
         else:
             raise StandardError, self.upd_strat
@@ -827,22 +751,25 @@ cdef class Beam:
 
     cdef refresh(self):
         cdef size_t i, j
-        for i in range(self.nr_class):
+        for i in range(self.max_class):
             for j in range(N_MOVES):
                 self.seen_moves[i][j] = False
-
+        # TODO: Is there a more efficient way of doing this?
         for i in range(self.bsize):
             copy_state(self.parents[i], self.beam[i])
+        del self.next_moves
+        self.next_moves = new priority_queue[pair[double, size_t]]()
         self.psize = self.bsize
         self.is_full = False
         self.bsize = 0
+        self.i = 0
 
     def __dealloc__(self):
         for i in range(self.k):
             free_state(self.beam[i])
         for i in range(self.k):
             free_state(self.parents[i])
-        for i in range(self.nr_class):
+        for i in range(self.max_class):
             free(self.seen_moves[i])
             free(self.conts[i])
         free(self.beam)
@@ -883,229 +810,6 @@ cdef class Violation:
         free(self.ghist)
         free(self.phist)
 
-cdef class EquivClass:
-    cdef double path_score
-    cdef list backptrs
-    cdef Kernel* k
-
-    def __cinit__(self):
-        self.path_score = 0
-        self.backptrs = []
-
-    def prune(self, k):
-        self.backptrs.sort(key=lambda p: p.score, reverse=True)
-        self.backptrs = self.backptrs[:k]
-
-    def viterbi_path(self):
-        cdef Backptr ptr
-        cdef EquivClass equiv
-        path = []
-        equiv = self
-        while True:
-            ptr = equiv.backptrs[0]
-            path.append(ptr.clas)
-
-
-    def __dealloc__(self):
-        free(self.k)
-
-    property path_score:
-        def __get__(self):
-            return self.path_score
-
-cdef class Backptr:
-    cdef double score
-    cdef EquivClass parent
-    cdef EquivClass stack_parent
-    cdef size_t clas
-
-    def __cinit__(self, score, parent, clas, stack_parent=None):
-        self.score = score
-        self.parent = parent
-        self.clas = clas
-        if stack_parent is None:
-            self.stack_parent = parent
-        else:
-            self.stack_parent = parent
-
-    property score:
-        def __get__(self):
-            return self.score
-
-
-cdef class DynBeam:
-    cdef State* gold
-    cdef size_t bsize
-    cdef size_t max_width
-    cdef size_t sent_len
-    cdef size_t nr_class
-    cdef size_t nr_equiv
-    cdef size_t nr_label
-    cdef double delta
-    #cdef dense_hash_map[uint64_t, size_t] table
-    cdef dict table
-    #cdef dense_hash_map[size_t, size_t] all_states
-    cdef list beam
-    cdef EquivClass best
-    cdef EquivClass violn
-    cdef size_t* _viterbi_path
-    cdef double max_delta
-    cdef double max_score
-
-    def __cinit__(self, size_t k, size_t sent_len, size_t nr_class):
-        self.gold = init_state(sent_len)
-        self.max_width = k
-        self.sent_len = sent_len
-        self.nr_class = nr_class
-        self.nr_label = 50
-        self.delta = -1
-        self.max_score = -10000
-        self.nr_equiv = 0
-        #self.table = dense_hash_map[uint64_t, size_t]()
-        self.table = {}
-        self.beam = []
-        self.bsize = 1
-        self.beam.append(self._init_equiv())
-        self.violn = None
-        self.best = self.beam[0]
-        self._viterbi_path = <size_t*>calloc(sent_len * 2, sizeof(size_t))
-
-    cdef size_t* viterbi_path(self, EquivClass eq, size_t* t):
-        memset(self._viterbi_path, 0, self.sent_len * 2)
-        path = eq.viterbi_path()
-        for i, clas in enumerate(path):
-            self._viterbi_path[i] = clas
-        return self._viterbi_path
-        # States start with the first word on the stack, so halt one early to get
-        # the same number of moves
-       # cdef size_t i = 0
-       # while eq.parents[0].nr_ptr != 0:
-       #     self._viterbi_path[i] = eq.moves_from[par_idx]
-       #     gp_idx = eq.best_gp
-       #     eq = eq.parents[par_idx]
-       #     par_idx = gp_idx
-       #     i += 1
-       # t[0] = i
-        # Reverse the list
-        #for i in range(t[0] / 2):
-        #    first = self._viterbi_path[i]
-        #    last = self._viterbi_path[t[0] - (i + 1)]
-        #    self._viterbi_path[i] = last
-        #    self._viterbi_path[t[0] - (i + 1)] = first
-        #return self._viterbi_path
-    
-    def refresh(self):
-        items = self.table.items()
-        items.sort(key=lambda i: i[1].path_score, reverse=True)
-        self.beam = [eq for h, eq in items[:self.max_width]]
-        for eq in self.beam:
-            eq.prune(self.max_width)
-        self.bsize = len(self.beam)
-        self.best = self.beam[0]
-        cdef double delta = self.best.path_score - self.gold.score
-        if delta > self.max_delta:
-            self.max_delta = delta
-            self.violn = self.best
-        self.nr_equiv = 0
-
-    cdef int extend_equiv(self, size_t i, size_t label, size_t move,
-                          size_t clas, double score) except -1:
-        cdef Kernel* cont
-        cdef EquivClass eq = self.beam[i]
-        cdef EquivClass gp
-        cdef Backptr backptr
-        cdef Kernel* k = eq.k
-        cdef size_t j
-        if move == SHIFT and k.i == self.sent_len:
-            return 0
-        elif move == RIGHT and (k.i == self.sent_len or not k.s0):
-            return 0
-        elif move == REDUCE and (k.s0 == 0 or k.hs0 == 0):
-            return 0
-        elif move == LEFT and (k.hs0 or not k.s0):
-            return 0
-        if move == SHIFT:
-            cont = kernel_from_s(k)
-            self._push(cont, i, 0, score)
-        elif move == RIGHT:
-            cont = kernel_from_r(k, label)
-            self._push(cont, i, clas, score)
-        elif move == REDUCE:
-            for j, backptr in enumerate(eq.backptrs):
-                gp = backptr.stack_parent
-                cont = kernel_from_d(k, gp.k)
-                self._pop(cont, i, j, 1, score)
-        elif move == LEFT:
-            for j, backptr in enumerate(eq.backptrs):
-                gp = backptr.stack_parent
-                cont = kernel_from_l(k, gp.k, label)
-                self._pop(cont, i, j, clas, score)
-
-    cdef int _push(self, Kernel* k, size_t par_idx, size_t clas, double score) except -1:
-        cdef EquivClass ext = self._lookup(k)
-        cdef EquivClass parent = self.beam[par_idx]
-        backptr = Backptr(score, parent, clas)
-        path_score = parent.path_score + score
-        if path_score > ext.path_score or not ext.backptrs:
-            ext.path_score = path_score
-            if path_score > self.max_score:
-                self.max_score = path_score
-                self.best = ext
-        ext.backptrs.append(backptr)
-
-    cdef int _pop(self, Kernel* k, size_t par_idx, size_t gp_idx, size_t clas, double score) except -1:
-        cdef EquivClass ext = self._lookup(k)
-        cdef EquivClass parent = self.beam[par_idx]
-        cdef Backptr a
-        assert clas < 100
-        if parent.backptrs:
-            a = parent.backptrs[gp_idx]
-            gp = a.stack_parent
-            # Because we care about the grandparent, we have to recalculate the parent's
-            # path score --- otherwise, it might refer to a path from a different GP
-            path_score = a.parent.path_score + a.score + score
-
-        else:
-            gp = parent
-            path_score = parent.path_score
-        backptr = Backptr(score, parent, clas, gp)
-        if path_score > ext.path_score or not ext.backptrs:
-            ext.path_score = path_score
-            if path_score > self.max_score:
-                self.max_score = path_score
-                self.best = ext
-        ext.backptrs.append(backptr)
-
-    cdef EquivClass _lookup(self, Kernel* k):
-        cdef EquivClass equiv
-        cdef uint64_t hashed = hash_kernel(k)
-        if hashed not in self.table:
-            equiv = EquivClass()
-            equiv.k = k
-            self.table[hashed] = equiv
-        else:
-            equiv = self.table[hashed]
-        return equiv
-
-    cdef EquivClass _init_equiv(self):
-        cdef EquivClass first = EquivClass()
-        cdef Kernel* k = <Kernel*>malloc(sizeof(Kernel))
-        memset(k, 0, sizeof(Kernel))
-        first.k = k
-        first.k.i = 1
-        cdef uint64_t hashed = hash_kernel(first.k)
-        cdef EquivClass second = EquivClass()
-        k = <Kernel*>malloc(sizeof(Kernel))
-        memset(k, 0, sizeof(Kernel))
-        second.k = k
-        second.k.i = 2
-        second.k.s0 = 1
-        second.backptrs.append(Backptr(1, first, 0))
-        return second
-
-    def __dealloc__(self):
-        free_state(self.gold)
-        free(self._viterbi_path)
 
 cdef class TransitionSystem:
     cdef bint allow_reattach
