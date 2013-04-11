@@ -754,9 +754,9 @@ cdef class Beam:
         for i in range(self.max_class):
             for j in range(N_MOVES):
                 self.seen_moves[i][j] = False
-        # TODO: Is there a more efficient way of doing this?
-        for i in range(self.bsize):
-            copy_state(self.parents[i], self.beam[i])
+        cdef State** parents = self.parents
+        self.parents = self.beam
+        self.beam = parents
         del self.next_moves
         self.next_moves = new priority_queue[pair[double, size_t]]()
         self.psize = self.bsize
@@ -765,9 +765,9 @@ cdef class Beam:
         self.i = 0
 
     def __dealloc__(self):
-        for i in range(self.k):
+        for i in range(self.bsize):
             free_state(self.beam[i])
-        for i in range(self.k):
+        for i in range(self.psize):
             free_state(self.parents[i])
         for i in range(self.max_class):
             free(self.seen_moves[i])
