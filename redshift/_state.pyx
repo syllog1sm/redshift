@@ -1,24 +1,15 @@
 from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
 
-DEF MAX_SENT_LEN = 200
-DEF MAX_TRANSITIONS = MAX_SENT_LEN * 2
-DEF MAX_VALENCY = MAX_SENT_LEN / 2
-
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
     s.heads[child] = head
     s.labels[child] = label
     if child < head:
-        assert s.l_valencies[head] < MAX_VALENCY
-        assert s.l_children[head][s.l_valencies[head]] == 0
         s.l_children[head][s.l_valencies[head]] = child
         s.l_valencies[head] += 1
     else:
-        assert s.r_valencies[head] < MAX_VALENCY, s.r_valencies[head]
         r = get_r(s, head)
-        if r != 0:
-            assert r < child, r
         s.r_children[head][s.r_valencies[head]] = child
         s.r_valencies[head] += 1
     return 1
@@ -26,8 +17,6 @@ cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
 
 cdef int del_r_child(State *s, size_t head) except -1:
     child = get_r(s, head)
-    assert s.r_valencies[head] >= 1
-    assert child > 0
     s.r_children[head][s.r_valencies[head] - 1] = 0
     s.r_valencies[head] -= 1
     s.heads[child] = 0
@@ -39,7 +28,6 @@ cdef int del_l_child(State *s, size_t head) except -1:
         size_t i
         size_t child
         size_t old_label
-    assert s.l_valencies[head] >= 1
     child = get_l(s, head)
     s.l_children[head][s.l_valencies[head] - 1] = 0
     s.l_valencies[head] -= 1
