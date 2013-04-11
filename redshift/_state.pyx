@@ -279,16 +279,3 @@ cdef free_state(State* s):
     free(s.r_children)
     free(s.history)
     free(s)
-
-
-
-cdef int cmp_contn(const_void* v1, const_void* v2) nogil:
-    cdef Cont* c1 = <Cont*>v1
-    cdef Cont* c2 = <Cont*>v2
-    if c1.score > c2.score:
-        return -1
-    elif c1.score < c2.score:
-        return 1
-    return 0
-
-

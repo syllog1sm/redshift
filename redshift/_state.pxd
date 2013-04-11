@@ -62,10 +62,7 @@ cdef struct Cont:
     double score
     size_t clas
     size_t parent
-    bint is_gold
-    bint is_valid
 
-cdef int cmp_contn(const_void* v1, const_void* v2) nogil
 cdef uint64_t hash_kernel(Kernel* k)
 cdef int fill_kernel(State* s)
 
