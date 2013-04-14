@@ -293,6 +293,7 @@ cdef class Parser:
                     cost = costs[cont.clas]
                     assert cost != -1, cont.clas
                 s = beam.add(cont.parent, cont.score, cost)
+                s.guess_labels[s.i] = cont.rlabel
                 self.moves.transition(cont.clas, s)
                 beam.next_moves.pop()
             halt = beam.check_violation()
@@ -319,6 +320,8 @@ cdef class Parser:
             double* scores
             bint cache_hit
             double best_score
+            double best_right
+            size_t rlabel
         fill_kernel(s)
         scores = self.guide.cache.lookup(sizeof(s.kernel), <void*>&s.kernel, &cache_hit)
         if not cache_hit:
@@ -329,11 +332,17 @@ cdef class Parser:
         else:
             costs = self.moves.get_costs(s, sent.parse.heads, sent.parse.labels)
             best_score = -1000000
+            best_right = scores[self.moves.r_start]
+            rlabel = self.moves.labels[self.moves.r_start]
             for i in range(self.moves.nr_class):
                 if costs[i] == 0 and scores[i] > best_score:
                     oracle = i
                     best_score = scores[i]
+                if self.moves.moves[i] == RIGHT and scores[i] > best_right:
+                    rlabel = self.moves.labels[i]
+                    best_right = scores[i]
             assert best_score > -1000000
+        s.guess_labels[s.i] = rlabel
         s.score += scores[oracle]
         self.moves.transition(oracle, s)
 
@@ -343,6 +352,8 @@ cdef class Parser:
         cdef uint64_t* feats
         cdef int* valid
         cdef double* scores
+        cdef double best_right_score 
+        cdef size_t best_right = self.moves.labels[self.moves.r_start]
         cdef bint cache_hit = False
         for parent_idx in range(beam.psize):
             parent = beam.parents[parent_idx]
@@ -353,7 +364,12 @@ cdef class Parser:
                 feats = self.features.extract(sent, &parent.kernel)
                 self.guide.model.get_scores(self.features.n, feats, scores)
             valid = self.moves.get_valid(parent)
-            beam.extend(parent_idx, scores, valid)
+            best_right_score = scores[self.moves.r_start]
+            for i in range(self.moves.r_start + 1, self.moves.r_end):
+                if scores[i] > best_right_score:
+                    best_right_score = scores[i]
+                    best_right = self.moves.labels[i]
+            beam.extend(parent_idx, scores, valid, best_right)
 
     cdef dict _count_feats(self, Sentence* sent, size_t t, size_t* phist, size_t* ghist):
         cdef size_t d, i, f
@@ -488,6 +504,7 @@ cdef class Parser:
                 if not beam.accept(cont.parent, self.moves.moves[cont.clas], cont.score):
                     continue
                 s = beam.add(cont.parent, cont.score, False)
+                s.guess_labels[s.i] = cont.rlabel
                 self.moves.transition(cont.clas, s)
             assert beam.bsize != 0
         s = beam.best_p()
@@ -688,16 +705,19 @@ cdef class Beam:
         self.is_full = self.bsize >= self.k
         return ext
 
-    cdef int extend(self, size_t parent_idx, double* scores, int* valid) except -1:
+    cdef int extend(self, size_t parent_idx, double* scores,
+                    int* valid, size_t rlabel) except -1:
         cdef Cont* cont
         cdef double parent_score = self.parents[parent_idx].score
         cdef size_t child_idx
+        cdef double best_right_score = 0
         for child_idx in range(self.nr_class):
             if valid[child_idx] == 0:
                 cont = self.conts[self.i]
                 cont.score = parent_score + scores[child_idx]
                 cont.parent = parent_idx
                 cont.clas = child_idx
+                cont.rlabel = rlabel
                 self.next_moves.push(pair[double, size_t](cont.score, <size_t>cont))
                 self.i += 1
 
@@ -722,8 +742,6 @@ cdef class Beam:
                         self.cost_violn = violn
                     if self.max_violn.delta <= violn.delta:
                         self.max_violn = violn
-                        if self.cost_violn.cost == violn.cost:
-                            self.cost_violn = violn
                 return out_of_beam and self.upd_strat == 'early'
         return False
 
