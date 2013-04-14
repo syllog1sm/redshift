@@ -17,6 +17,7 @@ cdef struct Subtree:
 cdef struct Kernel:
     size_t i
     size_t s0
+    size_t s1
     size_t Ls0
     size_t hs0
     size_t h2s0

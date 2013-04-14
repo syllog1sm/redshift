@@ -72,6 +72,7 @@ cdef int fill_kernel(State *s):
     cdef size_t i, val
     s.kernel.i = s.i
     s.kernel.s0 = s.top
+    s.kernel.s1 = s.second
     s.kernel.hs0 = s.heads[s.top]
     s.kernel.h2s0 = s.heads[s.heads[s.top]]
     s.kernel.Ls0 = s.labels[s.top]
@@ -88,6 +89,7 @@ cdef Kernel* kernel_from_s(Kernel* parent) except NULL:
     memset(k, 0, sizeof(Kernel))
     k.i = parent.i + 1
     k.s0 = parent.i
+    k.s1 = parent.s0
     # Parents of s0, e.g. hs0, h2s0, Lhs0 etc all null in Shift
     memcpy(&k.s0l, &parent.n0l, sizeof(Subtree))
     return k
