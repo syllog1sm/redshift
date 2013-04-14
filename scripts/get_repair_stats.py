@@ -22,27 +22,25 @@ def main(loc, repairs=False, labels=False):
         line = line.rstrip()
         if not line:
             continue
-        pieces = line.split()
+        pieces = line.split('\t')
         golds = pieces[0].split(',')
         parse = pieces[1]
+        is_punct = any(g.endswith('-P') for g in golds)
+        if is_punct:
+            continue
         if not labels:
             parse = parse.split('-')[0]
-
+            golds = [g.split('-')[0] for g in golds]
+        if parse not in golds:
+            false_pos[parse] += 1
         if len(golds) == 1:
             gold = golds[0]
-            if not labels:
-                gold = gold.split('-')[0]
-            if gold.endswith('-P'):
-                continue
             if gold == parse:
                 if (not repairs or '^' in gold):
                     true_pos[gold] += 1
             else:
                 if (not repairs or '^' in gold):
                     false_neg[gold] += 1
-        if parse not in golds and not parse.endswith('-P'):
-            if (not repairs or '^' in parse):
-                false_pos[parse] += 1
     print 'TP'
     for tag, freq in sort_dict(true_pos):
         print freq, tag
