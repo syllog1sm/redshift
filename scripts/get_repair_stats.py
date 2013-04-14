@@ -32,7 +32,8 @@ def main(loc, repairs=False, labels=False):
             parse = parse.split('-')[0]
             golds = [g.split('-')[0] for g in golds]
         if parse not in golds:
-            false_pos[parse] += 1
+            if (not repairs or '^' in parse):
+                false_pos[parse] += 1
         if len(golds) == 1:
             gold = golds[0]
             if gold == parse:
