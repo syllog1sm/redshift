@@ -4,8 +4,8 @@ import index.hashes
 
 from pathlib import Path
 
-DEF MAX_SENT_LEN = 300
-DEF MAX_TRANSITIONS = 300 / 2
+DEF MAX_SENT_LEN = 400
+DEF MAX_TRANSITIONS = 400 / 2
 
 # Ensure ERR is always specified first, so 0 remains null label
 LABEL_STRS = []
