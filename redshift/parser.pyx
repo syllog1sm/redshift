@@ -601,7 +601,7 @@ cdef class Parser:
                                               tokens)
                 parse_move = self.moves.moves[parse_class]
                 if parse_move == REDUCE and s.heads[s.top] == 0:
-                    parse_label = s.guess_labels[s.top]
+                    parse_label = sent.pare.labels[s.top]
                 else:
                     parse_label = self.moves.labels[parse_class]
                 parse_move_str = lmove_to_str(parse_move, parse_label,
