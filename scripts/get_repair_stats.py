@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 """
 Parse a best_moves file to get repair stats.
 """
@@ -7,29 +8,41 @@ from collections import defaultdict
 def sort_dict(d):
     return reversed(sorted(d.items(), key=lambda i: i[1]))
 
-def main(loc):
+@plac.annotations(
+    repairs=("Only print for repair moves", "flag", "r", bool),
+    labels=("Print labelled moves", "flag", "l", bool)
+)
+def main(loc, repairs=False, labels=False):
     true_pos = defaultdict(int)
     false_pos = defaultdict(int)
     false_neg = defaultdict(int)
     for line in open(loc):
         if '<start>' in line:
             continue
-        line = line.strip()
+        line = line.rstrip()
         if not line:
             continue
         pieces = line.split()
         golds = pieces[0].split(',')
         parse = pieces[1]
+        if not labels:
+            parse = parse.split('-')[0]
+
         if len(golds) == 1:
             gold = golds[0]
+            if not labels:
+                gold = gold.split('-')[0]
             if gold.endswith('-P'):
                 continue
             if gold == parse:
-                true_pos[gold] += 1
+                if (not repairs or '^' in gold):
+                    true_pos[gold] += 1
             else:
-                false_neg[gold] += 1
+                if (not repairs or '^' in gold):
+                    false_neg[gold] += 1
         if parse not in golds and not parse.endswith('-P'):
-            false_pos[parse] += 1
+            if (not repairs or '^' in parse):
+                false_pos[parse] += 1
     print 'TP'
     for tag, freq in sort_dict(true_pos):
         print freq, tag
