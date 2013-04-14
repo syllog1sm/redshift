@@ -112,15 +112,23 @@ def red(string):
         return string
 
 
-cdef lmove_to_str(move, label):
+cdef lmove_to_str(move, label, head):
     moves = ['E', 'S', 'D', 'L', 'R', 'W', 'V']
     label = LABEL_STRS[label]
     if move == SHIFT:
         return 'S'
     elif move == REDUCE:
-        return 'D'
+        if head != 0:
+            return 'D'
+        else:
+            return 'D^R'
+    elif move == LEFT:
+        if head != 0:
+            return 'L^R-%s' % label
+        else:
+            return 'L-%s' % label
     else:
-        return '%s-%s' % (moves[move], label)
+        return 'R-%s' % label
 
 
 def _parse_labels_str(labels_str):
@@ -580,7 +588,7 @@ cdef class Parser:
                         move = self.moves.moves[clas]
                         label = self.moves.labels[clas]
                         if move not in best_ids:
-                            best_strs.append(lmove_to_str(move, label))
+                            best_strs.append(lmove_to_str(move, label, s.heads[s.top]))
                         best_ids.add(move)
                 best_strs = ','.join(best_strs)
                 best_id_str = ','.join(map(str, sorted(best_ids)))
@@ -588,9 +596,9 @@ cdef class Parser:
                 state_str = transition_to_str(s, self.moves.moves[parse_class],
                                               self.moves.labels[parse_class],
                                               tokens)
-                parse_move_str = lmove_to_str(move, label)
-                if move not in best_ids:
-                    parse_move_str = red(parse_move_str)
+                parse_move_str = lmove_to_str(self.moves.moves[parse_class],
+                                              self.moves.labels[parse_class],
+                                              s.heads[s.top])
                 sent_moves.append((best_id_str, int(move),
                                   best_strs, parse_move_str,
                                   state_str))
