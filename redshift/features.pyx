@@ -56,6 +56,8 @@ cdef enum:
     S0h2l
     S0lv
     S0rv
+    S1w
+    S1p
     dist
     S0llabs
     S0rlabs
@@ -63,17 +65,6 @@ cdef enum:
     CONTEXT_SIZE
 
 
-#cdef void fill_context(size_t* context, size_t nr_label,
-#                       size_t* words, size_t* pos,
-#                       size_t n0, size_t s0,
-#                       size_t* labels,
-#                       size_t h_s0, size_t h_h_s0,
-#                       size_t s0_lval, size_t s0_rval, size_t n0_lval,
-#                       size_t l_s0, l2_s0, size_t r_s0, r2_s0,
-#                       size_t le0_s0, size_t le1_s0,
-#                       size_t re0_s0, size_t re1_s0,
-#                       size_t l_n0, size_t l2_n0,
-#                       size_t le0_n0, size_t le1_n0):
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* pos,
                        Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
     context[N0w] = words[k.i]
@@ -88,6 +79,9 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
     context[S0w] = words[k.s0]
     context[S0p] = pos[k.s0]
     context[S0l] = k.Ls0
+
+    context[S1w] = words[k.s1]
+    context[S1p] = words[k.s1]
     
     context[S0hw] = words[k.hs0]
     context[S0hp] = pos[k.hs0]
@@ -158,17 +152,6 @@ cdef class FeatureSet:
         assert <size_t>k != 0
         fill_context(context, self.nr_label, sent.words, sent.pos, k,
                      &k.s0l, &k.s0r, &k.n0l)
-        #fill_context(context, self.nr_label,
-        #             sent.words, sent.pos,
-        #             s.i, s.top,
-        #             s.labels,
-        #             s.heads[s.top], s.heads[s.heads[s.top]],
-        #             s.l_valencies[s.top], s.r_valencies[s.top], s.l_valencies[s.i],
-        #             get_l(s, s.top), get_l2(s, s.top), get_r(s, s.top), get_r2(s, s.top),
-        #             s.l_children[s.top][0], s.l_children[s.top][1],
-        #             s.r_children[s.top][0], s.r_children[s.top][1],
-        #             get_l(s, s.i), get_l2(s, s.i),
-        #             s.l_children[s.i][0], s.l_children[s.i][1])
         cdef size_t i, j
         cdef uint64_t hashed
         cdef uint64_t value
@@ -318,9 +301,29 @@ cdef class FeatureSet:
             (lp, N0p, N0llabs),
         )
 
+        extra = (
+            (w, S1w, S0l),
+            (w, S1p, S0l),
+            (ww, S1w, S0w, S0l),
+            (pp, S1p, S0p, S0l),
+            (wp, S1w, S0p, S0l),
+            (wp, S1p, S0w, S0l),
+            (ww, S1w, N0w, S0l),
+            (pp, S1p, N0p, S0l),
+            (wp, S1w, N0p, S0l),
+            (wp, S1p, N0w, S0l),
+            (ww, S1w, N1w, S0l),
+            (pp, S1p, N1p, S0l),
+            (wp, S1w, N1p, S0l),
+            (wp, S1p, N1w, S0l),
+        )
+
         feats = from_single + from_word_pairs + from_three_words + distance + valency + unigrams + third_order
         feats += labels
         feats += label_sets
+        if add_extra:
+            print "Extra feats"
+            feats += extra
         assert len(set(feats)) == len(feats), '%d vs %d' % (len(set(feats)), len(feats))
         self.n = len(feats)
         self.predicates = <Predicate*>malloc(self.n * sizeof(Predicate))
