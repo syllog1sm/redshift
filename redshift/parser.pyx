@@ -121,7 +121,7 @@ cdef lmove_to_str(move, label, head):
         if head != 0:
             return 'D'
         else:
-            return 'D^R'
+            return 'D^R-%s' % label
     elif move == LEFT:
         if head != 0:
             return 'L^R-%s' % label
@@ -586,7 +586,10 @@ cdef class Parser:
                 for clas in range(self.moves.nr_class):
                     if costs[clas] == 0:
                         move = self.moves.moves[clas]
-                        label = self.moves.labels[clas]
+                        if move == REDUCE and s.heads[s.top] == 0:
+                            label = g_labels[s.top]
+                        else:
+                            label = self.moves.labels[clas]
                         if move not in best_ids:
                             best_strs.append(lmove_to_str(move, label, s.heads[s.top]))
                         best_ids.add(move)
@@ -596,8 +599,12 @@ cdef class Parser:
                 state_str = transition_to_str(s, self.moves.moves[parse_class],
                                               self.moves.labels[parse_class],
                                               tokens)
-                parse_move_str = lmove_to_str(self.moves.moves[parse_class],
-                                              self.moves.labels[parse_class],
+                parse_move = self.moves.moves[parse_class]
+                if parse_move == REDUCE and s.heads[s.top] == 0:
+                    parse_label = s.guess_labels[s.top]
+                else:
+                    parse_label = self.moves.label[parse_class]
+                parse_move_str = lmove_to_str(parse_move, parse_label,
                                               s.heads[s.top])
                 sent_moves.append((best_id_str, int(move),
                                   best_strs, parse_move_str,
