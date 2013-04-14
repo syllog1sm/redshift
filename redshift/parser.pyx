@@ -603,7 +603,7 @@ cdef class Parser:
                 if parse_move == REDUCE and s.heads[s.top] == 0:
                     parse_label = s.guess_labels[s.top]
                 else:
-                    parse_label = self.moves.label[parse_class]
+                    parse_label = self.moves.labels[parse_class]
                 parse_move_str = lmove_to_str(parse_move, parse_label,
                                               s.heads[s.top])
                 sent_moves.append((best_id_str, int(move),
