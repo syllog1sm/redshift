@@ -8,6 +8,7 @@ from math import sqrt
 from os.path import join as pjoin
 from os import listdir
 from StringIO import StringIO
+import scipy.stats
 
 env.use_ssh_config = True
 
@@ -169,7 +170,33 @@ def beam_table(name):
     print r"\end{tabular}\end{table}"
     print r"\end{document}"
 
+def conll_table(name):
+    langs = ['arabic', 'basque', 'catalan', 'chinese', 'czech', 'english',
+            'greek', 'hungarian', 'italian', 'turkish']
+    systems = ['bl', 'exp']
+    for lang in langs:
+        bl_accs = []
+        exp_accs = []
+        for system, accs in zip(systems, ([bl_accs, exp_accs])):
 
+            for i in range(20):
+                uas_loc = pjoin(str(REMOTE_PARSERS), 'conll', lang, system,
+                                str(i), 'dev', 'acc')
+                try:
+                    text = run('cat %s' % uas_loc, quiet=True).stdout
+                    accs.append(_get_acc(text, score='U'))
+                except:
+                    continue
+        if bl_accs:
+            bl_n, bl_acc, stdev = _get_stdev(bl_accs)
+        if exp_accs:
+            exp_n, exp_acc, stdev = _get_stdev(exp_accs)
+        if bl_n == exp_n:
+            z, p = scipy.stats.wilcoxon(bl_accs, exp_accs)
+        else:
+            p = 1.0
+
+        print lang, fmt_pc(bl_acc), fmt_pc(exp_acc), '%.4f' % p
 
 def fmt_pc(pc):
     if pc < 1:
@@ -189,7 +216,7 @@ def conll(name, lang, n=20, debug=False):
     for condition, arg_str in [('bl', ''), ('exp', '-r -d')]:
         for i in range(n):
             exp_name = '%s_%s_%s_%d' % (name, lang, condition, i)
-            model = pjoin(str(REMOTE_PARSERS), exp_name, lang, condition, str(i))
+            model = pjoin(str(REMOTE_PARSERS), name, lang, condition, str(i))
             run("mkdir -p %s" % model)
             train_str = _train(pjoin(data, train_name), model, k=0, i=15,
                                add_feats=False, train_alg='online', seed=i, label="conll",
@@ -233,7 +260,7 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=8gb,nodes=1:ppn=5
+#PBS -l walltime=20:00:00,mem=8gb,nodes=1:ppn=9
 source /home/mhonniba/py27/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
