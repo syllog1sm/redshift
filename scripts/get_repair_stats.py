@@ -9,7 +9,6 @@ def sort_dict(d):
     return reversed(sorted(d.items(), key=lambda i: i[1]))
 
 @plac.annotations(
-    repairs=("Only print for repair moves", "flag", "r", bool),
     labels=("Print labelled moves", "flag", "l", bool)
 )
 def main(loc, labels=False):
