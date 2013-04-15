@@ -308,14 +308,6 @@ cdef class FeatureSet:
             (pp, S1p, S0p, S0l),
             (wp, S1w, S0p, S0l),
             (wp, S1p, S0w, S0l),
-            (ww, S1w, N0w, S0l),
-            (pp, S1p, N0p, S0l),
-            (wp, S1w, N0p, S0l),
-            (wp, S1p, N0w, S0l),
-            (ww, S1w, N1w, S0l),
-            (pp, S1p, N1p, S0l),
-            (wp, S1w, N1p, S0l),
-            (wp, S1p, N1w, S0l),
         )
 
         feats = from_single + from_word_pairs + from_three_words + distance + valency + unigrams + third_order

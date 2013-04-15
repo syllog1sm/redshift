@@ -56,6 +56,7 @@ cdef struct Cont:
     double score
     size_t clas
     size_t parent
+    size_t rlabel
 
 cdef uint64_t hash_kernel(Kernel* k)
 cdef int fill_kernel(State* s)
