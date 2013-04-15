@@ -37,6 +37,7 @@ cdef enum:
     S0hw
     S0hp
     S0hl
+    S0hb
     S0lw
     S0lp
     S0ll
@@ -86,6 +87,7 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
     context[S0hw] = words[k.hs0]
     context[S0hp] = pos[k.hs0]
     context[S0hl] = k.Lhs0
+    context[S0hb] = k.hs0 != 0
 
     context[S0h2w] = words[k.h2s0]
     context[S0h2p] = pos[k.h2s0]
@@ -302,12 +304,13 @@ cdef class FeatureSet:
         )
 
         extra = (
-            (w, S1w, S0l),
-            (w, S1p, S0l),
-            (ww, S1w, S0w, S0l),
-            (pp, S1p, S0p, S0l),
-            (wp, S1w, S0p, S0l),
-            (wp, S1p, S0w, S0l),
+            (w, S0hb),
+            (w, S1w, S0hb),
+            (w, S1p, S0hb),
+            (ww, S1w, S0w),
+            (pp, S1p, S0p),
+            (wp, S1w, S0p),
+            (wp, S1p, S0w),
         )
 
         feats = from_single + from_word_pairs + from_three_words + distance + valency + unigrams + third_order
