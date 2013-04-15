@@ -12,10 +12,11 @@ def sort_dict(d):
     repairs=("Only print for repair moves", "flag", "r", bool),
     labels=("Print labelled moves", "flag", "l", bool)
 )
-def main(loc, repairs=False, labels=False):
+def main(loc, labels=False):
     true_pos = defaultdict(int)
     false_pos = defaultdict(int)
     false_neg = defaultdict(int)
+    true_neg = defaultdict(int)
     for line in open(loc):
         if '<start>' in line:
             continue
@@ -31,29 +32,23 @@ def main(loc, repairs=False, labels=False):
         if not labels:
             parse = parse.split('-')[0]
             golds = [g.split('-')[0] for g in golds]
-        if parse not in golds:
-            if (not repairs or '^' in parse):
+        if len(golds) > 1:
+            continue
+        gold = golds[0]
+        if gold.split('-')[0] == parse.split('-')[0]:
+            if '^' in gold:
+                true_pos[gold] += 1
+            elif gold.startswith('L') or gold.startswith('D'):
+                true_neg[gold] += 1
+        else:
+            if '^' in gold:
+                false_neg[gold] += 1
+            elif '^' in parse:
                 false_pos[parse] += 1
-        if len(golds) == 1:
-            gold = golds[0]
-            if gold == parse:
-                if (not repairs or '^' in gold):
-                    true_pos[gold] += 1
-            else:
-                if (not repairs or '^' in gold):
-                    false_neg[gold] += 1
-    print 'TP'
-    for tag, freq in sort_dict(true_pos):
-        print freq, tag
-    print sum(true_pos.values())
-    print 'FP'
-    for tag, freq in sort_dict(false_pos):
-        print freq, tag
-    print sum(false_pos.values())
-    print 'FN'
-    for tag, freq in sort_dict(false_neg):
-        print freq, tag
-    print sum(false_neg.values())
+    for label, d in [('TP', true_pos), ('FP', false_pos), ('FN', false_neg), ('TN', true_neg)]:
+        print label
+        for tag, freq in sort_dict(d):
+            print tag, freq
 
 
 if __name__ == '__main__':
