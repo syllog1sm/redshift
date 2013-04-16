@@ -726,24 +726,27 @@ cdef class Beam:
         cdef bint out_of_beam
         if self.bsize < self.k:
             return False
-        if not self.beam[0].is_gold:
-            if self.gold.score <= self.beam[0].score:
-                out_of_beam = (not self.beam[self.bsize - 1].is_gold and \
-                               self.gold.score <= self.beam[self.bsize - 1].score)
-                violn = Violation()
-                violn.set(self.beam[0], self.gold, out_of_beam)
-                self.last_violn = violn
-                if self.first_violn == None:
-                    self.first_violn = violn
-                    self.max_violn = violn
-                    self.cost_violn = violn
-                else:
-                    if self.cost_violn.cost < violn.cost:
-                        self.cost_violn = violn
-                    if self.max_violn.delta <= violn.delta:
-                        self.max_violn = violn
-                return out_of_beam and self.upd_strat == 'early'
-        return False
+        if self.gold.score <= self.beam[0].score and not self.beam[0].is_gold:
+            out_of_beam = True
+            for i in range(self.bsize):
+                if self.beam[i].is_gold:
+                    out_of_beam = False
+                    gold = self.beam[i]
+                    break
+            else:
+                gold = self.gold
+            violn = Violation()
+            violn.set(self.beam[0], gold, out_of_beam)
+            self.last_violn = violn
+            if self.first_violn == None:
+                self.first_violn = violn
+                self.max_violn = violn
+                self.cost_violn = violn
+            elif self.cost_violn.cost < violn.cost:
+                self.cost_violn = violn
+            elif self.max_violn.delta <= violn.delta:
+                self.max_violn = violn
+        return out_of_beam and self.upd_strat == 'early'
 
     cdef Violation pick_violation(self):
         assert self.first_violn is not None
@@ -1006,7 +1009,8 @@ cdef class TransitionSystem:
         cdef size_t i, buff_i, stack_i
         if heads[s.i] == s.top:
             return 0
-        cost += has_head_in_buffer(s, s.i, heads)
+        if not self.allow_reattach:
+            cost += has_head_in_buffer(s, s.i, heads)
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
         return cost
@@ -1015,8 +1019,8 @@ cdef class TransitionSystem:
         cdef int cost = 0
         if s.heads[s.top] == 0 and not self.allow_reduce:
             return -1
-        if g_heads[s.top] == 0 and (s.stack_len == 2 or not self.allow_reattach):
-            cost += 1
+        #if g_heads[s.top] == 0 and (s.stack_len == 2 or not self.allow_reattach):
+        #    cost += 1
         cost += has_child_in_buffer(s, s.top, g_heads)
         if self.allow_reattach:
             cost += has_head_in_buffer(s, s.top, g_heads)
