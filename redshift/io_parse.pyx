@@ -1,4 +1,4 @@
-from libc.stdlib cimport malloc, free
+from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport strcpy, memcpy
 import index.hashes
 
@@ -20,7 +20,7 @@ def set_labels(name):
     if name == 'MALT':
         LABEL_STRS.extend('ERR,ROOT,P,NMOD,VMOD,PMOD,SUB,OBJ,AMOD,VC,SBAR,PRD,DEP'.split(','))
     elif name == 'NONE':
-        LABEL_STRS.extend(('ERR', 'ROOT', 'P'))
+        LABEL_STRS.extend(('ERR', 'ROOT', 'P', 'NONE'))
     elif name == 'Stanford':
         LABEL_STRS.extend('ERR,ROOT,P,abbrev,acomp,advcl,advmod,amod,appos,attr,aux,auxpass,cc,ccomp,complm,conj,cop,csubj,csubjpass,dep,det,dobj,expl,infmod,iobj,mark,mwe,neg,nn,npadvmod,nsubj,nsubjpass,num,number,parataxis,partmod,pcomp,pobj,poss,preconj,predet,prep,prt,ps,purpcl,quantmod,rcmod,rel,tmod,xcomp'.split(','))
     elif name.endswith(".conll"):
@@ -63,17 +63,14 @@ cdef Sentence make_sentence(size_t id_, size_t length, object py_words, object p
         char* raw_pos
         Sentence s
     s = Sentence(length=length, id=id_)
-    for i in range(MAX_SENT_LEN):
-        s.words[i] = 0
-        s.pos[i] = 0
-        s.browns[i] = 0
-        s.parse.heads[i] = 0
-        s.parse.labels[i] = 0
-    for i in range(MAX_TRANSITIONS):
-        s.parse.moves[i] = 0
-        s.parse.move_labels[i] = 0
-    # Don't initialise this, as repairs may introduce unpredictable numbers of
-    # moves
+
+    s.browns = <size_t*>calloc(length, sizeof(size_t))
+    s.parse.heads = <size_t*>calloc(length, sizeof(size_t))
+    s.parse.labels = <size_t*>calloc(length, sizeof(size_t))
+    s.parse.moves = <size_t*>calloc(length * 2, sizeof(size_t))
+    
+    s.words = <size_t*>calloc(length, sizeof(size_t))
+    s.pos = <size_t*>calloc(length, sizeof(size_t))           
     s.parse.n_moves = 0
     for i in range(length):
         s.words[i] = index.hashes.encode_word(py_words[i])

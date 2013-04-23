@@ -19,7 +19,7 @@ from io_parse cimport Sentence
 from io_parse cimport Sentences
 from io_parse cimport make_sentence
 cimport features
-from features cimport FeatureSet
+from features cimport FeatureSet, ArcStandardFeatureSet
 
 from io_parse import LABEL_STRS, STR_TO_LABEL
 
@@ -147,13 +147,11 @@ cdef class Parser:
     cdef int feat_thresh
 
     cdef bint label_beam
-    cdef object upd_strat
 
     def __cinit__(self, model_dir, clean=False, train_alg='static',
                   add_extra=True, label_set='MALT', feat_thresh=5,
                   allow_reattach=False, allow_reduce=False,
-                  reuse_idx=False, beam_width=1, upd_strat="early", 
-                  label_beam=True):
+                  reuse_idx=False, beam_width=1, label_beam=True):
         model_dir = Path(model_dir)
         if not clean:
             params = dict([line.split() for line in model_dir.join('parser.cfg').open()])
@@ -168,7 +166,6 @@ cdef class Parser:
             l_labels = params['left_labels']
             r_labels = params['right_labels']
             beam_width = int(params['beam_width'])
-            upd_strat = params['upd_strat']
             label_beam = params['label_beam'] == 'True'
         if allow_reattach and allow_reduce:
             print 'NM L+D'
@@ -177,24 +174,32 @@ cdef class Parser:
         elif allow_reduce:
             print 'NM D'
         if beam_width >= 1:
-            beam_settings = (beam_width, upd_strat, label_beam)
+            beam_settings = (beam_width, train_alg, label_beam)
             print 'Beam settings: k=%d; upd_strat=%s; label_beam=%s' % beam_settings
         self.model_dir = self.setup_model_dir(model_dir, clean)
         labels = io_parse.set_labels(label_set)
-        self.features = FeatureSet(len(labels), add_extra)
+        if train_alg == 'standard':
+            self.features = ArcStandardFeatureSet(len(labels), add_extra)
+        else:
+            print "Using ArcEager features"
+            self.features = FeatureSet(len(labels), add_extra)
         self.add_extra = add_extra
         self.label_set = label_set
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
         self.beam_width = beam_width
-        self.upd_strat = upd_strat
         self.label_beam = label_beam
         if clean == True:
             self.new_idx(self.model_dir, self.features.n)
         else:
             self.load_idx(self.model_dir, self.features.n)
-        self.moves = TransitionSystem(labels, allow_reattach=allow_reattach,
-                                      allow_reduce=allow_reduce)
+        if self.train_alg == 'standard':
+            print "Using ArcStandard transitions"
+            self.moves = ArcStandard(labels)
+        else:
+            print "Using ArcEager transitions"
+            self.moves = TransitionSystem(labels, allow_reattach=allow_reattach,
+                                           allow_reduce=allow_reduce)
         if not clean:
             self.moves.set_labels(_parse_labels_str(l_labels), _parse_labels_str(r_labels))
         guide_loc = self.model_dir.join('model')
@@ -235,11 +240,13 @@ cdef class Parser:
             self.guide.use_cache = True
         stats = defaultdict(int)
         for n in range(n_iter):
-            random.shuffle(indices)
+            #random.shuffle(indices)
             # Group indices into minibatches of fixed size
             for minibatch in izip(*[iter(indices)] * 1):
                 deltas = []
                 for i in minibatch:
+                    if sents.s[i].length < 4:
+                        continue
                     if self.beam_width >= 1:
                         if DEBUG:
                             print ' '.join(sents.strings[i][0])
@@ -273,12 +280,12 @@ cdef class Parser:
         cdef pair[double, size_t] data
         self.guide.cache.flush()
         cdef Beam beam = Beam(k, sent.length, self.guide.nr_class,
-                              upd_strat=self.upd_strat, add_labels=self.label_beam)
+                              upd_strat=self.train_alg, add_labels=self.label_beam)
         stats['sents'] += 1
         while not beam.gold.is_finished:
             beam.refresh()
             self._fill_move_scores(sent, beam)
-            self._advance_gold(beam.gold, sent, self.train_alg == 'static')
+            self._advance_gold(beam.gold, sent, True)
             while not (beam.is_full or beam.next_moves.empty()):
                 data = beam.next_moves.top()
                 cont = <Cont*>data.second
@@ -286,7 +293,7 @@ cdef class Parser:
                     beam.next_moves.pop()
                     continue
                 parent = beam.parents[cont.parent]
-                if self.train_alg == 'static':
+                if self.train_alg != 'online':
                     cost = cont.clas != self.moves.break_tie(parent, g_heads, g_labels)
                 else:
                     costs = self.moves.get_costs(parent, g_heads, g_labels)
@@ -358,11 +365,12 @@ cdef class Parser:
         for parent_idx in range(beam.psize):
             parent = beam.parents[parent_idx]
             fill_kernel(parent)
-            scores = self.guide.cache.lookup(sizeof(parent.kernel),
-                                             <void*>&parent.kernel, &cache_hit)
-            if not cache_hit:
-                feats = self.features.extract(sent, &parent.kernel)
-                self.guide.model.get_scores(self.features.n, feats, scores)
+            #scores = self.guide.cache.lookup(sizeof(parent.kernel),
+            #                                 <void*>&parent.kernel, &cache_hit)
+            scores = self.guide.model.scores
+            #if not cache_hit:
+            feats = self.features.extract(sent, &parent.kernel)
+            self.guide.model.get_scores(self.features.n, feats, scores)
             valid = self.moves.get_valid(parent)
             best_right_score = scores[self.moves.r_start]
             for i in range(self.moves.r_start + 1, self.moves.r_end):
@@ -429,6 +437,7 @@ cdef class Parser:
         if DEBUG:
             print ' '.join(py_words)
         while not s.is_finished:
+            if not s.i % 10000: print s.i
             fill_kernel(s)
             feats = self.features.extract(sent, &s.kernel)
             valid = self.moves.get_valid(s)
@@ -470,17 +479,21 @@ cdef class Parser:
         s = init_state(sent.length)
         sent.parse.n_moves = 0
         self.guide.cache.flush()
-        while not s.is_finished:
+        while not s.is_finished and s.n > 3:
             fill_kernel(s)
             feats = self.features.extract(sent, &s.kernel)
-            clas = self.predict(n_preds, feats, self.moves.get_valid(s),
-                                  &s.guess_labels[s.i])
+            try:
+                clas = self.predict(n_preds, feats, self.moves.get_valid(s),
+                                    &s.guess_labels[s.i])
+            except:
+                print '%d stack, buffer=%d, len=%d' % (s.stack_len, s.i, s.n)
+                raise
             sent.parse.moves[s.t] = clas
             self.moves.transition(clas, s)
         sent.parse.n_moves = s.t
         # No need to copy heads for root and start symbols
         for i in range(1, sent.length - 1):
-            assert s.heads[i] != 0
+            #assert s.heads[i] != 0, i
             sent.parse.heads[i] = s.heads[i]
             sent.parse.labels[i] = s.labels[i]
         free_state(s)
@@ -494,7 +507,7 @@ cdef class Parser:
         cdef Beam beam = Beam(k, sent.length, self.guide.nr_class,
                               add_labels=self.label_beam)
         self.guide.cache.flush()
-        while not beam.beam[0].is_finished:
+        while not beam.beam[0].is_finished and sent.length > 3:
             beam.refresh()
             self._fill_move_scores(sent, beam)
             while not beam.is_full and not beam.next_moves.empty():
@@ -513,7 +526,9 @@ cdef class Parser:
             sent.parse.moves[i] = s.history[i]
         # No need to copy heads for root and start symbols
         for i in range(1, sent.length - 1):
-            assert s.heads[i] != 0
+            #assert s.heads[i] != 0
+            if s.heads[i] == 0:
+                s.heads[i] = s.n - 1
             sent.parse.heads[i] = s.heads[i]
             sent.parse.labels[i] = s.labels[i]
 
@@ -572,7 +587,6 @@ cdef class Parser:
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
             cfg.write(u'beam_width\t%d\n' % self.beam_width)
-            cfg.write(u'upd_strat\t%s\n' % self.upd_strat)
             cfg.write(u'label_beam\t%s\n' % self.label_beam)
         
     def get_best_moves(self, Sentences sents, Sentences gold):
@@ -738,6 +752,7 @@ cdef class Beam:
             violn = Violation()
             violn.set(self.beam[0], gold, out_of_beam)
             self.last_violn = violn
+
             if self.first_violn == None:
                 self.first_violn = violn
                 self.max_violn = violn
@@ -746,12 +761,12 @@ cdef class Beam:
                 self.cost_violn = violn
             elif self.max_violn.delta <= violn.delta:
                 self.max_violn = violn
-        return out_of_beam and self.upd_strat == 'early'
+        return out_of_beam and (self.upd_strat == 'early' or self.upd_strat == 'standard')
 
     cdef Violation pick_violation(self):
         assert self.first_violn is not None
-        if self.upd_strat == 'early':
-            return self.first_violn
+        if self.upd_strat == 'early' or self.upd_strat == 'standard':
+            return self.last_violn
         elif self.upd_strat == 'max':
             return self.max_violn
         elif self.upd_strat == 'last':
@@ -868,7 +883,7 @@ cdef class TransitionSystem:
         self.d_id = 1
         self.l_start = 2
         self.l_end = 0
-        self.r_start = 0
+        self.r_start = 3
         self.r_end = 0
 
     def set_labels(self, left_labels, right_labels):
@@ -1042,6 +1057,116 @@ cdef class TransitionSystem:
         if self.allow_reduce and heads[s.top] == s.second:
             cost += 1
         return cost
+
+
+cdef class ArcStandard(TransitionSystem):        
+    def __cinit__(self, object labels, allow_reattach=False,
+                  allow_reduce=False):
+        self.n_labels = len(labels)
+        self.py_labels = labels
+        self.allow_reattach = allow_reattach
+        self.allow_reduce = allow_reduce
+        self.nr_class = 0
+        max_classes = N_MOVES * len(labels)
+        self.max_class = max_classes
+        self._costs = <int*>calloc(max_classes, sizeof(int))
+        self.labels = <size_t*>calloc(max_classes, sizeof(size_t))
+        self.moves = <size_t*>calloc(max_classes, sizeof(size_t))
+        self.l_classes = <size_t*>calloc(self.n_labels, sizeof(size_t))
+        self.r_classes = <size_t*>calloc(self.n_labels, sizeof(size_t))
+        self.s_id = 0
+        self.l_start = 1
+        self.l_end = 0
+        self.r_start = 0
+        self.r_end = 0
+        self.d_id = 0
+
+    def set_labels(self, left_labels, right_labels):
+        self.left_labels = [self.py_labels[l] for l in sorted(left_labels)]
+        self.right_labels = [self.py_labels[l] for l in sorted(right_labels)]
+        self.labels[self.s_id] = 0
+        self.moves[self.s_id] = <int>SHIFT
+        clas = self.l_start
+        for label in left_labels:
+            self.moves[clas] = <int>LEFT
+            self.labels[clas] = label
+            self.l_classes[label] = clas
+            clas += 1
+        self.l_end = clas
+        self.r_start = clas
+        for label in right_labels:
+            self.moves[clas] = <int>RIGHT
+            self.labels[clas] = label
+            self.r_classes[label] = clas
+            clas += 1
+        self.r_end = clas
+        self.nr_class = clas
+        return clas
+      
+
+    cdef int transition(self, size_t clas, State *s) except -1:
+        cdef size_t head, child, new_parent, new_child, c, gc, move, label
+        move = self.moves[clas]
+        label = self.labels[clas]
+        s.history[s.t] = clas
+        s.t += 1 
+        if move == SHIFT:
+            push_stack(s)
+        elif move == LEFT:
+            assert s.stack_len >= 3
+            head = s.top
+            child = s.second
+            add_dep(s, head, child, label)
+            s.stack_len -= 1
+            s.stack[s.stack_len - 1] = s.top
+            s.second = s.stack[s.stack_len - 2]
+        elif move == RIGHT:
+            assert s.stack_len >= 3
+            child = s.top
+            head = s.second
+            add_dep(s, head, child, label)
+            pop_stack(s)
+        else:
+            raise StandardError(clas)
+        if s.i == (s.n - 1):
+            s.at_end_of_buffer = True
+        if s.at_end_of_buffer and s.stack_len == 2:
+            s.is_finished = True
+            add_dep(s, s.top, s.i, 0)
+            pop_stack(s)
+
+    cdef int break_tie(self, State* s, size_t* heads, size_t* labels) except -1:
+        if s.stack_len <= 2 and not s.at_end_of_buffer:
+            return self.s_id
+        elif heads[s.top] == s.second and not has_child_in_buffer(s, s.top, heads):
+            return self.r_classes[labels[s.top]]
+        elif heads[s.second] == s.top:
+            return self.l_classes[labels[s.second]]
+        elif s.at_end_of_buffer:
+            return self.nr_class + 1
+        elif heads[s.i] == s.top or heads[s.top] == s.i:
+            return self.s_id
+        elif not has_head_in_stack(s, s.i, heads) and not has_child_in_stack(s, s.i, heads):
+            return self.s_id
+        else:
+            return self.nr_class + 1
+
+    cdef int* get_valid(self, State* s):
+        cdef size_t i
+        cdef int* valid = self._costs
+        if s.stack_len >= 3:
+            validity = 0
+        else:
+            validity = -1
+        for i in range(self.r_start, self.r_end):
+            valid[i] = validity
+        for i in range(self.l_start, self.l_end):
+            valid[i] = validity
+        if s.at_end_of_buffer:
+            valid[self.s_id] = -1
+        else:
+            valid[self.s_id] = 0
+        return valid
 
 
 cdef transition_to_str(State* s, size_t move, label, object tokens):

@@ -1,16 +1,19 @@
 from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
 
+DEF MAX_VALENCY = 100
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
     s.heads[child] = head
     s.labels[child] = label
     if child < head:
         s.l_children[head][s.l_valencies[head]] = child
+        assert s.l_valencies[head] < MAX_VALENCY
         s.l_valencies[head] += 1
     else:
         r = get_r(s, head)
         s.r_children[head][s.r_valencies[head]] = child
+        assert s.r_valencies[head] < MAX_VALENCY
         s.r_valencies[head] += 1
     return 1
 
@@ -68,11 +71,13 @@ cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, Subtree* tree):
 cdef uint64_t hash_kernel(Kernel* k):
     return MurmurHash64A(k, sizeof(Kernel), 0)
 
+
 cdef int fill_kernel(State *s):
     cdef size_t i, val
     s.kernel.i = s.i
     s.kernel.s0 = s.top
     s.kernel.s1 = s.second
+    s.kernel.s2 = s.stack[s.stack_len - 3] if s.stack_len >= 3 else 0
     s.kernel.hs0 = s.heads[s.top]
     s.kernel.h2s0 = s.heads[s.heads[s.top]]
     s.kernel.Ls0 = s.labels[s.top]
@@ -82,7 +87,9 @@ cdef int fill_kernel(State *s):
     fill_subtree(s.l_valencies[s.top], s.l_children[s.top], s.labels, &s.kernel.s0l)
     fill_subtree(s.r_valencies[s.top], s.r_children[s.top], s.labels, &s.kernel.s0r)
     fill_subtree(s.l_valencies[s.i], s.l_children[s.i], s.labels, &s.kernel.n0l)
-  
+    fill_subtree(s.l_valencies[s.second], s.l_children[s.second], s.labels, &s.kernel.s1l)
+    fill_subtree(s.r_valencies[s.second], s.r_children[s.second], s.labels, &s.kernel.s1r)
+
 
 cdef Kernel* kernel_from_s(Kernel* parent) except NULL:
     k = <Kernel*>malloc(sizeof(Kernel))
@@ -222,8 +229,8 @@ cdef State* init_state(size_t n):
     s.l_children = <size_t**>malloc(n * sizeof(size_t*))
     s.r_children = <size_t**>malloc(n * sizeof(size_t*))
     for i in range(n):
-        s.l_children[i] = <size_t*>calloc(n, sizeof(size_t))
-        s.r_children[i] = <size_t*>calloc(n, sizeof(size_t))
+        s.l_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
+        s.r_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
     s.stack[1] = 1
     s.history = <size_t*>calloc(n * 2, sizeof(size_t))
     return s
@@ -251,8 +258,8 @@ cdef copy_state(State* s, State* old):
     memcpy(s.history, old.history, nbytes * 2)
     cdef size_t i
     for i in range(old.n + PADDING):
-        memcpy(s.l_children[i], old.l_children[i], nbytes)
-        memcpy(s.r_children[i], old.r_children[i], nbytes)
+        memcpy(s.l_children[i], old.l_children[i], MAX_VALENCY * sizeof(size_t))
+        memcpy(s.r_children[i], old.r_children[i], MAX_VALENCY * sizeof(size_t))
 
 
 cdef free_state(State* s):

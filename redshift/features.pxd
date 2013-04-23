@@ -71,7 +71,12 @@ cdef class FeatureSet:
     cdef int n
     cdef int nr_label
     cdef uint64_t* extract(self, Sentence* sent, Kernel* k) except NULL
-    cdef bint min_feats
+
+
+cdef class ArcStandardFeatureSet(FeatureSet):
+    pass
+    
+
 
 #cdef void fill_context(size_t* context, size_t nr_label,
 #                       size_t* words, size_t* pos,
