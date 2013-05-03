@@ -209,15 +209,15 @@ cdef State* init_state(size_t n):
     cdef State* s = <State*>malloc(sizeof(State))
     s.n = n
     s.t = 0
-    s.i = 2
+    s.i = 1
     s.cost = 0
     s.score = 0
-    s.top = 1
+    s.top = 0
     s.second = 0
-    s.stack_len = 2
+    s.stack_len = 1
     s.is_finished = False
     s.is_gold = True
-    s.at_end_of_buffer = n == 3
+    s.at_end_of_buffer = n == 2
     n = n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
     s.heads = <size_t*>calloc(n, sizeof(size_t))
@@ -276,3 +276,17 @@ cdef free_state(State* s):
     free(s.r_children)
     free(s.history)
     free(s)
+
+
+cdef free_fast_state(FastState* s):
+    cdef FastState* prev = s.previous
+    prev.nr_kids -= 1
+    free(s.k)
+    free(s)
+    while prev.nr_kids == 0:
+        s = prev.previous
+        s.nr_kids -= 1
+        free(prev)
+        free(prev.k)
+        prev = s
+

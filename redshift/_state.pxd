@@ -31,6 +31,17 @@ cdef struct Kernel:
     Subtree s1r
 
 
+cdef struct FastState:
+    Kernel* k
+    size_t last_action
+    FastState* previous
+    FastState* tail
+    double score
+    bint is_gold
+    size_t cost
+    size_t nr_kids
+
+
 cdef struct State:
     double score
     size_t i
@@ -89,3 +100,5 @@ cdef int has_head_in_stack(State *s, size_t word, size_t* heads)
 cdef State* init_state(size_t n)
 cdef free_state(State* s)
 cdef copy_state(State* s, State* old)
+
+cdef free_fast_state(FastState* s)
