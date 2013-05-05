@@ -1,3 +1,4 @@
+# cython: profile=True
 """
 Handle parser features
 """

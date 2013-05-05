@@ -1,3 +1,4 @@
+# cython: profile=True
 from _state cimport *
 from libc.stdlib cimport malloc, calloc, free
 
@@ -140,28 +141,29 @@ cdef class TransitionSystem:
                         costs[i] = l_cost
         return costs
 
-    cdef bint is_valid(self, size_t clas, size_t i, size_t n, size_t stack_len,
-                      size_t head):
+    cdef bint is_valid(self, size_t clas, bint at_end_of_buffer, bint has_stack,
+                      bint has_head):
         if self.moves[clas] == SHIFT:
-            return i < (n - 1)
+            return not at_end_of_buffer
+        elif not has_stack:
+            return False
         elif self.moves[clas] == RIGHT:
-            return (i < (n - 1) and stack_len >= 2)
+            return not at_end_of_buffer
         elif self.moves[clas] == LEFT:
-            return (i < (n - 1) and stack_len >= 2 and (self.allow_reattach or not head))
+            return (not at_end_of_buffer) and (self.allow_reattach or not has_head)
         elif self.moves[clas] == REDUCE:
-            return (stack_len >= 2 and (self.allow_reduce or head))
+            return (self.allow_reduce or has_head)
         else:
             raise StandardError
 
-    cdef int* get_valid(self, State* s):
+    cdef int fill_valid(self, State* s, int* valid) except -1:
         cdef size_t i
-        cdef int* valid = self._costs
         for i in range(self.nr_class):
             valid[i] = -1
         if not s.at_end_of_buffer:
             valid[self.s_id] = 0
             if s.stack_len == 1:
-                return valid
+                return 0
             else:
                 for i in range(self.r_start, self.r_end):
                     valid[i] = 0
@@ -176,7 +178,14 @@ cdef class TransitionSystem:
         if s.stack_len >= 3 and self.allow_reduce:
             valid[self.d_id] = 0
             assert s.second != 0
-        return valid  
+
+    cdef int fill_static_costs(self, State* s, size_t* heads, size_t* labels,
+                               int* costs) except -1:
+        cdef size_t oracle = self.break_tie(s, heads, labels)
+        cdef int cost = s.cost
+        cdef size_t i
+        for i in range(self.nr_class):
+            costs[i] = cost + (i != oracle)
 
     cdef int break_tie(self, State* s, size_t* heads, size_t* labels) except -1:
         if s.stack_len == 1:

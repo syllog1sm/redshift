@@ -235,40 +235,34 @@ cdef class Parser:
         self.guide.train()
 
     cdef object decode_beam(self, Sentence* sent, size_t k, object stats):
-        cdef size_t i
+        cdef size_t p_idx
+        cdef State* parent
+        cdef uint64_t* feats
         cdef int* costs
         cdef int cost
         cdef size_t* g_heads = sent.parse.heads
         cdef size_t* g_labels = sent.parse.labels
-        cdef Cont* cont
         cdef Violation violn
-        cdef bint halt = False
-        cdef int* valid
-        cdef pair[double, size_t] data
         self.guide.cache.flush()
         cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
         stats['sents'] += 1
         while not beam.gold.is_finished:
-            beam.refresh()
             self._advance_gold(beam.gold, sent, True)
-            self._fill_move_scores(sent, beam)
-            while not beam.is_full and not beam.next_moves.empty():
-                data = beam.next_moves.top()
-                cont = <Cont*>data.second
-                if self.train_alg != 'online':
-                    cost = cont.clas != self.moves.break_tie(beam.parents[cont.parent],
-                                                             g_heads, g_labels)
-                else:
-                    costs = self.moves.get_costs(beam.parents[cont.parent], g_heads, g_labels)
-                    cost = costs[cont.clas]
-                    assert cost != -1, cont.clas
-                beam.add(cont.parent, cont.score, cost, cont.clas, cont.rlabel)
-                beam.next_moves.pop()
+            for p_idx in range(beam.bsize):
+                parent = beam.beam[p_idx]
+                fill_kernel(parent)
+                feats = self.features.extract(sent, &parent.kernel)
+                # TODO: Hook cache back up
+                self.guide.model.get_scores(self.features.n, feats, beam.scores[p_idx])
+                self.moves.fill_valid(parent, beam.valid[p_idx])
+                # This is the part where the gold standard gets used
+                self.moves.fill_static_costs(parent, g_heads, g_labels, beam.costs[p_idx])
+            beam.extend_states()
             beam.check_violation()
             if self.train_alg == 'early' and beam.violn != None:
                 stats['early'] += 1
                 break
-            elif beam.beam[0].is_gold:
+            elif beam.beam[0].cost == 0:
                 self.guide.n_corr += 1
         self.guide.total += beam.gold.t
         if beam.violn is not None:
@@ -312,24 +306,6 @@ cdef class Parser:
         s.guess_labels[s.i] = rlabel
         s.score += scores[oracle]
         self.moves.transition(oracle, s)
-
-    cdef int _fill_move_scores(self, Sentence* sent, Beam beam) except -1:
-        cdef size_t parent_idx
-        cdef Kernel* parent_kernel
-        cdef uint64_t* feats
-        cdef int* valid
-        cdef double* scores
-        cdef bint cache_hit = False
-        for parent_idx in range(beam.psize):
-            parent_kernel = &beam.parents[parent_idx].kernel
-            # TODO: Fill kernel elsewhere
-            fill_kernel(beam.parents[parent_idx])
-            scores = self.guide.cache.lookup(sizeof(Kernel),
-                                         <void*>parent_kernel, &cache_hit)
-            if not cache_hit:
-                feats = self.features.extract(sent, parent_kernel)
-                self.guide.model.get_scores(self.features.n, feats, scores)
-            beam.extend(parent_idx, scores)
 
     cdef dict _count_feats(self, Sentence* sent, size_t t, size_t* phist, size_t* ghist):
         cdef size_t d, i, f
@@ -375,7 +351,7 @@ cdef class Parser:
         return counts
 
     cdef int train_one(self, int iter_num, Sentence* sent, py_words) except -1:
-        cdef int* valid
+        cdef int* valid = self.moves._costs
         cdef int* costs
         cdef size_t* g_labels = sent.parse.labels
         cdef size_t* g_heads = sent.parse.heads
@@ -392,7 +368,7 @@ cdef class Parser:
             if not s.i % 10000: print s.i
             fill_kernel(s)
             feats = self.features.extract(sent, &s.kernel)
-            valid = self.moves.get_valid(s)
+            self.moves.fill_valid(s, valid)
             pred = self.predict(n_feats, feats, valid, &s.guess_labels[s.i])
             if online:
                 costs = self.moves.get_costs(s, g_heads, g_labels)
@@ -435,7 +411,8 @@ cdef class Parser:
             fill_kernel(s)
             feats = self.features.extract(sent, &s.kernel)
             try:
-                clas = self.predict(n_preds, feats, self.moves.get_valid(s),
+                self.moves.fill_valid(s, self.moves._costs)
+                clas = self.predict(n_preds, feats, self.moves._costs,
                                     &s.guess_labels[s.i])
             except:
                 print '%d stack, buffer=%d, len=%d' % (s.stack_len, s.i, s.n)
@@ -451,22 +428,22 @@ cdef class Parser:
         free_state(s)
     
     cdef int beam_parse(self, Sentence* sent, size_t k) except -1:
-        cdef size_t i, c, n_valid
-        cdef Cont* cont
-        cdef pair[double, size_t] data
-        cdef Beam beam = Beam(k, sent.length, self.guide.nr_class,
-                              add_labels=self.label_beam)
+        cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
         self.guide.cache.flush()
+        cdef size_t p_idx 
+        cdef State* parent
+        cdef uint64_t* feats
         while not beam.beam[0].is_finished:
-            beam.refresh()
-            self._fill_move_scores(sent, beam)
-            while not beam.is_full and not beam.next_moves.empty():
-                data = beam.next_moves.top()
-                beam.next_moves.pop()
-                cont = <Cont*>data.second
-                beam.add(cont.parent, cont.score, False, cont.clas, cont.rlabel)
+            for p_idx in range(beam.bsize):
+                parent = beam.beam[p_idx]
+                fill_kernel(parent)
+                feats = self.features.extract(sent, &parent.kernel)
+                # TODO: Hook cache back up
+                self.guide.model.get_scores(self.features.n, feats, beam.scores[p_idx])
+                self.moves.fill_valid(parent, beam.valid[p_idx])
+            beam.extend_states()
             assert beam.bsize != 0
-        s = beam.best_p()
+        cdef State* s = beam.beam[0]
         sent.parse.n_moves = s.t
         for i in range(s.t):
             sent.parse.moves[i] = s.history[i]

@@ -7,7 +7,6 @@ cdef extern from "MurmurHash2.h":
     uint64_t MurmurHash64B(void * key, uint64_t len, int64_t seed)
 
 
-
 cdef struct Subtree:
     size_t val
     size_t[4] lab
@@ -52,7 +51,6 @@ cdef struct State:
     size_t second
     bint is_finished
     bint at_end_of_buffer
-    bint is_gold
     int cost
 
     size_t* stack
@@ -65,12 +63,6 @@ cdef struct State:
     size_t** r_children
     size_t* history
     Kernel kernel
-
-cdef struct Cont:
-    double score
-    size_t clas
-    size_t parent
-    size_t rlabel
 
 cdef uint64_t hash_kernel(Kernel* k)
 cdef int fill_kernel(State* s)

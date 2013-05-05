@@ -1,3 +1,4 @@
+# cython: profile=True
 from _state cimport *
 from transitions cimport TransitionSystem
 
@@ -5,24 +6,23 @@ from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport memcpy
 from libc.stdint cimport uint64_t, int64_t
 
-from libcpp.utility cimport pair
-from libcpp.vector cimport vector
 from libcpp.queue cimport priority_queue
+from libcpp.utility cimport pair
 
+from cython.operator cimport preincrement as inc
+from cython.operator cimport dereference as deref
 
 
 cdef class Beam:
     def __cinit__(self, TransitionSystem trans, 
                   size_t k, size_t length, upd_strat='early'):
-        cdef size_t i
-        cdef Cont* cont
-        cdef State* s
         self.trans = trans
         self.upd_strat = upd_strat
         self.k = k
         self.i = 0
         self.parents = <State**>malloc(k * sizeof(State*))
         self.beam = <State**>malloc(k * sizeof(State*))
+        cdef size_t i
         for i in range(k):
             self.parents[i] = init_state(length)
         for i in range(k):
@@ -31,59 +31,62 @@ cdef class Beam:
         self.bsize = 1
         self.psize = 0
         self.is_full = self.bsize >= self.k
-        self.max_class = self.trans.nr_class * k
         self.next_moves = new priority_queue[pair[double, size_t]]()
-        self.conts = <Cont**>malloc(self.max_class * sizeof(Cont*))
-        for i in range(self.max_class):
-            self.conts[i] = <Cont*>malloc(sizeof(Cont))
+        self.scores = <double**>malloc(self.k * sizeof(double*))
+        self.costs = <int**>malloc(self.k * sizeof(int*))
+        self.valid = <bint**>malloc(self.k * sizeof(bint*))
+        for i in range(self.k):
+            self.scores[i] = <double*>calloc(self.trans.nr_class, sizeof(double*))
+            self.costs[i] = <int*>calloc(self.trans.nr_class, sizeof(int*))
+            self.valid[i] = <bint*>calloc(self.trans.nr_class, sizeof(bint*))
         self.violn = None
 
-    cdef int add(self, size_t par_idx, double score, int cost,
-                 size_t clas, size_t rlabel) except -1:
-        cdef State* parent = self.parents[par_idx]
-        assert par_idx < self.psize
-        assert not self.is_full
-        copy_state(self.beam[self.bsize], parent)
-        cdef State* ext = self.beam[self.bsize]
-        ext.score = score
-        ext.is_gold = ext.is_gold and cost == 0
-        ext.cost += cost
-        self.bsize += 1
+    cdef int extend_states(self) except -1:
+        # Former states are now parents, beam will hold the extensions
+        cdef State** parents = self.parents
+        self.parents = self.beam
+        self.beam = parents 
+        self.psize = self.bsize
+        self.bsize = 0
+        cdef size_t parent_idx, clas, move_id
+        cdef double parent_score, score
+        # Get best parent/clas pairs by score
+        for parent_idx in range(self.psize):
+            parent_score = self.parents[parent_idx].score
+            for clas in range(self.trans.nr_class):
+                if self.valid[parent_idx][clas] != -1:
+                    score = parent_score + self.scores[parent_idx][clas]
+                    move_id = (parent_idx * self.trans.nr_class) + clas
+                    self.next_moves.push(pair[double, size_t](score, move_id))
+        cdef pair[double, size_t] data
+        # Apply extensions for best continuations
+        cdef State* s
+        cdef State* parent
+        while self.bsize < self.k and not self.next_moves.empty():
+            data = self.next_moves.top()
+            parent_idx = data.second / self.trans.nr_class
+            assert parent_idx < self.psize
+            clas = data.second % self.trans.nr_class
+            parent = self.parents[parent_idx]
+            s = self.beam[self.bsize]
+            # TODO: Fill in guess_labels for s
+            copy_state(s, parent)
+            s.cost += self.costs[parent_idx][clas]
+            s.score = data.first
+            self.trans.transition(clas, s)
+            self.bsize += 1
+            self.next_moves.pop()
         self.is_full = self.bsize >= self.k
-        ext.guess_labels[ext.i] = rlabel
-        self.trans.transition(clas, ext)
-        fill_kernel(ext)
-
-    cdef int extend(self, size_t parent_idx, double* scores) except -1:
-        cdef double best_right_score = scores[self.trans.r_start]
-        cdef size_t best_right = self.trans.labels[self.trans.r_start]
-        cdef size_t i
-        for i in range(self.trans.r_start + 1, self.trans.r_end):
-            if scores[i] > best_right_score:
-                best_right_score = scores[i]
-                best_right = self.trans.labels[i]
-        cdef State* parent = self.parents[parent_idx]
-        cdef double parent_score = parent.score
-        cdef Cont* cont
-        cdef size_t clas
-        for clas in range(self.trans.nr_class):
-            if not self.trans.is_valid(clas, parent.i, parent.n, parent.stack_len,
-                                       parent.heads[parent.top]):
-                continue
-            cont = self.conts[self.i]
-            self.i += 1
-            cont.score = parent_score + scores[clas]
-            cont.parent = parent_idx
-            cont.clas = clas
-            cont.rlabel = best_right
-            self.next_moves.push(pair[double, size_t](cont.score, <size_t>cont))
+        # Flush next_moves queue
+        del self.next_moves
+        self.next_moves = new priority_queue[pair[double, size_t]]()
 
     cdef bint check_violation(self):
         cdef Violation violn
         cdef bint out_of_beam
         if self.bsize < self.k:
             return False
-        if self.beam[0].is_gold:
+        if self.beam[0].cost == 0:
             return False
         if self.gold.score > self.beam[0].score:
             return False
@@ -91,7 +94,7 @@ cdef class Beam:
             return False
         out_of_beam = True
         for i in range(self.bsize):
-            if self.beam[i].is_gold:
+            if self.beam[i].cost == 0:
                 out_of_beam = False
                 gold = self.beam[i]
                 break
@@ -99,41 +102,26 @@ cdef class Beam:
             gold = self.gold
         violn = Violation()
         violn.set(self.beam[0], gold, out_of_beam)
-        if self.upd_strat == 'max' and violn.delta > self.max_violn.delta:
-            self.violn = violn
+        if self.upd_strat == 'max':
+            if self.violn is None or violn.delta > self.violn.delta:
+                self.violn = violn
         if out_of_beam and self.upd_strat == 'early' and self.violn == None:
             self.violn = violn
         return self.upd_strat == 'early' and bool(self.violn)
 
-    cdef State* best_p(self) except NULL:
-        if self.bsize != 0:
-            return self.beam[0]
-        else:
-            raise StandardError
-
-    cdef refresh(self):
-        cdef size_t i, j
-        cdef State** parents = self.parents
-        self.parents = self.beam
-        self.beam = parents
-        del self.next_moves
-        self.next_moves = new priority_queue[pair[double, size_t]]()
-        self.psize = self.bsize
-        self.is_full = False
-        self.bsize = 0
-        self.i = 0
-
     def __dealloc__(self):
-        for i in range(self.bsize):
+        free_state(self.gold)
+        for i in range(self.k):
             free_state(self.beam[i])
-        for i in range(self.psize):
             free_state(self.parents[i])
-        for i in range(self.max_class):
-            free(self.conts[i])
+            free(self.scores[i])
+            free(self.valid[i])
+            free(self.costs[i])
         free(self.beam)
         free(self.parents)
-        free(self.conts)
-        free_state(self.gold)
+        free(self.scores)
+        free(self.valid)
+        free(self.costs)
 
 """
 cdef class FastBeam(Beam):

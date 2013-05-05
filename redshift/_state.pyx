@@ -1,3 +1,4 @@
+# cython: profile=True
 from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
 
@@ -216,7 +217,6 @@ cdef State* init_state(size_t n):
     s.second = 0
     s.stack_len = 1
     s.is_finished = False
-    s.is_gold = True
     s.at_end_of_buffer = n == 2
     n = n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
@@ -246,18 +246,23 @@ cdef copy_state(State* s, State* old):
     s.second = old.second
     s.stack_len = old.stack_len
     s.is_finished = old.is_finished
-    s.is_gold = old.is_gold
     s.at_end_of_buffer = old.at_end_of_buffer
-    cdef size_t nbytes = (old.n + PADDING) * sizeof(size_t)
-    memcpy(s.stack, old.stack, nbytes)
+    memcpy(s.stack, old.stack, old.n * sizeof(size_t))
+    cdef size_t nbytes
+    # TODO: Is this solid?
+    if s.i > old.i:
+        nbytes = (s.i + 2) * sizeof(size_t)
+    else:
+        nbytes = (old.i + 2) * sizeof(size_t)
     memcpy(s.l_valencies, old.l_valencies, nbytes)
     memcpy(s.r_valencies, old.r_valencies, nbytes)
     memcpy(s.heads, old.heads, nbytes)
     memcpy(s.labels, old.labels, nbytes)
     memcpy(s.guess_labels, old.guess_labels, nbytes)
-    memcpy(s.history, old.history, nbytes * 2)
+    memcpy(s.history, old.history, old.t * sizeof(size_t))
     cdef size_t i
-    for i in range(old.n + PADDING):
+    # TODO: Look into why we can't copy only the L/R children up to valency
+    for i in range(old.i + 2):
         memcpy(s.l_children[i], old.l_children[i], MAX_VALENCY * sizeof(size_t))
         memcpy(s.r_children[i], old.r_children[i], MAX_VALENCY * sizeof(size_t))
 
