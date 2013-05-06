@@ -236,7 +236,7 @@ cdef class Parser:
 
     cdef object decode_beam(self, Sentence* sent, size_t k, object stats):
         cdef size_t p_idx
-        cdef State* parent
+        cdef Kernel* kernel
         cdef uint64_t* feats
         cdef int* costs
         cdef int cost
@@ -249,14 +249,11 @@ cdef class Parser:
         while not beam.gold.is_finished:
             self._advance_gold(beam.gold, sent, True)
             for p_idx in range(beam.bsize):
-                parent = beam.beam[p_idx]
-                fill_kernel(parent)
-                feats = self.features.extract(sent, &parent.kernel)
+                kernel = beam.next_state(p_idx)
+                beam.cost_next(p_idx, g_heads, g_labels)
+                feats = self.features.extract(sent, kernel)
                 # TODO: Hook cache back up
                 self.guide.model.get_scores(self.features.n, feats, beam.scores[p_idx])
-                self.moves.fill_valid(parent, beam.valid[p_idx])
-                # This is the part where the gold standard gets used
-                self.moves.fill_static_costs(parent, g_heads, g_labels, beam.costs[p_idx])
             beam.extend_states()
             beam.check_violation()
             if self.train_alg == 'early' and beam.violn != None:
@@ -430,28 +427,19 @@ cdef class Parser:
     cdef int beam_parse(self, Sentence* sent, size_t k) except -1:
         cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
         self.guide.cache.flush()
-        cdef size_t p_idx 
-        cdef State* parent
+        cdef size_t p_idx
+        cdef Kernel* kernel
         cdef uint64_t* feats
-        while not beam.beam[0].is_finished:
+        while not beam.is_finished:
             for p_idx in range(beam.bsize):
-                parent = beam.beam[p_idx]
-                fill_kernel(parent)
-                feats = self.features.extract(sent, &parent.kernel)
+                kernel = beam.next_state(p_idx)
+                feats = self.features.extract(sent, kernel)
                 # TODO: Hook cache back up
                 self.guide.model.get_scores(self.features.n, feats, beam.scores[p_idx])
-                self.moves.fill_valid(parent, beam.valid[p_idx])
             beam.extend_states()
             assert beam.bsize != 0
-        cdef State* s = beam.beam[0]
-        sent.parse.n_moves = s.t
-        for i in range(s.t):
-            sent.parse.moves[i] = s.history[i]
-        # No need to copy heads for root and start symbols
-        for i in range(1, sent.length - 1):
-            assert s.heads[i] != 0
-            sent.parse.heads[i] = s.heads[i]
-            sent.parse.labels[i] = s.labels[i]
+        sent.parse.n_moves = beam.t
+        beam.fill_parse(sent.parse.moves, sent.parse.heads, sent.parse.labels)
 
     cdef int predict(self, uint64_t n_preds, uint64_t* feats, int* valid,
                      size_t* rlabel) except -1:

@@ -18,6 +18,7 @@ cdef class Beam:
                   size_t k, size_t length, upd_strat='early'):
         self.trans = trans
         self.upd_strat = upd_strat
+        self.length = length
         self.k = k
         self.i = 0
         self.parents = <State**>malloc(k * sizeof(State*))
@@ -30,6 +31,7 @@ cdef class Beam:
         self.gold = init_state(length)
         self.bsize = 1
         self.psize = 0
+        self.t = 0
         self.is_full = self.bsize >= self.k
         self.next_moves = new priority_queue[pair[double, size_t]]()
         self.scores = <double**>malloc(self.k * sizeof(double*))
@@ -40,6 +42,15 @@ cdef class Beam:
             self.costs[i] = <int*>calloc(self.trans.nr_class, sizeof(int*))
             self.valid[i] = <bint*>calloc(self.trans.nr_class, sizeof(bint*))
         self.violn = None
+
+    cdef Kernel* next_state(self, size_t idx):
+        self.trans.fill_valid(self.beam[idx], self.valid[idx])
+        fill_kernel(self.beam[idx])
+        return &self.beam[idx].kernel
+
+    cdef int cost_next(self, size_t i, size_t* heads, size_t* labels) except -1:
+        self.trans.fill_static_costs(self.beam[i], heads, labels, self.costs[i])
+        fill_kernel(self.beam[i])
 
     cdef int extend_states(self) except -1:
         # Former states are now parents, beam will hold the extensions
@@ -80,6 +91,7 @@ cdef class Beam:
         # Flush next_moves queue
         del self.next_moves
         self.next_moves = new priority_queue[pair[double, size_t]]()
+        self.t += 1
 
     cdef bint check_violation(self):
         cdef Violation violn
@@ -108,6 +120,17 @@ cdef class Beam:
         if out_of_beam and self.upd_strat == 'early' and self.violn == None:
             self.violn = violn
         return self.upd_strat == 'early' and bool(self.violn)
+
+    cdef int fill_parse(self, size_t* hist, size_t* heads, size_t* labels) except -1:
+        for i in range(self.t):
+            hist[i] = self.beam[0].history[i]
+        # No need to copy heads for root and start symbols
+        for i in range(1, self.length - 1):
+            assert self.beam[0].heads[i] != 0
+            heads[i] = self.beam[0].heads[i]
+            labels[i] = self.beam[0].labels[i]
+
+
 
     def __dealloc__(self):
         free_state(self.gold)

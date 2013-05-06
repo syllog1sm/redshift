@@ -34,10 +34,15 @@ cdef class Beam:
     cdef size_t max_class
     cdef size_t k
     cdef size_t i
+    cdef size_t t
+    cdef size_t length
     cdef size_t bsize
     cdef size_t psize
     cdef bint is_full
 
+    cdef Kernel* next_state(self, size_t i)
+    cdef int cost_next(self, size_t i, size_t* heads, size_t* labels) except -1
     cdef int extend_states(self) except -1
     cdef bint check_violation(self)
+    cdef int fill_parse(self, size_t* hist, size_t* heads, size_t* labels) except -1
 

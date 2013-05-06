@@ -251,9 +251,9 @@ cdef copy_state(State* s, State* old):
     cdef size_t nbytes
     # TODO: Is this solid?
     if s.i > old.i:
-        nbytes = (s.i + 2) * sizeof(size_t)
+        nbytes = (old.n + PADDING) * sizeof(size_t)
     else:
-        nbytes = (old.i + 2) * sizeof(size_t)
+        nbytes = (old.n + PADDING) * sizeof(size_t)
     memcpy(s.l_valencies, old.l_valencies, nbytes)
     memcpy(s.r_valencies, old.r_valencies, nbytes)
     memcpy(s.heads, old.heads, nbytes)
