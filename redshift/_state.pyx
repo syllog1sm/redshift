@@ -57,7 +57,7 @@ cdef size_t pop_stack(State *s) except 0:
     cdef size_t child
     for child in range(s.l_valencies[popped]):
         s.sig[child] = 0
-    for rc in range(s.r_valencies[popped]):
+    for child in range(s.r_valencies[popped]):
         s.sig[child] = 0
     return popped
 
