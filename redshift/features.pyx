@@ -78,8 +78,7 @@ cdef enum:
 
 
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* pos,
-                       Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l,
-                       Subtree* s1l, Subtree* s1r):
+                       Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
     context[N0w] = words[k.i]
     context[N0p] = pos[k.i]
 
@@ -93,17 +92,17 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
     context[S0p] = pos[k.s0]
     context[S0l] = k.Ls0
 
-    context[S1w] = words[k.s1]
-    context[S1p] = pos[k.s1]
-    context[S1lw] = words[s1l.idx[0]]
-    context[S1lp] = pos[s1l.idx[0]]
-    context[S1ll] = s1l.lab[0]
-    context[S1rw] = words[s1r.idx[0]]
-    context[S1rp] = pos[s1r.idx[0]]
-    context[S1rl] = s1r.lab[0]
+    #context[S1w] = words[k.s1]
+    #context[S1p] = pos[k.s1]
+    #context[S1lw] = words[s1l.idx[0]]
+    #context[S1lp] = pos[s1l.idx[0]]
+    #context[S1ll] = s1l.lab[0]
+    #context[S1rw] = words[s1r.idx[0]]
+    #context[S1rp] = pos[s1r.idx[0]]
+    #context[S1rl] = s1r.lab[0]
 
-    context[S2w] = words[k.s2]
-    context[S2p] = pos[k.s2]
+    #context[S2w] = words[k.s2]
+    #context[S2p] = pos[k.s2]
     
     context[S0hw] = words[k.hs0]
     context[S0hp] = pos[k.hs0]
@@ -150,8 +149,8 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
         context[S0llabs] += s0l.lab[i] << (nr_label - s0l.lab[i])
         context[S0rlabs] += s0r.lab[i] << (nr_label - s0r.lab[i])
         context[N0llabs] += n0l.lab[i] << (nr_label - n0l.lab[i])
-        context[S1llabs] += s1l.lab[i] << (nr_label - s1l.lab[i])
-        context[S1rlabs] += s1r.lab[i] << (nr_label - s1r.lab[i])
+        #context[S1llabs] += s1l.lab[i] << (nr_label - s1l.lab[i])
+        #context[S1rlabs] += s1r.lab[i] << (nr_label - s1r.lab[i])
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
     if k.s0 != 0:
@@ -176,7 +175,8 @@ cdef class FeatureSet:
         cdef size_t* context = self.context
         assert <size_t>k != 0
         fill_context(context, self.nr_label, sent.words, sent.pos, k,
-                     &k.s0l, &k.s0r, &k.n0l, &k.s1l, &k.s1r)
+                     &k.s0l, &k.s0r, &k.n0l)
+                     #&k.s1l, &k.s1r)
         cdef size_t i, j
         cdef uint64_t hashed
         cdef uint64_t value

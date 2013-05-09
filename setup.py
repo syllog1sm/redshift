@@ -22,30 +22,27 @@ def clean(ext):
                 os.unlink(cpp)
 
 
-LIBLINEAR = 'liblinear-weights-1.91'
 pwd = os.path.dirname(__file__)
 virtual_env = os.environ.get('VIRTUAL_ENV', '')
 
 includes = [numpy.get_include(),
             os.path.join(virtual_env, 'include'),
-            os.path.join(pwd, 'index'),
-            os.path.join(pwd, 'svm', 'include')]
+            os.path.join(pwd, 'index')]
 
 exts = [
     Extension('redshift.parser', ["redshift/parser.pyx"], language="c++",
               include_dirs=includes),
+    Extension('redshift.beam', ["redshift/beam.pyx"],
+        language="c++", include_dirs=includes), 
     Extension('redshift._state', ["redshift/_state.pyx"], language="c++"),
     Extension('redshift.io_parse', ["redshift/io_parse.pyx"], language="c++",
                include_dirs=includes),
     Extension('redshift.features', ["redshift/features.pyx", "index/MurmurHash2.cpp"],
-        language="c++",
+        language="c++", include_dirs=includes),
+    Extension('redshift.transitions', ["redshift/transitions.pyx"],
+        language="c++", include_dirs=includes),
+    Extension('learn.perceptron', ['learn/perceptron.pyx'], language="c++",
               include_dirs=includes),
-    Extension('svm.multitron', ['svm/multitron.pyx'], language="c++",
-              include_dirs=includes),
-    Extension("svm.cy_svm", ["svm/cy_svm.pyx"], language="c++", libraries=['linear'],
-              include_dirs=includes, runtime_library_dirs=[os.path.join(pwd, 'svm', 'lib')],
-              library_dirs=[os.path.join(pwd, 'svm', 'lib')],
-               extra_objects=[os.path.join(pwd, 'svm', 'lib', 'liblinear.so.1')]),
     Extension(
         "index.hashes",
         ["index/hashes.pyx", "index/MurmurHash2.cpp", "index/MurmurHash3.cpp"],

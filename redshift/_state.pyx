@@ -77,8 +77,6 @@ cdef int fill_kernel(State *s):
     cdef size_t i, val
     s.kernel.i = s.i
     s.kernel.s0 = s.top
-    s.kernel.s1 = s.second
-    s.kernel.s2 = s.stack[s.stack_len - 3] if s.stack_len >= 3 else 0
     s.kernel.hs0 = s.heads[s.top]
     s.kernel.h2s0 = s.heads[s.heads[s.top]]
     s.kernel.Ls0 = s.labels[s.top]
@@ -88,8 +86,6 @@ cdef int fill_kernel(State *s):
     fill_subtree(s.l_valencies[s.top], s.l_children[s.top], s.labels, &s.kernel.s0l)
     fill_subtree(s.r_valencies[s.top], s.r_children[s.top], s.labels, &s.kernel.s0r)
     fill_subtree(s.l_valencies[s.i], s.l_children[s.i], s.labels, &s.kernel.n0l)
-    fill_subtree(s.l_valencies[s.second], s.l_children[s.second], s.labels, &s.kernel.s1l)
-    fill_subtree(s.r_valencies[s.second], s.r_children[s.second], s.labels, &s.kernel.s1r)
 
 
 cdef Kernel* kernel_from_s(Kernel* parent) except NULL:
@@ -97,7 +93,6 @@ cdef Kernel* kernel_from_s(Kernel* parent) except NULL:
     memset(k, 0, sizeof(Kernel))
     k.i = parent.i + 1
     k.s0 = parent.i
-    k.s1 = parent.s0
     # Parents of s0, e.g. hs0, h2s0, Lhs0 etc all null in Shift
     memcpy(&k.s0l, &parent.n0l, sizeof(Subtree))
     return k
@@ -236,7 +231,16 @@ cdef State* init_state(size_t n):
     return s
 
 cdef copy_state(State* s, State* old):
-    # Don't copy number of children, as this refers to the state object itself
+    cdef size_t nbytes, i
+    if s.i > old.i:
+        nbytes = (s.i + 1) * sizeof(size_t)
+    else:
+        nbytes = (old.i + 1) * sizeof(size_t)
+    # TODO: Why doesnt this work in training??
+    #for j in range(start, old.n):
+    #    assert old.heads[j] == 0
+    #    assert s.heads[j] == 0, '%d headed by %d with i at %d' % (j, s.heads[j], s.i)
+    #nbytes = (old.n + PADDING) * sizeof(size_t)
     s.n = old.n
     s.t = old.t
     s.i = old.i
@@ -248,23 +252,16 @@ cdef copy_state(State* s, State* old):
     s.is_finished = old.is_finished
     s.at_end_of_buffer = old.at_end_of_buffer
     memcpy(s.stack, old.stack, old.n * sizeof(size_t))
-    cdef size_t nbytes
-    # TODO: Is this solid?
-    if s.i > old.i:
-        nbytes = (old.n + PADDING) * sizeof(size_t)
-    else:
-        nbytes = (old.n + PADDING) * sizeof(size_t)
     memcpy(s.l_valencies, old.l_valencies, nbytes)
     memcpy(s.r_valencies, old.r_valencies, nbytes)
     memcpy(s.heads, old.heads, nbytes)
     memcpy(s.labels, old.labels, nbytes)
     memcpy(s.guess_labels, old.guess_labels, nbytes)
     memcpy(s.history, old.history, old.t * sizeof(size_t))
-    cdef size_t i
     # TODO: Look into why we can't copy only the L/R children up to valency
     for i in range(old.i + 2):
-        memcpy(s.l_children[i], old.l_children[i], MAX_VALENCY * sizeof(size_t))
-        memcpy(s.r_children[i], old.r_children[i], MAX_VALENCY * sizeof(size_t))
+        memcpy(s.l_children[i], old.l_children[i], old.l_valencies[i] * sizeof(size_t))
+        memcpy(s.r_children[i], old.r_children[i], old.r_valencies[i] * sizeof(size_t))
 
 
 cdef free_state(State* s):

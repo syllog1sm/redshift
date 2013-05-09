@@ -28,7 +28,7 @@ from io_parse import LABEL_STRS, STR_TO_LABEL
 import index.hashes
 cimport index.hashes
 
-from svm.cy_svm cimport Model, LibLinear, Perceptron
+from learn.perceptron cimport Perceptron
 
 from libc.stdint cimport uint64_t, int64_t
 from libc.stdlib cimport qsort
@@ -125,9 +125,7 @@ cdef class Parser:
         model_dir = Path(model_dir)
         if not clean:
             params = dict([line.split() for line in model_dir.join('parser.cfg').open()])
-            C = float(params['C'])
             train_alg = params['train_alg']
-            eps = float(params['eps'])
             add_extra = True if params['add_extra'] == 'True' else False
             label_set = params['label_set']
             feat_thresh = int(params['feat_thresh'])
@@ -211,7 +209,7 @@ cdef class Parser:
             self.guide.use_cache = True
         stats = defaultdict(int)
         for n in range(n_iter):
-            #random.shuffle(indices)
+            random.shuffle(indices)
             # Group indices into minibatches of fixed size
             for minibatch in izip(*[iter(indices)] * 1):
                 deltas = []
@@ -230,12 +228,14 @@ cdef class Parser:
                             stats)
             self.guide.n_corr = 0
             self.guide.total = 0
+            if n < 3:
+                self.guide.reindex()
         if self.feat_thresh > 1:
             self.guide.prune(self.feat_thresh)
-        self.guide.train()
+        self.guide.finalize()
 
     cdef object decode_beam(self, Sentence* sent, size_t k, object stats):
-        cdef size_t p_idx
+        cdef size_t p_idx, i
         cdef Kernel* kernel
         cdef uint64_t* feats
         cdef int* costs
@@ -243,24 +243,30 @@ cdef class Parser:
         cdef size_t* g_heads = sent.parse.heads
         cdef size_t* g_labels = sent.parse.labels
         cdef Violation violn
+        cdef double* scores
+        cdef bint cache_hit = False
         self.guide.cache.flush()
         cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
         stats['sents'] += 1
+        beam_scores = <double**>malloc(beam.k * sizeof(double*))
         while not beam.gold.is_finished:
             self._advance_gold(beam.gold, sent, True)
             for p_idx in range(beam.bsize):
                 kernel = beam.next_state(p_idx)
                 beam.cost_next(p_idx, g_heads, g_labels)
-                feats = self.features.extract(sent, kernel)
-                # TODO: Hook cache back up
-                self.guide.model.get_scores(self.features.n, feats, beam.scores[p_idx])
-            beam.extend_states()
+                scores = self.guide.cache.lookup(sizeof(Kernel), kernel, &cache_hit)
+                if not cache_hit:
+                    feats = self.features.extract(sent, kernel)
+                    self.guide.fill_scores(self.features.n, feats, scores)
+                beam_scores[p_idx] = scores
+            beam.extend_states(beam_scores)
             beam.check_violation()
             if self.train_alg == 'early' and beam.violn != None:
                 stats['early'] += 1
                 break
             elif beam.beam[0].cost == 0:
                 self.guide.n_corr += 1
+        free(beam_scores)
         self.guide.total += beam.gold.t
         if beam.violn is not None:
             stats['moves'] += beam.violn.t
@@ -284,7 +290,7 @@ cdef class Parser:
         scores = self.guide.cache.lookup(sizeof(s.kernel), <void*>&s.kernel, &cache_hit)
         if not cache_hit:
             feats = self.features.extract(sent, &s.kernel)
-            self.guide.model.get_scores(self.features.n, feats, scores)
+            self.guide.fill_scores(self.features.n, feats, scores)
         if use_static:
             oracle = self.moves.break_tie(s, sent.parse.heads, sent.parse.labels)
         else:
@@ -427,19 +433,25 @@ cdef class Parser:
     cdef int beam_parse(self, Sentence* sent, size_t k) except -1:
         cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
         self.guide.cache.flush()
-        cdef size_t p_idx
+        cdef size_t p_idx, i
+        cdef double* scores
+        cdef bint cache_hit
         cdef Kernel* kernel
         cdef uint64_t* feats
+        cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
         while not beam.is_finished:
             for p_idx in range(beam.bsize):
                 kernel = beam.next_state(p_idx)
-                feats = self.features.extract(sent, kernel)
-                # TODO: Hook cache back up
-                self.guide.model.get_scores(self.features.n, feats, beam.scores[p_idx])
-            beam.extend_states()
-            assert beam.bsize != 0
+                scores = self.guide.cache.lookup(sizeof(kernel[0]), <void*>kernel,
+                                                 &cache_hit)
+                if not cache_hit:
+                    feats = self.features.extract(sent, kernel)
+                    self.guide.fill_scores(self.features.n, feats, scores)
+                beam_scores[p_idx] = scores
+            beam.extend_states(beam_scores)
         sent.parse.n_moves = beam.t
         beam.fill_parse(sent.parse.moves, sent.parse.heads, sent.parse.labels)
+        free(beam_scores)
 
     cdef int predict(self, uint64_t n_preds, uint64_t* feats, int* valid,
                      size_t* rlabel) except -1:
@@ -452,7 +464,8 @@ cdef class Parser:
         cdef size_t right_move = 0
         cdef double valid_score = -10000
         cdef double right_score = -10000
-        scores = self.guide.predict_scores(n_preds, feats)
+        self.guide.fill_scores(n_preds, feats, self.guide.scores)
+        scores = self.guide.scores
         seen_valid = False
         for clas in range(self.guide.nr_class):
             score = scores[clas]
@@ -468,10 +481,10 @@ cdef class Parser:
         return best_valid
 
     def save(self):
-        self.guide.save(self.model_dir.join('model'))
+        self.guide.save(str(self.model_dir.join('model')))
 
     def load(self):
-        self.guide.load(self.model_dir.join('model'))
+        self.guide.load(str(self.model_dir.join('model')))
 
     def new_idx(self, model_dir, size_t n_predicates):
         index.hashes.init_word_idx(model_dir.join('words'))
@@ -485,8 +498,6 @@ cdef class Parser:
     def write_cfg(self, loc):
         with loc.open('w') as cfg:
             cfg.write(u'model_dir\t%s\n' % self.model_dir)
-            cfg.write(u'C\t%s\n' % self.guide.C)
-            cfg.write(u'eps\t%s\n' % self.guide.eps)
             cfg.write(u'train_alg\t%s\n' % self.train_alg)
             cfg.write(u'add_extra\t%s\n' % self.add_extra)
             cfg.write(u'label_set\t%s\n' % self.label_set)

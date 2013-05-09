@@ -16,8 +16,6 @@ cdef struct Subtree:
 cdef struct Kernel:
     size_t i
     size_t s0
-    size_t s1
-    size_t s2
     size_t Ls0
     size_t hs0
     size_t h2s0
@@ -26,8 +24,6 @@ cdef struct Kernel:
     Subtree s0l
     Subtree s0r
     Subtree n0l
-    Subtree s1l
-    Subtree s1r
 
 
 cdef struct FastState:

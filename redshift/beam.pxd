@@ -21,12 +21,11 @@ cdef class Violation:
 cdef class Beam:
     cdef TransitionSystem trans
     cdef Violation violn
-    cdef priority_queue[pair[double, size_t]]* next_moves
+    #cdef priority_queue[pair[double, size_t]]* next_moves
     
     cdef State* gold
     cdef State** parents
     cdef State** beam
-    cdef double** scores
     cdef int** costs
     cdef bint** valid
     
@@ -39,10 +38,11 @@ cdef class Beam:
     cdef size_t bsize
     cdef size_t psize
     cdef bint is_full
+    cdef bint is_finished
 
     cdef Kernel* next_state(self, size_t i)
     cdef int cost_next(self, size_t i, size_t* heads, size_t* labels) except -1
-    cdef int extend_states(self) except -1
+    cdef int extend_states(self, double** scores) except -1
     cdef bint check_violation(self)
     cdef int fill_parse(self, size_t* hist, size_t* heads, size_t* labels) except -1
 
