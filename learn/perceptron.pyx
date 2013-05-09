@@ -38,7 +38,6 @@ cdef void update_dense(size_t now, double w, size_t clas, DenseFeature* raw):
         raw.s = clas
     if clas >= raw.e:
         raw.e = clas + 1
-    print 'done'
 
 
 cdef inline void update_square(size_t nr_class, size_t div,
