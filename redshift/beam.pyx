@@ -22,9 +22,13 @@ cdef class Beam:
         self.k = k
         self.i = 0
         self.is_finished = False
+        self.ancestry = <size_t*>calloc(k, sizeof(size_t))
+        self.anc_freqs = <size_t**>malloc(k * sizeof(size_t))
+        cdef size_t i
+        for i in range(self.k):
+            self.anc_freqs[i] = <size_t*>calloc(k, sizeof(size_t))
         self.parents = <State**>malloc(k * sizeof(State*))
         self.beam = <State**>malloc(k * sizeof(State*))
-        cdef size_t i
         for i in range(k):
             self.parents[i] = init_state(length)
         for i in range(k):
@@ -51,6 +55,7 @@ cdef class Beam:
         fill_kernel(self.beam[i])
 
     cdef int extend_states(self, double** ext_scores) except -1:
+        global merged
         # Former states are now parents, beam will hold the extensions
         cdef State** parents = self.parents
         self.parents = self.beam
@@ -80,12 +85,14 @@ cdef class Beam:
             assert parent_idx < self.psize
             clas = data.second % self.trans.nr_class
             parent = self.parents[parent_idx]
+            self.anc_freqs[self.ancestry[parent_idx]][parent_idx] += 1
             s = self.beam[self.bsize]
             # TODO: Fill in guess_labels for s
             copy_state(s, parent)
             s.cost += self.costs[parent_idx][clas]
             s.score = data.first
             self.trans.transition(clas, s)
+            self.ancestry[self.bsize] = parent_idx
             self.bsize += 1
             next_moves.pop()
         self.is_full = self.bsize >= self.k

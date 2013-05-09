@@ -391,11 +391,13 @@ cdef class Parser:
         if k == None:
             k = self.beam_width
         self.guide.nr_class = self.moves.nr_class
+        ancestry_counts = defaultdict(int)
         for i in range(sents.length):
             if k == 0:
                 self.parse(&sents.s[i])
             else:
-                self.beam_parse(&sents.s[i], k)
+                self.beam_parse(&sents.s[i], k, ancestry_counts)
+        print ancestry_counts
         if gold is not None:
             return sents.evaluate(gold)
 
@@ -430,7 +432,7 @@ cdef class Parser:
             sent.parse.labels[i] = s.labels[i]
         free_state(s)
     
-    cdef int beam_parse(self, Sentence* sent, size_t k) except -1:
+    cdef int beam_parse(self, Sentence* sent, size_t k, object ancestry_counts) except -1:
         cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
         self.guide.cache.flush()
         cdef size_t p_idx, i
@@ -449,6 +451,10 @@ cdef class Parser:
                     self.guide.fill_scores(self.features.n, feats, scores)
                 beam_scores[p_idx] = scores
             beam.extend_states(beam_scores)
+            for i in range(k):
+                for j in range(k):
+                    ancestry_counts[beam.anc_freqs[i][j]] += 1
+                    beam.anc_freqs[i][j] = 0
         sent.parse.n_moves = beam.t
         beam.fill_parse(sent.parse.moves, sent.parse.heads, sent.parse.labels)
         free(beam_scores)

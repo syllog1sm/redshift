@@ -58,6 +58,7 @@ cdef struct State:
     size_t** l_children
     size_t** r_children
     size_t* history
+    size_t* sig
     Kernel kernel
 
 cdef uint64_t hash_kernel(Kernel* k)

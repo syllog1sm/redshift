@@ -5,6 +5,11 @@ from libcpp.queue cimport priority_queue
 from libcpp.utility cimport pair
 
 
+cdef extern from "MurmurHash2.h":
+    uint64_t MurmurHash64A(void * key, uint64_t len, int64_t seed)
+    uint64_t MurmurHash64B(void * key, uint64_t len, int64_t seed)
+
+
 cdef class Violation:
     """
     A gold/prediction pair where the g.score < p.score
@@ -28,6 +33,8 @@ cdef class Beam:
     cdef State** beam
     cdef int** costs
     cdef bint** valid
+    cdef size_t* ancestry
+    cdef size_t** anc_freqs
     
     cdef object upd_strat
     cdef size_t max_class

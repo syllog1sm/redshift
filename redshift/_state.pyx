@@ -6,6 +6,7 @@ DEF MAX_VALENCY = 100
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
     s.heads[child] = head
+    s.sig[child] = head
     s.labels[child] = label
     if child < head:
         s.l_children[head][s.l_valencies[head]] = child
@@ -25,6 +26,7 @@ cdef int del_r_child(State *s, size_t head) except -1:
     s.r_valencies[head] -= 1
     s.heads[child] = 0
     s.labels[child] = 0
+    s.sig[child] = 0
 
 
 cdef int del_l_child(State *s, size_t head) except -1:
@@ -37,6 +39,7 @@ cdef int del_l_child(State *s, size_t head) except -1:
     s.l_valencies[head] -= 1
     s.heads[child] = 0
     s.labels[child] = 0
+    s.sig[child] = 0
 
 
 cdef size_t pop_stack(State *s) except 0:
@@ -51,7 +54,23 @@ cdef size_t pop_stack(State *s) except 0:
         s.second = 0
     assert s.top <= s.n, s.top
     assert popped != 0
+    cdef size_t child
+    for child in range(s.l_valencies[popped]):
+        s.sig[child] = 0
+    for rc in range(s.r_valencies[popped]):
+        s.sig[child] = 0
     return popped
+
+
+cdef int push_stack(State *s) except -1:
+    s.second = s.top
+    s.top = s.i
+    s.stack[s.stack_len] = s.i
+    s.stack_len += 1
+    assert s.top <= s.n
+    s.i += 1
+    if s.sig[s.top] == 0:
+        s.sig[s.top] = s.top
 
 
 cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, Subtree* tree):
@@ -133,14 +152,6 @@ cdef Kernel* kernel_from_l(Kernel* parent, Kernel* grandparent, size_t label) ex
     k.n0l.lab[3] = parent.n0l.idx[2]
     return k
 
-cdef int push_stack(State *s) except -1:
-    s.second = s.top
-    s.top = s.i
-    s.stack[s.stack_len] = s.i
-    s.stack_len += 1
-    assert s.top <= s.n
-    s.i += 1
-
 cdef size_t get_l(State *s, size_t head):
     if s.l_valencies[head] == 0:
         return 0
@@ -217,6 +228,7 @@ cdef State* init_state(size_t n):
     s.stack = <size_t*>calloc(n, sizeof(size_t))
     s.heads = <size_t*>calloc(n, sizeof(size_t))
     s.labels = <size_t*>calloc(n, sizeof(size_t))
+    s.sig = <size_t*>calloc(n, sizeof(size_t))
     s.guess_labels = <size_t*>calloc(n, sizeof(size_t))
     s.l_valencies = <size_t*>calloc(n, sizeof(size_t))
     s.r_valencies = <size_t*>calloc(n, sizeof(size_t))
@@ -255,6 +267,7 @@ cdef copy_state(State* s, State* old):
     memcpy(s.l_valencies, old.l_valencies, nbytes)
     memcpy(s.r_valencies, old.r_valencies, nbytes)
     memcpy(s.heads, old.heads, nbytes)
+    memcpy(s.sig, old.sig, nbytes)
     memcpy(s.labels, old.labels, nbytes)
     memcpy(s.guess_labels, old.guess_labels, nbytes)
     memcpy(s.history, old.history, old.t * sizeof(size_t))
