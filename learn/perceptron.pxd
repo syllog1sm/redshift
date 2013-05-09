@@ -101,7 +101,6 @@ cdef class Perceptron:
     cdef int add_instance(self, size_t label, double weight, int n, uint64_t* feats) except -1
     cdef int64_t update(self, size_t gold_i, size_t pred_i,
                         uint64_t n_feats, uint64_t* features, double weight) except -1
-    cdef int update_raw(self, size_t idx, size_t clas, double w) except -1
     cdef int fill_scores(self, size_t n_feats, uint64_t* features, double* scores) except -1
     cdef uint64_t predict_best_class(self, uint64_t n_feats, uint64_t* features)
     cdef int64_t finalize(self) except -1

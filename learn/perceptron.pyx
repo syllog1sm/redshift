@@ -11,8 +11,38 @@ cimport cython
 cimport index.hashes
 
 
-cdef inline void update_dense_param(size_t nr_class, size_t div, size_t now, size_t clas,
-        double weight, SquareFeature* feat):
+cdef DenseFeature* init_dense_feat(uint64_t feat_id, size_t nr_class):
+    cdef DenseFeature* feat = <DenseFeature*>malloc(sizeof(DenseFeature))
+    feat.w = <double*>calloc(nr_class, sizeof(double))
+    feat.acc = <double*>calloc(nr_class, sizeof(double))
+    feat.last_upd = <size_t*>calloc(nr_class, sizeof(size_t))
+    feat.id = feat_id
+    feat.nr_seen = 0
+    feat.s = 0
+    feat.e = 0
+    return feat
+
+
+cdef void free_dense_feat(DenseFeature* feat):
+    free(feat.w)
+    free(feat.acc)
+    free(feat.last_upd)
+    free(feat)
+
+
+cdef void update_dense(size_t now, double w, size_t clas, DenseFeature* raw):
+    raw.acc[clas] += (now - raw.last_upd[clas]) * raw.w[clas]
+    raw.w[clas] += w
+    raw.last_upd[clas] = now
+    if clas < raw.s:
+        raw.s = clas
+    if clas >= raw.e:
+        raw.e = clas + 1
+    print 'done'
+
+
+cdef inline void update_square(size_t nr_class, size_t div,
+                               size_t now, double weight, size_t clas, SquareFeature* feat):
     cdef DenseParams* params
     cdef size_t part_idx = clas / div
     if not feat.seen[part_idx]:
@@ -30,7 +60,7 @@ cdef inline void update_dense_param(size_t nr_class, size_t div, size_t now, siz
     params.last_upd[i] = now
 
 
-cdef void free_dense_feat(SquareFeature* feat, size_t div):
+cdef void free_square_feat(SquareFeature* feat, size_t div):
     cdef size_t i
     for i in range(div):
         if feat.seen[i]:
@@ -47,7 +77,6 @@ cdef class Perceptron:
     def __cinit__(self, max_classes, model_loc, clean=False):
         self.path = model_loc
         self.nr_class = max_classes
-        cdef uint64_t i
         self.scores = <double *>calloc(max_classes, sizeof(double))
         self.W = dense_hash_map[uint64_t, size_t]()
         self.W.set_empty_key(0)
@@ -55,15 +84,9 @@ cdef class Perceptron:
         self.now = 0
         self.nr_raws = 10000
         self.raws = <DenseFeature**>malloc(self.nr_raws * sizeof(DenseFeature*))
+        cdef size_t i
         for i in range(self.nr_raws):
-            self.raws[i] = <DenseFeature*>malloc(sizeof(DenseFeature))
-            self.raws[i].w = <double*>calloc(max_classes, sizeof(double))
-            self.raws[i].acc = <double*>calloc(max_classes, sizeof(double))
-            self.raws[i].last_upd = <size_t*>calloc(max_classes, sizeof(size_t))
-            self.raws[i].id = 0
-            self.raws[i].nr_seen = 0
-            self.raws[i].s = 0
-            self.raws[i].e = 0
+            self.raws[i] = init_dense_feat(0, max_classes)
         self.n_corr = 0.0
         self.total = 0.0
         self.use_cache = True
@@ -78,11 +101,19 @@ cdef class Perceptron:
             data = deref(it)
             inc(it)
             if data.second >= self.nr_raws:
-                feat = <SquareFeature*>data.second
-                free_dense_feat(feat, self.div)
+                free_square_feat(<SquareFeature*>data.second, self.div)
+        cdef size_t i
         for i in range(self.nr_raws):
-            free(self.raws[i])
+            free_dense_feat(self.raws[i])
         free(self.raws)
+
+    def set_classes(self, labels):
+        print "Allocating for %d class" % len(labels)
+        self.nr_class = len(labels)
+        self.div = <size_t>math.sqrt(self.nr_class) + 1
+        for i in range(1, self.nr_raws):
+            free(self.raws[i])
+            self.raws[i] = init_dense_feat(0, self.nr_class)
 
     cdef int add_feature(self, uint64_t f) except -1:
         cdef size_t i
@@ -114,11 +145,10 @@ cdef class Perceptron:
                     if feat_addr == 0:
                         self.add_feature(f)
                     elif feat_addr < self.nr_raws:
-                        self.update_raw(feat_addr, clas, d)
+                        update_dense(self.now, d, clas, self.raws[feat_addr])
                     else:
-                        feat = <SquareFeature*>self.W[f]
-                        update_dense_param(self.nr_class, self.div,
-                                           self.now, clas, d, feat)
+                        update_square(self.nr_class, self.div,
+                                      self.now, d, clas, <SquareFeature*>feat_addr)
 
     cdef int64_t update(self, size_t pred_i, size_t gold_i,
                     uint64_t n_feats, uint64_t* features, double margin) except -1:
@@ -140,24 +170,14 @@ cdef class Perceptron:
             if feat_addr == 0:
                 self.add_feature(f)
             elif feat_addr < self.nr_raws:
-                self.update_raw(feat_addr, gold_i, 1.0)
-                self.update_raw(feat_addr, pred_i, -1.0)
+                update_dense(self.now, 1.0, gold_i, <DenseFeature*>feat_addr)
+                update_dense(self.now, -1.0, pred_i, <DenseFeature*>feat_addr)
             else:
-                feat = <SquareFeature*>self.W[f]
-                update_dense_param(self.nr_class, self.div, self.now, gold_i, 1.0, feat)
-                update_dense_param(self.nr_class, self.div, self.now, pred_i, -1.0, feat)
-
-    cdef int update_raw(self, size_t idx, size_t clas, double w) except -1:
-        cdef DenseFeature* raw = self.raws[idx]
-        raw.acc[clas] += (self.now - raw.last_upd[clas]) * raw.w[clas]
-        raw.w[clas] += w
-        raw.last_upd[clas] = self.now
-        if clas < raw.s:
-            raw.s = clas
-        if clas >= raw.e:
-            raw.e = clas + 1
-        assert raw.e <= self.nr_class
-    
+                update_square(self.nr_class, self.div,
+                              self.now, 1.0, gold_i, <SquareFeature*>feat_addr)
+                update_square(self.nr_class, self.div,
+                              self.now, -1.0, pred_i, <SquareFeature*>feat_addr)
+   
     cdef inline int fill_scores(self, size_t n, uint64_t* features, double* scores) except -1:
         cdef size_t i, f, j, k, c
         cdef size_t feat_addr
@@ -180,7 +200,6 @@ cdef class Perceptron:
                 raw_feat = self.raws[feat_addr]
                 raw_feat.nr_seen += 1
                 w = raw_feat.w
-                assert raw_feat.e <= self.nr_class, feat_addr
                 for c in range(raw_feat.s, raw_feat.e):
                     scores[c] += w[c]
             else:
@@ -303,7 +322,7 @@ cdef class Perceptron:
             f = int(f_str)
             if f == 0:
                 continue
-            if int(nr_seen) < 50:
+            if int(nr_seen) < 100:
                 continue
             if nr_raws < self.nr_raws:
                 seen_cls = False
@@ -342,20 +361,6 @@ cdef class Perceptron:
                 nr_weight += 1
         print "%d weights for %d features" % (nr_weight, nr_feat)
 
-    def set_classes(self, labels):
-        self.nr_class = len(labels)
-        self.div = <size_t>math.sqrt(self.nr_class) + 1
-        for i in range(1, self.nr_raws):
-            free(self.raws[i])
-            self.raws[i] = <DenseFeature*>malloc(sizeof(DenseFeature))
-            self.raws[i].w = <double*>calloc(self.nr_class, sizeof(double))
-            self.raws[i].acc = <double*>calloc(self.nr_class, sizeof(double))
-            self.raws[i].last_upd = <size_t*>calloc(self.nr_class, sizeof(size_t))
-            self.raws[i].id = 0
-            self.raws[i].nr_seen = 0
-            self.raws[i].s = 0
-            self.raws[i].e = 0
- 
     def flush_cache(self):
         self.cache.flush()
 
@@ -370,6 +375,7 @@ cdef class Perceptron:
             else:
                 feat = <SquareFeature*>feat_addr
                 return feat.nr_seen
+        print "Reindexing"
         cdef dense_hash_map[uint64_t, size_t].iterator it = self.W.begin()
         cdef pair[uint64_t, size_t] data
         # Build priority queue of the top N scores
@@ -463,7 +469,7 @@ cdef class Perceptron:
                     raw.acc[clas] = accs[k]
                     raw.last_upd[clas] = last_upd[k]
 
-        free_dense_feat(feat, self.div)
+        free_square_feat(feat, self.div)
         self.W.erase(f_id)
         self.W[f_id] = i
         assert self.W[f_id] < self.nr_raws
