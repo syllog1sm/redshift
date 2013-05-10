@@ -162,9 +162,12 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
 cdef class FeatureSet:
     def __cinit__(self, nr_label, bint add_extra=False):
         self.nr_label = nr_label
+        # Sets "n"
         self._make_predicates(add_extra)
+        # TODO: Reference index.hashes constant
+        self.nr_tags = 100 if add_extra else 0
         self.context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
-        self.features = <uint64_t*>calloc(self.n, sizeof(uint64_t))
+        self.features = <uint64_t*>calloc(self.n + self.nr_tags, sizeof(uint64_t))
 
     def __dealloc__(self):
         free(self.context)
@@ -196,6 +199,11 @@ cdef class FeatureSet:
                 pred.raws[pred.n] = pred.id
                 hashed = MurmurHash64A(pred.raws, (pred.n + 1) * sizeof(uint64_t), i)
                 features[f] = hashed
+                f += 1
+        cdef size_t tag
+        if self.nr_tags and k.s0 > 0 and (k.s0 + 1) < k.i:
+            for i in range(k.s0 + 1, k.i):
+                features[f] = sent.pos[i]
                 f += 1
         features[f] = 0
         return features
@@ -341,31 +349,19 @@ cdef class FeatureSet:
         )
 
         extra = (
-            (w, S1w, S1p),
-            (w, S1w),
-            (w, S1p),
-            (w, S1p, S0hb),
-            (ww, S1w, S0w),
-            (pp, S1p, S0p),
-            (wp, S1w, S0p),
-            (wp, S1p, S0w),
-            (ppp, S1p, S0p, N0p),
-            (wpp, S1p, S0w, N0p),
-            (wpp, S1p, S0p, N0w),
-            (wpp, S1w, S0p, N0p),
-            (ppp, S1p, S0p, S0rp),
-            (wpp, S1p, S0p, S0rw),
-            (wpp, S1p, S0w, S0lp),
-            (ppp, S1p, S1lp, S0p),
-            (ppp, S1p, S1rp, S0p),
+            (ww, S0w, S0rw),
+            (wp, S0rw, N0p),
+            (ww, S0rw, N0w),
+            (wpp, S0p, S0rw, N0p),
+            (wwp, S0w, S0rw, N0w)
         )
-
         feats = from_single + from_word_pairs + from_three_words + distance + valency + unigrams + third_order
         feats += labels
         feats += label_sets
         if add_extra:
             print "Extra feats"
             feats += extra
+
         assert len(set(feats)) == len(feats), '%d vs %d' % (len(set(feats)), len(feats))
         return feats
 

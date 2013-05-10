@@ -142,7 +142,7 @@ cdef class TransitionSystem:
         return costs
 
     cdef bint is_valid(self, size_t clas, bint at_end_of_buffer, bint has_stack,
-                      bint has_head):
+                      bint has_head, bint has_root_child):
         if self.moves[clas] == SHIFT:
             return not at_end_of_buffer
         elif not has_stack:
@@ -150,7 +150,8 @@ cdef class TransitionSystem:
         elif self.moves[clas] == RIGHT:
             return not at_end_of_buffer
         elif self.moves[clas] == LEFT:
-            return (not at_end_of_buffer) and (self.allow_reattach or not has_head)
+            return (not at_end_of_buffer) and (not has_root_child) \
+                    and (self.allow_reattach or not has_head)
         elif self.moves[clas] == REDUCE:
             return (self.allow_reduce or has_head)
         else:
@@ -164,15 +165,14 @@ cdef class TransitionSystem:
             valid[self.s_id] = 0
             if s.stack_len == 1:
                 return 0
-            else:
-                for i in range(self.r_start, self.r_end):
-                    valid[i] = 0
+            for i in range(self.r_start, self.r_end):
+                valid[i] = 0
         else:
             valid[self.s_id] = -1
         if s.stack_len != 1:
             if s.heads[s.top] != 0:
                 valid[self.d_id] = 0
-            if self.allow_reattach or s.heads[s.top] == 0:
+            elif (self.allow_reattach or s.heads[s.top] == 0) and not has_root_child(s):
                 for i in range(self.l_start, self.l_end):
                     valid[i] = 0
         if s.stack_len >= 3 and self.allow_reduce:
@@ -204,6 +204,8 @@ cdef class TransitionSystem:
     cdef int s_cost(self, State *s, size_t* heads, size_t* labels):
         cdef int cost = 0
         cdef size_t i, stack_i
+        if has_root_child(s):
+            return 0
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
         return cost
@@ -236,6 +238,8 @@ cdef class TransitionSystem:
         cdef size_t buff_i, i
         cdef int cost = 0
         if s.heads[s.top] != 0 and not self.allow_reattach:
+            return -1
+        if has_root_child(s):
             return -1
         if heads[s.top] == s.i:
             return 0

@@ -6,17 +6,17 @@ DEF MAX_VALENCY = 100
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
     s.heads[child] = head
-    s.sig[child] = head
+    s.sig[child] = (label * s.n) + head
     s.labels[child] = label
     if child < head:
-        s.l_children[head][s.l_valencies[head]] = child
-        assert s.l_valencies[head] < MAX_VALENCY
-        s.l_valencies[head] += 1
+        if s.l_valencies[head] < MAX_VALENCY:
+            s.l_children[head][s.l_valencies[head]] = child
+            s.l_valencies[head] += 1
     else:
-        r = get_r(s, head)
-        s.r_children[head][s.r_valencies[head]] = child
-        assert s.r_valencies[head] < MAX_VALENCY
-        s.r_valencies[head] += 1
+        if s.r_valencies[head] < MAX_VALENCY:
+            r = get_r(s, head)
+            s.r_children[head][s.r_valencies[head]] = child
+            s.r_valencies[head] += 1
     return 1
 
 
@@ -78,6 +78,9 @@ cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, Subtree* tree):
     cdef size_t i = 0
     while val != 0 and i < 4:
         val -= 1
+        # The last in valencies is the right/left most. For left, we attach
+        # in stack order, so left-most is deepest on stack. And for right,
+        # we go through buffer.
         tree.idx[i] = kids[val]
         tree.lab[i] = labs[kids[val]]
         i += 1
@@ -200,6 +203,7 @@ cdef int has_child_in_stack(State *s, size_t word, size_t* heads):
             n += 1
     return n
 
+
 cdef int has_head_in_stack(State *s, size_t word, size_t* heads):
     assert word != 0
     cdef size_t i, stack_i
@@ -209,6 +213,13 @@ cdef int has_head_in_stack(State *s, size_t word, size_t* heads):
             return 1
     return 0
 
+
+cdef bint has_root_child(State *s):
+    if s.at_end_of_buffer:
+        return False
+    # TODO: Refer to the root label constant instead here!!
+    return s.labels[get_l(s, s.i)] == 1
+
 DEF PADDING = 4
 
 cdef State* init_state(size_t n):
@@ -216,12 +227,12 @@ cdef State* init_state(size_t n):
     cdef State* s = <State*>malloc(sizeof(State))
     s.n = n
     s.t = 0
-    s.i = 1
+    s.i = 2
     s.cost = 0
     s.score = 0
-    s.top = 0
+    s.top = 1
     s.second = 0
-    s.stack_len = 1
+    s.stack_len = 2
     s.is_finished = False
     s.at_end_of_buffer = n == 2
     n = n + PADDING

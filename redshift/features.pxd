@@ -68,6 +68,7 @@ cdef class FeatureSet:
     cdef Predicate* predicates
     cdef size_t* context
     cdef uint64_t* features 
+    cdef size_t nr_tags
     cdef int n
     cdef int nr_label
     cdef uint64_t* extract(self, Sentence* sent, Kernel* k) except NULL

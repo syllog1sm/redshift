@@ -29,7 +29,7 @@ cdef class TransitionSystem:
     cdef int fill_static_costs(self, State* s, size_t* heads, size_t* labels,
                                int* costs) except -1
     cdef bint is_valid(self, size_t clas, bint at_end_of_buffer, bint has_stack,
-                       bint has_head)
+                       bint has_head, bint has_root_child)
     cdef int fill_valid(self, State* s, int* valid)
     cdef int break_tie(self, State* s, size_t* heads, size_t* labels) except -1
     cdef int s_cost(self, State *s, size_t* heads, size_t* labels)

@@ -21,6 +21,7 @@ cdef class Beam:
         self.length = length
         self.k = k
         self.i = 0
+        self.nr_skip = 0
         self.is_finished = False
         self.ancestry = <size_t*>calloc(k, sizeof(size_t))
         self.anc_freqs = <size_t**>malloc(k * sizeof(size_t))
@@ -79,21 +80,34 @@ cdef class Beam:
         # Apply extensions for best continuations
         cdef State* s
         cdef State* parent
+        cdef uint64_t key
+        cdef dense_hash_map[uint64_t, int] seen_states = dense_hash_map[uint64_t, int](self.k)
+        seen_states.set_empty_key(0)
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
             parent_idx = data.second / self.trans.nr_class
             assert parent_idx < self.psize
             clas = data.second % self.trans.nr_class
             parent = self.parents[parent_idx]
-            self.anc_freqs[self.ancestry[parent_idx]][parent_idx] += 1
+            # We've got two arrays of states, and we swap beam-for-parents.
+            # So, s here will get manipulated, then copied into parents later.
             s = self.beam[self.bsize]
-            # TODO: Fill in guess_labels for s
             copy_state(s, parent)
             s.cost += self.costs[parent_idx][clas]
             s.score = data.first
             self.trans.transition(clas, s)
+            self.anc_freqs[self.ancestry[parent_idx]][parent_idx] += 1
             self.ancestry[self.bsize] = parent_idx
-            self.bsize += 1
+            # Unless! If s has an identical "signature" to a previous state,
+            # then we know it's dominated, and we can discard it. We do that by
+            # just not advancing self.bsize, as that means this s struct
+            # will be reused next iteration, and over-written.
+            key = MurmurHash64A(s.sig, (s.i + 1) * sizeof(size_t), 0)
+            if seen_states[key] == 0:
+                seen_states[key] = 1
+                self.bsize += 1
+            else:
+                self.nr_skip += 1
             next_moves.pop()
         self.is_full = self.bsize >= self.k
         # Flush next_moves queue

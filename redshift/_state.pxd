@@ -85,6 +85,7 @@ cdef int has_child_in_buffer(State *s, size_t word, size_t* heads)
 cdef int has_head_in_buffer(State *s, size_t word, size_t* heads)
 cdef int has_child_in_stack(State *s, size_t word, size_t* heads)
 cdef int has_head_in_stack(State *s, size_t word, size_t* heads)
+cdef bint has_root_child(State *s)
 
 cdef State* init_state(size_t n)
 cdef free_state(State* s)

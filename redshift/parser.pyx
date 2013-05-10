@@ -211,25 +211,20 @@ cdef class Parser:
         for n in range(n_iter):
             random.shuffle(indices)
             # Group indices into minibatches of fixed size
-            for minibatch in izip(*[iter(indices)] * 1):
-                deltas = []
-                for i in minibatch:
-                    if self.beam_width >= 1:
-                        if DEBUG:
-                            print ' '.join(sents.strings[i][0])
-                        deltas.append(self.decode_beam(&sents.s[i], self.beam_width,
-                                      stats))
-                    else:
-                        self.train_one(n, &sents.s[i], sents.strings[i][0])
-                for weights, margin in deltas:
-                    self.guide.batch_update(weights, margin)
-            print_train_msg(n, self.guide.n_corr, self.guide.total,
-                            self.guide.cache.n_hit, self.guide.cache.n_miss,
-                            stats)
+            for i in indices:
+                if DEBUG:
+                    print ' '.join(sents.strings[i][0])
+                if self.beam_width >= 1:
+                    deltas = self.decode_beam(&sents.s[i], self.beam_width, stats)
+                    self.guide.batch_update(*deltas)
+                else:
+                    self.train_one(n, &sents.s[i], sents.strings[i][0])
+            print_train_msg(n, self.guide.n_corr, self.guide.total, self.guide.cache.n_hit,
+                            self.guide.cache.n_miss, stats)
             self.guide.n_corr = 0
             self.guide.total = 0
-            if n < 3:
-                self.guide.reindex()
+            #if n < 3:
+            #    self.guide.reindex()
         if self.feat_thresh > 1:
             self.guide.prune(self.feat_thresh)
         self.guide.finalize()
@@ -383,6 +378,8 @@ cdef class Parser:
                 self.moves.transition(pred, s)
             else:
                 self.moves.transition(gold, s)
+            self.guide.n_corr += (gold == pred)
+            self.guide.total += 1
         free_state(s)
 
     def add_parses(self, Sentences sents, Sentences gold=None, k=None):
@@ -392,26 +389,23 @@ cdef class Parser:
             k = self.beam_width
         self.guide.nr_class = self.moves.nr_class
         ancestry_counts = defaultdict(int)
+        skip_counts = {'skip': 0.0, 'total': 1e-100}
         for i in range(sents.length):
             if k == 0:
                 self.parse(&sents.s[i])
             else:
-                self.beam_parse(&sents.s[i], k, ancestry_counts)
+                self.beam_parse(&sents.s[i], k, ancestry_counts, skip_counts)
         print ancestry_counts
+        print skip_counts['skip'] / skip_counts['total']
         if gold is not None:
             return sents.evaluate(gold)
 
     cdef int parse(self, Sentence* sent) except -1:
         cdef State* s
-        cdef size_t move = 0
-        cdef size_t label = 0
-        cdef size_t clas
         cdef size_t n_preds = self.features.n
         cdef uint64_t* feats
-        cdef double* scores
         s = init_state(sent.length)
         sent.parse.n_moves = 0
-        self.guide.cache.flush()
         while not s.is_finished:
             fill_kernel(s)
             feats = self.features.extract(sent, &s.kernel)
@@ -432,7 +426,8 @@ cdef class Parser:
             sent.parse.labels[i] = s.labels[i]
         free_state(s)
     
-    cdef int beam_parse(self, Sentence* sent, size_t k, object ancestry_counts) except -1:
+    cdef int beam_parse(self, Sentence* sent, size_t k, object ancestry_counts,
+                        object skip_counts) except -1:
         cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
         self.guide.cache.flush()
         cdef size_t p_idx, i
@@ -455,6 +450,8 @@ cdef class Parser:
                 for j in range(k):
                     ancestry_counts[beam.anc_freqs[i][j]] += 1
                     beam.anc_freqs[i][j] = 0
+            skip_counts['skip'] += beam.nr_skip
+            skip_counts['total'] += beam.k
         sent.parse.n_moves = beam.t
         beam.fill_parse(sent.parse.moves, sent.parse.heads, sent.parse.labels)
         free(beam_scores)
@@ -470,8 +467,8 @@ cdef class Parser:
         cdef size_t right_move = 0
         cdef double valid_score = -10000
         cdef double right_score = -10000
-        self.guide.fill_scores(n_preds, feats, self.guide.scores)
         scores = self.guide.scores
+        self.guide.fill_scores(n_preds, feats, scores)
         seen_valid = False
         for clas in range(self.guide.nr_class):
             score = scores[clas]

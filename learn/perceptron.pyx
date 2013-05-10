@@ -169,8 +169,8 @@ cdef class Perceptron:
             if feat_addr == 0:
                 self.add_feature(f)
             elif feat_addr < self.nr_raws:
-                update_dense(self.now, 1.0, gold_i, <DenseFeature*>feat_addr)
-                update_dense(self.now, -1.0, pred_i, <DenseFeature*>feat_addr)
+                update_dense(self.now, 1.0, gold_i, self.raws[feat_addr])
+                update_dense(self.now, -1.0, pred_i, self.raws[feat_addr])
             else:
                 update_square(self.nr_class, self.div,
                               self.now, 1.0, gold_i, <SquareFeature*>feat_addr)
@@ -183,7 +183,6 @@ cdef class Perceptron:
         cdef SquareFeature* feat
         cdef DenseFeature* raw_feat
         cdef size_t part_idx
-        cdef double* w
         for c in range(self.nr_class):
             scores[c] = 0
         i = 0
@@ -198,24 +197,21 @@ cdef class Perceptron:
             elif feat_addr < self.nr_raws:
                 raw_feat = self.raws[feat_addr]
                 raw_feat.nr_seen += 1
-                w = raw_feat.w
                 for c in range(raw_feat.s, raw_feat.e):
-                    scores[c] += w[c]
+                    scores[c] += raw_feat.w[c]
             else:
                 feat = <SquareFeature*>feat_addr
                 feat.nr_seen += 1
                 for j in range(self.div - 1):
                     if feat.seen[j]:
                         part_idx = j * self.div
-                        w = feat.parts[j].w
                         for k in range(self.div):
-                            scores[part_idx + k] += w[k]
+                            scores[part_idx + k] += feat.parts[j].w[k]
                 j = self.div - 1
                 if feat.seen[j]:
                     part_idx = j * self.div
-                    w = feat.parts[j].w
                     for k in range(self.nr_class - part_idx):
-                        scores[part_idx + k] += w[k]
+                        scores[part_idx + k] += feat.parts[j].w[k]
 
     cdef uint64_t predict_best_class(self, uint64_t n_feats, uint64_t* features):
         cdef uint64_t i
@@ -374,7 +370,6 @@ cdef class Perceptron:
             else:
                 feat = <SquareFeature*>feat_addr
                 return feat.nr_seen
-        print "Reindexing"
         cdef dense_hash_map[uint64_t, size_t].iterator it = self.W.begin()
         cdef pair[uint64_t, size_t] data
         # Build priority queue of the top N scores

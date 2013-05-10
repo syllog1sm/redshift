@@ -70,7 +70,7 @@ cdef Sentence make_sentence(size_t id_, size_t length, object py_words, object p
     s.parse.moves = <size_t*>calloc(length * 2, sizeof(size_t))
     
     s.words = <size_t*>calloc(length, sizeof(size_t))
-    s.pos = <size_t*>calloc(length, sizeof(size_t))           
+    s.pos = <size_t*>calloc(length, sizeof(size_t))       
     s.parse.n_moves = 0
     for i in range(length):
         s.words[i] = index.hashes.encode_word(py_words[i])
