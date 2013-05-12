@@ -152,8 +152,6 @@ cdef class Beam:
             heads[i] = self.beam[0].heads[i]
             labels[i] = self.beam[0].labels[i]
 
-
-
     def __dealloc__(self):
         free_state(self.gold)
         for i in range(self.k):
@@ -161,6 +159,9 @@ cdef class Beam:
             free_state(self.parents[i])
             free(self.valid[i])
             free(self.costs[i])
+            free(self.anc_freqs[i])
+        free(self.anc_freqs)
+        free(self.ancestry)
         free(self.beam)
         free(self.parents)
         free(self.valid)
