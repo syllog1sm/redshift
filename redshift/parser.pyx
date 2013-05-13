@@ -204,10 +204,11 @@ cdef class Parser:
         move_classes = self.moves.set_labels(seen_l_labels, seen_r_labels)
         self.guide.set_classes(range(move_classes))
         self.write_cfg(self.model_dir.join('parser.cfg'))
-        indices = range(sents.length)
         if self.beam_width >= 1:
             self.guide.use_cache = True
         stats = defaultdict(int)
+        sents.connect_sentences(10)
+        indices = range(sents.length)
         for n in range(n_iter):
             random.shuffle(indices)
             # Group indices into minibatches of fixed size
@@ -254,6 +255,7 @@ cdef class Parser:
                     feats = self.features.extract(sent, kernel)
                     self.guide.fill_scores(self.features.n, feats, scores)
                 beam_scores[p_idx] = scores
+            self.guide.cache.flush()
             beam.extend_states(beam_scores)
             beam.check_violation()
             if self.train_alg == 'early' and beam.violn != None:
@@ -420,10 +422,19 @@ cdef class Parser:
             self.moves.transition(clas, s)
         sent.parse.n_moves = s.t
         # No need to copy heads for root and start symbols
+        cdef size_t rightmost = 0
         for i in range(1, sent.length - 1):
             assert s.heads[i] != 0, i
             sent.parse.heads[i] = s.heads[i]
             sent.parse.labels[i] = s.labels[i]
+            # Do sentence boundary detection
+            # TODO: Set this as ROOT label
+            if s.labels[i] == 1:
+                rightmost = i
+            if rightmost and s.r_valencies[rightmost] == 0:
+                sent.parse.sbd[rightmost] = True
+            else:
+                rightmost = get_r(s, rightmost)
         free_state(s)
     
     cdef int beam_parse(self, Sentence* sent, size_t k, object ancestry_counts,
@@ -453,7 +464,8 @@ cdef class Parser:
             skip_counts['skip'] += beam.nr_skip
             skip_counts['total'] += beam.k
         sent.parse.n_moves = beam.t
-        beam.fill_parse(sent.parse.moves, sent.parse.heads, sent.parse.labels)
+        beam.fill_parse(sent.parse.moves, sent.parse.heads, sent.parse.labels,
+                        sent.parse.sbd)
         free(beam_scores)
 
     cdef int predict(self, uint64_t n_preds, uint64_t* feats, int* valid,

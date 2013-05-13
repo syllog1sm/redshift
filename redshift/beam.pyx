@@ -143,15 +143,25 @@ cdef class Beam:
             self.violn = violn
         return self.upd_strat == 'early' and bool(self.violn)
 
-    cdef int fill_parse(self, size_t* hist, size_t* heads, size_t* labels) except -1:
+    cdef int fill_parse(self, size_t* hist, size_t* heads,
+                        size_t* labels, bint* sbd) except -1:
         for i in range(self.t):
             hist[i] = self.beam[0].history[i]
+        cdef size_t rightmost = 1
         # No need to copy heads for root and start symbols
         for i in range(1, self.length - 1):
             assert self.beam[0].heads[i] != 0
             heads[i] = self.beam[0].heads[i]
             labels[i] = self.beam[0].labels[i]
-
+            # Do sentence boundary detection
+            # TODO: Set this as ROOT label
+            if labels[i] == 1:
+                rightmost = i
+            if self.beam[0].r_valencies[rightmost] == 0:
+                sbd[rightmost] = True
+            else:
+                rightmost = get_r(self.beam[0], rightmost)
+ 
     def __dealloc__(self):
         free_state(self.gold)
         for i in range(self.k):
