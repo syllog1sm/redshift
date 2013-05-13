@@ -234,7 +234,7 @@ cdef State* init_state(size_t n):
     s.second = 0
     s.stack_len = 2
     s.is_finished = False
-    s.at_end_of_buffer = n == 2
+    s.at_end_of_buffer = n == 3
     n = n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
     s.heads = <size_t*>calloc(n, sizeof(size_t))
@@ -301,6 +301,7 @@ cdef free_state(State* s):
     free(s.l_children)
     free(s.r_children)
     free(s.history)
+    free(s.sig)
     free(s)
 
 
