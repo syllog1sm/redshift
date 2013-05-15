@@ -21,6 +21,8 @@ cdef struct Kernel:
     size_t h2s0
     size_t Lhs0
     size_t Lh2s0
+    size_t s0ledge
+    size_t n0ledge
     Subtree s0l
     Subtree s0r
     Subtree n0l
@@ -55,6 +57,7 @@ cdef struct State:
     size_t* guess_labels
     size_t* l_valencies
     size_t* r_valencies
+    size_t* ledges
     size_t** l_children
     size_t** r_children
     size_t* history
@@ -85,7 +88,7 @@ cdef int has_child_in_buffer(State *s, size_t word, size_t* heads)
 cdef int has_head_in_buffer(State *s, size_t word, size_t* heads)
 cdef int has_child_in_stack(State *s, size_t word, size_t* heads)
 cdef int has_head_in_stack(State *s, size_t word, size_t* heads)
-cdef bint has_root_child(State *s)
+cdef bint has_root_child(State *s, size_t token)
 
 cdef State* init_state(size_t n)
 cdef free_state(State* s)

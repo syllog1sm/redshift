@@ -74,10 +74,23 @@ cdef enum:
     S0llabs
     S0rlabs
     N0llabs
+    N0orth
+    N0paren
+    N0quote
+    N1orth
+    N1paren
+    N1quote
+    S0re_orth
+    S0re_w
+    S0re_p
+    N0le_orth
+    N0le_w
+    N0le_p
     CONTEXT_SIZE
 
 
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* pos,
+                       size_t* orths, size_t* parens, size_t* quotes,
                        Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
     context[N0w] = words[k.i]
     context[N0p] = pos[k.i]
@@ -157,7 +170,19 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
         context[dist] = k.i - k.s0
     else:
         context[dist] = 0
-
+    context[N0orth] = orths[k.i]
+    context[N1orth] = orths[k.i + 1]
+    context[N0paren] = parens[k.i]
+    context[N1paren] = parens[k.i + 1]
+    context[N0quote] = quotes[k.i]
+    context[N1quote] = quotes[k.i + 1]
+    context[N0le_orth] = orths[k.n0ledge]
+    context[N0le_w] = words[k.n0ledge]
+    context[N0le_p] = pos[k.n0ledge]
+    context[S0re_orth] = orths[k.n0ledge - 1]
+    context[S0re_w] = words[k.n0ledge - 1]
+    context[S0re_p] = pos[k.n0ledge - 1]
+ 
 
 cdef class FeatureSet:
     def __cinit__(self, nr_label, bint add_extra=False):
@@ -177,9 +202,9 @@ cdef class FeatureSet:
     cdef uint64_t* extract(self, Sentence* sent, Kernel* k) except NULL:
         cdef size_t* context = self.context
         assert <size_t>k != 0
-        fill_context(context, self.nr_label, sent.words, sent.pos, k,
-                     &k.s0l, &k.s0r, &k.n0l)
-                     #&k.s1l, &k.s1r)
+        fill_context(context, self.nr_label, sent.words, sent.pos,
+                     sent.orths, sent.parens, sent.quotes,
+                     k, &k.s0l, &k.s0r, &k.n0l)
         cdef size_t i, j
         cdef uint64_t hashed
         cdef uint64_t value
@@ -200,11 +225,17 @@ cdef class FeatureSet:
                 hashed = MurmurHash64A(pred.raws, (pred.n + 1) * sizeof(uint64_t), i)
                 features[f] = hashed
                 f += 1
-        cdef size_t tag
+        cdef size_t tag, letter
+        cdef bint* seen_tags 
         if self.nr_tags and k.s0 > 0 and (k.s0 + 1) < k.i:
+            seen_tags = <bint*>calloc(self.nr_tags, sizeof(bint))
             for i in range(k.s0 + 1, k.i):
-                features[f] = sent.pos[i]
-                f += 1
+                tag = sent.pos[i]
+                if not seen_tags[tag]:
+                    features[f] = sent.pos[i]
+                    seen_tags[tag] = 1
+                    f += 1
+            free(seen_tags)
         features[f] = 0
         return features
 
@@ -349,17 +380,32 @@ cdef class FeatureSet:
         )
 
         extra = (
+            (ppp, S0p, N0p, S0ll),
+            (wpp, S0w, N0p, S0ll),
+            (wwp, S0p, N0p, S0rp, S0ll),
             (ww, S0w, S0rw),
             (wp, S0rw, N0p),
             (ww, S0rw, N0w),
             (wpp, S0p, S0rw, N0p),
-            (wwp, S0w, S0rw, N0w)
+            (wwp, S0w, S0rw, N0w),
+            (p, N0orth),
+            (p, N1orth),
+            (p, N0paren),
+            (p, N1paren),
+            (p, N0quote),
+            (p, N1quote),
+            (pp, S0rw, N0orth),
+            (ppp, S0rw, N0orth, N1orth),
+            (wp, S0re_p, N0le_orth),
+            (pp, S0re_p, N0le_p),
+            (wp, S0re_p, N0le_w),
+            (ppp, S0re_p, N0le_p, N0p)
         )
         feats = from_single + from_word_pairs + from_three_words + distance + valency + unigrams + third_order
         feats += labels
         feats += label_sets
         if add_extra:
-            print "Extra feats"
+            print "Add extra feats"
             feats += extra
 
         assert len(set(feats)) == len(feats), '%d vs %d' % (len(set(feats)), len(feats))
@@ -433,24 +479,24 @@ cdef class ArcStandardFeatureSet(FeatureSet):
         five = (
             (ppp, S2p, S1p, S0p),
         )
-        extra = (
-            (wp, S1p, S1ll, S0w),
-            (wp, S1p, S1rl, S0w),
-            (wp, S1w, S0ll, S0w),
-            (wp, S1w, S0rl, S0w),
-            (lw, S0w, S0rlabs),
-            (lp, S0p, S0rlabs),
-            (lw, S0w, S0llabs),
-            (lp, S0p, S0llabs),
-            (lw, S1w, S1llabs),
-            (lp, S1p, S1llabs),
-            (lw, S1w, S1rlabs),
-            (lp, S1p, S1rlabs)
-        )
+        #extra = (
+        #    (wp, S1p, S1ll, S0w),
+        #    (wp, S1p, S1rl, S0w),
+        #    (wp, S1w, S0ll, S0w),
+        #    (wp, S1w, S0rl, S0w),
+        #    (lw, S0w, S0rlabs),
+        #    (lp, S0p, S0rlabs),
+        #    (lw, S0w, S0llabs),
+        #    (lp, S0p, S0llabs),
+        #    (lw, S1w, S1llabs),
+        #    (lp, S1p, S1llabs),
+        #    (lw, S1w, S1rlabs),
+        #    (lp, S1p, S1rlabs)
+        #)
 
         feats = one + two + three + four + five
-        if add_extra:
-            feats += extra
+        #if add_extra:
+        #    feats += extra
         return feats
 
 

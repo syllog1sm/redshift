@@ -194,7 +194,7 @@ cdef class Parser:
         seen_l_labels = set([])
         seen_r_labels = set([])
         for i in range(sents.length):
-            sent = &sents.s[i]
+            sent = sents.s[i]
             for j in range(1, sent.length - 1):
                 label = sent.parse.labels[j]
                 if sent.parse.heads[j] > j:
@@ -207,7 +207,6 @@ cdef class Parser:
         if self.beam_width >= 1:
             self.guide.use_cache = True
         stats = defaultdict(int)
-        sents.connect_sentences(10)
         indices = range(sents.length)
         for n in range(n_iter):
             random.shuffle(indices)
@@ -216,16 +215,17 @@ cdef class Parser:
                 if DEBUG:
                     print ' '.join(sents.strings[i][0])
                 if self.beam_width >= 1:
-                    deltas = self.decode_beam(&sents.s[i], self.beam_width, stats)
+                    deltas = self.decode_beam(sents.s[i], self.beam_width, stats)
                     self.guide.batch_update(*deltas)
                 else:
-                    self.train_one(n, &sents.s[i], sents.strings[i][0])
+                    self.train_one(n, sents.s[i], sents.strings[i][0])
             print_train_msg(n, self.guide.n_corr, self.guide.total, self.guide.cache.n_hit,
                             self.guide.cache.n_miss, stats)
             self.guide.n_corr = 0
             self.guide.total = 0
             #if n < 3:
             #    self.guide.reindex()
+            #
         if self.feat_thresh > 1:
             self.guide.prune(self.feat_thresh)
         self.guide.finalize()
@@ -365,7 +365,6 @@ cdef class Parser:
         if DEBUG:
             print ' '.join(py_words)
         while not s.is_finished:
-            if not s.i % 10000: print s.i
             fill_kernel(s)
             feats = self.features.extract(sent, &s.kernel)
             self.moves.fill_valid(s, valid)
@@ -390,22 +389,19 @@ cdef class Parser:
         if k == None:
             k = self.beam_width
         self.guide.nr_class = self.moves.nr_class
-        ancestry_counts = defaultdict(int)
-        skip_counts = {'skip': 0.0, 'total': 1e-100}
         for i in range(sents.length):
             if k == 0:
-                self.parse(&sents.s[i])
-            else:
-                self.beam_parse(&sents.s[i], k, ancestry_counts, skip_counts)
-        print ancestry_counts
-        print skip_counts['skip'] / skip_counts['total']
-        if gold is not None:
-            return sents.evaluate(gold)
+                self.parse(sents.s[i], sents.strings[i][0])
+            #else:
+            #    self.beam_parse(sents.s[i], k, ancestry_counts)
+        #if gold is not None:
+        #    return sents.evaluate(gold)
 
-    cdef int parse(self, Sentence* sent) except -1:
+    cdef int parse(self, Sentence* sent, words) except -1:
         cdef State* s
         cdef size_t n_preds = self.features.n
         cdef uint64_t* feats
+        print 'parse'
         s = init_state(sent.length)
         sent.parse.n_moves = 0
         while not s.is_finished:
@@ -422,19 +418,24 @@ cdef class Parser:
             self.moves.transition(clas, s)
         sent.parse.n_moves = s.t
         # No need to copy heads for root and start symbols
-        cdef size_t rightmost = 0
+        cdef size_t root
         for i in range(1, sent.length - 1):
             assert s.heads[i] != 0, i
             sent.parse.heads[i] = s.heads[i]
             sent.parse.labels[i] = s.labels[i]
-            # Do sentence boundary detection
-            # TODO: Set this as ROOT label
-            if s.labels[i] == 1:
-                rightmost = i
-            if rightmost and s.r_valencies[rightmost] == 0:
-                sent.parse.sbd[rightmost] = True
-            else:
-                rightmost = get_r(s, rightmost)
+            if s.r_valencies[i] == 0:
+                root = i
+                while s.labels[root] != 1:
+                    if s.heads[root] > root:
+                        break
+                    if s.heads[root] == 0:
+                        break
+                    if get_r(s, s.heads[root]) != root:
+                        break
+                    root = s.heads[root]
+                else:
+                    if sent
+                    sent.parse.sbd[i] = 1
         free_state(s)
     
     cdef int beam_parse(self, Sentence* sent, size_t k, object ancestry_counts,
@@ -523,6 +524,9 @@ cdef class Parser:
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
             cfg.write(u'beam_width\t%d\n' % self.beam_width)
             cfg.write(u'label_beam\t%s\n' % self.label_beam)
+
+    def __dealloc__(self):
+        pass
       
     """
     def get_best_moves(self, Sentences sents, Sentences gold):

@@ -155,12 +155,7 @@ cdef class Beam:
             labels[i] = self.beam[0].labels[i]
             # Do sentence boundary detection
             # TODO: Set this as ROOT label
-            if labels[i] == 1:
-                rightmost = i
-            if self.beam[0].r_valencies[rightmost] == 0:
-                sbd[rightmost] = True
-            else:
-                rightmost = get_r(self.beam[0], rightmost)
+            raise StandardError
  
     def __dealloc__(self):
         free_state(self.gold)

@@ -141,22 +141,6 @@ cdef class TransitionSystem:
                         costs[i] = l_cost
         return costs
 
-    cdef bint is_valid(self, size_t clas, bint at_end_of_buffer, bint has_stack,
-                      bint has_head, bint has_root_child):
-        if self.moves[clas] == SHIFT:
-            return not at_end_of_buffer
-        elif not has_stack:
-            return False
-        elif self.moves[clas] == RIGHT:
-            return not at_end_of_buffer
-        elif self.moves[clas] == LEFT:
-            return (not at_end_of_buffer) and (not has_root_child) \
-                    and (self.allow_reattach or not has_head)
-        elif self.moves[clas] == REDUCE:
-            return (self.allow_reduce or has_head)
-        else:
-            raise StandardError
-
     cdef int fill_valid(self, State* s, int* valid) except -1:
         cdef size_t i
         for i in range(self.nr_class):
@@ -165,16 +149,21 @@ cdef class TransitionSystem:
             valid[self.s_id] = 0
             if s.stack_len == 1:
                 return 0
-            for i in range(self.r_start, self.r_end):
-                valid[i] = 0
+            if not has_root_child(s, s.i):
+                for i in range(self.r_start, self.r_end):
+                    valid[i] = 0
         else:
             valid[self.s_id] = -1
         if s.stack_len != 1:
             if s.heads[s.top] != 0:
                 valid[self.d_id] = 0
-            elif (self.allow_reattach or s.heads[s.top] == 0) and not has_root_child(s):
-                for i in range(self.l_start, self.l_end):
-                    valid[i] = 0
+            elif (self.allow_reattach or s.heads[s.top] == 0):
+                #if has_root_child(s, s.i) or has_root_child(s, s.top):
+                #    valid[self.l_classes[1]] = 0
+                #else:
+                if not has_root_child(s, s.i):
+                    for i in range(self.l_start, self.l_end):
+                        valid[i] = 0
         if s.stack_len >= 3 and self.allow_reduce:
             valid[self.d_id] = 0
             assert s.second != 0
@@ -204,8 +193,6 @@ cdef class TransitionSystem:
     cdef int s_cost(self, State *s, size_t* heads, size_t* labels):
         cdef int cost = 0
         cdef size_t i, stack_i
-        if has_root_child(s):
-            return 0
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
         return cost
@@ -213,6 +200,8 @@ cdef class TransitionSystem:
     cdef int r_cost(self, State *s, size_t* heads, size_t* labels):
         cdef int cost = 0
         cdef size_t i, buff_i, stack_i
+        if has_root_child(s, s.i):
+            return -1
         if heads[s.i] == s.top:
             return 0
         if not self.allow_reattach:
@@ -239,7 +228,7 @@ cdef class TransitionSystem:
         cdef int cost = 0
         if s.heads[s.top] != 0 and not self.allow_reattach:
             return -1
-        if has_root_child(s):
+        if has_root_child(s, s.i):
             return -1
         if heads[s.top] == s.i:
             return 0
