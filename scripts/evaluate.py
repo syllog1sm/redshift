@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import os
 import sys
-from pathlib import Path
 import plac
 from collections import defaultdict
 
@@ -15,62 +14,81 @@ def fmt_acc(label, n, l_corr, u_corr, total_errs):
     return '%s\t%d\t%.3f\t%.3f\t%.3f' % (label, n, l_pc, u_pc, err_pc)
 
 
+def gen_toks(loc):
+    lines = open(str(loc))
+    token = None
+    i = 0
+    for line in lines:
+        line = line.strip()
+        if not line:
+            assert token is not None
+            token.append(True)
+            yield Token(i, token)
+            i = 0
+            token = None
+        else:
+            if token is not None:
+                token.append(False)
+                yield Token(i, token)
+            i += 1
+            token = list(line.strip().split())
+    if token is not None:
+        token.append(False)
+        yield Token(i, token)
+
+
+class Token(object):
+    def __init__(self, id_, attrs):
+        self.id = id_
+        self.sbd = attrs.pop()
+        self.label = attrs.pop()
+        # Make head an offset from the token id, for sent variation
+        head = int(attrs.pop())
+        if head == -1 or self.label == 'ROOT':
+            self.head = id_
+        else:
+            self.head = head - id_
+        self.pos = attrs.pop()
+        self.word = attrs.pop()
+        self.dir = 'R' if self.head else 'L'
+    
+
 @plac.annotations(
     eval_punct=("Evaluate punct transitions", "flag", "p")
 )
 def main(test_loc, gold_loc, eval_punct=False):
-    test_loc = Path(test_loc)
-    gold_loc = Path(gold_loc)
-    if not test_loc.exists():
+    if not os.path.exists(test_loc):
         test_loc.mkdir()
-    test_sents = test_loc.open().read().strip().split('\n\n')
-    gold_sents = gold_loc.open().read().strip().split('\n\n')
-    assert len(test_sents) == len(gold_sents)
     n_by_label = defaultdict(lambda: defaultdict(int))
     u_by_label = defaultdict(lambda: defaultdict(int))
     l_by_label = defaultdict(lambda: defaultdict(int))
     N = 0
     u_nc = 0
     l_nc = 0
-    u_sents_c = 0
-    l_sents_c = 0
-    n_sents = 0
-    for test_sent, gold_sent in zip(test_sents, gold_sents):
-        test_sent = test_sent.split('\n')
-        n_sents += 1
-        gold_sent = gold_sent.split('\n')
-        assert len(test_sent) == len(gold_sent)
-        u_sent_err = False
-        l_sent_err = False
-        for i, (t, g) in enumerate(zip(test_sent, gold_sent)):
-            t = t.strip().split()
-            g = g.strip().split()
-            g_label = g[-1]
-            if g_label == "P" and not eval_punct:
-                continue
-            t_label = t[-1]
-            g_head = g[-2]
-            if int(g_head) > i:
-                d = 'L'
-            else:
-                d = 'R'
-            t_head = t[-2]
-            u_c = g_head == t_head
-            l_c = u_c and g_label == t_label
-            
-            N += 1
-            l_nc += l_c
-            u_nc += u_c
-
-            n_by_label[d][g_label] += 1
-            u_by_label[d][g_label] += u_c
-            l_by_label[d][g_label] += l_c
-            if not u_c:
-                u_sent_err = True
-            if not l_c:
-                l_sent_err = True
-        u_sents_c += not u_sent_err
-        l_sents_c += not l_sent_err
+    sb_tp = 0
+    sb_fp = 0
+    sb_fn = 0
+    sb_n = 0
+    for t, g in zip(gen_toks(test_loc), gen_toks(gold_loc)):
+        sb_n += g.sbd
+        if g.sbd:
+            sb_tp += t.sbd
+            sb_fn += not t.sbd
+        else:
+            sb_fp += t.sbd
+            if t.sbd:
+                print 'SBD Err: ', t.word, g.word
+        if g.label == "P" and not eval_punct:
+            continue
+        assert t.word == g.word, '%s vs %s' %(t.word, g.word)
+        u_c = g.head == t.head
+        l_c = u_c and g.label == t.label
+        N += 1
+        l_nc += l_c
+        u_nc += u_c
+        n_by_label[g.dir][g.label] += 1
+        u_by_label[g.dir][g.label] += u_c
+        l_by_label[g.dir][g.label] += l_c
     n_l_err = N - l_nc
     for D in ['L', 'R']:
         yield D 
@@ -91,8 +109,12 @@ def main(test_loc, gold_loc, eval_punct=False):
         yield fmt_acc('Other', n_other, l_other, u_other, n_l_err) 
     yield 'U: %.3f' % pc(u_nc, N)
     yield 'L: %.3f' % pc(l_nc, N)
-    yield 'Sent u: %.3f' % pc(u_sents_c, n_sents)
-    yield 'Sent l: %.3f' % pc(l_sents_c, n_sents)
+    sb_p = pc(sb_tp, sb_tp + sb_fp)
+    sb_r = pc(sb_tp, sb_n)
+    sb_f = 2 * ((sb_p * sb_r) / (sb_p + sb_r))
+    yield 'SBD P: %.2f' % sb_p
+    yield 'SBD R: %.2f' % sb_r
+    yield 'SBD F: %.2f' % sb_f
 
 
 if __name__ == '__main__':
