@@ -119,26 +119,24 @@ cdef class TransitionSystem:
         cdef int* costs = self._costs
         for i in range(self.nr_class):
             costs[i] = -1
-        if s.stack_len == 1 and not s.at_end_of_buffer:
-            costs[self.s_id] = 0
-        if not s.at_end_of_buffer:
-            costs[self.s_id] = self.s_cost(s, heads, labels)
-            r_cost = self.r_cost(s, heads, labels)
-            if r_cost != -1:
-                for i in range(self.r_start, self.r_end):
-                    if heads[s.i] == s.top and self.labels[i] != labels[s.i]:
-                        costs[i] = r_cost + 1
-                    else:
-                        costs[i] = r_cost
-        if s.stack_len >= 2:
-            costs[self.d_id] = self.d_cost(s, heads, labels)
-            l_cost = self.l_cost(s, heads, labels)
-            if l_cost != -1:
-                for i in range(self.l_start, self.l_end):
-                    if heads[s.top] == s.i and self.labels[i] != labels[s.top]:
-                        costs[i] = l_cost + 1
-                    else:
-                        costs[i] = l_cost
+        costs[self.s_id] = self.s_cost(s, heads, labels)
+        costs[self.d_id] = self.d_cost(s, heads, labels)
+        r_cost = self.r_cost(s, heads, labels)
+        if r_cost != -1:
+            for i in range(self.r_start, self.r_end):
+                costs[i] = r_cost
+                if heads[s.i] == s.top and self.labels[i] != labels[s.i]:
+                    costs[i] += 1
+        l_cost = self.l_cost(s, heads, labels)
+        if l_cost != -1:
+            for i in range(self.l_start, self.l_end):
+                costs[i] = l_cost
+                if heads[s.top] == s.i and self.labels[i] != labels[s.top]:
+                    costs[i] += 1
+            # Add an additional penalty for using the ROOT label inappropriately,
+            # as it signals SBD
+            if labels[s.top] != 1:
+                costs[self.l_classes[1]] += 1
         return costs
 
     cdef int fill_valid(self, State* s, int* valid) except -1:
@@ -152,21 +150,16 @@ cdef class TransitionSystem:
             if not has_root_child(s, s.i):
                 for i in range(self.r_start, self.r_end):
                     valid[i] = 0
-        else:
-            valid[self.s_id] = -1
         if s.stack_len != 1:
-            if s.heads[s.top] != 0:
+            if s.heads[s.top] != 0 or (s.stack_len >= 3 and self.allow_reattach):
                 valid[self.d_id] = 0
-            elif (self.allow_reattach or s.heads[s.top] == 0):
+            if self.allow_reattach or s.heads[s.top] == 0:
                 #if has_root_child(s, s.i) or has_root_child(s, s.top):
                 #    valid[self.l_classes[1]] = 0
                 #else:
                 if not has_root_child(s, s.i):
                     for i in range(self.l_start, self.l_end):
                         valid[i] = 0
-        if s.stack_len >= 3 and self.allow_reduce:
-            valid[self.d_id] = 0
-            assert s.second != 0
 
     cdef int fill_static_costs(self, State* s, size_t* heads, size_t* labels,
                                int* costs) except -1:
@@ -193,6 +186,8 @@ cdef class TransitionSystem:
     cdef int s_cost(self, State *s, size_t* heads, size_t* labels):
         cdef int cost = 0
         cdef size_t i, stack_i
+        if s.at_end_of_buffer:
+            return -1
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
         return cost
@@ -200,12 +195,15 @@ cdef class TransitionSystem:
     cdef int r_cost(self, State *s, size_t* heads, size_t* labels):
         cdef int cost = 0
         cdef size_t i, buff_i, stack_i
+        if s.at_end_of_buffer:
+            return -1
+        if s.stack_len < 2:
+            return -1
         if has_root_child(s, s.i):
             return -1
         if heads[s.i] == s.top:
             return 0
-        if not self.allow_reattach:
-            cost += has_head_in_buffer(s, s.i, heads)
+        cost += has_head_in_buffer(s, s.i, heads)
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
         return cost
@@ -213,6 +211,8 @@ cdef class TransitionSystem:
     cdef int d_cost(self, State *s, size_t* g_heads, size_t* g_labels):
         cdef int cost = 0
         if s.heads[s.top] == 0 and not self.allow_reduce:
+            return -1
+        if s.stack_len < 2:
             return -1
         #if g_heads[s.top] == 0 and (s.stack_len == 2 or not self.allow_reattach):
         #    cost += 1
@@ -226,6 +226,8 @@ cdef class TransitionSystem:
     cdef int l_cost(self, State *s, size_t* heads, size_t* labels):
         cdef size_t buff_i, i
         cdef int cost = 0
+        if s.stack_len < 2:
+            return -1
         if s.heads[s.top] != 0 and not self.allow_reattach:
             return -1
         if has_root_child(s, s.i):

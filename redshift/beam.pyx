@@ -23,11 +23,8 @@ cdef class Beam:
         self.i = 0
         self.nr_skip = 0
         self.is_finished = False
-        self.ancestry = <size_t*>calloc(k, sizeof(size_t))
-        self.anc_freqs = <size_t**>malloc(k * sizeof(size_t))
+        self.anc_freqs = {}
         cdef size_t i
-        for i in range(self.k):
-            self.anc_freqs[i] = <size_t*>calloc(k, sizeof(size_t))
         self.parents = <State**>malloc(k * sizeof(State*))
         self.beam = <State**>malloc(k * sizeof(State*))
         for i in range(k):
@@ -83,12 +80,20 @@ cdef class Beam:
         cdef uint64_t key
         cdef dense_hash_map[uint64_t, int] seen_states = dense_hash_map[uint64_t, int](self.k)
         seen_states.set_empty_key(0)
+        seen_parents = set()
+        survivors = set()
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
             parent_idx = data.second / self.trans.nr_class
             assert parent_idx < self.psize
             clas = data.second % self.trans.nr_class
             parent = self.parents[parent_idx]
+            #if parent_idx not in seen_parents:
+            #    seen_parents.add(parent_idx)
+            #    prefix = []
+            #    for i in range(parent.t):
+            #        prefix.append(parent.history[i])
+            #        survivors.add(tuple(prefix))
             # We've got two arrays of states, and we swap beam-for-parents.
             # So, s here will get manipulated, then copied into parents later.
             s = self.beam[self.bsize]
@@ -96,8 +101,6 @@ cdef class Beam:
             s.cost += self.costs[parent_idx][clas]
             s.score = data.first
             self.trans.transition(clas, s)
-            self.anc_freqs[self.ancestry[parent_idx]][parent_idx] += 1
-            self.ancestry[self.bsize] = parent_idx
             # Unless! If s has an identical "signature" to a previous state,
             # then we know it's dominated, and we can discard it. We do that by
             # just not advancing self.bsize, as that means this s struct
@@ -109,6 +112,18 @@ cdef class Beam:
             else:
                 self.nr_skip += 1
             next_moves.pop()
+        #for parent_idx in range(self.psize):
+        #    if parent_idx not in seen_parents:
+        #        seen_parents.add(parent_idx)
+        #        parent = self.parents[parent_idx]
+        #        prefix = []
+        #        for i in range(parent.t):
+        #            prefix.append(parent.history[i])
+        #            if tuple(prefix) not in survivors:
+        #                survived_for = parent.t - i
+        #                self.anc_freqs.setdefault(survived_for, 0)
+        #                self.anc_freqs[survived_for] += 1
+        #                break
         self.is_full = self.bsize >= self.k
         # Flush next_moves queue
         self.t += 1
@@ -145,8 +160,6 @@ cdef class Beam:
 
     cdef int fill_parse(self, size_t* hist, size_t* heads,
                         size_t* labels, bint* sbd) except -1:
-        for i in range(self.t):
-            hist[i] = self.beam[0].history[i]
         cdef size_t rightmost = 1
         # No need to copy heads for root and start symbols
         for i in range(1, self.length - 1):
@@ -155,7 +168,7 @@ cdef class Beam:
             labels[i] = self.beam[0].labels[i]
             # Do sentence boundary detection
             # TODO: Set this as ROOT label
-            raise StandardError
+            #raise StandardError
  
     def __dealloc__(self):
         free_state(self.gold)
@@ -164,9 +177,6 @@ cdef class Beam:
             free_state(self.parents[i])
             free(self.valid[i])
             free(self.costs[i])
-            free(self.anc_freqs[i])
-        free(self.anc_freqs)
-        free(self.ancestry)
         free(self.beam)
         free(self.parents)
         free(self.valid)

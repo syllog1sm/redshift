@@ -78,8 +78,7 @@ cdef class Beam:
     cdef State** beam
     cdef int** costs
     cdef bint** valid
-    cdef size_t* ancestry
-    cdef size_t** anc_freqs
+    cdef dict anc_freqs
     
     cdef object upd_strat
     cdef size_t max_class

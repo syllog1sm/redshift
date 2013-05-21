@@ -223,8 +223,8 @@ cdef class Parser:
                             self.guide.cache.n_miss, stats)
             self.guide.n_corr = 0
             self.guide.total = 0
-            #if n < 3:
-            #    self.guide.reindex()
+            if n < 3:
+                self.guide.reindex()
             #
         if self.feat_thresh > 1:
             self.guide.prune(self.feat_thresh)
@@ -351,8 +351,7 @@ cdef class Parser:
         return counts
 
     cdef int train_one(self, int iter_num, Sentence* sent, py_words) except -1:
-        cdef int* valid = self.moves._costs
-        cdef int* costs
+        cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))
         cdef size_t* g_labels = sent.parse.labels
         cdef size_t* g_heads = sent.parse.heads
 
@@ -382,6 +381,7 @@ cdef class Parser:
             self.guide.n_corr += (gold == pred)
             self.guide.total += 1
         free_state(s)
+        free(valid)
 
     def add_parses(self, Sentences sents, Sentences gold=None, k=None):
         cdef:
@@ -389,19 +389,22 @@ cdef class Parser:
         if k == None:
             k = self.beam_width
         self.guide.nr_class = self.moves.nr_class
+        anc_freqs = {}
         for i in range(sents.length):
             if k == 0:
                 self.parse(sents.s[i], sents.strings[i][0])
-            #else:
-            #    self.beam_parse(sents.s[i], k, ancestry_counts)
-        #if gold is not None:
-        #    return sents.evaluate(gold)
+            else:
+                self.beam_parse(sents.s[i], k, anc_freqs)
+        print len(anc_freqs)
+        for k, v in sorted(anc_freqs.items()):
+            print '%d\t%d' % (k, v)
+        if gold is not None:
+            return sents.evaluate(gold)
 
     cdef int parse(self, Sentence* sent, words) except -1:
         cdef State* s
         cdef size_t n_preds = self.features.n
         cdef uint64_t* feats
-        print 'parse'
         s = init_state(sent.length)
         sent.parse.n_moves = 0
         while not s.is_finished:
@@ -418,7 +421,10 @@ cdef class Parser:
             self.moves.transition(clas, s)
         sent.parse.n_moves = s.t
         # No need to copy heads for root and start symbols
+
         cdef size_t root
+        quot = index.hashes.encode_pos("``")
+        comma = index.hashes.encode_pos(",")
         for i in range(1, sent.length - 1):
             assert s.heads[i] != 0, i
             sent.parse.heads[i] = s.heads[i]
@@ -432,14 +438,15 @@ cdef class Parser:
                         break
                     if get_r(s, s.heads[root]) != root:
                         break
+                    elif sent.pos[root] == quot:
+                        break
                     root = s.heads[root]
                 else:
-                    if sent
-                    sent.parse.sbd[i] = 1
+                    if sent.pos[i] != quot and sent.pos[i] != comma:
+                        sent.parse.sbd[i] = 1
         free_state(s)
     
-    cdef int beam_parse(self, Sentence* sent, size_t k, object ancestry_counts,
-                        object skip_counts) except -1:
+    cdef int beam_parse(self, Sentence* sent, size_t k, dict anc_freqs) except -1:
         cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
         self.guide.cache.flush()
         cdef size_t p_idx, i
@@ -458,15 +465,12 @@ cdef class Parser:
                     self.guide.fill_scores(self.features.n, feats, scores)
                 beam_scores[p_idx] = scores
             beam.extend_states(beam_scores)
-            for i in range(k):
-                for j in range(k):
-                    ancestry_counts[beam.anc_freqs[i][j]] += 1
-                    beam.anc_freqs[i][j] = 0
-            skip_counts['skip'] += beam.nr_skip
-            skip_counts['total'] += beam.k
         sent.parse.n_moves = beam.t
         beam.fill_parse(sent.parse.moves, sent.parse.heads, sent.parse.labels,
                         sent.parse.sbd)
+        for k, v in beam.anc_freqs.items():
+            anc_freqs.setdefault(k, 0)
+            anc_freqs[k] += v
         free(beam_scores)
 
     cdef int predict(self, uint64_t n_preds, uint64_t* feats, int* valid,
@@ -485,14 +489,16 @@ cdef class Parser:
         seen_valid = False
         for clas in range(self.guide.nr_class):
             score = scores[clas]
-            if valid[clas] == 0 and (not seen_valid or score > valid_score):
-                best_valid = clas
-                valid_score = score
-                seen_valid = True
+            if valid[clas] == 0:
+                if score > valid_score:
+                    best_valid = clas
+                    valid_score = score
+                if not seen_valid:
+                    seen_valid = True
             if self.moves.r_end > clas >= self.moves.r_start and score > right_score:
                 best_right = clas
                 right_score = score
-        assert seen_valid
+        assert seen_valid 
         rlabel[0] = self.moves.labels[best_right]
         return best_valid
 

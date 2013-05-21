@@ -125,13 +125,20 @@ def read_conll(conll_str, moves=None):
         ids = []
         for token_str in token_strs:
             pieces = token_str.split()
-            if len(pieces) == 5:
-                pieces.pop(0)
-            try:
-                word, pos, head, label = pieces
-            except:
-                print pieces
-                raise
+            if len(pieces) == 10:
+                word = pieces[1]
+                pos = pieces[3]
+                head = pieces[6]
+                label = pieces[7]
+                head = str(int(head) - 1)
+            else:
+                if len(pieces) == 5:
+                    pieces.pop(0)
+                try:
+                    word, pos, head, label = pieces
+                except:
+                    print pieces
+                    raise
             words.append(word)
             tags.append(pos)
             if head == '-1':
@@ -308,7 +315,7 @@ cdef class Sentences:
             bint* sbd
             Sentence* sent
         if n == 0:
-            n = self.length - 1
+            n = self.length
         cdef size_t n_merged = (self.length / n) + 1
         cdef Sentence** merged = <Sentence**>malloc(sizeof(Sentence*) * n_merged)
         new_strings = []
