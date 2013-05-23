@@ -53,8 +53,6 @@ cdef extern from "sparsehash/dense_hash_map" namespace "google":
         D& operator[](K&) nogil
 
 
-
-
 cdef class Violation:
     """
     A gold/prediction pair where the g.score < p.score
@@ -78,7 +76,7 @@ cdef class Beam:
     cdef State** beam
     cdef int** costs
     cdef bint** valid
-    cdef dict anc_freqs
+    cdef object _prune_freqs
     
     cdef object upd_strat
     cdef size_t max_class

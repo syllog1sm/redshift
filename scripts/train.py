@@ -57,6 +57,7 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
         to_parse = redshift.io_parse.read_conll('\n\n'.join(train_sent_strs[split_point:]))
     else:
         train = redshift.io_parse.read_conll(train_loc.open().read())
+        #train.connect_sentences(1000)
         if profile:
             print 'profiling'
             cProfile.runctx("parser.train(train, n_iter=n_iter)", globals(),

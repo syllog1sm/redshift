@@ -44,36 +44,21 @@ def main(parser_dir, text_loc, out_dir, use_gold=False, k=-1, profile=False, deb
     yield "Loading parser"
     parser = redshift.parser.Parser(parser_dir)
     parser.load()
-    if use_gold:
-        gold_sents = redshift.io_parse.read_conll(text_loc.open().read())
-        pos_tagged = get_pos(text_loc.open().read())
-        sentences = redshift.io_parse.read_pos(pos_tagged)
-    else:
-        sentences = redshift.io_parse.read_pos(text_loc.open().read())
-        gold_sents = None
+    sentences = redshift.io_parse.read_pos(text_loc.open().read())
+    #sentences.connect_sentences(1700)
     if profile:
         cProfile.runctx("parser.add_parses(sentences,gold=gold_sents)",
                         globals(), locals(), "Profile.prof")
         s = pstats.Stats("Profile.prof")
         s.strip_dirs().sort_stats("time").print_stats()
     else:
-
         t1 = time.time()
-        print parser.add_parses(sentences, gold=gold_sents, k=k if k != -1 else None)
+        parser.add_parses(sentences, k=k if k != -1 else None)
         t2 = time.time()
         print '%d sents took %0.3f ms' % (sentences.length, (t2-t1)*1000.0)
-    
-    sentences.write_moves(out_dir.join('moves').open('w'))
+
+    #sentences.write_moves(out_dir.join('moves').open('w'))
     sentences.write_parses(out_dir.join('parses').open('w'))
-    #if gold_sents:
-    #    best_moves = parser.get_best_moves(sentences, gold_sents)
-    #    with out_dir.join('best_moves').open('w') as out:
-    #        for sent_str, moves in best_moves:
-    #            out.write(sent_str + u'\n')
-    #            for o_id, p_id, o_str, p_str, s_str in moves:
-    #                out.write(u'%s\t%s\t%s\n' % (o_str, p_str, s_str))
-    #            out.write(u'\n')
-                
 
 
 if __name__ == '__main__':

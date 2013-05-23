@@ -383,23 +383,21 @@ cdef class Parser:
         free_state(s)
         free(valid)
 
-    def add_parses(self, Sentences sents, Sentences gold=None, k=None):
+    def add_parses(self, Sentences sents, k=None, collect_stats=False):
         cdef:
             size_t i
         if k == None:
             k = self.beam_width
         self.guide.nr_class = self.moves.nr_class
-        anc_freqs = {}
+        prune_freqs = {} if collect_stats else None
         for i in range(sents.length):
             if k == 0:
                 self.parse(sents.s[i], sents.strings[i][0])
             else:
-                self.beam_parse(sents.s[i], k, anc_freqs)
-        print len(anc_freqs)
-        for k, v in sorted(anc_freqs.items()):
-            print '%d\t%d' % (k, v)
-        if gold is not None:
-            return sents.evaluate(gold)
+                self.beam_parse(sents.s[i], k, prune_freqs)
+        if prune_freqs is not None:
+            for k, v in sorted(prune_freqs.items()):
+                print '%d\t%d' % (k, v)
 
     cdef int parse(self, Sentence* sent, words) except -1:
         cdef State* s
@@ -446,8 +444,9 @@ cdef class Parser:
                         sent.parse.sbd[i] = 1
         free_state(s)
     
-    cdef int beam_parse(self, Sentence* sent, size_t k, dict anc_freqs) except -1:
-        cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
+    cdef int beam_parse(self, Sentence* sent, size_t k, dict prune_freqs) except -1:
+        cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg,
+                              prune_freqs=prune_freqs)
         self.guide.cache.flush()
         cdef size_t p_idx, i
         cdef double* scores
@@ -468,9 +467,6 @@ cdef class Parser:
         sent.parse.n_moves = beam.t
         beam.fill_parse(sent.parse.moves, sent.parse.heads, sent.parse.labels,
                         sent.parse.sbd)
-        for k, v in beam.anc_freqs.items():
-            anc_freqs.setdefault(k, 0)
-            anc_freqs[k] += v
         free(beam_scores)
 
     cdef int predict(self, uint64_t n_preds, uint64_t* feats, int* valid,

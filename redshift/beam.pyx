@@ -15,7 +15,7 @@ from cython.operator cimport dereference as deref
 
 cdef class Beam:
     def __cinit__(self, TransitionSystem trans, 
-                  size_t k, size_t length, upd_strat='early'):
+                  size_t k, size_t length, upd_strat='early', prune_freqs=None):
         self.trans = trans
         self.upd_strat = upd_strat
         self.length = length
@@ -23,7 +23,6 @@ cdef class Beam:
         self.i = 0
         self.nr_skip = 0
         self.is_finished = False
-        self.anc_freqs = {}
         cdef size_t i
         self.parents = <State**>malloc(k * sizeof(State*))
         self.beam = <State**>malloc(k * sizeof(State*))
@@ -42,6 +41,7 @@ cdef class Beam:
             self.costs[i] = <int*>calloc(self.trans.nr_class, sizeof(int*))
             self.valid[i] = <bint*>calloc(self.trans.nr_class, sizeof(bint*))
         self.violn = None
+        self._prune_freqs = prune_freqs
 
     cdef Kernel* next_state(self, size_t idx):
         self.trans.fill_valid(self.beam[idx], self.valid[idx])
@@ -88,12 +88,12 @@ cdef class Beam:
             assert parent_idx < self.psize
             clas = data.second % self.trans.nr_class
             parent = self.parents[parent_idx]
-            #if parent_idx not in seen_parents:
-            #    seen_parents.add(parent_idx)
-            #    prefix = []
-            #    for i in range(parent.t):
-            #        prefix.append(parent.history[i])
-            #        survivors.add(tuple(prefix))
+            if self._prune_freqs is not None and parent_idx not in seen_parents:
+                seen_parents.add(parent_idx)
+                prefix = []
+                for i in range(parent.t):
+                    prefix.append(parent.history[i])
+                    survivors.add(tuple(prefix))
             # We've got two arrays of states, and we swap beam-for-parents.
             # So, s here will get manipulated, then copied into parents later.
             s = self.beam[self.bsize]
@@ -105,25 +105,34 @@ cdef class Beam:
             # then we know it's dominated, and we can discard it. We do that by
             # just not advancing self.bsize, as that means this s struct
             # will be reused next iteration, and over-written.
-            key = MurmurHash64A(s.sig, (s.i + 1) * sizeof(size_t), 0)
-            if seen_states[key] == 0:
-                seen_states[key] = 1
-                self.bsize += 1
-            else:
-                self.nr_skip += 1
+            #key = MurmurHash64A(s.sig, (s.i + 1) * sizeof(size_t), 0)
+            #if seen_states[key] == 0:
+            #    seen_states[key] = 1
+            self.bsize += 1
+            #else:
+            #    self.nr_skip += 1
             next_moves.pop()
-        #for parent_idx in range(self.psize):
-        #    if parent_idx not in seen_parents:
-        #        seen_parents.add(parent_idx)
-        #        parent = self.parents[parent_idx]
-        #        prefix = []
-        #        for i in range(parent.t):
-        #            prefix.append(parent.history[i])
-        #            if tuple(prefix) not in survivors:
-        #                survived_for = parent.t - i
-        #                self.anc_freqs.setdefault(survived_for, 0)
-        #                self.anc_freqs[survived_for] += 1
-        #                break
+        cdef int survived_for
+        if self._prune_freqs is not None:
+            for parent_idx in range(self.psize):
+                if parent_idx not in seen_parents:
+                    seen_parents.add(parent_idx)
+                    parent = self.parents[parent_idx]
+                    prefix = []
+                    # So, we have the set of prefixes that have remained in the beam
+                    for i in range(parent.t):
+                        # Find prefixes which _aren't_ in the beam
+                        prefix.append(parent.history[i])
+                        if tuple(prefix) not in survivors:
+                            # Let's say we find a prefix of length 2 not represented
+                            # in the current beam. If t=10, that's 7 states that prefix
+                            # must have survived for. So, increment the prune
+                            # freqs to say that the state survived for at least 1,
+                            # at least 2, etc.
+                            for survived_for in range(1, parent.t - i):
+                                self._prune_freqs.setdefault(survived_for, 0)
+                                self._prune_freqs[survived_for] += 1
+                            break
         self.is_full = self.bsize >= self.k
         # Flush next_moves queue
         self.t += 1
@@ -169,6 +178,20 @@ cdef class Beam:
             # Do sentence boundary detection
             # TODO: Set this as ROOT label
             #raise StandardError
+        survivors = set()
+        cdef State* s
+        if self._prune_freqs is not None:
+            for idx in range(self.bsize):
+                prefix = []
+                s = self.beam[idx]
+                for i in range(s.t):
+                    prefix.append(s.history[i])
+                    key = tuple(prefix)
+                    if key not in survivors:
+                        survivors.add(key)
+                        for survived_for in range(1, s.t - len(key)):
+                            self._prune_freqs.setdefault(survived_for, 0)
+                            self._prune_freqs[survived_for] += 1
  
     def __dealloc__(self):
         free_state(self.gold)
