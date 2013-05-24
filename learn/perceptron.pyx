@@ -107,7 +107,6 @@ cdef class Perceptron:
         free(self.raws)
 
     def set_classes(self, labels):
-        print "Allocating for %d class" % len(labels)
         self.nr_class = len(labels)
         self.div = <size_t>math.sqrt(self.nr_class) + 1
         for i in range(1, self.nr_raws):
