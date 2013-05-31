@@ -13,7 +13,8 @@ cdef struct Sentence:
     size_t* ids
     size_t* words
     size_t* pos
-    size_t* browns
+    size_t* clusters
+    size_t* cprefixes
     size_t* orths
     size_t* parens
     size_t* quotes

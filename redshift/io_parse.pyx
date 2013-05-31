@@ -1,6 +1,7 @@
 from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport strcpy, memcpy
 import index.hashes
+cimport index.hashes
 
 from pathlib import Path
 
@@ -74,11 +75,13 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.words = <size_t*>calloc(length, sizeof(size_t))
     s.pos = <size_t*>calloc(length, sizeof(size_t))       
     s.ids = <size_t*>calloc(length, sizeof(size_t))
-    s.browns = <size_t*>calloc(length, sizeof(size_t))
+    s.clusters = <size_t*>calloc(length, sizeof(size_t))
+    s.cprefixes = <size_t*>calloc(length, sizeof(size_t))
     s.orths = <size_t*>calloc(length, sizeof(size_t))
     s.parens = <size_t*>calloc(length, sizeof(size_t))
     s.quotes = <size_t*>calloc(length, sizeof(size_t))
-    
+
+    cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
     py_ids.insert(0, 0)
     py_ids.append(0)
     cdef size_t paren_cnt = 0
@@ -86,6 +89,8 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     for i in range(length):
         s.words[i] = index.hashes.encode_word(py_words[i])
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
+        s.clusters[i] = brown_idx.table[s.words[i]].full
+        s.cprefixes[i] = brown_idx.table[s.words[i]].prefix
         s.ids[i] = py_ids[i]
         # Use POS tag to semi-smartly get ' disambiguation
         if py_tags[i] == "``":
@@ -306,7 +311,8 @@ cdef class Sentences:
             size_t i, j, offset, m_id, old_id, new_id, prev_head
             size_t* words
             size_t* pos
-            size_t* browns
+            size_t* clusters
+            size_t* cprefixes
             size_t* heads
             size_t* labels
             size_t* orths
@@ -338,7 +344,8 @@ cdef class Sentences:
             ids = <size_t*>calloc(length, sizeof(size_t))
             words = <size_t*>calloc(length, sizeof(size_t))
             pos = <size_t*>calloc(length, sizeof(size_t))
-            browns = <size_t*>calloc(length, sizeof(size_t))
+            clusters = <size_t*>calloc(length, sizeof(size_t))
+            cprefixes = <size_t*>calloc(length, sizeof(size_t))
             heads = <size_t*>calloc(length, sizeof(size_t))
             labels = <size_t*>calloc(length, sizeof(size_t))
             orths = <size_t*>calloc(length, sizeof(size_t))
@@ -348,7 +355,8 @@ cdef class Sentences:
             # Dummy start symbol
             words[0] = self.s[i].words[0]
             pos[0] = self.s[i].pos[0]
-            browns[0] = self.s[i].browns[0]
+            clusters[0] = self.s[i].clusters[0]
+            cprefixes[0] = self.s[i].cprefixes[0]
             prev_head = 0
             offset = 0
             for j in range(n):
@@ -361,7 +369,8 @@ cdef class Sentences:
                     ids[new_id] = sent.ids[old_id]
                     words[new_id] = sent.words[old_id]
                     pos[new_id] = sent.pos[old_id]
-                    browns[new_id] = sent.pos[old_id]
+                    clusters[new_id] = sent.clusters[old_id]
+                    cprefixes[new_id] = sent.cprefixes[old_id]
                     orths[new_id] = sent.orths[old_id]
                     parens[new_id] = sent.parens[old_id]
                     quotes[new_id] = sent.quotes[old_id]
@@ -381,7 +390,8 @@ cdef class Sentences:
                 free(sent.orths)
                 free(sent.quotes)
                 free(sent.parens)
-                free(sent.browns)
+                free(sent.clusters)
+                free(sent.cprefixes)
                 free(sent.parse.heads)
                 free(sent.parse.labels)
                 free(sent.parse.moves)
@@ -392,7 +402,8 @@ cdef class Sentences:
             old_id += 1
             words[new_id] = sent.words[old_id]
             pos[new_id] = sent.pos[old_id]
-            browns[new_id] = sent.browns[old_id]
+            clusters[new_id] = sent.clusters[old_id]
+            cprefixes[new_id] = sent.cprefixes[old_id]
             ids[new_id] = sent.ids[old_id]
             merged[m_id] = <Sentence*>malloc(sizeof(Sentence))
             merged[m_id].id = m_id
@@ -402,7 +413,8 @@ cdef class Sentences:
             merged[m_id].ids = ids
             merged[m_id].words = words
             merged[m_id].pos = pos
-            merged[m_id].browns = browns
+            merged[m_id].clusters = clusters
+            merged[m_id].cprefixes = cprefixes
             merged[m_id].orths = orths
             merged[m_id].parens = parens
             merged[m_id].quotes = quotes

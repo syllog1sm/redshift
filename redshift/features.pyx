@@ -21,55 +21,67 @@ from libcpp.vector cimport vector
 cdef enum:
     N0w
     N0p
+    N0c
+    N0cp
     N0lw
     N0lp
+    N0lc
+    N0lcp
     N0ll
     N0lv
     N0l2w
     N0l2p
+    N0l2c
+    N0l2cp
     N0l2l
     N1w
     N1p
+    N1c
+    N1cp
     N2w
     N2p
+    N2c
+    N2cp
     S0w
     S0p
+    S0c
+    S0cp
     S0l
     S0hw
     S0hp
+    S0hc
+    S0hcp
     S0hl
     S0hb
     S0lw
     S0lp
+    S0lc
+    S0lcp
     S0ll
     S0rw
     S0rp
+    S0rc
+    S0rcp
     S0rl
     S0l2w
     S0l2p
+    S0l2c
+    S0l2cp
     S0l2l
     S0l2b
     S0r2w
     S0r2p
+    S0r2c
+    S0r2cp
     S0r2l
     S0r2b
     S0h2w
     S0h2p
+    S0h2c
+    S0h2cp
     S0h2l
     S0lv
     S0rv
-    S1w
-    S1p
-    S1lw
-    S1lp
-    S1ll
-    S1rw
-    S1rp
-    S1rl
-    S1llabs
-    S1rlabs
-    S2w
-    S2p
     dist
     S0llabs
     S0rlabs
@@ -83,47 +95,106 @@ cdef enum:
     S0re_orth
     S0re_w
     S0re_p
+    S0re_c
+    S0re_cp
     N0le_orth
     N0le_w
     N0le_p
+    N0le_c
+    N0le_cp
     CONTEXT_SIZE
 
 
+def bigram(a, b, add_clusters=False):
+    ww = 100000
+    pp = 2500
+    pw = 50000
+    ppp = 10000
+    
+    w1 = a
+    p1 = a + 1
+    c1 = a + 2
+    cp1 = a + 3
+    w2 = b
+    p2 = b + 1
+    c2 = b + 2
+    cp2 = b + 3
+    basic = ((ww, w1, w2), (ww, w1, p1, w2, p2), (ww, p1, p2))
+    clusters = ((pp, c1, c2), (pp, c1, p1, c2, p2), (ww, c1, w1, cp2, p2),
+                (ww, cp1, p1, c2, p2), (ww, cp1, p1, cp2, p2))
+    if add_clusters:
+        return basic + clusters
+    else:
+        return basic
+
+
+def trigram(a, b, c, add_clusters=True):
+    ww = 100000
+    pp = 2500
+    pw = 50000
+    ppp = 10000
+    
+    w1 = a
+    p1 = a + 1
+    c1 = a + 2
+    cp1 = a + 3
+    w2 = b
+    p2 = b + 1
+    c2 = b + 2
+    cp2 = b + 3
+    w3 = c
+    p3 = c + 1
+    c3 = c + 2
+    cp3 = c + 3
+
+    basic = ((ww, w1, p2, p3), (ww, p1, w2, p3), (ww, p1, p2, w3), (ww, p1, p2, p3))
+    clusters = ((ww, c1, c2, p3), (ww, c1, p2, w3), (ww, p1, c2, c3), (ww, c1, p2, p3),
+             (ww, p1, c2, p3), (ww, p1, c2, c3), (ww, p1, p2, p3))
+
+    if add_clusters:
+        return basic + clusters
+    else:
+        return basic
+
+
+
+
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* pos,
+                       size_t* clusters, size_t* cprefixes,
                        size_t* orths, size_t* parens, size_t* quotes,
                        Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
     context[N0w] = words[k.i]
     context[N0p] = pos[k.i]
+    context[N0c] = clusters[k.i]
+    context[N0cp] = cprefixes[k.i]
 
     context[N1w] = words[k.i + 1]
     context[N1p] = pos[k.i + 1]
+    context[N1c] = clusters[k.i + 1]
+    context[N1cp] = cprefixes[k.i + 1]
 
     context[N2w] = words[k.i + 2]
     context[N2p] = pos[k.i + 2]
+    context[N2c] = clusters[k.i + 2]
+    context[N2cp] = cprefixes[k.i + 2]
 
     context[S0w] = words[k.s0]
     context[S0p] = pos[k.s0]
+    context[S0c] = clusters[k.s0]
+    context[S0cp] = cprefixes[k.s0]
     context[S0l] = k.Ls0
 
-    #context[S1w] = words[k.s1]
-    #context[S1p] = pos[k.s1]
-    #context[S1lw] = words[s1l.idx[0]]
-    #context[S1lp] = pos[s1l.idx[0]]
-    #context[S1ll] = s1l.lab[0]
-    #context[S1rw] = words[s1r.idx[0]]
-    #context[S1rp] = pos[s1r.idx[0]]
-    #context[S1rl] = s1r.lab[0]
-
-    #context[S2w] = words[k.s2]
-    #context[S2p] = pos[k.s2]
-    
     context[S0hw] = words[k.hs0]
     context[S0hp] = pos[k.hs0]
+    context[S0hc] = clusters[k.hs0]
+    context[S0hcp] = cprefixes[k.hs0]
     context[S0hl] = k.Lhs0
     context[S0hb] = k.hs0 != 0
 
     context[S0h2w] = words[k.h2s0]
     context[S0h2p] = pos[k.h2s0]
+    context[S0h2c] = clusters[k.h2s0]
+    context[S0h2cp] = cprefixes[k.h2s0]
     context[S0h2l] = k.Lh2s0
  
     context[S0lv] = s0l.val
@@ -132,18 +203,33 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
 
     context[S0lw] = words[s0l.idx[0]]
     context[S0lp] = pos[s0l.idx[0]]
+    context[S0lc] = clusters[s0l.idx[0]]
+    context[S0lcp] = cprefixes[s0l.idx[0]]
+
     context[S0rw] = words[s0r.idx[0]]
     context[S0rp] = pos[s0r.idx[0]]
+    context[S0rc] = clusters[s0r.idx[0]]
+    context[S0rcp] = cprefixes[s0r.idx[0]]
 
     context[S0l2w] = words[s0l.idx[1]]
     context[S0l2p] = pos[s0l.idx[1]]
+    context[S0l2c] = clusters[s0l.idx[1]]
+    context[S0l2cp] = cprefixes[s0l.idx[1]]
+
     context[S0r2w] = words[s0r.idx[1]]
     context[S0r2p] = pos[s0r.idx[1]]
+    context[S0r2c] = clusters[s0r.idx[1]]
+    context[S0r2cp] = cprefixes[s0r.idx[1]]
 
     context[N0lw] = words[n0l.idx[0]]
     context[N0lp] = pos[n0l.idx[0]]
+    context[N0lc] = clusters[n0l.idx[0]]
+    context[N0lcp] = cprefixes[n0l.idx[0]]
+
     context[N0l2w] = words[n0l.idx[1]]
     context[N0l2p] = pos[n0l.idx[1]]
+    context[N0l2c] = clusters[n0l.idx[1]]
+    context[N0l2cp] = cprefixes[n0l.idx[1]]
 
     context[S0ll] = s0l.lab[0]
     context[S0l2l] = s0l.lab[1]
@@ -155,15 +241,11 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
     context[S0llabs] = 0
     context[S0rlabs] = 0
     context[N0llabs] = 0
-    context[S1llabs] = 0
-    context[S1rlabs] = 0
     cdef size_t i
     for i in range(4):
         context[S0llabs] += s0l.lab[i] << (nr_label - s0l.lab[i])
         context[S0rlabs] += s0r.lab[i] << (nr_label - s0r.lab[i])
         context[N0llabs] += n0l.lab[i] << (nr_label - n0l.lab[i])
-        #context[S1llabs] += s1l.lab[i] << (nr_label - s1l.lab[i])
-        #context[S1rlabs] += s1r.lab[i] << (nr_label - s1r.lab[i])
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
     if k.s0 != 0:
@@ -179,9 +261,14 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
     context[N0le_orth] = orths[k.n0ledge]
     context[N0le_w] = words[k.n0ledge]
     context[N0le_p] = pos[k.n0ledge]
+    context[N0le_c] = clusters[k.n0ledge]
+    context[N0le_cp] = cprefixes[k.n0ledge]
+    # TODO: This isn't accurate!!
     context[S0re_orth] = orths[k.n0ledge - 1]
     context[S0re_w] = words[k.n0ledge - 1]
     context[S0re_p] = pos[k.n0ledge - 1]
+    context[S0re_c] = clusters[k.n0ledge - 1]
+    context[S0re_cp] = cprefixes[k.n0ledge - 1]
  
 
 cdef class FeatureSet:
@@ -203,6 +290,7 @@ cdef class FeatureSet:
         cdef size_t* context = self.context
         assert <size_t>k != 0
         fill_context(context, self.nr_label, sent.words, sent.pos,
+                     sent.clusters, sent.cprefixes,
                      sent.orths, sent.parens, sent.quotes,
                      k, &k.s0l, &k.s0r, &k.n0l)
         cdef size_t i, j
@@ -294,6 +382,56 @@ cdef class FeatureSet:
             (wp, N2w, N2p),
             (w, N2w,),
             (p, N2p,)
+        )
+
+        from_clusters = (
+            bigram(S0w, N0w)
+            + bigram(S0w, N1w)
+            + bigram(S0w, N2w)
+            + bigram(S0w, N0lw)
+            + bigram(S0w, N0l2w)
+            + bigram(S0w, S0h2w)
+            + bigram(S0hw, N0w)
+            + bigram(S0hw, N1w)
+            + bigram(S0hw, N2w)
+            + bigram(S0hw, N0lw)
+            + bigram(S0hw, N0l2w)
+            + bigram(S0h2w, N0w)
+            + bigram(S0h2w, N1w)
+            + bigram(S0h2w, N2w)
+            + bigram(S0h2w, N0lw)
+            + bigram(S0h2w, N0l2w)
+            + bigram(S0rw, N0w)
+            + bigram(S0rw, N1w)
+            + bigram(S0rw, N2w)
+            + bigram(S0rw, N0lw)
+            + bigram(S0r2w, N0l2w)
+            + bigram(S0r2w, N0w)
+            + bigram(S0r2w, N1w)
+            + bigram(S0r2w, N2w)
+            + bigram(S0r2w, N0lw)
+            + bigram(S0r2w, N0l2w)
+            + bigram(S0lw, N0w)
+            + bigram(S0lw, N1w)
+            + bigram(S0lw, N2w)
+            + bigram(S0lw, N0lw)
+            + bigram(S0l2w, N0l2w)
+            + bigram(S0l2w, N0w)
+            + bigram(S0l2w, N1w)
+            + bigram(S0l2w, N2w)
+            + bigram(S0l2w, N0lw)
+            + bigram(S0l2w, N0l2w)
+
+            + trigram(S0hw, S0w, N0w)
+            + trigram(S0w, S0rw, N0w)
+            + trigram(S0w, N0lw, N0w)
+
+            #((ww, S0hp, S0hc, S0p, S0c, N0p, N0c),
+            #(ww, S0p, S0cp, N0p, N0cp, N1p, N1cp),
+            #(ww, S0c, S0p, S0rc, S0rp, N0c, N0p),
+            #(ww, S0cp, S0r2cp, S0rcp, N0cp),
+            #(ww, S0w, S0rcp, S0rp, N0lcp, N0lp),
+            #(ww, S0c, S0p, S0rlabs, N0c, N0p))
         )
 
         from_word_pairs = (
@@ -406,97 +544,10 @@ cdef class FeatureSet:
         feats += label_sets
         if add_extra:
             print "Add extra feats"
-            feats += extra
+            #feats += extra
+            feats += from_clusters
 
-        assert len(set(feats)) == len(feats), '%d vs %d' % (len(set(feats)), len(feats))
-        return feats
-
-
-cdef class ArcStandardFeatureSet(FeatureSet):
-    def _get_feats(self, bint add_extra):
-        # For multi-part features, we want expected sizes, as the table will
-        # resize
-        wp = 50000
-        wwpp = 100000
-        wwp = 100000
-        wpp = 100000
-        ww = 100000
-        pp = 2500
-        pw = 50000
-        ppp = 10000
-        vw = 60000
-        vp = 200
-        lwp = 110000
-        lww = 110000
-        lw = 80000
-        lp = 500
-        dp = 500
-        dw = 50000
-        dppp = 10000
-        dpp = 30000
-        dww = 60000
-        # For unigrams we need max values
-        w = 20000
-        p = 100
-        l = 100
-        print "Using ArcStandard feats"
-        
-        one = (
-            (w, S0w),
-            (p, S0p),
-            (wp, S0w, S0p),
-            (w, S1w),
-            (p, S1p),
-            (wp, S1w, S1p),
-            (w, N0w),
-            (p, N0p),
-            (wp, N0w, N0p)
-        )
-        two = (
-            (ww, S0w, S1w),
-            (pp, S0p, S1p),
-            (pp, S0p, N0p),
-            (wpp, S0w, S0p, S1p),
-            (wpp, S0p, S1w, S1p),
-            (wwp, S0w, S1w, S1p),
-            (wwp, S0w, S0p, S1w),
-            (wwpp, S0w, S0p, S1w, S1p)
-        )
-        three = (
-            (ppp, S0p, N0p, N1p),
-            (ppp, S1p, S0p, N0p),
-            (wpp, S0w, N0p, N1p),
-            (wpp, S1p, S0w, N0p),
-        )
-        four = (
-            (ppp, S1p, S1lp, S0p),
-            (ppp, S1p, S1rp, S0p),
-            (ppp, S1p, S0p, S0rp),
-            (wpp, S1p, S1lp, S0w),
-            (wpp, S1p, S1rp, S0w),
-            (wpp, S1p, S0w, S0lp)
-        )
-        five = (
-            (ppp, S2p, S1p, S0p),
-        )
-        #extra = (
-        #    (wp, S1p, S1ll, S0w),
-        #    (wp, S1p, S1rl, S0w),
-        #    (wp, S1w, S0ll, S0w),
-        #    (wp, S1w, S0rl, S0w),
-        #    (lw, S0w, S0rlabs),
-        #    (lp, S0p, S0rlabs),
-        #    (lw, S0w, S0llabs),
-        #    (lp, S0p, S0llabs),
-        #    (lw, S1w, S1llabs),
-        #    (lp, S1p, S1llabs),
-        #    (lw, S1w, S1rlabs),
-        #    (lp, S1p, S1rlabs)
-        #)
-
-        feats = one + two + three + four + five
-        #if add_extra:
-        #    feats += extra
+        #assert len(set(feats)) == len(feats), '%d vs %d' % (len(set(feats)), len(feats))
         return feats
 
 
