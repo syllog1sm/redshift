@@ -1,10 +1,12 @@
-from libc.stdint cimport uint64_t, int64_t
-from _state cimport State, Kernel
-#from index.hashes cimport FeatIndex
-from io_parse cimport Sentence
+cimport index.hashes
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 
+from libc.stdint cimport int64_t, uint64_t
+
+DEF MAX_PARAMS = 5000000
+
+DEF MAX_DENSE = 100000
 
 cdef extern from "sparsehash/dense_hash_map" namespace "google":
     cdef cppclass dense_hash_map[K, D]:
@@ -48,45 +50,59 @@ cdef extern from "sparsehash/dense_hash_map" namespace "google":
         pair[iterator, iterator] equal_range(K& k)
         D& operator[](K&) nogil
 
-cdef extern from "MurmurHash3.h":
-    void MurmurHash3_x86_32(void * key, uint64_t len, uint64_t seed, void* out)
-    void MurmurHash3_x86_128(void * key, uint64_t len, uint64_t seed, void* out)
 
-cdef extern from "MurmurHash2.h":
-    uint64_t MurmurHash64A(void * key, uint64_t len, int64_t seed)
-    uint64_t MurmurHash64B(void * key, uint64_t len, int64_t seed)
-
+cdef struct Param:
+    double w
+    double acc
+    size_t clas
+    size_t last_upd
 
 
-
-cdef struct Predicate:
-    int id, n, expected_size
-    uint64_t* raws
-    int* args
-
-cdef class FeatureSet:
-    cdef Predicate* predicates
-    cdef size_t* context
-    cdef uint64_t* features 
-    cdef size_t nr_tags
-    cdef int n
-    cdef int nr_label
-    cdef uint64_t* extract(self, Sentence* sent, Kernel* k) except NULL
+cdef struct DenseParams:
+    double* w
+    double* acc
+    size_t* last_upd
 
 
-cdef class ArcStandardFeatureSet(FeatureSet):
-    pass
-    
+cdef struct SquareFeature:
+    DenseParams* parts    
+    bint* seen
+    size_t nr_seen
 
 
-#cdef void fill_context(size_t* context, size_t nr_label,
-#                       size_t* words, size_t* pos,
-#                       size_t n0, size_t s0,
-#                       size_t* labels,
-#                       size_t h_s0, size_t h_h_s0,
-#                       size_t s0_lval, size_t s0_rval, size_t n0_lval,
-#                       size_t l_s0, l2_s0, size_t r_s0, r2_s0,
-#                       size_t le0_s0, size_t le1_s0,
-#                       size_t re0_s0, size_t re1_s0,
-#                       size_t l_n0, size_t l2_n0,
-#                       size_t le0_n0, size_t le1_n0)
+cdef struct DenseFeature:
+    double* w
+    double* acc
+    size_t* last_upd
+    uint64_t id
+    size_t nr_seen
+    size_t s
+    size_t e
+
+cdef class Perceptron:
+    cdef int nr_class
+    cdef double *scores
+    cdef object path
+    cdef bint is_trained
+    cdef float n_corr
+    cdef float total
+
+    cdef size_t nr_raws
+    cdef DenseFeature** raws
+
+    cdef size_t div
+    cdef uint64_t now
+ 
+    cdef dense_hash_map[uint64_t, size_t] W
+    cdef index.hashes.ScoresCache cache
+    cdef bint use_cache
+
+    cdef int add_feature(self, uint64_t f)
+    cdef int add_instance(self, size_t label, double weight, int n, uint64_t* feats) except -1
+    cdef int64_t update(self, size_t gold_i, size_t pred_i,
+                        uint64_t n_feats, uint64_t* features, double weight) except -1
+    cdef int fill_scores(self, size_t n_feats, uint64_t* features, double* scores) except -1
+    cdef uint64_t predict_best_class(self, uint64_t n_feats, uint64_t* features)
+    cdef int64_t finalize(self) except -1
+
+

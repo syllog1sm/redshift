@@ -70,10 +70,22 @@ cdef class Index:
 
 
 cdef class StrIndex(Index):
+    cdef object vocab
     cdef dense_hash_map[uint64_t, uint64_t] table
     cdef uint64_t encode(self, char* feature) except 0
     cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value)
 
+
+cdef struct Cluster:
+    size_t prefix
+    size_t full
+
+
+cdef class ClusterIndex:
+    cdef Cluster* table
+    cdef size_t prefix_len
+    cdef size_t thresh
+    cdef size_t n
 
 cdef class PruningFeatIndex(Index):
     cdef uint64_t n
@@ -108,6 +120,9 @@ cdef class ScoresCache:
     cdef double* lookup(self, size_t size, void* kernel, bint* success)
     cdef int _resize(self, size_t new_size)
 
+cpdef encode_word(object word)
+
+cpdef int get_freq(object word) except -1
 
 #cdef uint64_t encode_feat(uint64_t* feature, uint64_t length, uint64_t i)
 

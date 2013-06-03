@@ -7,7 +7,6 @@ cdef extern from "MurmurHash2.h":
     uint64_t MurmurHash64B(void * key, uint64_t len, int64_t seed)
 
 
-
 cdef struct Subtree:
     size_t val
     size_t[4] lab
@@ -17,15 +16,27 @@ cdef struct Subtree:
 cdef struct Kernel:
     size_t i
     size_t s0
-    size_t s1
     size_t Ls0
     size_t hs0
     size_t h2s0
     size_t Lhs0
     size_t Lh2s0
+    size_t s0ledge
+    size_t n0ledge
     Subtree s0l
     Subtree s0r
     Subtree n0l
+
+
+cdef struct FastState:
+    Kernel* k
+    size_t last_action
+    FastState* previous
+    FastState* tail
+    double score
+    bint is_gold
+    size_t cost
+    size_t nr_kids
 
 
 cdef struct State:
@@ -38,7 +49,6 @@ cdef struct State:
     size_t second
     bint is_finished
     bint at_end_of_buffer
-    bint is_gold
     int cost
 
     size_t* stack
@@ -47,16 +57,12 @@ cdef struct State:
     size_t* guess_labels
     size_t* l_valencies
     size_t* r_valencies
+    size_t* ledges
     size_t** l_children
     size_t** r_children
     size_t* history
+    size_t* sig
     Kernel kernel
-
-cdef struct Cont:
-    double score
-    size_t clas
-    size_t parent
-    size_t rlabel
 
 cdef uint64_t hash_kernel(Kernel* k)
 cdef int fill_kernel(State* s)
@@ -82,7 +88,10 @@ cdef int has_child_in_buffer(State *s, size_t word, size_t* heads)
 cdef int has_head_in_buffer(State *s, size_t word, size_t* heads)
 cdef int has_child_in_stack(State *s, size_t word, size_t* heads)
 cdef int has_head_in_stack(State *s, size_t word, size_t* heads)
+cdef bint has_root_child(State *s, size_t token)
 
 cdef State* init_state(size_t n)
 cdef free_state(State* s)
 cdef copy_state(State* s, State* old)
+
+cdef free_fast_state(FastState* s)

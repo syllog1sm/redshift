@@ -5,8 +5,10 @@ DEF VOCAB_SIZE = 1e6
 DEF TAG_SET_SIZE = 100
 
 from libc.stdint cimport uint64_t
-from libc.stdlib cimport malloc, free
+from libc.stdlib cimport calloc, malloc, free
 from libc.string cimport memcpy
+
+import os.path
 
 
 cdef class Index:
@@ -36,11 +38,18 @@ cdef class Index:
 
 
 cdef class StrIndex(Index):
-    def __cinit__(self, expected_size, uint64_t i=1):
+    def __cinit__(self, expected_size, uint64_t i=1, vocab_loc=None):
         self.table.set_empty_key(0)
         self.table.resize(expected_size)
         self.i = i
         self.save_entries = False
+        self.vocab = {}
+        if vocab_loc is not None:
+            for line in open(vocab_loc):
+                if not line.strip():
+                    continue
+                freq, word = line.strip().split()
+                self.vocab[word] = int(freq)
     
     cdef uint64_t encode(self, char* feature) except 0:
         cdef uint64_t value
@@ -61,6 +70,10 @@ cdef class StrIndex(Index):
     def __dealloc__(self):
         if self.save_entries:
             self.out_file.close()
+
+    property vocab:
+        def __get__(self):
+            return self.vocab
 
 cdef class PruningFeatIndex(Index):
     def __cinit__(self):
@@ -265,7 +278,9 @@ cdef class InstanceCounter:
 
 
 _pos_idx = StrIndex(TAG_SET_SIZE)
-_word_idx = StrIndex(VOCAB_SIZE, i=TAG_SET_SIZE)
+_word_idx = StrIndex(VOCAB_SIZE, vocab_loc='/Users/matt/repos/redshift/index/vocab.txt',
+                     i=TAG_SET_SIZE)
+_cluster_idx = ClusterIndex(os.path.join('/Users/matt/repos/redshift/index/browns.txt'))
 #_feat_idx = FeatIndex()
 
 #def init_feat_idx(int n, path):
@@ -307,7 +322,7 @@ def load_pos_idx(path):
 #    global _feat_idx
 #    _feat_idx.set_threshold(threshold)
 
-def encode_word(object word):
+cpdef encode_word(object word):
     global _word_idx
     cdef StrIndex idx = _word_idx
     py_word = word.encode('ascii')
@@ -321,10 +336,56 @@ def encode_pos(object pos):
     raw_pos = py_pos
     return idx.encode(raw_pos)
 
+cpdef int get_freq(object word) except -1:
+    global _word_idx
+    return _word_idx.vocab.get(str(word), 0)
+
+def get_clusters():
+    global _cluster_idx
+    return _cluster_idx
+
+
 def get_max_context():
     global _word_idx
     cdef StrIndex idx = _word_idx
     return idx.i + 1
+
+
+cdef class ClusterIndex:
+    def __cinit__(self, loc, thresh=1, prefix_len=5):
+        self.thresh = thresh
+        self.prefix_len = prefix_len
+        self.n = 0
+        entries = [('1', encode_word('<root>'), 40000),
+                   ('1', encode_word('<start>'), 40000)]
+        cdef object line
+        cdef size_t i, word_id, freq
+        for line in open(loc):
+            if not line.strip():
+                continue
+            pieces = line.split()
+            cluster_str = pieces[0]
+            word = pieces[1]
+            freq = int(pieces[2])
+            if freq >= thresh:
+                encoded = encode_word(word)
+                entries.append((cluster_str, encoded, freq))
+                if encoded >= self.n:
+                    self.n = encoded + 1
+        self.table = <Cluster*>calloc(self.n, sizeof(Cluster))
+        cdef Cluster* cluster
+        cdef object c_str
+        for cluster_str, word_id, freq in entries:
+            cluster = &self.table[word_id]
+            cluster.full = int(cluster_str, 2) + 1
+            cluster.prefix = int(cluster_str[:self.prefix_len], 2) + 1
+
+
+    def __dealloc__(self):
+        free(self.table)
+
+
+
 
 #cdef uint64_t encode_feat(uint64_t* feature, uint64_t length, uint64_t i):
 #    global _feat_idx

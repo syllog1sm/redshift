@@ -1,31 +1,34 @@
-DEF MAX_SENT_LEN = 400
-DEF MAX_TRANSITIONS = 400 / 2
 
 
 cdef struct _Parse:
     size_t n_moves
-    size_t[MAX_SENT_LEN] heads
-    size_t[MAX_SENT_LEN] labels
-    size_t[MAX_TRANSITIONS] moves
-    size_t[MAX_TRANSITIONS] move_labels
+    size_t* heads
+    size_t* labels
+    bint* sbd
+    size_t* moves
 
 cdef struct Sentence:
     size_t id
     size_t length
-    size_t[MAX_SENT_LEN] words
-    size_t[MAX_SENT_LEN] pos
-    size_t[MAX_SENT_LEN] browns
-    _Parse parse
+    size_t* ids
+    size_t* words
+    size_t* pos
+    size_t* clusters
+    size_t* cprefixes
+    size_t* orths
+    size_t* parens
+    size_t* quotes
+    _Parse* parse
 
 
-cdef Sentence make_sentence(size_t id_, size_t length, object py_words, object py_tags)
+cdef Sentence* make_sentence(size_t id_, size_t length, object py_ids,
+                            object py_words, object py_tags)
 
 cdef class Sentences:
     cdef object strings
-    cdef Sentence *s
+    cdef Sentence** s
     cdef size_t length
     cdef size_t max_length
 
-    cpdef int add(self, size_t id_, object words, object tags, object heads, object labels) except -1
-
-    cdef evaluate(self, Sentences gold)
+    cpdef int add(self, size_t id_, object ids, object words, object tags,
+                  object heads, object labels) except -1
