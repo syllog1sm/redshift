@@ -104,8 +104,22 @@ cdef enum:
     N0le_cp
     CONTEXT_SIZE
 
+def unigram(word, add_clusters=True):
+    w = 1000
+    pos = word + 1
+    cluster = word + 2
+    cluster_prefix = word + 3
+    basic = ((w, word, pos), (w, word), (w, pos))
+    clusters = ((w, word, pos, cluster_prefix), (w, word, pos, cluster),
+                (w, word, cluster), (w, word, cluster_prefix),
+                (w, pos, cluster), (w, pos, cluster_prefix))
+    if add_clusters:
+        return basic + clusters
+    else:
+        return basic
 
-def bigram(a, b, add_clusters=False):
+
+def bigram(a, b, add_clusters=True):
     ww = 100000
     pp = 2500
     pw = 50000
@@ -384,54 +398,66 @@ cdef class FeatureSet:
             (p, N2p,)
         )
 
-        from_clusters = (
+        unigrams = (
+            unigram(S0w)
+            + unigram(S0hw)
+            + unigram(S0h2w)
+            + unigram(S0rw)
+            + unigram(S0r2w)
+            + unigram(S0lw)
+            + unigram(S0l2w)
+            + unigram(N0w)
+            + unigram(N1w)
+            + unigram(N2w)
+            + unigram(N0lw)
+            + unigram(N0l2w)
+        )
+
+        s0_bigrams = (
             bigram(S0w, N0w)
             + bigram(S0w, N1w)
             + bigram(S0w, N2w)
             + bigram(S0w, N0lw)
             + bigram(S0w, N0l2w)
-            + bigram(S0w, S0h2w)
-            + bigram(S0hw, N0w)
+        )
+        
+        s0h_bigrams = (
+            bigram(S0hw, N0w)
             + bigram(S0hw, N1w)
             + bigram(S0hw, N2w)
-            + bigram(S0hw, N0lw)
-            + bigram(S0hw, N0l2w)
             + bigram(S0h2w, N0w)
-            + bigram(S0h2w, N1w)
-            + bigram(S0h2w, N2w)
-            + bigram(S0h2w, N0lw)
-            + bigram(S0h2w, N0l2w)
-            + bigram(S0rw, N0w)
-            + bigram(S0rw, N1w)
-            + bigram(S0rw, N2w)
-            + bigram(S0rw, N0lw)
-            + bigram(S0r2w, N0l2w)
+        )
+        s0r_bigrams = (
+            bigram(S0rw, N0w)
             + bigram(S0r2w, N0w)
-            + bigram(S0r2w, N1w)
-            + bigram(S0r2w, N2w)
-            + bigram(S0r2w, N0lw)
-            + bigram(S0r2w, N0l2w)
-            + bigram(S0lw, N0w)
-            + bigram(S0lw, N1w)
-            + bigram(S0lw, N2w)
-            + bigram(S0lw, N0lw)
-            + bigram(S0l2w, N0l2w)
+            + bigram(S0rw, S0r2w)
+        )
+        s0l_bigrams = (
+            bigram(S0lw, N0w)
             + bigram(S0l2w, N0w)
-            + bigram(S0l2w, N1w)
-            + bigram(S0l2w, N2w)
-            + bigram(S0l2w, N0lw)
-            + bigram(S0l2w, N0l2w)
+            + bigram(S0lw, S0l2w)
+        )
+        n_bigrams = (
+            bigram(N0w, N1w)
+            + bigram(N1w, N2w)
+            + bigram(N0w, N0lw)
+            + bigram(N0lw, N0l2w)
+        )
 
-            + trigram(S0hw, S0w, N0w)
+        trigrams = (
+            trigram(S0hw, S0w, N0w)
+            + trigram(S0h2w, S0w, N0w)
+            + trigram(S0h2w, S0h2w, S0w)
+            + trigram(N0w, N1w, N2w)
+            + trigram(S0w, N0w, N1w)
+            + trigram(S0w, N0w, N0lw)
+            + trigram(N0w, N0lw, N0l2w)
             + trigram(S0w, S0rw, N0w)
-            + trigram(S0w, N0lw, N0w)
-
-            #((ww, S0hp, S0hc, S0p, S0c, N0p, N0c),
-            #(ww, S0p, S0cp, N0p, N0cp, N1p, N1cp),
-            #(ww, S0c, S0p, S0rc, S0rp, N0c, N0p),
-            #(ww, S0cp, S0r2cp, S0rcp, N0cp),
-            #(ww, S0w, S0rcp, S0rp, N0lcp, N0lp),
-            #(ww, S0c, S0p, S0rlabs, N0c, N0p))
+            + trigram(S0w, S0r2w, S0rw)
+            + trigram(S0w, S0lw, S0l2w)
+            + trigram(S0hw, S0w, S0rw)
+            + trigram(S0hw, S0w, S0lw)
+            + trigram(S0hw, S0w, N0lw)
         )
 
         from_word_pairs = (
@@ -472,7 +498,7 @@ cdef class FeatureSet:
             (vp, N0p, N0lv),
         )
 
-        unigrams = (
+        zhang_unigrams = (
             (w, S0hw,),
             (p, S0hp,),
             (w, S0lw,),
@@ -539,13 +565,19 @@ cdef class FeatureSet:
             (wp, S0re_p, N0le_w),
             (ppp, S0re_p, N0le_p, N0p)
         )
-        feats = from_single + from_word_pairs + from_three_words + distance + valency + unigrams + third_order
-        feats += labels
-        feats += label_sets
         if add_extra:
             print "Add extra feats"
-            #feats += extra
-            feats += from_clusters
+            feats = unigrams + distance + valency + labels + label_sets
+            feats += s0_bigrams
+            feats += s0h_bigrams
+            feats += s0r_bigrams
+            feats += s0l_bigrams
+            feats += n_bigrams
+            feats += trigrams
+        else:
+            feats = from_single + from_word_pairs + from_three_words + distance + valency + zhang_unigrams + third_order
+            feats += labels
+            feats += label_sets
 
         #assert len(set(feats)) == len(feats), '%d vs %d' % (len(set(feats)), len(feats))
         return feats

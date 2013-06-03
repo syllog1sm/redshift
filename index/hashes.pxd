@@ -122,6 +122,8 @@ cdef class ScoresCache:
 
 cpdef encode_word(object word)
 
+cpdef int get_freq(object word) except -1
+
 #cdef uint64_t encode_feat(uint64_t* feature, uint64_t length, uint64_t i)
 
 #cdef FeatIndex get_feat_idx()

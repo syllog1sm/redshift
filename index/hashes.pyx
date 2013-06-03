@@ -46,14 +46,12 @@ cdef class StrIndex(Index):
         self.vocab = {}
         if vocab_loc is not None:
             for line in open(vocab_loc):
+                if not line.strip():
+                    continue
                 freq, word = line.strip().split()
                 self.vocab[word] = int(freq)
     
     cdef uint64_t encode(self, char* feature) except 0:
-        if self.vocab:
-            freq = self.vocab.get(str(feature))
-            if freq < 100:
-                return 0
         cdef uint64_t value
         cdef uint64_t hashed = MurmurHash64A(<char*>feature, len(feature), 0)
         value = self.table[hashed]
@@ -72,6 +70,10 @@ cdef class StrIndex(Index):
     def __dealloc__(self):
         if self.save_entries:
             self.out_file.close()
+
+    property vocab:
+        def __get__(self):
+            return self.vocab
 
 cdef class PruningFeatIndex(Index):
     def __cinit__(self):
@@ -276,7 +278,8 @@ cdef class InstanceCounter:
 
 
 _pos_idx = StrIndex(TAG_SET_SIZE)
-_word_idx = StrIndex(VOCAB_SIZE, i=TAG_SET_SIZE)
+_word_idx = StrIndex(VOCAB_SIZE, vocab_loc='/Users/matt/repos/redshift/index/vocab.txt',
+                     i=TAG_SET_SIZE)
 _cluster_idx = ClusterIndex(os.path.join('/Users/matt/repos/redshift/index/browns.txt'))
 #_feat_idx = FeatIndex()
 
@@ -333,6 +336,9 @@ def encode_pos(object pos):
     raw_pos = py_pos
     return idx.encode(raw_pos)
 
+cpdef int get_freq(object word) except -1:
+    global _word_idx
+    return _word_idx.vocab.get(str(word), 0)
 
 def get_clusters():
     global _cluster_idx
@@ -346,7 +352,7 @@ def get_max_context():
 
 
 cdef class ClusterIndex:
-    def __cinit__(self, loc, thresh=10, prefix_len=5):
+    def __cinit__(self, loc, thresh=1, prefix_len=5):
         self.thresh = thresh
         self.prefix_len = prefix_len
         self.n = 0
