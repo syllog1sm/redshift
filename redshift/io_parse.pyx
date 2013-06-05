@@ -92,9 +92,9 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
         if s.words[i] < brown_idx.n:
             s.clusters[i] = brown_idx.table[s.words[i]].full
             s.cprefixes[i] = brown_idx.table[s.words[i]].prefix
-        if index.hashes.get_freq(py_words[i]) < 1000:
+        #if index.hashes.get_freq(py_words[i]) < 800:
         #    s.words[i] = s.pos[i]
-            s.words[i] = 0
+        #    s.words[i] = 0
         s.ids[i] = py_ids[i]
         # Use POS tag to semi-smartly get ' disambiguation
         if py_tags[i] == "``":

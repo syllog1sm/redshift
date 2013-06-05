@@ -14,6 +14,8 @@ from io_parse cimport Sentence
 
 from libcpp.vector cimport vector
 
+import itertools
+
 # Context elements
 # Ensure _context_size is always last; it ensures our compile-time setting
 # is in synch with the enum
@@ -119,7 +121,7 @@ def unigram(word, add_clusters=True):
         return basic
 
 
-def bigram(a, b, add_clusters=True):
+def _bigram(a, b, add_clusters=True):
     ww = 100000
     pp = 2500
     pw = 50000
@@ -133,7 +135,7 @@ def bigram(a, b, add_clusters=True):
     p2 = b + 1
     c2 = b + 2
     cp2 = b + 3
-    basic = ((ww, w1, w2), (ww, w1, p1, w2, p2), (ww, p1, p2))
+    basic = ((ww, w1, w2), (ww, w1, p1, w2, p2), (ww, p1, p2), (ww, w1, p2), (ww, p1, w2))
     clusters = ((pp, c1, c2), (pp, c1, p1, c2, p2), (ww, c1, w1, cp2, p2),
                 (ww, cp1, p1, c2, p2), (ww, cp1, p1, cp2, p2))
     if add_clusters:
@@ -141,8 +143,13 @@ def bigram(a, b, add_clusters=True):
     else:
         return basic
 
+def bigram_no_clusters(a, b):
+    return _bigram(a, b, False)
 
-def trigram(a, b, c, add_clusters=True):
+def bigram_with_clusters(a, b):
+    return _bigram(a, b, True)
+
+def _trigram(a, b, c, add_clusters=True):
     ww = 100000
     pp = 2500
     pw = 50000
@@ -161,7 +168,8 @@ def trigram(a, b, c, add_clusters=True):
     c3 = c + 2
     cp3 = c + 3
 
-    basic = ((ww, w1, p2, p3), (ww, p1, w2, p3), (ww, p1, p2, w3), (ww, p1, p2, p3))
+    basic = ((ww, w1, w2, w3), (ww, w1, w2, p3), (ww, w1, p2, w3), (ww, p1, w2, w3),
+            (ww, w1, p2, p3), (ww, p1, w2, p3), (ww, p1, p2, w3), (ww, p1, p2, p3))
     clusters = ((ww, c1, c2, p3), (ww, c1, p2, w3), (ww, p1, c2, c3), (ww, c1, p2, p3),
              (ww, p1, c2, p3), (ww, p1, c2, c3), (ww, p1, p2, p3))
 
@@ -171,6 +179,11 @@ def trigram(a, b, c, add_clusters=True):
         return basic
 
 
+def trigram_no_clusters(a, b, c):
+    return _trigram(a, b, c, False)
+
+def trigram_with_clusters(a, b, c):
+    return _trigram(a, b, c, True)
 
 
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* pos,
@@ -286,10 +299,13 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
  
 
 cdef class FeatureSet:
-    def __cinit__(self, nr_label, bint add_extra=False):
+    def __cinit__(self, nr_label, bint add_extra=False, to_add=None, add_clusters=False):
+        if to_add is None:
+            to_add = range(45)
+        self.bigrams = to_add
         self.nr_label = nr_label
         # Sets "n"
-        self._make_predicates(add_extra)
+        self._make_predicates(add_extra, to_add, add_clusters)
         # TODO: Reference index.hashes constant
         self.nr_tags = 100 if add_extra else 0
         self.context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
@@ -341,8 +357,8 @@ cdef class FeatureSet:
         features[f] = 0
         return features
 
-    def _make_predicates(self, bint add_extra):
-        feats = self._get_feats(add_extra)
+    def _make_predicates(self, bint add_extra, object to_add, add_clusters):
+        feats = self._get_feats(add_extra, to_add, add_clusters)
         self.n = len(feats)
         self.predicates = <Predicate*>malloc(self.n * sizeof(Predicate))
         cdef Predicate pred
@@ -356,7 +372,7 @@ cdef class FeatureSet:
                 pred.args[i] = element
             self.predicates[id_] = pred
 
-    def _get_feats(self, bint add_extra):
+    def _get_feats(self, bint add_extra, object to_add, bint add_clusters):
         # For multi-part features, we want expected sizes, as the table will
         # resize
         wp = 50000
@@ -412,7 +428,8 @@ cdef class FeatureSet:
             + unigram(N0lw)
             + unigram(N0l2w)
         )
-
+        bigram = bigram_with_clusters if add_clusters else bigram_no_clusters
+        trigram = trigram_with_clusters if add_clusters else trigram_no_clusters
         s0_bigrams = (
             bigram(S0w, N0w)
             + bigram(S0w, N1w)
@@ -568,12 +585,26 @@ cdef class FeatureSet:
         if add_extra:
             print "Add extra feats"
             feats = unigrams + distance + valency + labels + label_sets
-            feats += s0_bigrams
-            feats += s0h_bigrams
-            feats += s0r_bigrams
-            feats += s0l_bigrams
-            feats += n_bigrams
-            feats += trigrams
+            pairs = itertools.combinations((S0w, N0w, N1w, N2w, N0lw, N0l2w, S0hw,
+                                            S0h2w, S0rw, S0r2w, S0lw, S0l2w), 2)
+
+            for i, (t1, t2) in enumerate(pairs):
+                if i in to_add:
+                    feats += bigram(t1, t2)
+            feats += from_three_words
+            #if 's0' in to_add:
+            #    feats += s0_bigrams
+            #if 's0h' in to_add:
+            #    feats += s0h_bigrams
+            #if 's0r' in to_add:
+            #    feats += s0r_bigrams
+            #if 's0l' in to_add:
+            #    feats += s0l_bigrams
+            #if 'n' in to_add:
+            #    feats += n_bigrams
+            #if 'tri' in to_add:
+            #    feats += trigrams
+            #feats += trigrams
         else:
             feats = from_single + from_word_pairs + from_three_words + distance + valency + zhang_unigrams + third_order
             feats += labels
