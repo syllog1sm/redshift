@@ -30,12 +30,13 @@ USE_HELD_OUT = False
     beam_width=("Beam width", "option", "k", int),
     movebeam=("Add labels to beams", "flag", "m", bool),
     bigrams=("What bigram to include/exclude, or all", "option", "b", str),
-    add_clusters=("Add brown cluster features", "flag", "c", bool)
+    add_clusters=("Add brown cluster features", "flag", "c", bool),
+    n_sents=("Number of sentences to train from", "option", "n", int)
 )
 def main(train_loc, model_loc, train_alg="online", n_iter=15,
          add_extra_feats=False, label_set="Stanford", feat_thresh=1,
          allow_reattach=False, allow_reduce=False, bigrams='all',
-         add_clusters=False,
+         add_clusters=False, n_sents=0,
          profile=False, debug=False, seed=0, beam_width=1, movebeam=False):
     if bigrams == 'all':
         bigrams = range(45)
@@ -45,7 +46,6 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
         bigrams.pop(excluded)
     elif bigrams.startswith('in'):
         bigrams = [int(bigrams[2:])]
-    print bigrams
     random.seed(seed)
     train_loc = Path(train_loc)
     model_loc = Path(model_loc)
@@ -62,28 +62,23 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
                                     beam_width=beam_width, label_beam=not movebeam,
                                     feat_codes=bigrams,
                                     add_clusters=add_clusters)
-    if USE_HELD_OUT:
-        train_sent_strs = train_loc.open().read().strip().split('\n\n')
-        split_point = len(train_sent_strs)/20
-        held_out = '\n\n'.join(train_sent_strs[:split_point])
-        train = redshift.io_parse.read_conll('\n\n'.join(train_sent_strs[split_point:]))
-        parser.train(train, held_out=held_out, n_iter=n_iter)
-        to_parse = redshift.io_parse.read_conll('\n\n'.join(train_sent_strs[split_point:]))
+    
+    train_sent_strs = train_loc.open().read().strip().split('\n\n')
+    if n_sents != 0:
+        print "Using %d sents for training"
+        random.shuffle(train_sent_strs)
+        train_sent_strs = train_sent_strs[:n_sents]
+    train_str = '\n\n'.join(train_sent_strs)
+    train = redshift.io_parse.read_conll(train_str)
+    #train.connect_sentences(1000)
+    if profile:
+        print 'profiling'
+        cProfile.runctx("parser.train(train, n_iter=n_iter)", globals(),
+                        locals(), "Profile.prof")
+        s = pstats.Stats("Profile.prof")
+        s.strip_dirs().sort_stats("time").print_stats()
     else:
-        train = redshift.io_parse.read_conll(train_loc.open().read())
-        #train.connect_sentences(1000)
-        if profile:
-            print 'profiling'
-            cProfile.runctx("parser.train(train, n_iter=n_iter)", globals(),
-                            locals(), "Profile.prof")
-            s = pstats.Stats("Profile.prof")
-            s.strip_dirs().sort_stats("time").print_stats()
-
-        else:
-            parser.train(train, n_iter=n_iter)
-        to_parse = redshift.io_parse.read_conll(train_loc.open().read())
-    #print 'Train accuracy:'
-    #print parser.add_parses(to_parse, gold=train)
+        parser.train(train, n_iter=n_iter)
     parser.save()
 
 
