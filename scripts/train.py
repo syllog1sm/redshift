@@ -21,7 +21,7 @@ USE_HELD_OUT = False
     n_iter=("Number of Perceptron iterations", "option", "i", int),
     label_set=("Name of label set to use.", "option", "l", str),
     add_extra_feats=("Add extra features", "flag", "x", bool),
-    feat_thresh=("Feature pruning threshold", "option", "f", int),
+    feat_thresh=("Feature pruning threshold", "option", "t", int),
     allow_reattach=("Allow left-clobber", "flag", "r", bool),
     allow_reduce=("Allow reduce when no head is set", "flag", "d", bool),
     profile=("Run profiler (slow)", "flag", None, bool),
@@ -29,11 +29,23 @@ USE_HELD_OUT = False
     seed=("Set random seed", "option", "s", int),
     beam_width=("Beam width", "option", "k", int),
     movebeam=("Add labels to beams", "flag", "m", bool),
+    bigrams=("What bigram to include/exclude, or all", "option", "b", str),
+    add_clusters=("Add brown cluster features", "flag", "c", bool)
 )
 def main(train_loc, model_loc, train_alg="online", n_iter=15,
          add_extra_feats=False, label_set="Stanford", feat_thresh=1,
-         allow_reattach=False, allow_reduce=False,
+         allow_reattach=False, allow_reduce=False, bigrams='all',
+         add_clusters=False,
          profile=False, debug=False, seed=0, beam_width=1, movebeam=False):
+    if bigrams == 'all':
+        bigrams = range(45)
+    elif bigrams.startswith('ex'):
+        excluded = int(bigrams[2:])
+        bigrams = range(45)
+        bigrams.pop(excluded)
+    elif bigrams.startswith('in'):
+        bigrams = [int(bigrams[2:])]
+    print bigrams
     random.seed(seed)
     train_loc = Path(train_loc)
     model_loc = Path(model_loc)
@@ -47,7 +59,9 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
                                     train_alg=train_alg, add_extra=add_extra_feats,
                                     label_set=label_set, feat_thresh=feat_thresh,
                                     allow_reattach=allow_reattach, allow_reduce=allow_reduce,
-                                    beam_width=beam_width, label_beam=not movebeam)
+                                    beam_width=beam_width, label_beam=not movebeam,
+                                    feat_codes=bigrams,
+                                    add_clusters=add_clusters)
     if USE_HELD_OUT:
         train_sent_strs = train_loc.open().read().strip().split('\n\n')
         split_point = len(train_sent_strs)/20
