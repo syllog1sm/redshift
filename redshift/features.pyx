@@ -301,8 +301,9 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
 cdef class FeatureSet:
     def __cinit__(self, nr_label, bint add_extra=False, to_add=None, add_clusters=False):
         if to_add is None:
-            to_add = range(45)
+            to_add = range(66)
         self.bigrams = to_add
+        self.bigrams.append(-1)
         self.nr_label = nr_label
         # Sets "n"
         self._make_predicates(add_extra, to_add, add_clusters)
