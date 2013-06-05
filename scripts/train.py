@@ -40,6 +40,8 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
          profile=False, debug=False, seed=0, beam_width=1, movebeam=False):
     if bigrams == 'all':
         bigrams = range(45)
+    elif bigrams == 'base':
+        bigrams = []
     elif bigrams.startswith('ex'):
         excluded = int(bigrams[2:])
         bigrams = range(45)
