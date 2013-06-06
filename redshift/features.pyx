@@ -284,12 +284,11 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
     context[N0le_p] = pos[k.n0ledge]
     context[N0le_c] = clusters[k.n0ledge]
     context[N0le_cp] = cprefixes[k.n0ledge]
-    # TODO: This isn't accurate!!
-    context[S0re_orth] = orths[k.n0ledge - 1]
-    context[S0re_w] = words[k.n0ledge - 1]
-    context[S0re_p] = pos[k.n0ledge - 1]
-    context[S0re_c] = clusters[k.n0ledge - 1]
-    context[S0re_cp] = cprefixes[k.n0ledge - 1]
+    context[S0re_orth] = orths[k.s0redge]
+    context[S0re_w] = words[k.s0redge]
+    context[S0re_p] = pos[k.s0redge]
+    context[S0re_c] = clusters[k.s0redge]
+    context[S0re_cp] = cprefixes[k.s0redge]
  
 
 cdef class FeatureSet:
@@ -513,6 +512,9 @@ cdef class FeatureSet:
             
             bigram = bigram_with_clusters if add_clusters else bigram_no_clusters
             trigram = trigram_with_clusters if add_clusters else trigram_no_clusters
+            print "%d bigrams, %d trigrams" % (len(list(combinations(kernel_tokens, 2))),
+                                               len(list(combinations(kernel_tokens, 3))))
+            print "Adding %s" % to_add
 
             for i, (t1, t2) in enumerate(combinations(kernel_tokens, 2)):
                 if i in to_add:

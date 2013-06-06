@@ -8,12 +8,12 @@ cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
     s.heads[child] = head
     s.labels[child] = label
     if child < head:
-        if label != 1:
-            s.ledges[head] = s.ledges[child]
+        s.ledges[head] = s.ledges[child]
         if s.l_valencies[head] < MAX_VALENCY:
             s.l_children[head][s.l_valencies[head]] = child
             s.l_valencies[head] += 1
     else:
+        s.redges[head] = s.redges[child]
         if s.r_valencies[head] < MAX_VALENCY:
             r = get_r(s, head)
             s.r_children[head][s.r_valencies[head]] = child
@@ -27,6 +27,10 @@ cdef int del_r_child(State *s, size_t head) except -1:
     s.r_valencies[head] -= 1
     s.heads[child] = 0
     s.labels[child] = 0
+    if s.r_valencies[head] != 0:
+        s.redges[head] = s.redges[get_r(s, head)]
+    else:
+        s.redges[head] = head
 
 
 cdef int del_l_child(State *s, size_t head) except -1:
@@ -37,12 +41,12 @@ cdef int del_l_child(State *s, size_t head) except -1:
     child = get_l(s, head)
     s.l_children[head][s.l_valencies[head] - 1] = 0
     s.l_valencies[head] -= 1
-    if s.l_valencies[head]:
+    s.heads[child] = 0
+    s.labels[child] = 0
+    if s.l_valencies[head] != 0:
         s.ledges[head] = s.ledges[get_l(s, head)]
     else:
         s.ledges[head] = head
-    s.heads[child] = 0
-    s.labels[child] = 0
 
 
 cdef size_t pop_stack(State *s) except 0:
@@ -88,6 +92,7 @@ cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, Subtree* tree):
     tree.idx[2] = 0
     tree.idx[3] = 0
 
+
 cdef uint64_t hash_kernel(Kernel* k):
     return MurmurHash64A(k, sizeof(Kernel), 0)
 
@@ -101,7 +106,7 @@ cdef int fill_kernel(State *s):
     s.kernel.Ls0 = s.labels[s.top]
     s.kernel.Lhs0 = s.labels[s.heads[s.top]]
     s.kernel.Lh2s0 = s.labels[s.heads[s.heads[s.top]]]
-    s.kernel.s0ledge = s.ledges[s.top]
+    s.kernel.s0redge = s.redges[s.top]
     s.kernel.n0ledge = s.ledges[s.i]
 
     fill_subtree(s.l_valencies[s.top], s.l_children[s.top], s.labels, &s.kernel.s0l)
@@ -254,8 +259,10 @@ cdef State* init_state(size_t n):
     s.l_children = <size_t**>malloc(n * sizeof(size_t*))
     s.r_children = <size_t**>malloc(n * sizeof(size_t*))
     s.ledges = <size_t*>malloc(n * sizeof(size_t))
+    s.redges = <size_t*>malloc(n * sizeof(size_t))
     for i in range(n):
         s.ledges[i] = i
+        s.redges[i] = i
         s.l_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
         s.r_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
     s.stack[1] = 1
@@ -268,11 +275,6 @@ cdef copy_state(State* s, State* old):
         nbytes = (s.i + 1) * sizeof(size_t)
     else:
         nbytes = (old.i + 1) * sizeof(size_t)
-    # TODO: Why doesnt this work in training??
-    #for j in range(start, old.n):
-    #    assert old.heads[j] == 0
-    #    assert s.heads[j] == 0, '%d headed by %d with i at %d' % (j, s.heads[j], s.i)
-    #nbytes = (old.n + PADDING) * sizeof(size_t)
     s.n = old.n
     s.t = old.t
     s.i = old.i
@@ -285,13 +287,13 @@ cdef copy_state(State* s, State* old):
     s.at_end_of_buffer = old.at_end_of_buffer
     memcpy(s.stack, old.stack, old.n * sizeof(size_t))
     memcpy(s.ledges, old.ledges, old.n * sizeof(size_t))
+    memcpy(s.redges, old.redges, old.n * sizeof(size_t))
     memcpy(s.l_valencies, old.l_valencies, nbytes)
     memcpy(s.r_valencies, old.r_valencies, nbytes)
     memcpy(s.heads, old.heads, nbytes)
     memcpy(s.labels, old.labels, nbytes)
     memcpy(s.guess_labels, old.guess_labels, nbytes)
     memcpy(s.history, old.history, old.t * sizeof(size_t))
-    # TODO: Look into why we can't copy only the L/R children up to valency
     for i in range(old.i + 2):
         memcpy(s.l_children[i], old.l_children[i], old.l_valencies[i] * sizeof(size_t))
         memcpy(s.r_children[i], old.r_children[i], old.r_valencies[i] * sizeof(size_t))
@@ -305,6 +307,7 @@ cdef free_state(State* s):
     free(s.l_valencies)
     free(s.r_valencies)
     free(s.ledges)
+    free(s.redges)
     for i in range(s.n + PADDING):
         free(s.l_children[i])
         free(s.r_children[i])

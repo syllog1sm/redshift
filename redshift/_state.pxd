@@ -21,7 +21,7 @@ cdef struct Kernel:
     size_t h2s0
     size_t Lhs0
     size_t Lh2s0
-    size_t s0ledge
+    size_t s0redge
     size_t n0ledge
     Subtree s0l
     Subtree s0r
@@ -58,6 +58,7 @@ cdef struct State:
     size_t* l_valencies
     size_t* r_valencies
     size_t* ledges
+    size_t* redges
     size_t** l_children
     size_t** r_children
     size_t* history
@@ -66,10 +67,10 @@ cdef struct State:
 cdef uint64_t hash_kernel(Kernel* k)
 cdef int fill_kernel(State* s)
 
-cdef Kernel* kernel_from_s(Kernel* parent) except NULL
-cdef Kernel* kernel_from_r(Kernel* parent, size_t label) except NULL
-cdef Kernel* kernel_from_d(Kernel* parent, Kernel* gp) except NULL
-cdef Kernel* kernel_from_l(Kernel* parent, Kernel* gp, size_t label) except NULL
+#cdef Kernel* kernel_from_s(Kernel* parent) except NULL
+#cdef Kernel* kernel_from_r(Kernel* parent, size_t label) except NULL
+#cdef Kernel* kernel_from_d(Kernel* parent, Kernel* gp) except NULL
+#cdef Kernel* kernel_from_l(Kernel* parent, Kernel* gp, size_t label) except NULL
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1
 cdef int del_l_child(State *s, size_t head) except -1
