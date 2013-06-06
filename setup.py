@@ -27,14 +27,12 @@ virtual_env = os.environ.get('VIRTUAL_ENV', '')
 
 includes = [numpy.get_include(),
             os.path.join(virtual_env, 'include'),
+            os.path.join(pwd, 'redshift'),
             os.path.join(pwd, 'index')]
-
 exts = [
     Extension('redshift.parser', ["redshift/parser.pyx"], language="c++",
               include_dirs=includes),
-    Extension('redshift.beam', ["redshift/beam.pyx"],
-        language="c++", include_dirs=includes), 
-    Extension('redshift._state', ["redshift/_state.pyx"], language="c++"),
+    Extension('redshift._state', ["redshift/_state.pyx", "index/MurmurHash2.cpp"], language="c++", include_dirs=includes),
     Extension('redshift.io_parse', ["redshift/io_parse.pyx"], language="c++",
                include_dirs=includes),
     Extension('redshift.features', ["redshift/features.pyx", "index/MurmurHash2.cpp"],
