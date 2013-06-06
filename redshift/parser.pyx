@@ -122,7 +122,7 @@ cdef class Parser:
                   add_extra=True, label_set='MALT', feat_thresh=5,
                   allow_reattach=False, allow_reduce=False,
                   reuse_idx=False, beam_width=1, label_beam=True,
-                  feat_codes=None, add_clusters=False):
+                  ngrams=None, add_clusters=False):
         model_dir = Path(model_dir)
         if not clean:
             params = dict([line.split() for line in model_dir.join('parser.cfg').open()])
@@ -136,7 +136,8 @@ cdef class Parser:
             r_labels = params['right_labels']
             beam_width = int(params['beam_width'])
             label_beam = params['label_beam'] == 'True'
-            feat_codes = [int(i) for i in params['bigrams'].split(',')]
+            ngrams = [int(i) for i in params['ngrams'].split(',')]
+            add_clusters = params['add_clusters'] == 'True'
         if allow_reattach and allow_reduce:
             print 'NM L+D'
         elif allow_reattach:
@@ -153,7 +154,7 @@ cdef class Parser:
         else:
             print "Using ArcEager features"
             self.features = FeatureSet(len(labels), add_extra=add_extra,
-                                       to_add=feat_codes, add_clusters=add_clusters)
+                                       ngrams=ngrams, add_clusters=add_clusters)
         self.add_extra = add_extra
         self.label_set = label_set
         self.feat_thresh = feat_thresh
@@ -530,7 +531,8 @@ cdef class Parser:
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
             cfg.write(u'beam_width\t%d\n' % self.beam_width)
             cfg.write(u'label_beam\t%s\n' % self.label_beam)
-            cfg.write(u'bigrams\t%s\n' % u','.join([str(b) for b in self.features.bigrams]))
+            cfg.write(u'ngrams\t%s\n' % u','.join([str(b) for b in self.features.ngrams]))
+            cfg.write(u'add_clusters\t%s\n' % self.features.add_clusters)
 
     def __dealloc__(self):
         pass

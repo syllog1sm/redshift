@@ -65,7 +65,8 @@ cdef struct Predicate:
     int* args
 
 cdef class FeatureSet:
-    cdef object bigrams
+    cdef object ngrams
+    cdef bint add_clusters
     cdef Predicate* predicates
     cdef size_t* context
     cdef uint64_t* features 

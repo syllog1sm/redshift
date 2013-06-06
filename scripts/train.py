@@ -9,9 +9,11 @@ import time
 from pathlib import Path
 import pstats
 import cProfile
+from itertools import combinations
 
 import redshift.parser
 import redshift.io_parse
+import redshift.features
 
 USE_HELD_OUT = False
 
@@ -29,25 +31,34 @@ USE_HELD_OUT = False
     seed=("Set random seed", "option", "s", int),
     beam_width=("Beam width", "option", "k", int),
     movebeam=("Add labels to beams", "flag", "m", bool),
-    bigrams=("What bigram to include/exclude, or all", "option", "b", str),
+    ngrams=("What ngrams to include", "option", "b", str),
     add_clusters=("Add brown cluster features", "flag", "c", bool),
     n_sents=("Number of sentences to train from", "option", "n", int)
 )
 def main(train_loc, model_loc, train_alg="online", n_iter=15,
          add_extra_feats=False, label_set="Stanford", feat_thresh=1,
-         allow_reattach=False, allow_reduce=False, bigrams='all',
+         allow_reattach=False, allow_reduce=False, ngrams='best',
          add_clusters=False, n_sents=0,
          profile=False, debug=False, seed=0, beam_width=1, movebeam=False):
-    if bigrams == 'all':
-        bigrams = range(45)
-    elif bigrams == 'base':
-        bigrams = []
-    elif bigrams.startswith('ex'):
-        excluded = int(bigrams[2:])
-        bigrams = range(45)
-        bigrams.pop(excluded)
-    elif bigrams.startswith('in'):
-        bigrams = [int(bigrams[2:])]
+    best_bigrams = [0,1,2,3,4,5,6,7,11,12,15,16,17,19,21,24,25,26,27,51,54]
+    n_kernel_tokens = len(redshift.features.get_kernel_tokens())
+    n_bigrams = len(list(combinations(range(n_kernel_tokens), 2)))
+    n_ngrams = n_bigrams + len(list(combinations(range(n_kernel_tokens), 3)))
+    if ngrams == 'all_bi':
+        ngrams = range(n_bigrams)
+    elif ngrams == 'base':
+        ngrams = []
+    elif ngrams == 'best':
+        ngrams = best_bigrams
+    elif ngrams.startswith('in'):
+        ngram = int(ngrams[2:])
+        if ngram >= n_bigrams:
+            ngrams = best_bigrams
+            ngrams.append(ngram)
+        else:
+            ngrams = [int(ngrams[2:])]
+    else:
+        raise StandardError, ngrams
     random.seed(seed)
     train_loc = Path(train_loc)
     model_loc = Path(model_loc)
@@ -62,12 +73,11 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
                                     label_set=label_set, feat_thresh=feat_thresh,
                                     allow_reattach=allow_reattach, allow_reduce=allow_reduce,
                                     beam_width=beam_width, label_beam=not movebeam,
-                                    feat_codes=bigrams,
-                                    add_clusters=add_clusters)
+                                    ngrams=ngrams, add_clusters=add_clusters)
     
     train_sent_strs = train_loc.open().read().strip().split('\n\n')
     if n_sents != 0:
-        print "Using %d sents for training"
+        print "Using %d sents for training" % n_sents
         random.shuffle(train_sent_strs)
         train_sent_strs = train_sent_strs[:n_sents]
     train_str = '\n\n'.join(train_sent_strs)
