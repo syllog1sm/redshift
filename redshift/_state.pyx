@@ -6,7 +6,6 @@ DEF MAX_VALENCY = 100
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
     s.heads[child] = head
-    s.sig[child] = (label * s.n) + head
     s.labels[child] = label
     if child < head:
         if label != 1:
@@ -28,7 +27,6 @@ cdef int del_r_child(State *s, size_t head) except -1:
     s.r_valencies[head] -= 1
     s.heads[child] = 0
     s.labels[child] = 0
-    s.sig[child] = 0
 
 
 cdef int del_l_child(State *s, size_t head) except -1:
@@ -45,7 +43,6 @@ cdef int del_l_child(State *s, size_t head) except -1:
         s.ledges[head] = head
     s.heads[child] = 0
     s.labels[child] = 0
-    s.sig[child] = 0
 
 
 cdef size_t pop_stack(State *s) except 0:
@@ -61,10 +58,6 @@ cdef size_t pop_stack(State *s) except 0:
     assert s.top <= s.n, s.top
     assert popped != 0
     cdef size_t child
-    for child in range(s.l_valencies[popped]):
-        s.sig[child] = 0
-    for child in range(s.r_valencies[popped]):
-        s.sig[child] = 0
     return popped
 
 
@@ -75,8 +68,6 @@ cdef int push_stack(State *s) except -1:
     s.stack_len += 1
     assert s.top <= s.n
     s.i += 1
-    if s.sig[s.top] == 0:
-        s.sig[s.top] = s.top
 
 
 cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, Subtree* tree):
@@ -256,7 +247,6 @@ cdef State* init_state(size_t n):
     s.stack = <size_t*>calloc(n, sizeof(size_t))
     s.heads = <size_t*>calloc(n, sizeof(size_t))
     s.labels = <size_t*>calloc(n, sizeof(size_t))
-    s.sig = <size_t*>calloc(n, sizeof(size_t))
     s.guess_labels = <size_t*>calloc(n, sizeof(size_t))
     s.l_valencies = <size_t*>calloc(n, sizeof(size_t))
     s.r_valencies = <size_t*>calloc(n, sizeof(size_t))
@@ -298,7 +288,6 @@ cdef copy_state(State* s, State* old):
     memcpy(s.l_valencies, old.l_valencies, nbytes)
     memcpy(s.r_valencies, old.r_valencies, nbytes)
     memcpy(s.heads, old.heads, nbytes)
-    memcpy(s.sig, old.sig, nbytes)
     memcpy(s.labels, old.labels, nbytes)
     memcpy(s.guess_labels, old.guess_labels, nbytes)
     memcpy(s.history, old.history, old.t * sizeof(size_t))
@@ -322,7 +311,6 @@ cdef free_state(State* s):
     free(s.l_children)
     free(s.r_children)
     free(s.history)
-    free(s.sig)
     free(s)
 
 

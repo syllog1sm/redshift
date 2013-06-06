@@ -101,16 +101,7 @@ cdef class Beam:
             s.cost += self.costs[parent_idx][clas]
             s.score = data.first
             self.trans.transition(clas, s)
-            # Unless! If s has an identical "signature" to a previous state,
-            # then we know it's dominated, and we can discard it. We do that by
-            # just not advancing self.bsize, as that means this s struct
-            # will be reused next iteration, and over-written.
-            #key = MurmurHash64A(s.sig, (s.i + 1) * sizeof(size_t), 0)
-            #if seen_states[key] == 0:
-            #    seen_states[key] = 1
             self.bsize += 1
-            #else:
-            #    self.nr_skip += 1
             next_moves.pop()
         cdef int survived_for
         if self._prune_freqs is not None:
