@@ -10,6 +10,8 @@ from os import listdir
 from StringIO import StringIO
 import scipy.stats
 
+from itertools import combinations
+
 env.use_ssh_config = True
 
 from _paths import REMOTE_REPO, REMOTE_CONLL, REMOTE_MALT, REMOTE_STANFORD, REMOTE_PARSERS
@@ -245,7 +247,7 @@ def conll_table(name):
 def fmt_pc(pc):
     if pc < 1:
         pc *= 100
-    return '%.1f' % pc
+    return '%.2f' % pc
 
 
 def conll(name, lang, n=20, debug=False):
@@ -279,16 +281,126 @@ def conll(name, lang, n=20, debug=False):
                 run('qsub -N %s_bl %s' % (exp_name, script_loc))
  
 
+def bigram_exps(name, k=4, n=20, size=10000):
+    n = int(n)
+    k = int(k)
+    size = int(size)
+    data = str(REMOTE_MALT)
+    repo = str(REMOTE_REPO)
+    train_name = 'train.txt'
+    eval_pos = 'devi.txt' 
+    eval_parse = 'devr.txt'
+    arg_str = 'base'
+    train_n(n, 'base', pjoin(str(REMOTE_PARSERS), name), data, k=k, i=15,
+            add_feats=True, train_alg='max', label="NONE", n_sents=size,
+            ngrams="base")
+    n_bigrams = 66
+    for bigram_id in range(30, n_bigrams):
+        arg_strs = ['in%d' % bigram_id]
+        for arg_str in arg_strs:
+            train_n(n, arg_str, pjoin(str(REMOTE_PARSERS), name), data, k=k,
+                    i=15, add_feats=True, train_alg='max', label="NONE", n_sents=size,
+                    ngrams=arg_str)
+
+
+def trigram_exps(name, k=4, n=20, size=5000):
+    n = int(n)
+    k = int(k)
+    size = int(size)
+    data = str(REMOTE_MALT)
+    repo = str(REMOTE_REPO)
+    train_name = 'train.txt'
+    eval_pos = 'devi.txt' 
+    eval_parse = 'devr.txt'
+    arg_str = 'base'
+    train_n(n, 'base', pjoin(str(REMOTE_PARSERS), name), data, k=k, i=15,
+            add_feats=True, train_alg='max', label="NONE", n_sents=size,
+            ngrams="base")
+    n_trigrams = 66+10
+    for trigram_id in range(66, n_trigrams):
+        arg_strs = ['in%d' % trigram_id]
+        for arg_str in arg_strs:
+            train_n(n, arg_str, pjoin(str(REMOTE_PARSERS), name), data, k=k,
+                    i=15, add_feats=True, train_alg='max', label="NONE", n_sents=size,
+                    ngrams=arg_str)
+
+
+
+def bigram_table(name):
+    base_accs = []
+    arg_str = 'base'
+    for seed in range(20):
+        exp_name = '%s_%s_%d' % (name, arg_str, seed)
+        model = pjoin(str(REMOTE_PARSERS), name, arg_str, str(seed))
+        uas_loc = pjoin(model, 'dev', 'acc')
+        try:
+            text = run('cat %s' % uas_loc, quiet=True).stdout
+            base_accs.append(_get_acc(text, score='U'))
+        except:
+            continue
+    good_bigrams = []
+    s = 's0,n0,n1,n2,n0l,n0l2,s0h,s0h2,s0r,s0r2,s0l,s0l2'.split(',')
+    names = ['%s_%s' % (p) for p in combinations(s, 2)]
+    n, acc, stdev = _get_stdev(base_accs)
+    print n, arg_str, fmt_pc(acc), '%.4f' % stdev
+    base_acc = acc
+    for bigram_id in range(66):
+        arg_str = 'in%d' % bigram_id
+        accs = []
+        for seed in range(20):
+
+            exp_name = '%s_%s_%d' % (name, arg_str, seed)
+            model = pjoin(str(REMOTE_PARSERS), name, arg_str, str(seed))
+            uas_loc = pjoin(model, 'dev', 'acc')
+            try:
+                text = run('cat %s' % uas_loc, quiet=True).stdout
+                accs.append(_get_acc(text, score='U'))
+            except:
+                continue
+        n, acc, stdev = _get_stdev(accs)
+        z, p = scipy.stats.wilcoxon(base_accs, accs)
+        print bigram_id, names[bigram_id], fmt_pc(acc), '%.4f' % p
+        if acc > base_acc and p < 0.1:
+            good_bigrams.append(bigram_id)
+    print ','.join([str(i) for i in good_bigrams])
+    print ','.join(names[bigram_id] for bigram_id in good_bigrams)
+    print len(good_bigrams)
+ 
+
+def train_n(n, name, exp_dir, data, k=1, add_feats=False, i=15, upd='early',
+            movebeam=False, train_alg="online", label="Stanford", n_sents=0,
+            ngrams="best_bi"):
+    repo = str(REMOTE_REPO)
+    for seed in range(n):
+        exp_name = '%s_%d' % (name, seed)
+        model = pjoin(exp_dir, name, str(seed))
+        run("mkdir -p %s" % model)
+        train_str = _train(pjoin(data, 'train.txt'), model, k=k, i=15,
+                           add_feats=add_feats, train_alg=train_alg, seed=seed,
+                           label=label, n_sents=n_sents, ngrams=ngrams)
+        parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'), k=k)
+        eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.txt'))
+        grep_str = "grep 'U:' %s >> %s" % (pjoin(model, 'dev', 'acc'),
+                                           pjoin(model, 'dev', 'uas')) 
+        script = _pbsify(repo, (train_str, parse_str, eval_str, grep_str))
+        script_loc = pjoin(repo, 'pbs', exp_name)
+        with cd(repo):
+            put(StringIO(script), script_loc)
+            run('qsub -N %s %s' % (exp_name, script_loc))
+
+
+
 def _train(data, model, debug=False, k=1, add_feats=False, i=15, upd='early',
-           movebeam=False, train_alg="online", seed=0, args='', label="Stanford"):
+           movebeam=False, train_alg="online", seed=0, args='', label="Stanford",
+           n_sents=0, ngrams="best_bi"):
     feat_str = '-x' if add_feats else ''
     move_str = '-m' if movebeam else ''
-    template = './scripts/train.py -i {i} -a {alg} -k {k} -u {upd} {movebeam} {feat_str} {data} {model} -s {seed} -l {label} {args}'
+    template = './scripts/train.py -i {i} -a {alg} -k {k} {movebeam} {feat_str} {data} {model} -s {seed} -l {label} -n {n_sents} -b {ngrams} {args}'
     if debug:
         template += ' -debug'
     return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i,
                           upd=upd, movebeam=move_str, alg=train_alg, seed=seed,
-                          label=label, args=args)
+                          label=label, args=args, n_sents=n_sents, ngrams=ngrams)
 
 
 def _parse(model, data, out, gold=False, k=1):
@@ -304,7 +416,7 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=8gb,nodes=1:ppn=5
+#PBS -l walltime=20:00:00,mem=4gb,nodes=1:ppn=3
 source /home/mhonniba/py27/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
