@@ -109,56 +109,56 @@ cdef int fill_kernel(State *s):
     fill_subtree(s.l_valencies[s.i], s.l_children[s.i], s.labels, &s.kernel.n0l)
 
 
-cdef Kernel* kernel_from_s(Kernel* parent) except NULL:
-    k = <Kernel*>malloc(sizeof(Kernel))
-    memset(k, 0, sizeof(Kernel))
-    k.i = parent.i + 1
-    k.s0 = parent.i
-    k.s0ledge = parent.n0ledge
-    k.n0ledge = k.i
-    # Parents of s0, e.g. hs0, h2s0, Lhs0 etc all null in Shift
-    memcpy(&k.s0l, &parent.n0l, sizeof(Subtree))
-    return k
+#cdef Kernel* kernel_from_s(Kernel* parent) except NULL:
+#    k = <Kernel*>malloc(sizeof(Kernel))
+#    memset(k, 0, sizeof(Kernel))
+#    k.i = parent.i + 1
+#    k.s0 = parent.i
+#    k.s0ledge = parent.n0ledge
+#    k.n0ledge = k.i
+#    # Parents of s0, e.g. hs0, h2s0, Lhs0 etc all null in Shift
+#    memcpy(&k.s0l, &parent.n0l, sizeof(Subtree))
+#    return k
 
 
-cdef Kernel* kernel_from_r(Kernel* parent, size_t label) except NULL:
-    cdef Kernel* k = kernel_from_s(parent)
-    k.s0ledge = parent.s0ledge
-    k.n0ledge = k.i
-    k.Ls0 = label
-    k.hs0 = parent.s0
-    k.h2s0 = parent.hs0
-    k.Lhs0 = parent.Ls0
-    k.Lh2s0 = parent.Lhs0
-    return k
+#cdef Kernel* kernel_from_r(Kernel* parent, size_t label) except NULL:
+#    cdef Kernel* k = kernel_from_s(parent)
+#    k.s0ledge = parent.s0ledge
+#    k.n0ledge = k.i
+#    k.Ls0 = label
+#    k.hs0 = parent.s0
+#    k.h2s0 = parent.hs0
+#    k.Lhs0 = parent.Ls0
+#    k.Lh2s0 = parent.Lhs0
+#    return k
 
 
-cdef Kernel* kernel_from_d(Kernel* parent, Kernel* grandparent) except NULL:
-    assert parent.s0 >= grandparent.s0
-    k = <Kernel*>malloc(sizeof(Kernel))
-    memcpy(k, grandparent, sizeof(Kernel))
-    memcpy(&k.n0l, &parent.n0l, sizeof(Subtree))
-    k.i = parent.i
-    return k
+#cdef Kernel* kernel_from_d(Kernel* parent, Kernel* grandparent) except NULL:
+#    assert parent.s0 >= grandparent.s0
+#    k = <Kernel*>malloc(sizeof(Kernel))
+#    memcpy(k, grandparent, sizeof(Kernel))
+#    memcpy(&k.n0l, &parent.n0l, sizeof(Subtree))
+#    k.i = parent.i
+#    return k
 
 
-cdef Kernel* kernel_from_l(Kernel* parent, Kernel* grandparent, size_t label) except NULL:
-    assert parent.s0 >= grandparent.s0
-    k = <Kernel*>malloc(sizeof(Kernel))
-    memcpy(k, grandparent, sizeof(Kernel))
-    k.i = parent.i
-    k.n0ledge = parent.s0ledge
-    k.s0ledge = grandparent.s0ledge
-    k.n0l.val = parent.n0l.val + 1
-    k.n0l.idx[0] = parent.s0
-    k.n0l.idx[1] = parent.n0l.idx[0]
-    k.n0l.idx[2] = 0
-    k.n0l.idx[3] = 0
-    k.n0l.lab[0] = label
-    k.n0l.lab[1] = parent.n0l.idx[0]
-    k.n0l.lab[2] = parent.n0l.idx[1]
-    k.n0l.lab[3] = parent.n0l.idx[2]
-    return k
+#cdef Kernel* kernel_from_l(Kernel* parent, Kernel* grandparent, size_t label) except NULL:
+#    assert parent.s0 >= grandparent.s0
+#    k = <Kernel*>malloc(sizeof(Kernel))
+#    memcpy(k, grandparent, sizeof(Kernel))
+#    k.i = parent.i
+#    k.n0ledge = parent.s0ledge
+#    k.s0ledge = grandparent.s0ledge
+#    k.n0l.val = parent.n0l.val + 1
+#    k.n0l.idx[0] = parent.s0
+#    k.n0l.idx[1] = parent.n0l.idx[0]
+#    k.n0l.idx[2] = 0
+#    k.n0l.idx[3] = 0
+#    k.n0l.lab[0] = label
+#    k.n0l.lab[1] = parent.n0l.idx[0]
+#    k.n0l.lab[2] = parent.n0l.idx[1]
+#    k.n0l.lab[3] = parent.n0l.idx[2]
+#    return k
 
 cdef size_t get_l(State *s, size_t head):
     if s.l_valencies[head] == 0:
