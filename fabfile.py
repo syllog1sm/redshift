@@ -9,6 +9,7 @@ from os.path import join as pjoin
 from os import listdir
 from StringIO import StringIO
 import scipy.stats
+import redshift.features
 
 from itertools import combinations
 
@@ -281,7 +282,7 @@ def conll(name, lang, n=20, debug=False):
                 run('qsub -N %s_bl %s' % (exp_name, script_loc))
  
 
-def bigram_exps(name, k=4, n=20, size=10000):
+def ngram_add1(name, k=4, n=1, size=10000):
     n = int(n)
     k = int(k)
     size = int(size)
@@ -294,36 +295,33 @@ def bigram_exps(name, k=4, n=20, size=10000):
     train_n(n, 'base', pjoin(str(REMOTE_PARSERS), name), data, k=k, i=15,
             add_feats=True, train_alg='max', label="NONE", n_sents=size,
             ngrams="base")
-    n_bigrams = 66
-    for bigram_id in range(30, n_bigrams):
-        arg_strs = ['in%d' % bigram_id]
-        for arg_str in arg_strs:
-            train_n(n, arg_str, pjoin(str(REMOTE_PARSERS), name), data, k=k,
-                    i=15, add_feats=True, train_alg='max', label="NONE", n_sents=size,
-                    ngrams=arg_str)
+    tokens = 's0,n0,n1,n2,n0l,n0l2,s0h,s0h2,s0r,s0r2,s0l,s0l2'.split(',')
+    ngrams = ['%s_%s' % (p) for p in combinations(tokens, 2)]
+    ngrams.extend('%s_%s_%s' % (p) for p in combinations(tokens, 3))
+    n_ngrams = len(ngrams)
+    for ngram_id, ngram_name in enumerate(ngrams[:10]):
+        train_n(n, '%d_%s' % (ngram_id, ngram_name), pjoin(str(REMOTE_PARSERS), name),
+                data, k=k, i=15, add_feats=True, train_alg='max', label="NONE",
+                n_sents=size, ngrams='in%d' % ngram_id)
+        break
 
 
-def trigram_exps(name, k=4, n=20, size=5000):
-    n = int(n)
-    k = int(k)
-    size = int(size)
-    data = str(REMOTE_MALT)
-    repo = str(REMOTE_REPO)
-    train_name = 'train.txt'
-    eval_pos = 'devi.txt' 
-    eval_parse = 'devr.txt'
-    arg_str = 'base'
-    train_n(n, 'base', pjoin(str(REMOTE_PARSERS), name), data, k=k, i=15,
-            add_feats=True, train_alg='max', label="NONE", n_sents=size,
-            ngrams="base")
-    n_trigrams = 66+10
-    for trigram_id in range(66, n_trigrams):
-        arg_strs = ['in%d' % trigram_id]
-        for arg_str in arg_strs:
-            train_n(n, arg_str, pjoin(str(REMOTE_PARSERS), name), data, k=k,
-                    i=15, add_feats=True, train_alg='max', label="NONE", n_sents=size,
-                    ngrams=arg_str)
 
+def combine_ngrams(name, k=4, n=1, size=10000):
+    base_accs = get_acc('base')
+    for ngram_id in range(n_ngrams):
+        accs = get_acc('in%d' % ngram_id)
+        z, p = scipy.stats.wilcoxon(base_accs, accs)
+        if p < p_thresh:
+            accs.append((sum(accs) / len(accs), ngram_id))
+    accs.sort()
+    accs.reverse()
+    while accs:
+        for i in range(batch_size):
+            acc, ngram_id = accs.pop()
+            if not accs:
+                break
+        
 
 
 def bigram_table(name):
