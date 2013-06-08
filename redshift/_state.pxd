@@ -52,6 +52,7 @@ cdef struct State:
     int cost
 
     size_t* stack
+    size_t* tags
     size_t* heads
     size_t* labels
     size_t* guess_labels
