@@ -8,10 +8,8 @@ cdef enum:
     REDUCE
     LEFT
     RIGHT
-    _n_moves
-
-DEF N_MOVES = 5
-assert N_MOVES == _n_moves, "Set N_MOVES compile var to %d" % _n_moves
+    ASSIGN_POS
+    N_MOVES
 
 
 cdef transition_to_str(State* s, size_t move, label, object tokens):
