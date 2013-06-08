@@ -9,7 +9,6 @@ from os.path import join as pjoin
 from os import listdir
 from StringIO import StringIO
 import scipy.stats
-import redshift.features
 
 from itertools import combinations
 
