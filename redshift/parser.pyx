@@ -165,14 +165,10 @@ cdef class Parser:
             self.new_idx(self.model_dir, self.features.n)
         else:
             self.load_idx(self.model_dir, self.features.n)
-        if self.train_alg == 'standard':
-            raise StandardError
-            #print "Using ArcStandard transitions"
-            #self.moves = ArcStandard(labels)
-        else:
-            print "Using ArcEager transitions"
-            self.moves = TransitionSystem(labels, allow_reattach=allow_reattach,
-                                           allow_reduce=allow_reduce)
+        print "Using ArcEager transitions"
+        self.moves = TransitionSystem(list(range(100)), labels,
+                                      allow_reattach=allow_reattach,
+                                      allow_reduce=allow_reduce)
         if not clean:
             self.moves.set_labels(_parse_labels_str(l_labels), _parse_labels_str(r_labels))
         guide_loc = self.model_dir.join('model')
@@ -229,7 +225,7 @@ cdef class Parser:
             self.guide.total = 0
             if n < 3:
                 self.guide.reindex()
-            #
+            
         if self.feat_thresh > 1:
             self.guide.prune(self.feat_thresh)
         self.guide.finalize()
@@ -242,6 +238,7 @@ cdef class Parser:
         cdef int cost
         cdef size_t* g_heads = sent.parse.heads
         cdef size_t* g_labels = sent.parse.labels
+        cdef size_t* g_pos = sent.pos
         cdef Violation violn
         cdef double* scores
         cdef bint cache_hit = False
@@ -253,7 +250,7 @@ cdef class Parser:
             self._advance_gold(beam.gold, sent, True)
             for p_idx in range(beam.bsize):
                 kernel = beam.next_state(p_idx)
-                beam.cost_next(p_idx, g_heads, g_labels)
+                beam.cost_next(p_idx, g_pos, g_heads, g_labels)
                 scores = self.guide.cache.lookup(sizeof(Kernel), kernel, &cache_hit)
                 if not cache_hit:
                     feats = self.features.extract(sent, kernel)
@@ -293,9 +290,9 @@ cdef class Parser:
             feats = self.features.extract(sent, &s.kernel)
             self.guide.fill_scores(self.features.n, feats, scores)
         if use_static:
-            oracle = self.moves.break_tie(s, sent.parse.heads, sent.parse.labels)
+            oracle = self.moves.break_tie(s, sent.pos, sent.parse.heads, sent.parse.labels)
         else:
-            costs = self.moves.get_costs(s, sent.parse.heads, sent.parse.labels)
+            costs = self.moves.get_costs(s, sent.pos, sent.parse.heads, sent.parse.labels)
             best_score = -1000000
             best_right = scores[self.moves.r_start]
             rlabel = self.moves.labels[self.moves.r_start]
@@ -358,6 +355,7 @@ cdef class Parser:
         cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))
         cdef size_t* g_labels = sent.parse.labels
         cdef size_t* g_heads = sent.parse.heads
+        cdef size_t* g_pos = sent.pos
 
         cdef size_t n_feats = self.features.n
         cdef State* s = init_state(sent.length)
@@ -365,18 +363,16 @@ cdef class Parser:
         cdef size_t label = 0
         cdef size_t _ = 0
         cdef bint online = self.train_alg == 'online'
-        if DEBUG:
-            print ' '.join(py_words)
         while not s.is_finished:
             fill_kernel(s)
             feats = self.features.extract(sent, &s.kernel)
             self.moves.fill_valid(s, valid)
             pred = self.predict(n_feats, feats, valid, &s.guess_labels[s.i])
             if online:
-                costs = self.moves.get_costs(s, g_heads, g_labels)
+                costs = self.moves.get_costs(s, g_pos, g_heads, g_labels)
                 gold = self.predict(n_feats, feats, costs, &_) if costs[pred] != 0 else pred
             else:
-                gold = self.moves.break_tie(s, g_heads, g_labels)
+                gold = self.moves.break_tie(s, g_pos, g_heads, g_labels)
             self.guide.update(pred, gold, n_feats, feats, 1)
             if online and iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
                 self.moves.transition(pred, s)
@@ -386,6 +382,8 @@ cdef class Parser:
             self.guide.total += 1
         free_state(s)
         free(valid)
+        if DEBUG:
+            print 'Done'
 
     def add_parses(self, Sentences sents, k=None, collect_stats=False):
         cdef:
