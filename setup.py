@@ -32,6 +32,8 @@ includes = [numpy.get_include(),
 exts = [
     Extension('redshift.parser', ["redshift/parser.pyx"], language="c++",
               include_dirs=includes),
+    Extension('redshift.beam', ["redshift/beam.pyx"], language="c++",
+              include_dirs=includes),
     Extension('redshift._state', ["redshift/_state.pyx", "index/MurmurHash2.cpp"], language="c++", include_dirs=includes),
     Extension('redshift.io_parse', ["redshift/io_parse.pyx"], language="c++",
                include_dirs=includes),
