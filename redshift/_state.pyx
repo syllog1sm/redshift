@@ -74,7 +74,7 @@ cdef int push_stack(State *s) except -1:
     s.i += 1
 
 
-cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, Subtree* tree):
+cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, size_t* tags,  Subtree* tree):
     tree.val = val
     cdef size_t i = 0
     while val != 0 and i < 4:
@@ -84,10 +84,12 @@ cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, Subtree* tree):
         # we go through buffer.
         tree.idx[i] = kids[val]
         tree.lab[i] = labs[kids[val]]
+        tree.tags[i] = tags[kids[val]]
         i += 1
     for j in range(i, 4):
         tree.lab[j] = 0
         tree.idx[j] = 0
+        tree.tags[j] = 0
     # Don't use children 3 and 4 atm
     tree.idx[2] = 0
     tree.idx[3] = 0
@@ -97,21 +99,31 @@ cdef uint64_t hash_kernel(Kernel* k):
     return MurmurHash64A(k, sizeof(Kernel), 0)
 
 
-cdef int fill_kernel(State *s):
+cdef int fill_kernel(State *s, size_t* tags):
     cdef size_t i, val
     s.kernel.i = s.i
+    s.kernel.n0p = tags[s.i]
+    s.kernel.n1p = tags[s.i + 1]
     s.kernel.s0 = s.top
+    s.kernel.s0p = tags[s.top]
     s.kernel.hs0 = s.heads[s.top]
+    s.kernel.hs0p = tags[s.heads[s.top]]
     s.kernel.h2s0 = s.heads[s.heads[s.top]]
+    s.kernel.h2s0p = tags[s.heads[s.heads[s.top]]]
     s.kernel.Ls0 = s.labels[s.top]
     s.kernel.Lhs0 = s.labels[s.heads[s.top]]
     s.kernel.Lh2s0 = s.labels[s.heads[s.heads[s.top]]]
     s.kernel.s0redge = s.redges[s.top]
+    s.kernel.s0redgep = tags[s.redges[s.top]]
     s.kernel.n0ledge = s.ledges[s.i]
+    s.kernel.n0ledgep = tags[s.ledges[s.i]]
 
-    fill_subtree(s.l_valencies[s.top], s.l_children[s.top], s.labels, &s.kernel.s0l)
-    fill_subtree(s.r_valencies[s.top], s.r_children[s.top], s.labels, &s.kernel.s0r)
-    fill_subtree(s.l_valencies[s.i], s.l_children[s.i], s.labels, &s.kernel.n0l)
+    fill_subtree(s.l_valencies[s.top], s.l_children[s.top],
+                 s.labels, s.tags, &s.kernel.s0l)
+    fill_subtree(s.r_valencies[s.top], s.r_children[s.top],
+                 s.labels, s.tags, &s.kernel.s0r)
+    fill_subtree(s.l_valencies[s.i], s.l_children[s.i],
+                 s.labels, s.tags, &s.kernel.n0l)
 
 
 #cdef Kernel* kernel_from_s(Kernel* parent) except NULL:
@@ -267,7 +279,7 @@ cdef State* init_state(size_t n):
         s.l_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
         s.r_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
     s.stack[1] = 1
-    s.history = <size_t*>calloc(n * 2, sizeof(size_t))
+    s.history = <size_t*>calloc(n * 3, sizeof(size_t))
     return s
 
 cdef copy_state(State* s, State* old):

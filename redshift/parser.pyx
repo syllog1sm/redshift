@@ -170,7 +170,9 @@ cdef class Parser:
                                       allow_reattach=allow_reattach,
                                       allow_reduce=allow_reduce)
         if not clean:
-            self.moves.set_labels(_parse_labels_str(l_labels), _parse_labels_str(r_labels))
+            pos_tags = set([int(line.split()[-1]) for line in model_dir.join('pos').open()])
+            self.moves.set_labels(pos_tags, _parse_labels_str(l_labels),
+                                  _parse_labels_str(r_labels))
         guide_loc = self.model_dir.join('model')
         n_labels = len(io_parse.LABEL_STRS)
         self.guide = Perceptron(self.moves.max_class, guide_loc)
@@ -193,15 +195,17 @@ cdef class Parser:
         # Count classes and labels
         seen_l_labels = set([])
         seen_r_labels = set([])
+        seen_tags = set([])
         for i in range(sents.length):
             sent = sents.s[i]
             for j in range(1, sent.length - 1):
+                seen_tags.add(sent.pos[j])
                 label = sent.parse.labels[j]
                 if sent.parse.heads[j] > j:
                     seen_l_labels.add(label)
                 else:
                     seen_r_labels.add(label)
-        move_classes = self.moves.set_labels(seen_l_labels, seen_r_labels)
+        move_classes = self.moves.set_labels(seen_tags, seen_l_labels, seen_r_labels)
         self.guide.set_classes(range(move_classes))
         self.write_cfg(self.model_dir.join('parser.cfg'))
         if self.beam_width >= 1:
@@ -284,7 +288,7 @@ cdef class Parser:
             double best_score
             double best_right
             size_t rlabel
-        fill_kernel(s)
+        fill_kernel(s, sent.pos)
         scores = self.guide.cache.lookup(sizeof(s.kernel), <void*>&s.kernel, &cache_hit)
         if not cache_hit:
             feats = self.features.extract(sent, &s.kernel)
@@ -326,7 +330,7 @@ cdef class Parser:
             return {}
         cdef dict counts = {}
         for i in range(d, t):
-            fill_kernel(gold_state)
+            fill_kernel(gold_state, gold_state.tags)
             feats = self.features.extract(sent, &gold_state.kernel)
             clas = ghist[i]
             counts.setdefault(clas, {})
@@ -338,7 +342,7 @@ cdef class Parser:
             self.moves.transition(clas, gold_state)
         free_state(gold_state)
         for i in range(d, t):
-            fill_kernel(pred_state)
+            fill_kernel(pred_state, pred_state.tags)
             feats = self.features.extract(sent, &pred_state.kernel)
             clas = phist[i]
             counts.setdefault(clas, {})
@@ -364,7 +368,7 @@ cdef class Parser:
         cdef size_t _ = 0
         cdef bint online = self.train_alg == 'online'
         while not s.is_finished:
-            fill_kernel(s)
+            fill_kernel(s, g_pos)
             feats = self.features.extract(sent, &s.kernel)
             self.moves.fill_valid(s, valid)
             pred = self.predict(n_feats, feats, valid, &s.guess_labels[s.i])
@@ -408,7 +412,7 @@ cdef class Parser:
         s = init_state(sent.length)
         sent.parse.n_moves = 0
         while not s.is_finished:
-            fill_kernel(s)
+            fill_kernel(s, s.tags)
             feats = self.features.extract(sent, &s.kernel)
             try:
                 self.moves.fill_valid(s, self.moves._costs)
@@ -417,9 +421,9 @@ cdef class Parser:
             except:
                 print '%d stack, buffer=%d, len=%d' % (s.stack_len, s.i, s.n)
                 raise
-            sent.parse.moves[s.t] = clas
+            #sent.parse.moves[s.t] = clas
             self.moves.transition(clas, s)
-        sent.parse.n_moves = s.t
+        #sent.parse.n_moves = s.t
         # No need to copy heads for root and start symbols
 
         cdef size_t root

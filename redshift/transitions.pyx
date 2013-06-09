@@ -31,49 +31,63 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
 
 
 cdef class TransitionSystem:
-
-    def __cinit__(self, object labels, allow_reattach=False,
+    def __cinit__(self, object tags, object labels, allow_reattach=False,
                   allow_reduce=False):
         self.n_labels = len(labels)
+        self.n_tags = max(tags)
         self.py_labels = labels
         self.allow_reattach = allow_reattach
         self.allow_reduce = allow_reduce
         self.nr_class = 0
-        max_classes = N_MOVES * len(labels)
+        max_classes = 2 + self.n_labels + self.n_labels + self.n_tags
         self.max_class = max_classes
         self._costs = <int*>calloc(max_classes, sizeof(int))
         self.labels = <size_t*>calloc(max_classes, sizeof(size_t))
         self.moves = <size_t*>calloc(max_classes, sizeof(size_t))
         self.l_classes = <size_t*>calloc(self.n_labels, sizeof(size_t))
         self.r_classes = <size_t*>calloc(self.n_labels, sizeof(size_t))
+        self.p_classes = <size_t*>calloc(self.n_tags, sizeof(size_t))
         self.s_id = 0
         self.d_id = 1
         self.l_start = 2
         self.l_end = 0
         self.r_start = 3
         self.r_end = 0
+        self.p_start = 4
+        self.p_end = 0
 
-    def set_labels(self, left_labels, right_labels):
+    def set_labels(self, tags, left_labels, right_labels):
+        self.n_tags = <size_t>max(tags)
         self.left_labels = [self.py_labels[l] for l in sorted(left_labels)]
         self.right_labels = [self.py_labels[l] for l in sorted(right_labels)]
         self.labels[self.s_id] = 0
         self.labels[self.d_id] = 0
-        self.moves[self.s_id] = <int>SHIFT
-        self.moves[self.d_id] = <int>REDUCE
+        self.moves[self.s_id] = <size_t>SHIFT
+        self.moves[self.d_id] = <size_t>REDUCE
         clas = self.l_start
         for label in left_labels:
-            self.moves[clas] = <int>LEFT
+            self.moves[clas] = <size_t>LEFT
             self.labels[clas] = label
             self.l_classes[label] = clas
             clas += 1
         self.l_end = clas
         self.r_start = clas
         for label in right_labels:
-            self.moves[clas] = <int>RIGHT
+            self.moves[clas] = <size_t>RIGHT
             self.labels[clas] = label
             self.r_classes[label] = clas
             clas += 1
+        for i in range(self.r_start, self.r_end):
+            assert self.moves[i] == RIGHT
         self.r_end = clas
+        self.p_start = clas
+        cdef size_t tag
+        for tag in sorted(tags):
+            self.moves[clas] = <size_t>ASSIGN_POS
+            self.labels[clas] = tag
+            self.p_classes[tag] = clas
+            clas += 1
+        self.p_end = clas
         self.nr_class = clas
         return clas
         
@@ -103,7 +117,10 @@ cdef class TransitionSystem:
             head = s.top
             add_dep(s, head, child, label)
             push_stack(s)
+        elif move == ASSIGN_POS:
+            s.tags[s.i + 1] = label
         else:
+            print clas
             print move
             print label
             raise StandardError(clas)
@@ -112,11 +129,17 @@ cdef class TransitionSystem:
         if s.at_end_of_buffer and s.stack_len == 1:
             s.is_finished = True
   
-    cdef int* get_costs(self, State* s, size_t* heads, size_t* labels) except NULL:
+    cdef int* get_costs(self, State* s, size_t* tags, size_t* heads, size_t* labels) except NULL:
         cdef size_t i
         cdef int* costs = self._costs
         for i in range(self.nr_class):
             costs[i] = -1
+        cdef size_t last_move = self.moves[s.history[s.t - 1]] if s.t != 0 else SHIFT
+        if (s.i < (s.n - 2)) and (last_move == SHIFT or last_move == RIGHT):
+            for i in range(self.p_start, self.p_end):
+                costs[i] = 1
+            costs[self.p_classes[tags[s.i + 1]]] = 0
+            return costs
         costs[self.s_id] = self.s_cost(s, heads, labels)
         costs[self.d_id] = self.d_cost(s, heads, labels)
         r_cost = self.r_cost(s, heads, labels)
@@ -141,6 +164,15 @@ cdef class TransitionSystem:
         cdef size_t i
         for i in range(self.nr_class):
             valid[i] = -1
+        cdef size_t last_move
+        if s.t != 0:
+            last_move = self.moves[s.history[s.t - 1]]
+        else:
+            last_move = SHIFT
+        if (s.i < (s.n - 2)) and (last_move == SHIFT or last_move == RIGHT):
+            for i in range(self.p_start, self.p_end):
+                valid[i] = 0
+            return 0
         if not s.at_end_of_buffer:
             valid[self.s_id] = 0
             if s.stack_len == 1:
@@ -159,15 +191,22 @@ cdef class TransitionSystem:
                     for i in range(self.l_start, self.l_end):
                         valid[i] = 0
 
-    cdef int fill_static_costs(self, State* s, size_t* heads, size_t* labels,
-                               int* costs) except -1:
-        cdef size_t oracle = self.break_tie(s, heads, labels)
+    cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
+                               size_t* labels, int* costs) except -1:
+        cdef size_t oracle = self.break_tie(s, tags, heads, labels)
         cdef int cost = s.cost
         cdef size_t i
         for i in range(self.nr_class):
             costs[i] = cost + (i != oracle)
 
-    cdef int break_tie(self, State* s, size_t* heads, size_t* labels) except -1:
+    cdef int break_tie(self, State* s, size_t* tags, size_t* heads, size_t* labels) except -1:
+        cdef size_t last_move
+        if s.t != 0:
+            last_move = self.moves[s.history[s.t - 1]]
+        else:
+            last_move = SHIFT
+        if (s.i < (s.n - 2)) and (last_move == SHIFT or last_move == RIGHT):
+            return self.p_classes[tags[s.i + 1]]
         if s.stack_len == 1:
             return self.s_id
         elif not s.at_end_of_buffer and heads[s.i] == s.top:

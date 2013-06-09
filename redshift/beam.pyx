@@ -45,12 +45,12 @@ cdef class Beam:
 
     cdef Kernel* next_state(self, size_t idx):
         self.trans.fill_valid(self.beam[idx], self.valid[idx])
-        fill_kernel(self.beam[idx])
+        fill_kernel(self.beam[idx], self.beam[idx].tags)
         return &self.beam[idx].kernel
 
     cdef int cost_next(self, size_t i, size_t* tags, size_t* heads, size_t* labels) except -1:
         self.trans.fill_static_costs(self.beam[i], tags, heads, labels, self.costs[i])
-        fill_kernel(self.beam[i])
+        fill_kernel(self.beam[i], tags)
 
     cdef int extend_states(self, double** ext_scores) except -1:
         global merged
