@@ -252,12 +252,12 @@ cdef State* init_state(size_t n):
     cdef State* s = <State*>malloc(sizeof(State))
     s.n = n
     s.t = 0
-    s.i = 2
+    s.i = 0
     s.cost = 0
     s.score = 0
-    s.top = 1
+    s.top = 0
     s.second = 0
-    s.stack_len = 2
+    s.stack_len = 1
     s.is_finished = False
     s.at_end_of_buffer = n == 3
     n = n + PADDING
@@ -278,7 +278,7 @@ cdef State* init_state(size_t n):
         s.redges[i] = i
         s.l_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
         s.r_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
-    s.stack[1] = 1
+    s.stack[1] = 0
     s.history = <size_t*>calloc(n * 3, sizeof(size_t))
     return s
 
