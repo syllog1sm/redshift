@@ -33,6 +33,7 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
 cdef class TransitionSystem:
     def __cinit__(self, object tags, object labels, allow_reattach=False,
                   allow_reduce=False):
+        self.assign_pos = False
         self.n_labels = len(labels)
         self.n_tags = max(tags)
         self.py_labels = labels
@@ -135,7 +136,8 @@ cdef class TransitionSystem:
         for i in range(self.nr_class):
             costs[i] = -1
         cdef size_t last_move = self.moves[s.history[s.t - 1]] if s.t != 0 else SHIFT
-        if (s.i < (s.n - 2)) and (last_move == SHIFT or last_move == RIGHT):
+        if self.assign_pos and (s.i < (s.n - 2)) and \
+          (last_move == SHIFT or last_move == RIGHT):
             for i in range(self.p_start, self.p_end):
                 costs[i] = 1
             costs[self.p_classes[tags[s.i + 1]]] = 0
@@ -169,18 +171,19 @@ cdef class TransitionSystem:
             last_move = self.moves[s.history[s.t - 1]]
         else:
             last_move = SHIFT
-        if (s.i < (s.n - 2)) and (last_move == SHIFT or last_move == RIGHT):
+        if self.assign_pos and (s.i < (s.n - 2)) and \
+          (last_move == SHIFT or last_move == RIGHT):
             for i in range(self.p_start, self.p_end):
                 valid[i] = 0
             return 0
         if not s.at_end_of_buffer:
             valid[self.s_id] = 0
-            if s.stack_len == 1:
+            if s.stack_len < 2:
                 return 0
             if not has_root_child(s, s.i):
                 for i in range(self.r_start, self.r_end):
                     valid[i] = 0
-        if s.stack_len != 1:
+        if s.stack_len >= 2:
             if s.heads[s.top] != 0 or (s.stack_len >= 3 and self.allow_reattach):
                 valid[self.d_id] = 0
             if self.allow_reattach or s.heads[s.top] == 0:
@@ -205,9 +208,10 @@ cdef class TransitionSystem:
             last_move = self.moves[s.history[s.t - 1]]
         else:
             last_move = SHIFT
-        if (s.i < (s.n - 2)) and (last_move == SHIFT or last_move == RIGHT):
+        if self.assign_pos and (s.i < (s.n - 2)) and \
+          (last_move == SHIFT or last_move == RIGHT):
             return self.p_classes[tags[s.i + 1]]
-        if s.stack_len == 1:
+        if s.stack_len < 2 and not s.at_end_of_buffer:
             return self.s_id
         elif not s.at_end_of_buffer and heads[s.i] == s.top:
             return self.r_classes[labels[s.i]]
@@ -225,6 +229,8 @@ cdef class TransitionSystem:
         cdef size_t i, stack_i
         if s.at_end_of_buffer:
             return -1
+        if s.stack_len < 2:
+            return 0
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
         return cost
@@ -359,7 +365,7 @@ cdef class ArcStandard(TransitionSystem):
             pop_stack(s)
 
     cdef int break_tie(self, State* s, size_t* heads, size_t* labels) except -1:
-        if s.stack_len <= 2 and not s.at_end_of_buffer:
+        if s.stack_len < 2 and not s.at_end_of_buffer:
             return self.s_id
         elif heads[s.top] == s.second and not has_child_in_buffer(s, s.top, heads):
             return self.r_classes[labels[s.top]]

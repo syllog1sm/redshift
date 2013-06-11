@@ -180,37 +180,32 @@ def trigram_with_clusters(a, b, c):
     return _trigram(a, b, c, True)
 
 
-cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* pos,
+cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
                        size_t* clusters, size_t* cprefixes,
                        size_t* orths, size_t* parens, size_t* quotes,
                        Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
     context[N0w] = words[k.i]
-    #context[N0p] = pos[k.i]
     context[N0p] = k.n0p
     context[N0c] = clusters[k.i]
     context[N0cp] = cprefixes[k.i]
 
     context[N1w] = words[k.i + 1]
-    #context[N1p] = pos[k.i + 1]
     context[N1p] = k.n1p
     context[N1c] = clusters[k.i + 1]
     context[N1cp] = cprefixes[k.i + 1]
 
     context[N2w] = words[k.i + 2]
-    #context[N2p] = pos[k.i + 2]
     context[N2p] = 0
     context[N2c] = clusters[k.i + 2]
     context[N2cp] = cprefixes[k.i + 2]
 
     context[S0w] = words[k.s0]
-    #context[S0p] = pos[k.s0]
     context[S0p] = k.s0p
     context[S0c] = clusters[k.s0]
     context[S0cp] = cprefixes[k.s0]
     context[S0l] = k.Ls0
 
     context[S0hw] = words[k.hs0]
-    #context[S0hp] = pos[k.hs0]
     context[S0hp] = k.hs0p
     context[S0hc] = clusters[k.hs0]
     context[S0hcp] = cprefixes[k.hs0]
@@ -218,7 +213,6 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
     context[S0hb] = k.hs0 != 0
 
     context[S0h2w] = words[k.h2s0]
-    #context[S0h2p] = pos[k.h2s0]
     context[S0h2p] = k.h2s0p
     context[S0h2c] = clusters[k.h2s0]
     context[S0h2cp] = cprefixes[k.h2s0]
@@ -229,38 +223,32 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
     context[N0lv] = n0l.val
 
     context[S0lw] = words[s0l.idx[0]]
-    #context[S0lp] = pos[s0l.idx[0]]
     context[S0lp] = s0l.tags[0]
     context[S0lc] = clusters[s0l.idx[0]]
     context[S0lcp] = cprefixes[s0l.idx[0]]
 
     context[S0rw] = words[s0r.idx[0]]
-    #context[S0rp] = pos[s0r.idx[0]]
     context[S0rp] = s0r.tags[0]
     context[S0rc] = clusters[s0r.idx[0]]
     context[S0rcp] = cprefixes[s0r.idx[0]]
 
     context[S0l2w] = words[s0l.idx[1]]
-    #context[S0l2p] = pos[s0l.idx[1]]
-    context[S0l2p] = s0l.idx[1]
+    context[S0l2p] = s0l.tags[1]
     context[S0l2c] = clusters[s0l.idx[1]]
     context[S0l2cp] = cprefixes[s0l.idx[1]]
 
     context[S0r2w] = words[s0r.idx[1]]
-    #context[S0r2p] = pos[s0r.idx[1]]
-    context[S0r2p] = s0r.idx[1]
+    context[S0r2p] = s0r.tags[1]
     context[S0r2c] = clusters[s0r.idx[1]]
     context[S0r2cp] = cprefixes[s0r.idx[1]]
 
     context[N0lw] = words[n0l.idx[0]]
-    #context[N0lp] = pos[n0l.idx[0]]
-    context[N0lp] = n0l.idx[0]
+    context[N0lp] = n0l.tags[0]
     context[N0lc] = clusters[n0l.idx[0]]
     context[N0lcp] = cprefixes[n0l.idx[0]]
 
     context[N0l2w] = words[n0l.idx[1]]
-    #context[N0l2p] = pos[n0l.idx[1]]
-    context[N0l2p] = n0l.idx[1]
+    context[N0l2p] = n0l.tags[1]
     context[N0l2c] = clusters[n0l.idx[1]]
     context[N0l2cp] = cprefixes[n0l.idx[1]]
 
@@ -293,12 +281,12 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words, size_t* 
     context[N1quote] = quotes[k.i + 1]
     context[N0le_orth] = orths[k.n0ledge]
     context[N0le_w] = words[k.n0ledge]
-    context[N0le_p] = pos[k.n0ledge]
+    context[N0le_p] = k.n0ledgep
     context[N0le_c] = clusters[k.n0ledge]
     context[N0le_cp] = cprefixes[k.n0ledge]
     context[S0re_orth] = orths[k.s0redge]
     context[S0re_w] = words[k.s0redge]
-    context[S0re_p] = pos[k.s0redge]
+    context[S0re_p] = k.s0redgep
     context[S0re_c] = clusters[k.s0redge]
     context[S0re_cp] = cprefixes[k.s0redge]
  
@@ -326,7 +314,7 @@ cdef class FeatureSet:
     cdef uint64_t* extract(self, Sentence* sent, Kernel* k) except NULL:
         cdef size_t* context = self.context
         assert <size_t>k != 0
-        fill_context(context, self.nr_label, sent.words, sent.pos,
+        fill_context(context, self.nr_label, sent.words,
                      sent.clusters, sent.cprefixes,
                      sent.orths, sent.parens, sent.quotes,
                      k, &k.s0l, &k.s0r, &k.n0l)
@@ -370,9 +358,7 @@ cdef class FeatureSet:
         self.predicates = <Predicate*>malloc(self.n * sizeof(Predicate))
         cdef Predicate pred
         for id_, args in enumerate(feats):
-            size = args[0]
-            args = args[1:]
-            pred = Predicate(id=id_, n=len(args), expected_size = size)
+            pred = Predicate(id=id_, n=len(args), expected_size = 1000)
             pred.raws = <uint64_t*>malloc((len(args) + 1) * sizeof(uint64_t))
             pred.args = <int*>malloc(len(args) * sizeof(int))
             for i, element in enumerate(sorted(args)):

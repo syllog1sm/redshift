@@ -75,9 +75,11 @@ cdef int push_stack(State *s) except -1:
 
 
 cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, size_t* tags,  Subtree* tree):
+    # Fill the subtree with the last 4 values from "kids" (and labs and tags)
     tree.val = val
     cdef size_t i = 0
     while val != 0 and i < 4:
+        # Valency starts as the length, so decrement _before_ lookup
         val -= 1
         # The last in valencies is the right/left most. For left, we attach
         # in stack order, so left-most is deepest on stack. And for right,
@@ -93,30 +95,34 @@ cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, size_t* tags,  Sub
     # Don't use children 3 and 4 atm
     tree.idx[2] = 0
     tree.idx[3] = 0
+    tree.lab[2] = 0
+    tree.lab[3] = 0
+    tree.tags[2] = 0
+    tree.tags[3] = 0
 
 
 cdef uint64_t hash_kernel(Kernel* k):
     return MurmurHash64A(k, sizeof(Kernel), 0)
 
 
-cdef int fill_kernel(State *s, size_t* tags):
+cdef int fill_kernel(State *s):
     cdef size_t i, val
     s.kernel.i = s.i
-    s.kernel.n0p = tags[s.i]
-    s.kernel.n1p = tags[s.i + 1]
+    s.kernel.n0p = s.tags[s.i]
+    s.kernel.n1p = s.tags[s.i + 1]
     s.kernel.s0 = s.top
-    s.kernel.s0p = tags[s.top]
+    s.kernel.s0p = s.tags[s.top]
     s.kernel.hs0 = s.heads[s.top]
-    s.kernel.hs0p = tags[s.heads[s.top]]
+    s.kernel.hs0p = s.tags[s.heads[s.top]]
     s.kernel.h2s0 = s.heads[s.heads[s.top]]
-    s.kernel.h2s0p = tags[s.heads[s.heads[s.top]]]
+    s.kernel.h2s0p = s.tags[s.heads[s.heads[s.top]]]
     s.kernel.Ls0 = s.labels[s.top]
     s.kernel.Lhs0 = s.labels[s.heads[s.top]]
     s.kernel.Lh2s0 = s.labels[s.heads[s.heads[s.top]]]
     s.kernel.s0redge = s.redges[s.top]
-    s.kernel.s0redgep = tags[s.redges[s.top]]
+    s.kernel.s0redgep = s.tags[s.redges[s.top]]
     s.kernel.n0ledge = s.ledges[s.i]
-    s.kernel.n0ledgep = tags[s.ledges[s.i]]
+    s.kernel.n0ledgep = s.tags[s.ledges[s.i]]
 
     fill_subtree(s.l_valencies[s.top], s.l_children[s.top],
                  s.labels, s.tags, &s.kernel.s0l)
@@ -237,13 +243,14 @@ cdef int has_head_in_stack(State *s, size_t word, size_t* heads):
 
 
 cdef bint has_root_child(State *s, size_t token):
+    # TODO: This is an SBD thingy currently not in use
     if s.at_end_of_buffer:
         return False
     return False
     # TODO: Refer to the root label constant instead here!!
     # TODO: Instead update left-arc on root so that it attaches the rest of the
     # stack to S0
-    return s.labels[get_l(s, token)] == 1
+    #return s.labels[get_l(s, token)] == 1
 
 DEF PADDING = 4
 
@@ -257,12 +264,18 @@ cdef State* init_state(size_t n):
     s.score = 0
     s.top = 0
     s.second = 0
-    s.stack_len = 1
+    s.stack_len = 0
     s.is_finished = False
-    s.at_end_of_buffer = n == 3
+    s.at_end_of_buffer = n == 2
     n = n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
     s.tags = <size_t*>calloc(n, sizeof(size_t))
+    # These make the tags match the OOB/ROOT/NONE values.
+    # TODO: Need better way to do this.
+    for i in range(1, s.n):
+        s.tags[i] = 2
+    s.tags[0] = 3
+    s.tags[s.n] = 1
     s.heads = <size_t*>calloc(n, sizeof(size_t))
     s.labels = <size_t*>calloc(n, sizeof(size_t))
     s.guess_labels = <size_t*>calloc(n, sizeof(size_t))

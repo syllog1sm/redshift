@@ -45,12 +45,12 @@ cdef class Beam:
 
     cdef Kernel* next_state(self, size_t idx):
         self.trans.fill_valid(self.beam[idx], self.valid[idx])
-        fill_kernel(self.beam[idx], self.beam[idx].tags)
+        fill_kernel(self.beam[idx])
         return &self.beam[idx].kernel
 
     cdef int cost_next(self, size_t i, size_t* tags, size_t* heads, size_t* labels) except -1:
         self.trans.fill_static_costs(self.beam[i], tags, heads, labels, self.costs[i])
-        fill_kernel(self.beam[i], tags)
+        fill_kernel(self.beam[i])
 
     cdef int extend_states(self, double** ext_scores) except -1:
         global merged
@@ -158,12 +158,13 @@ cdef class Beam:
             self.violn = violn
         return self.upd_strat == 'early' and bool(self.violn)
 
-    cdef int fill_parse(self, size_t* hist, size_t* heads,
+    cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
                         size_t* labels, bint* sbd) except -1:
         cdef size_t rightmost = 1
         # No need to copy heads for root and start symbols
         for i in range(1, self.length - 1):
             assert self.beam[0].heads[i] != 0
+            #tags[i] = self.beam[0].tags[i]
             heads[i] = self.beam[0].heads[i]
             labels[i] = self.beam[0].labels[i]
             # Do sentence boundary detection

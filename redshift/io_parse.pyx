@@ -81,7 +81,7 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.parens = <size_t*>calloc(length, sizeof(size_t))
     s.quotes = <size_t*>calloc(length, sizeof(size_t))
 
-    cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
+    #cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
     py_ids.insert(0, 0)
     py_ids.append(0)
     cdef size_t paren_cnt = 0
@@ -89,9 +89,9 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     for i in range(length):
         s.words[i] = index.hashes.encode_word(py_words[i])
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
-        if s.words[i] < brown_idx.n:
-            s.clusters[i] = brown_idx.table[s.words[i]].full
-            s.cprefixes[i] = brown_idx.table[s.words[i]].prefix
+        #if s.words[i] < brown_idx.n:
+        #    s.clusters[i] = brown_idx.table[s.words[i]].full
+        #    s.cprefixes[i] = brown_idx.table[s.words[i]].prefix
         #if index.hashes.get_freq(py_words[i]) < 800:
         #    s.words[i] = s.pos[i]
         #    s.words[i] = 0
@@ -250,6 +250,7 @@ cdef class Sentences:
         cdef Sentence* s
         cdef size_t i, j, w_id
         cdef int head
+        pos_idx = index.hashes.reverse_pos_index()
         for i in range(self.length):
             s = self.s[i]
             py_words, py_pos = self.strings[i]
@@ -260,7 +261,7 @@ cdef class Sentences:
                 else:
                     head = <int>(s.parse.heads[j]) - (j - w_id)
                 try:
-                    fields = (w_id, py_words[j], py_pos[j], head,
+                    fields = (w_id, py_words[j], pos_idx[s.pos[j]], head,
                               LABEL_STRS[s.parse.labels[j]])
                 except:
                     print j, s.length, s.parse.labels[j], len(py_words), len(py_pos)
