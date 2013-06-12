@@ -5,7 +5,7 @@ import plac
 from collections import defaultdict
 
 def pc(num, den):
-    return (num / float(den)) * 100
+    return (num / float(den+1e-100)) * 100
 
 def fmt_acc(label, n, l_corr, u_corr, total_errs):
     l_pc = pc(l_corr, n)
@@ -69,6 +69,8 @@ def main(test_loc, gold_loc, eval_punct=False):
     sb_fp = 0
     sb_fn = 0
     sb_n = 0
+    tags_corr = 0
+    tags_tot = 0
     for t, g in zip(gen_toks(test_loc), gen_toks(gold_loc)):
         sb_n += g.sbd
         if g.sbd:
@@ -78,7 +80,11 @@ def main(test_loc, gold_loc, eval_punct=False):
             sb_fp += t.sbd
             if t.sbd:
                 print 'SBD Err: ', t.word, g.word
+        tags_corr += t.pos == g.pos
+        tags_tot += 1
         if g.label == "P" and not eval_punct:
+            continue
+        elif g.label == 'erased' or g.label == 'discourse':
             continue
         assert t.word == g.word, '%s vs %s' %(t.word, g.word)
         u_c = g.head == t.head
@@ -111,10 +117,11 @@ def main(test_loc, gold_loc, eval_punct=False):
     yield 'L: %.3f' % pc(l_nc, N)
     sb_p = pc(sb_tp, sb_tp + sb_fp)
     sb_r = pc(sb_tp, sb_n)
-    sb_f = 2 * ((sb_p * sb_r) / (sb_p + sb_r))
+    sb_f = 2 * ((sb_p * sb_r) / (sb_p + sb_r + 1e-100))
     yield 'SBD P: %.2f' % sb_p
     yield 'SBD R: %.2f' % sb_r
     yield 'SBD F: %.2f' % sb_f
+    yield 'POS Acc: %.2f' % (pc(tags_corr, tags_tot))
 
 
 if __name__ == '__main__':
