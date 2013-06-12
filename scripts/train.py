@@ -51,12 +51,7 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
     elif ngrams == 'best':
         ngrams = best_bigrams
     elif ngrams.startswith('in'):
-        ngram = int(ngrams[2:])
-        if ngram >= n_bigrams:
-            ngrams = best_bigrams
-            ngrams.append(ngram)
-        else:
-            ngrams = [int(ngrams[2:])]
+        ngrams = [int(ngrams[2:])]
     else:
         raise StandardError, ngrams
     random.seed(seed)
