@@ -292,14 +292,17 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
  
 
 cdef class FeatureSet:
-    def __cinit__(self, nr_label, bint add_extra=False, ngrams=None, add_clusters=False):
+    def __cinit__(self, nr_label, uint64_t mask_value=1, bint add_extra=False,
+                  ngrams=None, add_clusters=False):
         if ngrams is None:
             ngrams = []
         self.ngrams = ngrams
-        print self.ngrams
         self.add_clusters = add_clusters
         self.ngrams.append(-1)
         self.nr_label = nr_label
+        # Value that indicates the value has been "masked", e.g. it was pruned
+        # as a rare word. If a feature contains any masked values, it is dropped.
+        self.mask_value = mask_value
         # Sets "n"
         self._make_predicates(add_extra, ngrams, add_clusters)
         # TODO: Reference index.hashes constant
@@ -331,14 +334,17 @@ cdef class FeatureSet:
             seen_non_zero = False
             for j in range(pred.n):
                 value = context[pred.args[j]]
-                pred.raws[j] = value
-                if value != 0:
+                if value == self.mask_value:
+                    break
+                elif value != 0:
                     seen_non_zero = True
-            if seen_non_zero:
-                pred.raws[pred.n] = pred.id
-                hashed = MurmurHash64A(pred.raws, (pred.n + 1) * sizeof(uint64_t), i)
-                features[f] = hashed
-                f += 1
+                pred.raws[j] = value
+            else:
+                if seen_non_zero:
+                    pred.raws[pred.n] = pred.id
+                    hashed = MurmurHash64A(pred.raws, (pred.n + 1) * sizeof(uint64_t), i)
+                    features[f] = hashed
+                    f += 1
         cdef size_t tag, letter
         #cdef bint* seen_tags 
         #if self.nr_tags and k.s0 > 0 and (k.s0 + 1) < k.i:
@@ -505,9 +511,12 @@ cdef class FeatureSet:
         )
 
         if add_extra:
-            print "Add extra feats"
-            #feats = unigrams + distance + valency + labels + label_sets
-            feats = tuple(unigrams)
+            print "Use ngram feats"
+            if len(to_add) > 1:
+                print "Adding distance, label and valency"
+                feats = unigrams + distance + valency + labels + label_sets
+            else:
+                feats = tuple(unigrams)
             kernel_tokens = get_kernel_tokens()
             
             bigram = bigram_with_clusters if add_clusters else bigram_no_clusters
@@ -520,7 +529,7 @@ cdef class FeatureSet:
                 if i in to_add:
                     print "Added", i
                     feats += bigram(t1, t2)
-            n_bigrams = i
+            n_bigrams = i + 1
             for i, (t1, t2, t3) in enumerate(combinations(kernel_tokens, 3)):
 
                 if (i+n_bigrams) in to_add:

@@ -149,12 +149,9 @@ cdef class Parser:
             print 'Beam settings: k=%d; upd_strat=%s; label_beam=%s' % beam_settings
         self.model_dir = self.setup_model_dir(model_dir, clean)
         labels = io_parse.set_labels(label_set)
-        if train_alg == 'standard':
-            self.features = ArcStandardFeatureSet(len(labels), add_extra)
-        else:
-            print "Using ArcEager features"
-            self.features = FeatureSet(len(labels), add_extra=add_extra,
-                                       ngrams=ngrams, add_clusters=add_clusters)
+        self.features = FeatureSet(len(labels), mask_value=index.hashes.get_mask_value(),
+                                   add_extra=add_extra, ngrams=ngrams,
+                                   add_clusters=add_clusters)
         self.add_extra = add_extra
         self.label_set = label_set
         self.feat_thresh = feat_thresh
@@ -525,57 +522,6 @@ cdef class Parser:
     def __dealloc__(self):
         pass
       
-    """
-    def get_best_moves(self, Sentences sents, Sentences gold):
-        "Get a list of move taken/oracle move pairs for output"
-        cdef State* s
-        cdef size_t n
-        cdef size_t move = 0
-        cdef size_t label = 0
-        cdef object best_moves
-        cdef size_t i
-        cdef int* costs
-        cdef size_t* g_labels
-        cdef size_t* g_heads
-        cdef size_t clas, parse_class
-        best_moves = []
-        for i in range(sents.length):
-            sent = &sents.s[i]
-            g_labels = gold.s[i].parse.labels
-            g_heads = gold.s[i].parse.heads
-            n = sent.length
-            s = init_state(n)
-            sent_moves = []
-            tokens = sents.strings[i][0]
-            while not s.is_finished:
-                costs = self.moves.get_costs(s, g_heads, g_labels)
-                best_strs = []
-                best_ids = set()
-                for clas in range(self.moves.nr_class):
-                    if costs[clas] == 0:
-                        move = self.moves.moves[clas]
-                        label = 0
-                        if move not in best_ids:
-                            best_strs.append(lmove_to_str(move, label, s.heads[s.top]))
-                        best_ids.add(move)
-                best_strs = ','.join(best_strs)
-                best_id_str = ','.join(map(str, sorted(best_ids)))
-                parse_class = sent.parse.moves[s.t]
-                state_str = transition_to_str(s, self.moves.moves[parse_class],
-                                              self.moves.labels[parse_class],
-                                              tokens)
-                parse_move = self.moves.moves[parse_class]
-                parse_label = 0
-                parse_move_str = lmove_to_str(parse_move, parse_label,
-                                              s.heads[s.top])
-                sent_moves.append((best_id_str, int(move),
-                                  best_strs, parse_move_str,
-                                  state_str))
-                self.moves.transition(parse_class, s)
-            free_state(s)
-            best_moves.append((u' '.join(tokens), sent_moves))
-        return best_moves
-        """
 
 def print_train_msg(n, n_corr, n_move, n_hit, n_miss, stats):
     pc = lambda a, b: '%.1f' % ((float(a) / (b + 1e-100)) * 100)
@@ -589,4 +535,3 @@ def print_train_msg(n, n_corr, n_move, n_hit, n_miss, stats):
     if 'moves' in stats:
         msg += '. %.2f moves per sentence' % (float(stats['moves']) / stats['sents'])
     print msg
-

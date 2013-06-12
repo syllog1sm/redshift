@@ -3,6 +3,7 @@ from pathlib import Path
 
 DEF VOCAB_SIZE = 1e6
 DEF TAG_SET_SIZE = 100
+DEF MASK_VALUE = 1
 
 from libc.stdint cimport uint64_t
 from libc.stdlib cimport calloc, malloc, free
@@ -53,18 +54,20 @@ cdef class Index:
 
 
 cdef class StrIndex(Index):
-    def __cinit__(self, expected_size, uint64_t i=1, vocab_loc=None):
+    def __cinit__(self, expected_size, uint64_t i=2):
+        assert i > MASK_VALUE
         self.table.set_empty_key(0)
         self.table.resize(expected_size)
         self.i = i
         self.save_entries = False
         self.vocab = {}
-        #if vocab_loc is not None:
-        #    for line in open(vocab_loc):
-        #        if not line.strip():
-        #            continue
-        #        freq, word = line.strip().split()
-        #        self.vocab[word] = int(freq)
+
+    def load_vocab(self, vocab_loc):
+        for line in open(vocab_loc):
+            if not line.strip():
+                continue
+            freq, word = line.strip().split()
+            self.vocab[word] = int(freq)
     
     cdef uint64_t encode(self, char* feature) except 0:
         cdef uint64_t value
@@ -152,61 +155,6 @@ cdef class PruningFeatIndex(Index):
     def set_threshold(self, uint64_t threshold):
         self.threshold = threshold
 
-#
-#cdef class FeatIndex(Index):
-#    def __cinit__(self):
-#        cdef dense_hash_map[uint64_t, uint64_t] *table
-#        self.tables = vector[dense_hash_map[uint64_t, uint64_t]]()
-#        self.i = 1
-#
-#    cpdef set_path(self, path):
-#        self.path = path
-#        self.out_file = open(str(path), 'w')
-#        self.save_entries = True
-#
-#    def set_n_predicates(self, uint64_t n):
-#        cdef uint64_t i
-#        self.n = n
-#        self.save_entries = False
-#        cdef uint64_t zero = 0
-#        for i in range(n):
-#            table = new dense_hash_map[uint64_t, uint64_t]()
-#            self.tables.push_back(table[0])
-#            self.tables[i].set_empty_key(zero)
-#    
-#    cdef uint64_t encode(self, uint64_t* feature, uint64_t length, uint64_t i):
-#        cdef uint64_t value
-#        cdef uint64_t hashed
-#        hashed = MurmurHash64A(feature, length * sizeof(uint64_t), i)
-#        value = self.tables[i][hashed]
-#        if value == 0:
-#            value = self.i
-#            self.tables[i][hashed] = value
-#            if self.save_entries:
-#                self.out_file.write('%d\t_\t%d\t%d\n' % (i, hashed, value))
-#            self.i += 1
-#        return value
-#
-#    cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value):
-#        self.tables[i][hashed] = value
-#
-#    cpdef save(self):
-#        if self.save_entries:
-#            self.out_file.close()
-#        self.save_entries = False
-#
-#
-#    def __dealloc__(self):
-#        if self.save_entries:
-#            self.out_file.close()
-#
-#    def set_feat_counting(self, count_feats):
-#        self.count_features = count_feats
-#
-#    def set_threshold(self, uint64_t threshold):
-#        self.threshold = threshold
-#
-
 cdef class ScoresCache:
     def __cinit__(self, size_t scores_size, size_t pool_size=500):
         self._cache = dense_hash_map[uint64_t, size_t]()
@@ -293,20 +241,15 @@ cdef class InstanceCounter:
 
 
 _pos_idx = StrIndex(TAG_SET_SIZE)
-_word_idx = StrIndex(VOCAB_SIZE, vocab_loc='/home/mhonniba/repos/redshift/index/vocab.txt',
-                     i=TAG_SET_SIZE)
+_word_idx = StrIndex(VOCAB_SIZE, i=TAG_SET_SIZE)
 #_cluster_idx = ClusterIndex(os.path.join('/Users/matt/repos/redshift/index/browns.txt'))
 #_cluster_idx = ClusterIndex(os.path.join('/home/mhonniba/repos/redshift/index/browns.txt'))
 #_feat_idx = FeatIndex()
 
-#def init_feat_idx(int n, path):
-#    global _feat_idx
-#    _feat_idx.set_n_predicates(n)
-#    _feat_idx.set_path(path)
-
 def init_word_idx(path):
     global _word_idx
     _word_idx.set_path(path)
+    _word_idx.load_vocab(os.path.join(os.path.dirname(__file__), 'vocab.txt'))
 
 def init_pos_idx(path):
     global _pos_idx
@@ -315,28 +258,14 @@ def init_pos_idx(path):
     encode_pos('NONE')
     encode_pos('OOB')
 
-
-#def load_feat_idx(n, path):
-#    global _feat_idx
-#    _feat_idx.set_n_predicates(n)
-#    _feat_idx.load(path)
-
-
 def load_word_idx(path):
     global _word_idx
     _word_idx.load(path)
+    _word_idx.load_vocab(os.path.join(os.path.dirname(__file__), 'vocab.txt'))
 
 def load_pos_idx(path):
     global _pos_idx
     _pos_idx.load(path)
-
-#def set_feat_counting(bint feat_counting):
-#    global _feat_idx
-#    _feat_idx.set_feat_counting(feat_counting)
-
-#def set_feat_threshold(int threshold):
-#    global _feat_idx
-#    _feat_idx.set_threshold(threshold)
 
 cpdef encode_word(object word):
     global _word_idx
@@ -356,6 +285,9 @@ def reverse_pos_index():
     global _pos_idx
     cdef StrIndex idx = _pos_idx
     return idx.get_reverse_index()
+
+def get_mask_value():
+    return MASK_VALUE
 
 cpdef int get_freq(object word) except -1:
     global _word_idx
@@ -405,6 +337,82 @@ cdef class ClusterIndex:
     def __dealloc__(self):
         free(self.table)
 
+
+#def init_feat_idx(int n, path):
+#    global _feat_idx
+#    _feat_idx.set_n_predicates(n)
+#    _feat_idx.set_path(path)
+
+
+
+#def load_feat_idx(n, path):
+#    global _feat_idx
+#    _feat_idx.set_n_predicates(n)
+#    _feat_idx.load(path)
+
+
+#def set_feat_counting(bint feat_counting):
+#    global _feat_idx
+#    _feat_idx.set_feat_counting(feat_counting)
+
+#def set_feat_threshold(int threshold):
+#    global _feat_idx
+#    _feat_idx.set_threshold(threshold)
+
+#
+#cdef class FeatIndex(Index):
+#    def __cinit__(self):
+#        cdef dense_hash_map[uint64_t, uint64_t] *table
+#        self.tables = vector[dense_hash_map[uint64_t, uint64_t]]()
+#        self.i = 1
+#
+#    cpdef set_path(self, path):
+#        self.path = path
+#        self.out_file = open(str(path), 'w')
+#        self.save_entries = True
+#
+#    def set_n_predicates(self, uint64_t n):
+#        cdef uint64_t i
+#        self.n = n
+#        self.save_entries = False
+#        cdef uint64_t zero = 0
+#        for i in range(n):
+#            table = new dense_hash_map[uint64_t, uint64_t]()
+#            self.tables.push_back(table[0])
+#            self.tables[i].set_empty_key(zero)
+#    
+#    cdef uint64_t encode(self, uint64_t* feature, uint64_t length, uint64_t i):
+#        cdef uint64_t value
+#        cdef uint64_t hashed
+#        hashed = MurmurHash64A(feature, length * sizeof(uint64_t), i)
+#        value = self.tables[i][hashed]
+#        if value == 0:
+#            value = self.i
+#            self.tables[i][hashed] = value
+#            if self.save_entries:
+#                self.out_file.write('%d\t_\t%d\t%d\n' % (i, hashed, value))
+#            self.i += 1
+#        return value
+#
+#    cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value):
+#        self.tables[i][hashed] = value
+#
+#    cpdef save(self):
+#        if self.save_entries:
+#            self.out_file.close()
+#        self.save_entries = False
+#
+#
+#    def __dealloc__(self):
+#        if self.save_entries:
+#            self.out_file.close()
+#
+#    def set_feat_counting(self, count_feats):
+#        self.count_features = count_feats
+#
+#    def set_threshold(self, uint64_t threshold):
+#        self.threshold = threshold
+#
 
 
 

@@ -40,7 +40,8 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
          allow_reattach=False, allow_reduce=False, ngrams='base',
          add_clusters=False, n_sents=0,
          profile=False, debug=False, seed=0, beam_width=1, movebeam=False):
-    best_bigrams = [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26,27,28,30,32,33,34,36,38,40,41,43,45,47,50,51,52,54,55,56,57,58,59,60,61,62,63,64]
+    best_bigrams = [0, 65, 1, 5, 11, 15, 13, 7, 17, 3, 19, 51, 23, 9, 6, 22, 52]
+    best_trigrams = [69, 67, 71, 68, 66, 72, 73, 74]
     n_kernel_tokens = len(redshift.features.get_kernel_tokens())
     n_bigrams = len(list(combinations(range(n_kernel_tokens), 2)))
     n_ngrams = n_bigrams + len(list(combinations(range(n_kernel_tokens), 3)))
@@ -49,7 +50,7 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
     elif ngrams == 'base':
         ngrams = []
     elif ngrams == 'best':
-        ngrams = best_bigrams
+        ngrams = best_bigrams + best_trigrams
     elif ngrams.startswith('in'):
         ngrams = [int(ngrams[2:])]
     else:

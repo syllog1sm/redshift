@@ -67,6 +67,7 @@ cdef struct Predicate:
 cdef class FeatureSet:
     cdef object ngrams
     cdef bint add_clusters
+    cdef uint64_t mask_value
     cdef Predicate* predicates
     cdef size_t* context
     cdef uint64_t* features 
