@@ -293,9 +293,10 @@ cdef class InstanceCounter:
 
 
 _pos_idx = StrIndex(TAG_SET_SIZE)
-_word_idx = StrIndex(VOCAB_SIZE, vocab_loc='/Users/matt/repos/redshift/index/vocab.txt',
+_word_idx = StrIndex(VOCAB_SIZE, vocab_loc='/home/mhonniba/repos/redshift/index/vocab.txt',
                      i=TAG_SET_SIZE)
 #_cluster_idx = ClusterIndex(os.path.join('/Users/matt/repos/redshift/index/browns.txt'))
+#_cluster_idx = ClusterIndex(os.path.join('/home/mhonniba/repos/redshift/index/browns.txt'))
 #_feat_idx = FeatIndex()
 
 #def init_feat_idx(int n, path):
