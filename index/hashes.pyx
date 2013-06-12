@@ -28,13 +28,28 @@ cdef class Index:
     cpdef load(self, path):
         cdef object hashed
         cdef uint64_t value
-        for line in path.open():
+        self.path = path
+        nlines = 0
+        for line in self.path.open():
+            nlines += 1
             fields = line.strip().split()
             i = int(fields[0])
             key = fields[1]
             hashed = int(fields[2])
             value = int(fields[3])
             self.load_entry(i, key, hashed, value)
+        print "Loaded %s (%d lines)" % (path, nlines)
+
+    def get_reverse_index(self):
+        if self.out_file is not None:
+            self.out_file.close()
+        index = {}
+        for line in self.path.open():
+            if not line.strip():
+                continue
+            i, feat_str, hashed, value = line.split()
+            index[int(value)] = feat_str
+        return index
 
 
 cdef class StrIndex(Index):
@@ -44,12 +59,12 @@ cdef class StrIndex(Index):
         self.i = i
         self.save_entries = False
         self.vocab = {}
-        if vocab_loc is not None:
-            for line in open(vocab_loc):
-                if not line.strip():
-                    continue
-                freq, word = line.strip().split()
-                self.vocab[word] = int(freq)
+        #if vocab_loc is not None:
+        #    for line in open(vocab_loc):
+        #        if not line.strip():
+        #            continue
+        #        freq, word = line.strip().split()
+        #        self.vocab[word] = int(freq)
     
     cdef uint64_t encode(self, char* feature) except 0:
         cdef uint64_t value
@@ -280,7 +295,7 @@ cdef class InstanceCounter:
 _pos_idx = StrIndex(TAG_SET_SIZE)
 _word_idx = StrIndex(VOCAB_SIZE, vocab_loc='/Users/matt/repos/redshift/index/vocab.txt',
                      i=TAG_SET_SIZE)
-_cluster_idx = ClusterIndex(os.path.join('/Users/matt/repos/redshift/index/browns.txt'))
+#_cluster_idx = ClusterIndex(os.path.join('/Users/matt/repos/redshift/index/browns.txt'))
 #_feat_idx = FeatIndex()
 
 #def init_feat_idx(int n, path):
@@ -335,6 +350,11 @@ def encode_pos(object pos):
     py_pos = pos.encode('ascii')
     raw_pos = py_pos
     return idx.encode(raw_pos)
+
+def reverse_pos_index():
+    global _pos_idx
+    cdef StrIndex idx = _pos_idx
+    return idx.get_reverse_index()
 
 cpdef int get_freq(object word) except -1:
     global _word_idx
