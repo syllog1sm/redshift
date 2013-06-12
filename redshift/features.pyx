@@ -135,8 +135,8 @@ def _bigram(a, b, add_clusters=True):
     c2 = b + 2
     cp2 = b + 3
     basic = ((w1, w2), (w1, p1, w2, p2), (p1, p2), (w1, p2), (p1, w2))
-    clusters = ((c1, c2), (c1, p1, c2, p2), (c1, w1, cp2, p2),
-                (cp1, p1, c2, p2), (cp1, p1, cp2, p2))
+    clusters = ((c1, c2), (c1, p2, cp2), (cp1, p1, c2), (c1, w2), (w1, c2),
+                (cp1, p1, w2), (w1, cp2, p2))
     if add_clusters:
         return basic + clusters
     else:
@@ -162,10 +162,11 @@ def _trigram(a, b, c, add_clusters=True):
     c3 = c + 2
     cp3 = c + 3
 
-    basic = ((w1, w2, w3), (w1, w2, p3), (w1, p2, w3), (p1, w2, w3),
-            (w1, p2, p3), (p1, w2, p3), (p1, p2, w3), (p1, p2, p3))
-    clusters = ((c1, c2, p3), (c1, p2, w3), (p1, c2, c3), (c1, p2, p3),
-                (p1, c2, p3), (p1, c2, c3), (p1, p2, p3))
+    basic = ((w1, w2, w3), (w1, p2, p3), (p1, w2, p3), (p1, p2, w3), (p1, p2, p3))
+    clusters = ((c1, c2, c3), (c1, c2, w3), (c1, c2, p3), (c1, w2, c3), (c1, p2, c3),
+                (w1, c2, c3), (p1, c2, c3))
+    #clusters = ((c1, c2, p3), (c1, p2, w3), (p1, c2, c3), (c1, p2, p3),
+    #            (p1, c2, p3), (p1, c2, c3), (p1, p2, p3))
 
     if add_clusters:
         return basic + clusters
@@ -296,6 +297,7 @@ cdef class FeatureSet:
         if ngrams is None:
             ngrams = []
         self.ngrams = ngrams
+        print self.ngrams
         self.add_clusters = add_clusters
         self.ngrams.append(-1)
         self.nr_label = nr_label
@@ -505,7 +507,8 @@ cdef class FeatureSet:
 
         if add_extra:
             print "Add extra feats"
-            feats = unigrams + distance + valency + labels + label_sets
+            #feats = unigrams + distance + valency + labels + label_sets
+            feats = unigrams
             kernel_tokens = get_kernel_tokens()
             
             bigram = bigram_with_clusters if add_clusters else bigram_no_clusters
@@ -516,9 +519,13 @@ cdef class FeatureSet:
 
             for i, (t1, t2) in enumerate(combinations(kernel_tokens, 2)):
                 if i in to_add:
+                    print "Added", i
                     feats += bigram(t1, t2)
+            n_bigrams = i
             for i, (t1, t2, t3) in enumerate(combinations(kernel_tokens, 3)):
-                if i in to_add:
+
+                if (i+n_bigrams) in to_add:
+                    print "Added", i+n_bigrams
                     feats += trigram(t1, t2, t3)
         else:
             feats = from_single + from_word_pairs + from_three_words + distance
