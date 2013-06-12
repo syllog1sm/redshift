@@ -395,12 +395,12 @@ cdef class Perceptron:
                 self._raw_to_dense(self.raws[i].id, i)
                 vacancies.append(i)
         for freq, f_id in q[:self.nr_raws]:
+            if not vacancies:
+                break
             assert f_id != 0
             f_addr = self.W[f_id]
             if f_addr > self.nr_raws:
                 self._dense_to_raw(f_id, f_addr, vacancies.pop())
-                if not vacancies:
-                    break
         assert not vacancies, str(vacancies)
 
     def _raw_to_dense(self, uint64_t f_id, size_t raw_idx):
