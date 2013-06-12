@@ -237,6 +237,7 @@ cdef class Parser:
     cdef object decode_beam(self, Sentence* sent, size_t k, object stats):
         cdef size_t p_idx, i
         cdef Kernel* kernel
+        cdef Kernel* gold_kernel
         cdef uint64_t* feats
         cdef int* costs
         cdef int cost
@@ -252,7 +253,12 @@ cdef class Parser:
         stats['sents'] += 1
         beam_scores = <double**>malloc(beam.k * sizeof(double*))
         while not beam.gold.is_finished:
-            self._advance_gold(beam.gold, sent, True)
+            gold_kernel = beam.gold_kernel()
+            scores = self.guide.cache.lookup(sizeof(Kernel), gold_kernel, &cache_hit)
+            if not cache_hit:
+                feats = self.features.extract(sent, gold_kernel)
+                self.guide.fill_scores(self.features.n, feats, scores)
+            beam.advance_gold(scores, g_pos, g_heads, g_labels)
             for p_idx in range(beam.bsize):
                 memcpy(beam.beam[p_idx].tags, sent.pos, (sent.length + 4)* sizeof(size_t))
                 kernel = beam.next_state(p_idx)
@@ -279,40 +285,6 @@ cdef class Parser:
         else:
             stats['moves'] += beam.gold.t
             return ({}, 0)
-
-    cdef int _advance_gold(self, State* s, Sentence* sent, bint use_static) except -1:
-        cdef:
-            size_t oracle, i
-            int* costs
-            uint64_t* feats
-            double* scores
-            bint cache_hit
-            double best_score
-            double best_right
-            size_t rlabel
-        fill_kernel(s)
-        scores = self.guide.cache.lookup(sizeof(s.kernel), <void*>&s.kernel, &cache_hit)
-        if not cache_hit:
-            feats = self.features.extract(sent, &s.kernel)
-            self.guide.fill_scores(self.features.n, feats, scores)
-        if use_static:
-            oracle = self.moves.break_tie(s, sent.pos, sent.parse.heads, sent.parse.labels)
-        else:
-            costs = self.moves.get_costs(s, sent.pos, sent.parse.heads, sent.parse.labels)
-            best_score = -1000000
-            best_right = scores[self.moves.r_start]
-            rlabel = self.moves.labels[self.moves.r_start]
-            for i in range(self.moves.nr_class):
-                if costs[i] == 0 and scores[i] > best_score:
-                    oracle = i
-                    best_score = scores[i]
-                if self.moves.r_end > i > self.moves.r_start and scores[i] > best_right:
-                    rlabel = self.moves.labels[i]
-                    best_right = scores[i]
-            assert best_score > -1000000
-        s.guess_labels[s.i] = rlabel
-        s.score += scores[oracle]
-        self.moves.transition(oracle, s)
 
     cdef dict _count_feats(self, Sentence* sent, size_t t, size_t* phist, size_t* ghist):
         cdef size_t d, i, f

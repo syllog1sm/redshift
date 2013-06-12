@@ -43,6 +43,16 @@ cdef class Beam:
         self.violn = None
         self._prune_freqs = prune_freqs
 
+    cdef Kernel* gold_kernel(self):
+        fill_kernel(self.gold)
+        return &self.gold.kernel
+
+    cdef int advance_gold(self, double* scores, size_t* tags,
+                          size_t* heads, size_t* labels) except -1:
+        cdef size_t oracle = self.trans.break_tie(self.gold, tags, heads, labels)
+        self.gold.score += scores[oracle]
+        self.trans.transition(oracle, self.gold)
+
     cdef Kernel* next_state(self, size_t idx):
         self.trans.fill_valid(self.beam[idx], self.valid[idx])
         fill_kernel(self.beam[idx])
@@ -78,22 +88,12 @@ cdef class Beam:
         cdef State* s
         cdef State* parent
         cdef uint64_t key
-        cdef dense_hash_map[uint64_t, int] seen_states = dense_hash_map[uint64_t, int](self.k)
-        seen_states.set_empty_key(0)
-        seen_parents = set()
-        survivors = set()
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
             parent_idx = data.second / self.trans.nr_class
             assert parent_idx < self.psize
             clas = data.second % self.trans.nr_class
             parent = self.parents[parent_idx]
-            if self._prune_freqs is not None and parent_idx not in seen_parents:
-                seen_parents.add(parent_idx)
-                prefix = []
-                for i in range(parent.t):
-                    prefix.append(parent.history[i])
-                    survivors.add(tuple(prefix))
             # We've got two arrays of states, and we swap beam-for-parents.
             # So, s here will get manipulated, then copied into parents later.
             s = self.beam[self.bsize]
@@ -103,27 +103,6 @@ cdef class Beam:
             self.trans.transition(clas, s)
             self.bsize += 1
             next_moves.pop()
-        cdef int survived_for
-        if self._prune_freqs is not None:
-            for parent_idx in range(self.psize):
-                if parent_idx not in seen_parents:
-                    seen_parents.add(parent_idx)
-                    parent = self.parents[parent_idx]
-                    prefix = []
-                    # So, we have the set of prefixes that have remained in the beam
-                    for i in range(parent.t):
-                        # Find prefixes which _aren't_ in the beam
-                        prefix.append(parent.history[i])
-                        if tuple(prefix) not in survivors:
-                            # Let's say we find a prefix of length 2 not represented
-                            # in the current beam. If t=10, that's 7 states that prefix
-                            # must have survived for. So, increment the prune
-                            # freqs to say that the state survived for at least 1,
-                            # at least 2, etc.
-                            for survived_for in range(1, parent.t - i):
-                                self._prune_freqs.setdefault(survived_for, 0)
-                                self._prune_freqs[survived_for] += 1
-                            break
         self.is_full = self.bsize >= self.k
         # Flush next_moves queue
         self.t += 1
