@@ -111,14 +111,13 @@ def get_kernel_tokens():
     return [S0w, N0w, N1w, N2w, N0lw, N0l2w, S0hw, S0h2w, S0rw, S0r2w, S0lw, S0l2w]
 
 def unigram(word, add_clusters=True):
-    w = 1000
     pos = word + 1
     cluster = word + 2
     cluster_prefix = word + 3
-    basic = ((w, word, pos), (w, word), (w, pos))
-    clusters = ((w, word, pos, cluster_prefix), (w, word, pos, cluster),
-                (w, word, cluster), (w, word, cluster_prefix),
-                (w, pos, cluster), (w, pos, cluster_prefix))
+    basic = ((word, pos), (word,), (pos,))
+    clusters = ((word, pos, cluster_prefix), (word, pos, cluster),
+                (word, cluster), (word, cluster_prefix),
+                (pos, cluster), (pos, cluster_prefix))
     if add_clusters:
         return basic + clusters
     else:
@@ -508,7 +507,7 @@ cdef class FeatureSet:
         if add_extra:
             print "Add extra feats"
             #feats = unigrams + distance + valency + labels + label_sets
-            feats = unigrams
+            feats = tuple(unigrams)
             kernel_tokens = get_kernel_tokens()
             
             bigram = bigram_with_clusters if add_clusters else bigram_no_clusters
