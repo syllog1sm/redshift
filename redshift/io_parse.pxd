@@ -22,12 +22,13 @@ cdef struct Sentence:
 
 
 cdef Sentence* make_sentence(size_t id_, size_t length, object py_ids,
-                            object py_words, object py_tags)
+                            object py_words, object py_tags, size_t vocab_thresh)
 
 cdef class Sentences:
     cdef object strings
     cdef Sentence** s
     cdef size_t length
+    cdef size_t vocab_thresh 
     cdef size_t max_length
 
     cpdef int add(self, size_t id_, object ids, object words, object tags,

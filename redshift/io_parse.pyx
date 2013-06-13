@@ -52,7 +52,8 @@ def set_moves(moves):
         MOVE_STRS.append(move)
 
 
-cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tags):
+cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tags,
+                             size_t thresh):
     cdef:
         size_t i
         bytes py_word
@@ -93,7 +94,7 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
         #if s.words[i] < brown_idx.n:
         #    s.clusters[i] = brown_idx.table[s.words[i]].full
         #    s.cprefixes[i] = brown_idx.table[s.words[i]].prefix
-        if index.hashes.get_freq(py_words[i]) < 100:
+        if thresh != 0 and index.hashes.get_freq(py_words[i]) <= thresh:
             s.words[i] = mask_value
         s.ids[i] = py_ids[i]
         # Use POS tag to semi-smartly get ' disambiguation
@@ -111,13 +112,13 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     return s
 
 
-def read_conll(conll_str, moves=None):
+def read_conll(conll_str, moves=None, vocab_thresh=0):
     cdef:
         size_t i
         object words, tags, heads, labels, token_str, word, pos, head, label
         Sentences sentences
     sent_strs = conll_str.strip().split('\n\n')
-    sentences = Sentences(max_length=len(sent_strs))
+    sentences = Sentences(max_length=len(sent_strs), vocab_thresh=vocab_thresh)
     first_sent = sent_strs[0]
     cdef size_t word_idx = 0
     cdef size_t id_
@@ -168,14 +169,14 @@ def read_conll(conll_str, moves=None):
     return sentences
 
     
-def read_pos(file_str):
+def read_pos(file_str, vocab_thresh=0):
     cdef:
         size_t i
         object token_str, word, pos, words, tags
         Sentences sentences
 
     sent_strs = file_str.strip().split('\n')
-    sentences = Sentences(max_length=len(sent_strs))
+    sentences = Sentences(max_length=len(sent_strs), vocab_thresh=vocab_thresh)
     cdef size_t w_id = 0
     for i, sent_str in enumerate(sent_strs):
         words = ['<start>']
@@ -194,18 +195,20 @@ def read_pos(file_str):
 
 
 cdef class Sentences:
-    def __cinit__(self, size_t max_length=100000):
+    def __cinit__(self, size_t max_length=100000, vocab_thresh=0):
+        print "Vocab thresh=%d" % vocab_thresh
         self.strings = []
         self.length = 0
         self.s = <Sentence**>malloc(sizeof(Sentence*) * max_length)
         self.max_length = max_length
+        self.vocab_thresh = vocab_thresh
 
     cpdef int add(self, size_t id_, ids, words, tags, heads, labels) except -1:
         cdef Sentence* s
         cdef size_t n
         cdef size_t i
         n = len(words)
-        s = make_sentence(id_, n, ids, words, tags)
+        s = make_sentence(id_, n, ids, words, tags, self.vocab_thresh)
         # NB: This doesn't initialise moves, or set sentence boundaries
         if heads and labels:
             for i in range(s.length):

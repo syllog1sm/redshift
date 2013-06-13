@@ -78,17 +78,16 @@ cdef class TransitionSystem:
             self.labels[clas] = label
             self.r_classes[label] = clas
             clas += 1
-        for i in range(self.r_start, self.r_end):
-            assert self.moves[i] == RIGHT
         self.r_end = clas
-        self.p_start = clas
         cdef size_t tag
-        for tag in sorted(tags):
-            self.moves[clas] = <size_t>ASSIGN_POS
-            self.labels[clas] = tag
-            self.p_classes[tag] = clas
-            clas += 1
-        self.p_end = clas
+        if self.assign_pos:
+            self.p_start = clas
+            for tag in sorted(tags):
+                self.moves[clas] = <size_t>ASSIGN_POS
+                self.labels[clas] = tag
+                self.p_classes[tag] = clas
+                clas += 1
+            self.p_end = clas
         self.nr_class = clas
         return clas
         

@@ -119,7 +119,7 @@ cdef class Parser:
     cdef bint label_beam
 
     def __cinit__(self, model_dir, clean=False, train_alg='static',
-                  add_extra=True, label_set='MALT', feat_thresh=5,
+                  add_extra=True, label_set='MALT', vocab_thresh=5,
                   allow_reattach=False, allow_reduce=False,
                   reuse_idx=False, beam_width=1, label_beam=True,
                   ngrams=None, add_clusters=False):
@@ -154,7 +154,8 @@ cdef class Parser:
                                    add_clusters=add_clusters)
         self.add_extra = add_extra
         self.label_set = label_set
-        self.feat_thresh = feat_thresh
+        # TODO: Fix this
+        self.feat_thresh = 1
         self.train_alg = train_alg
         self.beam_width = beam_width
         self.label_beam = label_beam
