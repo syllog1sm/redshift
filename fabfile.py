@@ -298,75 +298,66 @@ def ngram_add1(name, k=4, n=1, size=10000):
     ngrams = ['%s_%s' % (p) for p in combinations(tokens, 2)]
     ngrams.extend('%s_%s_%s' % (p) for p in combinations(tokens, 3))
     n_ngrams = len(ngrams)
-    for ngram_id, ngram_name in enumerate(ngrams[:10]):
+    for ngram_id, ngram_name in list(enumerate(ngrams)):
         train_n(n, '%d_%s' % (ngram_id, ngram_name), pjoin(str(REMOTE_PARSERS), name),
                 data, k=k, i=15, add_feats=True, train_alg='max', label="NONE",
                 n_sents=size, ngrams='in%d' % ngram_id)
-        break
-
 
 
 def combine_ngrams(name, k=4, n=1, size=10000):
-    base_accs = get_acc('base')
-    for ngram_id in range(n_ngrams):
-        accs = get_acc('in%d' % ngram_id)
-        z, p = scipy.stats.wilcoxon(base_accs, accs)
-        if p < p_thresh:
-            accs.append((sum(accs) / len(accs), ngram_id))
-    accs.sort()
-    accs.reverse()
-    while accs:
-        for i in range(batch_size):
-            acc, ngram_id = accs.pop()
-            if not accs:
-                break
+    exp_dir = REMOTE_PARSERS.join(name)
+    bigrams = []
+    trigrams = []
+    with cd(str(exp_dir)):
+        ngrams = run("ls %s" % exp_dir, quiet=True).split()
+        for ngram in sorted(ngrams):
+            accs = get_accs(str(exp_dir.join(ngram)))
+            avg = sum(accs) / len(accs)
+            parts = ngram.split('_')
+            if ngram.startswith('base'):
+                base_acc = avg
+            elif len(parts) > 3:
+                bigrams.append((avg, ngram))
+            else:
+                trigrams.append((avg, ngram))
+    print "Baseline: %.2f" % base_acc
+    for results in [bigrams, trigrams]:
+        results.sort()
+        results.reverse()
+        for acc, ngram in results:
+            print ngram, acc
         
 
-
-def bigram_table(name):
-    base_accs = []
-    arg_str = 'base'
-    for seed in range(20):
-        exp_name = '%s_%s_%d' % (name, arg_str, seed)
-        model = pjoin(str(REMOTE_PARSERS), name, arg_str, str(seed))
-        uas_loc = pjoin(model, 'dev', 'acc')
-        try:
-            text = run('cat %s' % uas_loc, quiet=True).stdout
-            base_accs.append(_get_acc(text, score='U'))
-        except:
-            continue
-    good_bigrams = []
-    s = 's0,n0,n1,n2,n0l,n0l2,s0h,s0h2,s0r,s0r2,s0l,s0l2'.split(',')
-    names = ['%s_%s' % (p) for p in combinations(s, 2)]
-    n, acc, stdev = _get_stdev(base_accs)
-    print n, arg_str, fmt_pc(acc), '%.4f' % stdev
-    base_acc = acc
-    for bigram_id in range(66):
-        arg_str = 'in%d' % bigram_id
-        accs = []
-        for seed in range(20):
-
-            exp_name = '%s_%s_%d' % (name, arg_str, seed)
-            model = pjoin(str(REMOTE_PARSERS), name, arg_str, str(seed))
-            uas_loc = pjoin(model, 'dev', 'acc')
-            try:
-                text = run('cat %s' % uas_loc, quiet=True).stdout
-                accs.append(_get_acc(text, score='U'))
-            except:
-                continue
-        n, acc, stdev = _get_stdev(accs)
-        z, p = scipy.stats.wilcoxon(base_accs, accs)
-        print bigram_id, names[bigram_id], fmt_pc(acc), '%.4f' % p
-        if acc > base_acc and p < 0.1:
-            good_bigrams.append(bigram_id)
-    print ','.join([str(i) for i in good_bigrams])
-    print ','.join(names[bigram_id] for bigram_id in good_bigrams)
-    print len(good_bigrams)
+def vocab_thresholds(name, k=4, n=1, size=10000):
+    base_dir = REMOTE_PARSERS.join(name)
+    n = int(n)
+    k = int(k)
+    size = int(size)
+    data = str(REMOTE_MALT)
+    repo = str(REMOTE_REPO)
+    train_name = 'train.txt'
+    eval_pos = 'devi.txt' 
+    eval_parse = 'devr.txt'
  
+    thresholds = [0, 1, 10, 25, 50, 75, 100, 1000]
+    for t in thresholds:
+        thresh = 'thresh%d' % t
+        train_n(n, thresh, base_dir, data, k=k, i=15, t=t,
+            add_feats=False, train_alg='max', label="NONE", n_sents=size)
 
+def vocab_table(name):
+    exp_dir = REMOTE_PARSERS.join(name)
+    with cd(str(exp_dir)):
+        conditions = run("ls %s" % exp_dir, quiet=True).split()
+        for condition in sorted(conditions):
+            accs = get_accs(str(exp_dir.join(condition)))
+            print condition, len(accs), sum(accs) / len(accs)
+
+# 119_s0_s0r2_s0l2
 def train_n(n, name, exp_dir, data, k=1, add_feats=False, i=15, upd='early',
             movebeam=False, train_alg="online", label="Stanford", n_sents=0,
-            ngrams="best_bi"):
+            ngrams="base", t=0):
+    exp_dir = str(exp_dir)
     repo = str(REMOTE_REPO)
     for seed in range(n):
         exp_name = '%s_%d' % (name, seed)
@@ -374,7 +365,7 @@ def train_n(n, name, exp_dir, data, k=1, add_feats=False, i=15, upd='early',
         run("mkdir -p %s" % model)
         train_str = _train(pjoin(data, 'train.txt'), model, k=k, i=15,
                            add_feats=add_feats, train_alg=train_alg, seed=seed,
-                           label=label, n_sents=n_sents, ngrams=ngrams)
+                           label=label, n_sents=n_sents, ngrams=ngrams, vocab_thresh=t)
         parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'), k=k)
         eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.txt'))
         grep_str = "grep 'U:' %s >> %s" % (pjoin(model, 'dev', 'acc'),
@@ -386,16 +377,31 @@ def train_n(n, name, exp_dir, data, k=1, add_feats=False, i=15, upd='early',
             run('qsub -N %s %s' % (exp_name, script_loc))
 
 
+def get_accs(exp_dir, eval_name='dev'):
+    results = []
+    with cd(exp_dir):
+        samples = run("ls %s" % exp_dir, quiet=True).split()
+        for sample in samples:
+            sample = Path(exp_dir).join(sample)
+            acc_loc = sample.join(eval_name).join('acc')
+            try:
+                text = run("cat %s" % acc_loc, quiet=True).stdout
+                results.append(_get_acc(text, score='U'))
+            except:
+                continue
+    return results
+
 
 def _train(data, model, debug=False, k=1, add_feats=False, i=15, upd='early',
            movebeam=False, train_alg="online", seed=0, args='', label="Stanford",
-           n_sents=0, ngrams="best_bi"):
+           n_sents=0, ngrams="base", vocab_thresh=0):
     feat_str = '-x' if add_feats else ''
     move_str = '-m' if movebeam else ''
-    template = './scripts/train.py -i {i} -a {alg} -k {k} {movebeam} {feat_str} {data} {model} -s {seed} -l {label} -n {n_sents} -b {ngrams} {args}'
+    template = './scripts/train.py -i {i} -a {alg} -k {k} {movebeam} {feat_str} {data} {model} -s {seed} -l {label} -n {n_sents} -b {ngrams} -t {vocab_thresh} {args}'
     if debug:
         template += ' -debug'
     return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i,
+                           vocab_thresh=vocab_thresh,
                           upd=upd, movebeam=move_str, alg=train_alg, seed=seed,
                           label=label, args=args, n_sents=n_sents, ngrams=ngrams)
 
@@ -413,68 +419,12 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=4gb,nodes=1:ppn=3
+#PBS -l walltime=20:00:00,mem=3gb,nodes=1:ppn=3
 source /home/mhonniba/py27/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
 cd {repo}"""
     return header.format(repo=repo) + '\n' + '\n'.join(command_strs)
-
-
-
-
-def avg_accs(exp_name, test=False):
-    exp_dir = pjoin(str(REMOTE_PARSERS), exp_name)
-    if test:
-        exps = ['baseline', 'both']
-    else:
-        exps = ['baseline', 'reattach', 'adduce', 'both']
-    uas_results = {}
-    las_results = {}
-    with cd(exp_dir):
-        for system in exps:
-            sys_dir = pjoin(exp_dir, system)
-            uas = []
-            las = []
-            samples = run("ls %s" % sys_dir).split()
-            for sample in samples:
-                if sample == 'logs':
-                    continue
-                sample = Path(sys_dir).join(sample)
-                if test:
-                    acc_loc = sample.join('test').join('acc')
-                else:
-                    acc_loc = sample.join('dev').join('acc')
-                try:
-                    text = run("cat %s" % acc_loc).stdout
-                except:
-                    continue
-                uas.append(_get_acc(text, score='U'))
-                las.append(_get_acc(text, score='L'))
-            uas_results[system] = _get_stdev(uas)
-            las_results[system] = _get_stdev(las)
-    return uas_results, las_results
-
-def dev_eval_online(exp_name):
-    uas_results, las_results = avg_accs(exp_name)
-    print "UAS"
-    for name, (n, mean, stdev) in uas_results.items():
-        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
-    print "LAS"
-    for name, (n, mean, stdev) in las_results.items():
-        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
-
-
-def eval_online(exp_name):
-    uas_results, las_results = avg_accs(exp_name, test=True)
-    print "UAS"
-    for name, (n, mean, stdev) in uas_results.items():
-        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
-    print "LAS"
-    for name, (n, mean, stdev) in las_results.items():
-        print '%s %d: %.1f +/- %.2f' % (name, n, mean, stdev)
-
-
 
 
 uas_re = re.compile(r'U: (\d\d.\d+)')
@@ -531,7 +481,7 @@ def run_static(name, size='full', here=True, feats='all', labels="MALT", thresh=
     repair_str = ''
     if reattach:
         repair_str += '-r '
-    if lower:
+    if lower:   
         repair_str += '-m'
     if feats == 'all':
         feats_flag = ''
@@ -580,5 +530,3 @@ def run_static(name, size='full', here=True, feats='all', labels="MALT", thresh=
             runner('./scripts/train.py %s -f %d -l %s %s %s %s' % (repair_str, thresh, labels, feats_flag, train_loc, parser_loc))
             runner('./scripts/parse.py -g %s %s %s' % (parser_loc, in_loc, out_dir))
             runner('./scripts/evaluate.py %s %s' % (out_dir.join('parses'), dev_loc)) 
-
-
