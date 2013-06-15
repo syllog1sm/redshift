@@ -242,14 +242,13 @@ cdef class InstanceCounter:
 
 _pos_idx = StrIndex(TAG_SET_SIZE)
 _word_idx = StrIndex(VOCAB_SIZE, i=TAG_SET_SIZE)
-#_cluster_idx = ClusterIndex(os.path.join('/Users/matt/repos/redshift/index/browns.txt'))
-#_cluster_idx = ClusterIndex(os.path.join('/home/mhonniba/repos/redshift/index/browns.txt'))
-#_feat_idx = FeatIndex()
+_cluster_idx = ClusterIndex()
 
 def init_word_idx(path):
-    global _word_idx
+    global _word_idx, _cluster_idx
     _word_idx.set_path(path)
     _word_idx.load_vocab(os.path.join(os.path.dirname(__file__), 'vocab.txt'))
+    _cluster_idx.load(os.path.join(os.path.dirname(__file__), 'browns.txt'))
 
 def init_pos_idx(path):
     global _pos_idx
@@ -262,6 +261,7 @@ def load_word_idx(path):
     global _word_idx
     _word_idx.load(path)
     _word_idx.load_vocab(os.path.join(os.path.dirname(__file__), 'vocab.txt'))
+    _cluster_idx.load(os.path.join(os.path.dirname(__file__), 'browns.txt'))
 
 def load_pos_idx(path):
     global _pos_idx
@@ -305,10 +305,12 @@ def get_max_context():
 
 
 cdef class ClusterIndex:
-    def __cinit__(self, loc, thresh=1, prefix_len=5):
+    def __cinit__(self, thresh=1, prefix_len=5):
         self.thresh = thresh
         self.prefix_len = prefix_len
         self.n = 0
+
+    def load(self, loc):
         entries = [('1', encode_word('<root>'), 40000),
                    ('1', encode_word('<start>'), 40000)]
         cdef object line
@@ -320,7 +322,7 @@ cdef class ClusterIndex:
             cluster_str = pieces[0]
             word = pieces[1]
             freq = int(pieces[2])
-            if freq >= thresh:
+            if freq >= self.thresh:
                 encoded = encode_word(word)
                 entries.append((cluster_str, encoded, freq))
                 if encoded >= self.n:
