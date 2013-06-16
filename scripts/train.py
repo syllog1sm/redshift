@@ -45,9 +45,7 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
     n_kernel_tokens = len(redshift.features.get_kernel_tokens())
     n_bigrams = len(list(combinations(range(n_kernel_tokens), 2)))
     n_ngrams = n_bigrams + len(list(combinations(range(n_kernel_tokens), 3)))
-    if ngrams == 'all_bi':
-        ngrams = range(n_bigrams)
-    elif ngrams == 'base':
+    if ngrams == 'base':
         ngrams = []
     elif ngrams == 'best':
         ngrams = best_bigrams + best_trigrams
