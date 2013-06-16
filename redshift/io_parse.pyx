@@ -82,7 +82,7 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.parens = <size_t*>calloc(length, sizeof(size_t))
     s.quotes = <size_t*>calloc(length, sizeof(size_t))
 
-    #cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
+    cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
     py_ids.insert(0, 0)
     py_ids.append(0)
     mask_value = index.hashes.get_mask_value()
@@ -91,9 +91,10 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     for i in range(length):
         s.words[i] = index.hashes.encode_word(py_words[i])
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
-        #if s.words[i] < brown_idx.n:
-        #    s.clusters[i] = brown_idx.table[s.words[i]].full
-        #    s.cprefixes[i] = brown_idx.table[s.words[i]].prefix
+        # TODO: Fix this!!
+        if s.words[i] < brown_idx.n:
+            s.clusters[i] = brown_idx.table[s.words[i]].full
+            s.cprefixes[i] = brown_idx.table[s.words[i]].prefix
         if thresh != 0 and index.hashes.get_freq(py_words[i]) <= thresh:
             s.words[i] = mask_value
         s.ids[i] = py_ids[i]

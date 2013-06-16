@@ -19,69 +19,105 @@ from itertools import combinations
 # Context elements
 # Ensure _context_size is always last; it ensures our compile-time setting
 # is in synch with the enum
-
+# Ensure each token's attributes are listed: w, p, c, cp
 cdef enum:
     N0w
     N0p
     N0c
     N0cp
+
     N0lw
     N0lp
     N0lc
     N0lcp
+    
     N0ll
     N0lv
+    
     N0l2w
     N0l2p
     N0l2c
     N0l2cp
+    
     N0l2l
+    
     N1w
     N1p
     N1c
     N1cp
+    
     N2w
     N2p
     N2c
     N2cp
+    
+    N3w
+    N3p
+    N3c
+    N3cp
+    
     S0w
     S0p
     S0c
     S0cp
+    
     S0l
+    
     S0hw
     S0hp
     S0hc
     S0hcp
+    
     S0hl
     S0hb
+
     S0lw
     S0lp
     S0lc
     S0lcp
+    
     S0ll
+    
     S0rw
     S0rp
     S0rc
     S0rcp
+    
     S0rl
+    
     S0l2w
     S0l2p
     S0l2c
     S0l2cp
+    
     S0l2l
     S0l2b
+
     S0r2w
     S0r2p
     S0r2c
     S0r2cp
+    
     S0r2l
     S0r2b
+
+    S0l0w
+    S0l0p
+    S0l0c
+    S0l0cp
+
+    S0r0w
+    S0r0p
+    S0r0c
+    S0r0cp
+
     S0h2w
     S0h2p
     S0h2c
     S0h2cp
+    
     S0h2l
+    
     S0lv
     S0rv
     dist
@@ -95,11 +131,14 @@ cdef enum:
     N1paren
     N1quote
     S0re_orth
+    
     S0re_w
     S0re_p
     S0re_c
     S0re_cp
+    
     N0le_orth
+    
     N0le_w
     N0le_p
     N0le_c
@@ -108,9 +147,10 @@ cdef enum:
 
 
 def get_kernel_tokens():
-    return [S0w, N0w, N1w, N2w, N0lw, N0l2w, S0hw, S0h2w, S0rw, S0r2w, S0lw, S0l2w]
+    return [S0w, N0w, N1w, N2w, N0lw, N0l2w, S0hw, S0h2w, S0rw, S0r2w, S0lw,
+            S0l2w, S0re_w, N0le_w, N3w, S0l0w, S0r0w]
 
-def unigram(word, add_clusters=True):
+def unigram(word, add_clusters=False):
     pos = word + 1
     cluster = word + 2
     cluster_prefix = word + 3
@@ -134,8 +174,7 @@ def _bigram(a, b, add_clusters=True):
     c2 = b + 2
     cp2 = b + 3
     basic = ((w1, w2), (w1, p1, w2, p2), (p1, p2), (w1, p2), (p1, w2))
-    clusters = ((c1, c2), (c1, p2, cp2), (cp1, p1, c2), (c1, w2), (w1, c2),
-                (cp1, p1, w2), (w1, cp2, p2))
+    clusters = ((c1, c2), (cp1, p1, cp2, p2))
     if add_clusters:
         return basic + clusters
     else:
@@ -162,8 +201,7 @@ def _trigram(a, b, c, add_clusters=True):
     cp3 = c + 3
 
     basic = ((w1, w2, w3), (w1, p2, p3), (p1, w2, p3), (p1, p2, w3), (p1, p2, p3))
-    clusters = ((c1, c2, c3), (c1, c2, w3), (c1, c2, p3), (c1, w2, c3), (c1, p2, c3),
-                (w1, c2, c3), (p1, c2, c3))
+    clusters = ((c1, c2, c3), (cp1, p1, cp2, p2, cp3, p3))
     #clusters = ((c1, c2, p3), (c1, p2, w3), (p1, c2, c3), (c1, p2, p3),
     #            (p1, c2, p3), (p1, c2, c3), (p1, p2, p3))
 
@@ -195,9 +233,14 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N1cp] = cprefixes[k.i + 1]
 
     context[N2w] = words[k.i + 2]
-    context[N2p] = 0
+    context[N2p] = k.n2p
     context[N2c] = clusters[k.i + 2]
     context[N2cp] = cprefixes[k.i + 2]
+
+    context[N3w] = words[k.i + 3]
+    context[N3p] = k.n3p
+    context[N3c] = clusters[k.i + 3]
+    context[N3cp] = cprefixes[k.i + 3]
 
     context[S0w] = words[k.s0]
     context[S0p] = k.s0p
@@ -241,6 +284,16 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S0r2p] = s0r.tags[1]
     context[S0r2c] = clusters[s0r.idx[1]]
     context[S0r2cp] = cprefixes[s0r.idx[1]]
+
+    context[S0l0w] = words[s0l.idx[2]]
+    context[S0l0p] = s0l.tags[2]
+    context[S0l0c] = clusters[s0l.idx[2]]
+    context[S0l0cp] = cprefixes[s0l.idx[2]]
+
+    context[S0r0w] = words[s0r.idx[2]]
+    context[S0r0p] = s0r.tags[2]
+    context[S0r0c] = clusters[s0r.idx[2]]
+    context[S0r0cp] = cprefixes[s0r.idx[2]]
 
     context[N0lw] = words[n0l.idx[0]]
     context[N0lp] = n0l.tags[0]
@@ -496,18 +549,23 @@ cdef class FeatureSet:
         )
 
         unigrams = (
-            unigram(S0w)
-            + unigram(S0hw)
-            + unigram(S0h2w)
-            + unigram(S0rw)
-            + unigram(S0r2w)
-            + unigram(S0lw)
-            + unigram(S0l2w)
-            + unigram(N0w)
-            + unigram(N1w)
-            + unigram(N2w)
-            + unigram(N0lw)
-            + unigram(N0l2w)
+            unigram(S0w, add_clusters)
+            + unigram(S0hw, add_clusters)
+            + unigram(S0h2w, add_clusters)
+            + unigram(S0rw, add_clusters)
+            + unigram(S0r2w, add_clusters)
+            + unigram(S0lw, add_clusters)
+            + unigram(S0l2w, add_clusters)
+            + unigram(N0w, add_clusters)
+            + unigram(N1w, add_clusters)
+            + unigram(N2w, add_clusters)
+            + unigram(N0lw, add_clusters)
+            + unigram(N0l2w, add_clusters)
+            + unigram(S0re_w, add_clusters)
+            + unigram(N0le_w, add_clusters)
+            + unigram(N3w, add_clusters)
+            + unigram(S0l0w, add_clusters)
+            + unigram(S0r0w, add_clusters)
         )
 
         if add_extra:
@@ -515,6 +573,9 @@ cdef class FeatureSet:
             if len(to_add) > 1:
                 print "Adding distance, label and valency"
                 feats = unigrams + distance + valency + labels + label_sets
+                #feats += from_word_pairs
+                #feats += from_three_words
+                #feats += third_order
             else:
                 feats = tuple(unigrams)
             kernel_tokens = get_kernel_tokens()
@@ -527,13 +588,11 @@ cdef class FeatureSet:
 
             for i, (t1, t2) in enumerate(combinations(kernel_tokens, 2)):
                 if i in to_add:
-                    print "Added", i
                     feats += bigram(t1, t2)
             n_bigrams = i + 1
             for i, (t1, t2, t3) in enumerate(combinations(kernel_tokens, 3)):
 
                 if (i+n_bigrams) in to_add:
-                    print "Added", i+n_bigrams
                     feats += trigram(t1, t2, t3)
         else:
             feats = from_single + from_word_pairs + from_three_words + distance

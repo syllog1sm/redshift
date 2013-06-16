@@ -18,6 +18,8 @@ cdef struct Kernel:
     size_t i
     size_t n0p
     size_t n1p
+    size_t n2p
+    size_t n3p
     size_t s0
     size_t s0p
     size_t Ls0
