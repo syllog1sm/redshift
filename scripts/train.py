@@ -40,17 +40,38 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
          allow_reattach=False, allow_reduce=False, ngrams='base',
          add_clusters=False, n_sents=0,
          profile=False, debug=False, seed=0, beam_width=1, movebeam=False):
-    best_bigrams = [0, 65, 1, 5, 11, 15, 13, 7, 17, 3, 19, 51, 23, 9, 6, 22, 52]
+    best_bigrams = [0, 26, 12, 126, 1, 5, 41, 16, 40, 86, 20, 87, 18, 27, 22, 30,
+                    3, 104, 24, 65, 117, 132, 29, 11, 34, 131, 7, 116, 32, 36, 81,
+                    15, 9, 21, 44, 6, 128, 95, 89, 17, 96, 38, 19, 84, 14, 43, 4,
+                    2, 82, 90, 54, 76, 58, 77, 53, 23, 13, 31, 28, 42, 101, 35, 111,
+                    121, 122, 25, 10, 127, 106, 129, 130, 33, 120, 37, 100, 66, 135,
+                    59, 110, 8, 61, 107]
     best_trigrams = [69, 67, 71, 68, 66, 72, 73, 74, 70, 123, 138, 93, 78]
     n_kernel_tokens = len(redshift.features.get_kernel_tokens())
-    n_bigrams = len(list(combinations(range(n_kernel_tokens), 2)))
-    n_ngrams = n_bigrams + len(list(combinations(range(n_kernel_tokens), 3)))
+    bigrams = list(combinations(range(n_kernel_tokens), 2))
+    n_bigrams = len(bigrams)
+    trigrams = list(combinations(range(n_kernel_tokens), 3))
     if ngrams == 'base':
         ngrams = []
     elif ngrams == 'best':
-        ngrams = best_bigrams + best_trigrams
-    elif ngrams.startswith('in'):
-        ngrams = [int(ngrams[2:])]
+        ngrams = best_bigrams
+    elif ngrams.startswith('bi'):
+        idx = int(ngrams[2:])
+        ngrams = [idx]
+    elif ngrams.startswith('tri'):
+        idx = int(ngrams[3:])
+        trigram = trigrams[idx]
+        ngrams = [n_bigrams + idx,
+                  bigrams.index((trigram[0], trigram[1])),
+                  bigrams.index((trigram[0], trigram[2])),
+                  bigrams.index((trigram[1], trigram[2]))]
+    elif ngrams.startswith('btri'):
+        idx = int(ngrams[4:])
+        trigram = trigrams[idx]
+        ngrams = [bigrams.index((trigram[0], trigram[1])),
+                  bigrams.index((trigram[0], trigram[2])),
+                  bigrams.index((trigram[1], trigram[2]))]
+
     else:
         raise StandardError, ngrams
     random.seed(seed)
