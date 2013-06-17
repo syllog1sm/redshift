@@ -281,7 +281,7 @@ def conll(name, lang, n=20, debug=False):
                 run('qsub -N %s_bl %s' % (exp_name, script_loc))
  
 
-def ngram_add1(name, k=4, n=1, size=10000):
+def bigram_add1(name, k=4, n=1, size=10000):
     n = int(n)
     k = int(k)
     size = int(size)
@@ -291,41 +291,81 @@ def ngram_add1(name, k=4, n=1, size=10000):
     eval_pos = 'devi.txt' 
     eval_parse = 'devr.txt'
     arg_str = 'base'
-    train_n(n, 'base', pjoin(str(REMOTE_PARSERS), name), data, k=k, i=15,
-            add_feats=True, train_alg='max', label="NONE", n_sents=size,
-            ngrams="base")
-    tokens = 's0,n0,n1,n2,n0l,n0l2,s0h,s0h2,s0r,s0r2,s0l,s0l2'.split(',')
+    #train_n(n, 'base', pjoin(str(REMOTE_PARSERS), name), data, k=k, i=15,
+    #        add_feats=True, train_alg='max', label="NONE", n_sents=size,
+    #        ngrams="base")
+    tokens = 's0,n0,n1,n2,n0l,n0l2,s0h,s0h2,s0r,s0r2,s0l,s0l2,s0re,s0le,n3,s0l0,s0r0'.split(',')
     ngrams = ['%s_%s' % (p) for p in combinations(tokens, 2)]
-    ngrams.extend('%s_%s_%s' % (p) for p in combinations(tokens, 3))
+    #ngrams.extend('%s_%s_%s' % (p) for p in combinations(tokens, 3))
     n_ngrams = len(ngrams)
-    for ngram_id, ngram_name in list(enumerate(ngrams)):
+    n_models = n
+    for ngram_id, ngram_name in list(enumerate(ngrams))[83:]:
         train_n(n, '%d_%s' % (ngram_id, ngram_name), pjoin(str(REMOTE_PARSERS), name),
                 data, k=k, i=15, add_feats=True, train_alg='max', label="NONE",
                 n_sents=size, ngrams='in%d' % ngram_id)
+        n_models += n
+        # Sleep 5 mins after submitting 50 jobs
+        if n_models > 75:
+            time.sleep(300)
+            n_models = 0
+
+def trigram_add1(name, k=4, n=1, size=10000):
+    """Add each trigram in turn, to a baseline consisting of the unigrams plus
+    the three bigrams involved in the trigram"""
+    tokens = 's0,n0,n1,n2,n0l,n0l2,s0h,s0h2,s0r,s0r2,s0l,s0l2,s0re,s0le,n3,s0l0,s0r0'.split(',')
+    bigrams = len(list(combinations(tokens, 2)))
+    ngrams = list(combinations(tokens, 3))
+    n_ngrams = len(ngrams)
+    n_models = n
+    for ngram_id, ngram_name in list(enumerate(ngrams))[:10]:
+        exp_name = '%d_%s' % (ngram_id, ngram_name)
+        train_n(n, 'exp', pjoin(str(REMOTE_PARSERS), name, exp_name),
+                data, k=k, i=15, add_feats=True, train_alg='max', label="NONE",
+                n_sents=size, ngrams='tri%d' % ngram_id)
+        n_models += n
+        train_n(n, 'base', pjoin(str(REMOTE_PARSERS), name, exp_name),
+                data, k=k, i=15, add_feats=True, train_alg='max', label="NONE",
+                n_sents=size, ngrams='btri%d' % ngram_id)
+        n_models += n
+        # Sleep 5 mins after submitting 50 jobs
+        if n_models > 75:
+            time.sleep(300)
+            n_models = 0
 
 
 def combine_ngrams(name, k=4, n=1, size=10000):
     exp_dir = REMOTE_PARSERS.join(name)
     bigrams = []
     trigrams = []
+    base_accs = get_accs(str(exp_dir.join('base')))
+    base_acc = sum(base_accs) / len(base_accs)
+    print "Base:", sum(base_accs) / len(base_accs)
     with cd(str(exp_dir)):
         ngrams = run("ls %s" % exp_dir, quiet=True).split()
         for ngram in sorted(ngrams):
+            if ngram == 'base':
+                continue
             accs = get_accs(str(exp_dir.join(ngram)))
-            avg = sum(accs) / len(accs)
+            if not accs:
+                continue
+            _, avg, stdev = _get_stdev(accs)
+            z, p = scipy.stats.wilcoxon(accs, base_accs)
             parts = ngram.split('_')
             if ngram.startswith('base'):
                 base_acc = avg
             elif len(parts) > 3:
-                bigrams.append((avg, ngram))
+                bigrams.append((avg, ngram, stdev, p))
             else:
-                trigrams.append((avg, ngram))
-    print "Baseline: %.2f" % base_acc
+                trigrams.append((avg, ngram, stdev, p))
+    good_ngrams = []
     for results in [bigrams, trigrams]:
         results.sort()
         results.reverse()
-        for acc, ngram in results:
-            print ngram, acc
+        for acc, ngram, stdev, p in results:
+            print ngram, acc, p
+            if acc > base_acc and p < 0.01:
+                good_ngrams.append(int(ngram.split('_')[0]))
+    print good_ngrams
         
 
 def vocab_thresholds(name, k=4, n=1, size=10000):
@@ -374,7 +414,9 @@ def train_n(n, name, exp_dir, data, k=1, add_feats=False, i=15, upd='early',
         script_loc = pjoin(repo, 'pbs', exp_name)
         with cd(repo):
             put(StringIO(script), script_loc)
-            run('qsub -N %s %s' % (exp_name, script_loc))
+            err_loc = pjoin(model, 'stderr')
+            out_loc = pjoin(model, 'stdout')
+            run('qsub -N %s %s -e %s -o %s' % (exp_name, script_loc, err_loc, out_loc))
 
 
 def get_accs(exp_dir, eval_name='dev'):
@@ -383,7 +425,7 @@ def get_accs(exp_dir, eval_name='dev'):
         samples = run("ls %s" % exp_dir, quiet=True).split()
         for sample in samples:
             sample = Path(exp_dir).join(sample)
-            acc_loc = sample.join(eval_name).join('acc')
+            acc_loc = sample.join(eval_name).join('uas')
             try:
                 text = run("cat %s" % acc_loc, quiet=True).stdout
                 results.append(_get_acc(text, score='U'))
@@ -419,7 +461,7 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=3gb,nodes=1:ppn=3
+#PBS -l walltime=20:00:00,mem=1gb,nodes=1:ppn=2
 source /home/mhonniba/py27/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
