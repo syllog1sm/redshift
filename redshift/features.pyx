@@ -571,8 +571,9 @@ cdef class FeatureSet:
         if add_extra:
             print "Use ngram feats"
             if len(to_add) > 1:
-                print "Adding distance, label and valency"
-                feats = unigrams + distance + valency + labels + label_sets
+                feats = unigrams
+                print "Not Adding distance, label and valency"
+                #feats = unigrams + distance + valency + labels + label_sets
                 #feats += from_word_pairs
                 #feats += from_three_words
                 #feats += third_order
