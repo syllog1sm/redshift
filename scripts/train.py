@@ -39,10 +39,10 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
          allow_reattach=False, allow_reduce=False, ngrams='base',
          add_clusters=False, n_sents=0,
          profile=False, debug=False, seed=0, beam_width=1, movebeam=False):
-    n_kernel_tokens = len(redshift.features.get_kernel_tokens())
-    bigrams = list(combinations(range(n_kernel_tokens), 2))
+    kernel_tokens = redshift.features.get_kernel_tokens()
+    bigrams = list(combinations(kernel_tokens, 2))
     n_bigrams = len(bigrams)
-    trigrams = list(combinations(range(n_kernel_tokens), 3))
+    trigrams = list(combinations(kernel_tokens, 3))
     if ngrams == 'base':
         ngrams = []
     elif ngrams == 'best':
