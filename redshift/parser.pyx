@@ -307,24 +307,32 @@ cdef class Parser:
             fill_kernel(gold_state)
             feats = self.features.extract(sent, &gold_state.kernel)
             clas = ghist[i]
-            counts.setdefault(clas, {})
+            if clas not in counts:
+                counts[clas] = {}
+            clas_counts = counts[clas]
             for f in range(n_feats):
-                if feats[f] == 0:
+                value = feats[f]
+                if value == 0:
                     break
-                counts[clas].setdefault(feats[f], 0)
-                counts[clas][feats[f]] += 1
+                if value not in clas_counts:
+                    clas_counts[value] = 0
+                clas_counts[value] += 1
             self.moves.transition(clas, gold_state)
         free_state(gold_state)
         for i in range(d, t):
             fill_kernel(pred_state)
             feats = self.features.extract(sent, &pred_state.kernel)
             clas = phist[i]
-            counts.setdefault(clas, {})
+            if clas not in counts:
+                counts[clas] = {}
+            clas_counts = counts[clas]
             for f in range(n_feats):
-                if feats[f] == 0:
+                value = feats[f]
+                if value == 0:
                     break
-                counts[clas].setdefault(feats[f], 0)
-                counts[clas][feats[f]] -= 1
+                if value not in clas_counts:
+                    clas_counts[value] = 0
+                clas_counts[value] -= 1
             self.moves.transition(clas, pred_state)
         free_state(pred_state)
         return counts
