@@ -67,16 +67,6 @@ def draxx_baseline(name):
         run('qsub -N %s_bl %s' % (name, script_loc))
 
 
-def k_iters(basename, k=5, movebeam=False):
-    k = int(k)
-    movebeam = bool(movebeam)
-    for i in [5, 7, 10, 12, 15, 17, 20]:
-        name = '%s_k%d_i%d' % (basename, k, i)
-        if movebeam:
-            name += 'm'
-        draxx_beam(name, k=k, i=i, movebeam=movebeam, upd="max", alg="static")
-
-
 def draxx_repair(name, extra_feats='False', repairs='True', k=0):
     extra_feats = True if extra_feats == 'True' else False
     repairs = True if repairs == 'True' else False
@@ -120,8 +110,7 @@ def draxx_repair(name, extra_feats='False', repairs='True', k=0):
 
 
 def draxx_beam(name, model=None, k=5, i=10, add_feats='False', upd='early', alg='static',
-              movebeam='False', train_size="train.txt"):
-    movebeam = True if movebeam == 'True' else False
+              train_size="train.txt"):
     add_feats = True if add_feats == 'True' else False
     if name is not None:
         assert model is None
@@ -132,8 +121,7 @@ def draxx_beam(name, model=None, k=5, i=10, add_feats='False', upd='early', alg=
     data = str(REMOTE_STANFORD)
     repo = str(REMOTE_REPO)
     train_str = _train(pjoin(data, train_size), model, k=int(k), i=int(i),
-                             add_feats=bool(add_feats), upd=upd, train_alg=alg,
-                             movebeam=bool(movebeam))
+                             add_feats=bool(add_feats), upd=upd, train_alg=alg)
     parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'), k=k)
     eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.txt'))
     script = _pbsify(repo, [train_str, parse_str, eval_str])
@@ -142,79 +130,6 @@ def draxx_beam(name, model=None, k=5, i=10, add_feats='False', upd='early', alg=
         put(StringIO(script), script_loc)
         run('qsub -N %s_bl %s' % (name, script_loc))
 
-def beam_isolate(name, size="1k_train.txt"):
-    work_dir = pjoin(str(REMOTE_PARSERS), name)
-    with cd(str(REMOTE_PARSERS)):
-        for n in ['baseline', 'max_violation', 'feat_viol']:
-            d = pjoin(work_dir, n)
-            if not exists(d):
-                run('mkdir -p %s' % d)
-    #i_vals = [5, 10, 15, 30]
-    #k_vals = [5, 10, 15, 30]
-    i_vals = [10, 15, 30, 70]
-    k_vals = [5, 10, 25]
-    for i_val in i_vals:
-        for k_val in k_vals:
-            exp_dir = pjoin(work_dir, 'baseline', 'k%d_i%d' % (k_val, i_val))
-            # Baseline
-            #draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=False, upd="early",
-            #           alg="static", movebeam=False, train_size=size)
-            # BL w/ Feats
-            #exp_dir = pjoin(work_dir, 'features', 'k%d_i%d' % (k_val, i_val))
-            #draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=True, upd="early",
-            #           alg="static", movebeam=False, train_size=size)
-            # BL w/ Max-violation training
-            exp_dir = pjoin(work_dir, 'max_violation', 'k%d_i%d' % (k_val, i_val))
-            draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=False, upd="max",
-                       alg="static", movebeam=False, train_size=size)
-            # w/ online
-            #exp_dir = pjoin(work_dir, 'dynamic_oracle', 'k%d_i%d' % (k_val, i_val))
-            #draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=False, upd="early",
-            #           alg="online", movebeam=False, train_size=size)
-            # w/ movebeam
-            #exp_dir = pjoin(work_dir, 'moves_in_beam', 'k%d_i%d' % (k_val, i_val))
-            #draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=False, upd="early",
-            #           alg="static", movebeam=True, train_size=size)
-            # w/ all
-            exp_dir = pjoin(work_dir, 'feat_viol', 'k%d_i%d' % (k_val, i_val))
-            draxx_beam(None, model=exp_dir, k=k_val, i=i_val, add_feats=True, upd="max",
-                       alg="static", movebeam=False, train_size=size)
-
-
-def beam_table(name):
-    systems = ['baseline', 'features', 'max_violation', 'dynamic_oracle',
-             'moves_in_beam', 'combined']
-    table_names = ['Baseline', 'Features', 'Max. Violation', 'Dynamic Oracle', 'Prefer Moves', 'Combined']
-    i_vals = [5, 10, 15, 30, 45]
-    k_vals = [5, 10, 15, 25]
-    print r"\documentclass{article}"
-    print r"\begin{document}"
- 
-    print r"\begin{table}\begin{tabular}{l|%s}" % ('r' * len(i_vals))
-    for k in k_vals:
-        print r"\hline \hline \multicolumn{%s}{c}{ k = %s}  \\ \hline" % (len(i_vals), k)
-        print ' & ' + ' & '.join(str(i) for i in i_vals) + r'\\'
-        print r"\hline"
-        for tn, system in zip(table_names, systems):
-            print tn + '\t&\t',
-            sys_dir = pjoin(str(REMOTE_PARSERS), name, system)
-            accs = []
-            for i in i_vals:
-                exp_dir = pjoin(sys_dir, 'k%d_i%d' % (k, i))
-                with cd(exp_dir):
-                    if not exists(exp_dir):
-                        accs.append(0)
-                        continue
-                    try:
-                        text = run("cat dev/acc", quiet=True).stdout
-                        accs.append(_get_acc(text, score='U'))
-                    except:
-                        accs.append(0)
-                        continue
-            print ' & '.join(fmt_pc(a) for a in accs) + r'\\'
-            print "\hline"
-    print r"\end{tabular}\end{table}"
-    print r"\end{document}"
 
 def conll_table(name):
     langs = ['arabic', 'basque', 'catalan', 'chinese', 'czech', 'english',
@@ -329,15 +244,15 @@ def trigram_add1(name, k=4, n=1, size=10000):
     for ngram_id, ngram_name in list(enumerate(ngrams))[208:]:
         exp_name = '%d_%s' % (ngram_id, '_'.join(ngram_name))
         train_n(n, 'exp', pjoin(str(REMOTE_PARSERS), name, exp_name),
-                data, k=k, i=15, add_feats=True, train_alg='max', label="NONE",
+                data, k=k, i=15, feat_str="iso", train_alg='max', label="NONE",
                 n_sents=size, ngrams='tri%d' % ngram_id)
         n_models += n
         train_n(n, 'base', pjoin(str(REMOTE_PARSERS), name, exp_name),
-                data, k=k, i=15, add_feats=True, train_alg='max', label="NONE",
+                data, k=k, i=15, feat_str="iso", train_alg='max', label="NONE",
                 n_sents=size, ngrams='btri%d' % ngram_id)
         n_models += n
         # Sleep 5 mins after submitting n jobs
-        if n_models > 100:
+        if n_models > 50:
             time.sleep(300)
             n_models = 0
 
@@ -426,8 +341,8 @@ def vocab_table(name):
             print condition, len(accs), sum(accs) / len(accs)
 
 # 119_s0_s0r2_s0l2
-def train_n(n, name, exp_dir, data, k=1, add_feats=False, i=15, upd='early',
-            movebeam=False, train_alg="online", label="Stanford", n_sents=0,
+def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
+            train_alg="online", label="Stanford", n_sents=0,
             ngrams="base", t=0):
     exp_dir = str(exp_dir)
     repo = str(REMOTE_REPO)
@@ -436,9 +351,9 @@ def train_n(n, name, exp_dir, data, k=1, add_feats=False, i=15, upd='early',
         model = pjoin(exp_dir, name, str(seed))
         run("mkdir -p %s" % model)
         train_str = _train(pjoin(data, 'train.txt'), model, k=k, i=15,
-                           add_feats=add_feats, train_alg=train_alg, seed=seed,
+                           feat_str=feat_str, train_alg=train_alg, seed=seed,
                            label=label, n_sents=n_sents, ngrams=ngrams, vocab_thresh=t)
-        parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'), k=k)
+        parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'))
         eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.txt'))
         grep_str = "grep 'U:' %s >> %s" % (pjoin(model, 'dev', 'acc'),
                                            pjoin(model, 'dev', 'uas')) 
@@ -466,25 +381,23 @@ def get_accs(exp_dir, eval_name='dev'):
     return results
 
 
-def _train(data, model, debug=False, k=1, add_feats=False, i=15, upd='early',
-           movebeam=False, train_alg="online", seed=0, args='', label="Stanford",
+def _train(data, model, debug=False, k=1, feat_str='zhang', i=15, upd='early',
+           train_alg="online", seed=0, args='', label="Stanford",
            n_sents=0, ngrams="base", vocab_thresh=0):
-    feat_str = '-x' if add_feats else ''
-    move_str = '-m' if movebeam else ''
-    template = './scripts/train.py -i {i} -a {alg} -k {k} {movebeam} {feat_str} {data} {model} -s {seed} -l {label} -n {n_sents} -b {ngrams} -t {vocab_thresh} {args}'
+    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -l {label} -n {n_sents} -b {ngrams} -t {vocab_thresh} {args}'
     if debug:
         template += ' -debug'
     return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i,
                            vocab_thresh=vocab_thresh,
-                          upd=upd, movebeam=move_str, alg=train_alg, seed=seed,
+                          upd=upd, alg=train_alg, seed=seed,
                           label=label, args=args, n_sents=n_sents, ngrams=ngrams)
 
 
-def _parse(model, data, out, gold=False, k=1):
-    template = './scripts/parse.py -k {k} {model} {data} {out} '
+def _parse(model, data, out, gold=False):
+    template = './scripts/parse.py {model} {data} {out} '
     if gold:
         template += '-g'
-    return template.format(model=model, data=data, out=out, k=k)
+    return template.format(model=model, data=data, out=out)
 
 
 def _evaluate(test, gold):
