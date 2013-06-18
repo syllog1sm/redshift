@@ -1,5 +1,6 @@
 # cython: profile=True
 import math
+import gzip
 from libc.stdlib cimport *
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
@@ -295,7 +296,7 @@ cdef class Perceptron:
                 feat = <SquareFeature*>feat_addr
                 by_nr_seen.append((feat.nr_seen, data.first))
         by_nr_seen.sort(reverse=True)
-        out = open(str(out_loc), 'w')
+        out = gzip.open(str(out_loc), 'w')
         # Write LibSVM compatible format
         out.write(u'nr_class %d\n' % (self.nr_class))
         zeroes = '0 ' * self.nr_class 
@@ -329,7 +330,7 @@ cdef class Perceptron:
         nr_feat = 0
         nr_weight = 0
         #cdef uint64_t f, clas, idx
-        in_ = open(in_)
+        in_ = gzip.open(in_, 'rb')
         header = in_.readline()
         self.nr_class = int(header.split()[1])
         self.div = <int>math.sqrt(self.nr_class) + 1
