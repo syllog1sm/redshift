@@ -73,7 +73,7 @@ cdef void free_square_feat(SquareFeature* feat, size_t div):
 
 cdef class Perceptron:
     # From Model
-    def __cinit__(self, max_classes, model_loc, clean=False):
+    def __cinit__(self, max_classes, model_loc):
         self.path = model_loc
         self.nr_class = max_classes
         self.scores = <double *>calloc(max_classes, sizeof(double))
@@ -105,6 +105,33 @@ cdef class Perceptron:
         for i in range(self.nr_raws):
             free_dense_feat(self.raws[i])
         free(self.raws)
+
+    def train(self, n_iters, py_instances):
+        cdef:
+            size_t i, j
+            uint64_t f
+            size_t pred
+        cdef size_t length = len(py_instances)
+        class_set = set()
+        cdef uint64_t** instances = <uint64_t**>malloc(length * sizeof(uint64_t))
+        cdef size_t* labels = <size_t*>malloc(length * sizeof(size_t))
+        for i, py_instance in enumerate(py_instances):
+            labels[i] = py_instance.pop(0)
+            class_set.add(labels[i])
+            n_feats = len(py_instance)
+            instances[i] = <uint64_t*>malloc((n_feats + 1) * sizeof(uint64_t))
+            for j in range(n_feats):
+                instances[i][j] = py_instance[j]
+            instances[i][j + 1] = 0
+        for _ in range(n_iters):
+            for i in range(length):
+                pred = self.predict_best_class(0, instances[i])
+                self.update(pred, labels[i], 0, instances[i], 1.0)
+        self.finalize()
+        free(labels)
+        for i in range(length):
+            free(instances[i])
+        free(instances)
 
     def set_classes(self, labels):
         self.nr_class = len(labels)
@@ -362,6 +389,8 @@ cdef class Perceptron:
         pass
 
     def reindex(self):
+        """For efficiency, move the most frequent features to dense feature
+        vectors, instead of the square representation"""
         def get_nr_seen(size_t feat_addr):
             cdef SquareFeature* feat
             if feat_addr < self.nr_raws:
