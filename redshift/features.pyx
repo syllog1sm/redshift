@@ -10,7 +10,6 @@ from cython.operator cimport dereference as deref, preincrement as inc
 from _state cimport Kernel, Subtree
 
 from io_parse cimport Sentence
-#from index.hashes cimport encode_feat
 
 from libcpp.vector cimport vector
 
@@ -149,6 +148,23 @@ cdef enum:
 def get_kernel_tokens():
     return [S0w, N0w, N1w, N2w, N0lw, N0l2w, S0hw, S0h2w, S0rw, S0r2w, S0lw,
             S0l2w, S0re_w, N0le_w, N3w, S0l0w, S0r0w]
+
+def get_best_bigrams(all_bigrams):
+    best = [0, 26, 12, 126, 1, 5, 41, 16, 40, 86, 20, 87, 18, 27, 22, 30,
+            3, 104, 24, 65, 117, 132, 29, 11, 34, 131, 7, 116, 32, 36, 81,
+            15, 9, 21, 44, 6, 128, 95, 89, 17, 96, 38, 19, 84, 14, 43, 4,
+            2, 82, 90, 54, 76, 58, 77, 53, 23, 13, 31, 28, 42, 101, 35, 111,
+            121, 122, 25, 10, 127, 106, 129, 130, 33, 120, 37, 100, 66, 135,
+            59, 110, 8, 61, 107]
+    return [all_bigrams[i] for i in best]
+
+def get_best_trigrams(all_trigrams):
+    best = [2, 199, 158, 61, 66, 5, 150, 1, 88, 154, 85, 25, 53, 10, 3, 60,
+            73, 175, 114, 4, 6, 148, 205, 197, 0, 71, 127, 200, 142, 84, 43,
+            89, 45, 95, 33, 110, 182, 20, 24, 159, 51, 106, 26, 8, 178, 151, 12,
+            166, 192, 7, 190, 147, 13, 194, 50, 129, 174]
+    return [all_trigrams[i] for i in best]
+
 
 def unigram(word, add_clusters=False):
     pos = word + 1
@@ -345,23 +361,23 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
  
 
 cdef class FeatureSet:
-    def __cinit__(self, nr_label, uint64_t mask_value=1, bint add_extra=False,
+    def __cinit__(self, nr_label, uint64_t mask_value=1, feat_set="zhang",
                   ngrams=None, add_clusters=False):
         if ngrams is None:
             ngrams = []
+        self.name = feat_set
         self.ngrams = ngrams
         self.add_clusters = add_clusters
-        self.ngrams.append(-1)
+        if add_clusters:
+            print "Adding cluster feats"
         self.nr_label = nr_label
         # Value that indicates the value has been "masked", e.g. it was pruned
         # as a rare word. If a feature contains any masked values, it is dropped.
         self.mask_value = mask_value
         # Sets "n"
-        self._make_predicates(add_extra, ngrams, add_clusters)
-        # TODO: Reference index.hashes constant
-        self.nr_tags = 100 if add_extra else 0
+        self._make_predicates(self.name, ngrams, add_clusters)
         self.context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
-        self.features = <uint64_t*>calloc(self.n + self.nr_tags, sizeof(uint64_t))
+        self.features = <uint64_t*>calloc(self.n, sizeof(uint64_t))
 
     def __dealloc__(self):
         free(self.context)
@@ -369,51 +385,41 @@ cdef class FeatureSet:
         free(self.predicates)
 
     cdef uint64_t* extract(self, Sentence* sent, Kernel* k) except NULL:
+        cdef:
+            size_t i, j, f, size
+            uint64_t value
+            bint seen_non_zero, seen_masked
+            Predicate* pred
+
         cdef size_t* context = self.context
-        assert <size_t>k != 0
+        cdef uint64_t* features = self.features
         fill_context(context, self.nr_label, sent.words,
                      sent.clusters, sent.cprefixes,
                      sent.orths, sent.parens, sent.quotes,
                      k, &k.s0l, &k.s0r, &k.n0l)
-        cdef size_t i, j
-        cdef uint64_t hashed
-        cdef uint64_t value
-        cdef uint64_t* features = self.features
-        cdef bint seen_non_zero
-        cdef Predicate* pred
-        cdef size_t f = 0
+        f = 0
         for i in range(self.n):
             pred = &self.predicates[i]
             seen_non_zero = False
+            seen_masked = False
             for j in range(pred.n):
                 value = context[pred.args[j]]
                 if value == self.mask_value:
+                    seen_masked = True
                     break
                 elif value != 0:
                     seen_non_zero = True
                 pred.raws[j] = value
-            else:
-                if seen_non_zero:
-                    pred.raws[pred.n] = pred.id
-                    hashed = MurmurHash64A(pred.raws, (pred.n + 1) * sizeof(uint64_t), i)
-                    features[f] = hashed
-                    f += 1
-        cdef size_t tag, letter
-        #cdef bint* seen_tags 
-        #if self.nr_tags and k.s0 > 0 and (k.s0 + 1) < k.i:
-        #    seen_tags = <bint*>calloc(self.nr_tags, sizeof(bint))
-        #    for i in range(k.s0 + 1, k.i):
-        #        tag = sent.pos[i]
-        #        if not seen_tags[tag]:
-        #            features[f] = sent.pos[i]
-        #            seen_tags[tag] = 1
-        #            f += 1
-        #    free(seen_tags)
+            if seen_non_zero and not seen_masked:
+                pred.raws[pred.n] = pred.id
+                size = (pred.n + 1) * sizeof(uint64_t)
+                features[f] = MurmurHash64A(pred.raws, size, i)
+                f += 1
         features[f] = 0
         return features
 
-    def _make_predicates(self, bint add_extra, object to_add, add_clusters):
-        feats = self._get_feats(add_extra, to_add, add_clusters)
+    def _make_predicates(self, object name, object ngrams, add_clusters):
+        feats = self._get_feats(name, ngrams, add_clusters)
         self.n = len(feats)
         self.predicates = <Predicate*>malloc(self.n * sizeof(Predicate))
         cdef Predicate pred
@@ -425,7 +431,7 @@ cdef class FeatureSet:
                 pred.args[i] = element
             self.predicates[id_] = pred
 
-    def _get_feats(self, bint add_extra, object to_add, bint add_clusters):
+    def _get_feats(self, object feat_level, object ngrams, bint add_clusters):
 
         from_single = (
             (S0w, S0p),
@@ -567,41 +573,36 @@ cdef class FeatureSet:
             + unigram(S0l0w, add_clusters)
             + unigram(S0r0w, add_clusters)
         )
-
-        if add_extra:
-            print "Use ngram feats"
-            if len(to_add) > 1:
-                feats = unigrams
-                print "Not Adding distance, label and valency"
-                #feats = unigrams + distance + valency + labels + label_sets
-                #feats += from_word_pairs
-                #feats += from_three_words
-                #feats += third_order
-            else:
-                feats = tuple(unigrams)
-            kernel_tokens = get_kernel_tokens()
-            
-            bigram = bigram_with_clusters if add_clusters else bigram_no_clusters
-            trigram = trigram_with_clusters if add_clusters else trigram_no_clusters
-            print "%d bigrams, %d trigrams" % (len(list(combinations(kernel_tokens, 2))),
-                                               len(list(combinations(kernel_tokens, 3))))
-            print "Adding %s" % to_add
-
-            for i, (t1, t2) in enumerate(combinations(kernel_tokens, 2)):
-                if i in to_add:
-                    feats += bigram(t1, t2)
-            n_bigrams = i + 1
-            for i, (t1, t2, t3) in enumerate(combinations(kernel_tokens, 3)):
-
-                if (i+n_bigrams) in to_add:
-                    feats += trigram(t1, t2, t3)
-        else:
+        if feat_level == 'zhang':
+            print "Use Zhang feats"
             feats = from_single + from_word_pairs + from_three_words + distance
             feats += valency + zhang_unigrams + third_order
             feats += labels
             feats += label_sets
-
-        #assert len(set(feats)) == len(feats), '%d vs %d' % (len(set(feats)), len(feats))
-        return feats
-
-
+        else:
+            print "Use %d ngram feats" % len(ngrams)
+            feats = tuple(unigrams)
+            kernel_tokens = get_kernel_tokens()
+            bigram = bigram_with_clusters if add_clusters else bigram_no_clusters
+            trigram = trigram_with_clusters if add_clusters else trigram_no_clusters
+            for ngram_feat in ngrams:
+                if len(ngram_feat) == 2:
+                    feats += bigram(*ngram_feat)
+                elif len(ngram_feat) == 3:
+                    feats += trigram(*ngram_feat)
+                else:
+                    raise StandardError, ngram_feat
+            if feat_level != 'iso':
+                feats += valency
+                feats += distance
+                feats += label_sets
+                feats += labels
+            else:
+                print "No extra feats"
+            if feat_level == 'full':
+                print "Full feats"
+                feats += third_order
+                feats += from_single
+                feats += from_word_pairs
+                feats += from_three_words
+        return tuple(set(feats))

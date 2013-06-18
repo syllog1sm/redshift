@@ -21,7 +21,7 @@ from io_parse cimport make_sentence
 from transitions cimport TransitionSystem, transition_to_str 
 from beam cimport Beam, Violation
 cimport features
-from features cimport FeatureSet, ArcStandardFeatureSet
+from features cimport FeatureSet
 
 from io_parse import LABEL_STRS, STR_TO_LABEL
 
@@ -119,7 +119,7 @@ cdef class Parser:
     cdef bint label_beam
 
     def __cinit__(self, model_dir, clean=False, train_alg='static',
-                  add_extra=True, label_set='MALT', vocab_thresh=5,
+                  feat_set="zhang", label_set='MALT', vocab_thresh=5,
                   allow_reattach=False, allow_reduce=False,
                   reuse_idx=False, beam_width=1, label_beam=True,
                   ngrams=None, add_clusters=False):
@@ -127,7 +127,6 @@ cdef class Parser:
         if not clean:
             params = dict([line.split() for line in model_dir.join('parser.cfg').open()])
             train_alg = params['train_alg']
-            add_extra = True if params['add_extra'] == 'True' else False
             label_set = params['label_set']
             feat_thresh = int(params['feat_thresh'])
             allow_reattach = params['allow_reattach'] == 'True'
@@ -136,7 +135,11 @@ cdef class Parser:
             r_labels = params['right_labels']
             beam_width = int(params['beam_width'])
             label_beam = params['label_beam'] == 'True'
-            ngrams = [int(i) for i in params['ngrams'].split(',')]
+            feat_set = params['feat_set']
+            ngrams = []
+            for ngram_str in params['ngrams'].split(','):
+                if ngram_str == '-1': continue
+                ngrams.append(tuple([int(i) for i in ngram_str.split('_')]))
             add_clusters = params['add_clusters'] == 'True'
         if allow_reattach and allow_reduce:
             print 'NM L+D'
@@ -150,9 +153,7 @@ cdef class Parser:
         self.model_dir = self.setup_model_dir(model_dir, clean)
         labels = io_parse.set_labels(label_set)
         self.features = FeatureSet(len(labels), mask_value=index.hashes.get_mask_value(),
-                                   add_extra=add_extra, ngrams=ngrams,
-                                   add_clusters=add_clusters)
-        self.add_extra = add_extra
+                                   feat_set=feat_set, ngrams=ngrams, add_clusters=add_clusters)
         self.label_set = label_set
         # TODO: Fix this
         self.feat_thresh = 1
@@ -163,7 +164,6 @@ cdef class Parser:
             self.new_idx(self.model_dir, self.features.n)
         else:
             self.load_idx(self.model_dir, self.features.n)
-        print "Using ArcEager transitions"
         self.moves = TransitionSystem(list(range(100)), labels,
                                       allow_reattach=allow_reattach,
                                       allow_reduce=allow_reduce)
@@ -516,7 +516,6 @@ cdef class Parser:
         with loc.open('w') as cfg:
             cfg.write(u'model_dir\t%s\n' % self.model_dir)
             cfg.write(u'train_alg\t%s\n' % self.train_alg)
-            cfg.write(u'add_extra\t%s\n' % self.add_extra)
             cfg.write(u'label_set\t%s\n' % self.label_set)
             cfg.write(u'feat_thresh\t%d\n' % self.feat_thresh)
             cfg.write(u'allow_reattach\t%s\n' % self.moves.allow_reattach)
@@ -525,7 +524,13 @@ cdef class Parser:
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
             cfg.write(u'beam_width\t%d\n' % self.beam_width)
             cfg.write(u'label_beam\t%s\n' % self.label_beam)
-            cfg.write(u'ngrams\t%s\n' % u','.join([str(b) for b in self.features.ngrams]))
+            if not self.features.ngrams:
+                cfg.write(u'ngrams\t-1\n')
+            else:
+                ngram_strs = ['_'.join([str(i) for i in ngram])
+                              for ngram in self.features.ngrams]
+                cfg.write(u'ngrams\t%s\n' % u','.join(ngram_strs))
+            cfg.write(u'feat_set\t%s\n' % self.features.name)
             cfg.write(u'add_clusters\t%s\n' % self.features.add_clusters)
 
     def __dealloc__(self):
