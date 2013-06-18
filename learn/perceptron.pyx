@@ -308,7 +308,7 @@ cdef class Perceptron:
             elif feat_addr < self.nr_raws:
                 for i in range(self.nr_class):
                     if self.raws[feat_addr].w[i] != 0:
-                        non_zeroes.append('%d=%s' % (i, self.raws[feat_addr].w[i]))
+                        non_zeroes.append('%d=%.3f' % (i, self.raws[feat_addr].w[i]))
             else:
                 feat = <SquareFeature*>feat_addr
                 for i in range(self.div):
@@ -317,7 +317,7 @@ cdef class Perceptron:
                         for j in range(self.div):
                             clas = (i * self.div) + j
                             if params.w[j]:
-                                non_zeroes.append('%d=%s ' % (clas, params.w[j]))
+                                non_zeroes.append('%d=%.3f ' % (clas, params.w[j]))
                  
             if non_zeroes:
                 out.write(u'%d\t%d\t%s\n' % (feat_id, nr_seen, ' '.join(non_zeroes)))
