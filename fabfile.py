@@ -305,20 +305,29 @@ def bigram_add1(name, k=4, n=1, size=10000):
                 n_sents=size, ngrams='in%d' % ngram_id)
         n_models += n
         # Sleep 5 mins after submitting 50 jobs
-        if n_models > 75:
+        if n_models > 100:
             time.sleep(300)
             n_models = 0
 
 def trigram_add1(name, k=4, n=1, size=10000):
     """Add each trigram in turn, to a baseline consisting of the unigrams plus
     the three bigrams involved in the trigram"""
+    n = int(n)
+    k = int(k)
+    size = int(size)
+    data = str(REMOTE_MALT)
+    repo = str(REMOTE_REPO)
+    train_name = 'train.txt'
+    eval_pos = 'devi.txt' 
+    eval_parse = 'devr.txt'
+ 
     tokens = 's0,n0,n1,n2,n0l,n0l2,s0h,s0h2,s0r,s0r2,s0l,s0l2,s0re,s0le,n3,s0l0,s0r0'.split(',')
     bigrams = len(list(combinations(tokens, 2)))
     ngrams = list(combinations(tokens, 3))
     n_ngrams = len(ngrams)
     n_models = n
-    for ngram_id, ngram_name in list(enumerate(ngrams))[:10]:
-        exp_name = '%d_%s' % (ngram_id, ngram_name)
+    for ngram_id, ngram_name in list(enumerate(ngrams))[208:]:
+        exp_name = '%d_%s' % (ngram_id, '_'.join(ngram_name))
         train_n(n, 'exp', pjoin(str(REMOTE_PARSERS), name, exp_name),
                 data, k=k, i=15, add_feats=True, train_alg='max', label="NONE",
                 n_sents=size, ngrams='tri%d' % ngram_id)
@@ -327,11 +336,34 @@ def trigram_add1(name, k=4, n=1, size=10000):
                 data, k=k, i=15, add_feats=True, train_alg='max', label="NONE",
                 n_sents=size, ngrams='btri%d' % ngram_id)
         n_models += n
-        # Sleep 5 mins after submitting 50 jobs
-        if n_models > 75:
+        # Sleep 5 mins after submitting n jobs
+        if n_models > 100:
             time.sleep(300)
             n_models = 0
 
+def tritable(name):
+    exp_dir = REMOTE_PARSERS.join(name)
+    results = []
+    with cd(str(exp_dir)):
+        ngrams = run("ls %s" % exp_dir, quiet=True).split()
+        for ngram in sorted(ngrams):
+            base_dir = exp_dir.join(ngram).join('base')
+            tri_dir = exp_dir.join(ngram).join('exp')
+            base_accs = get_accs(str(base_dir))
+            tri_accs = get_accs(str(tri_dir))
+            if not base_accs or not tri_accs:
+                continue
+            if len(base_accs) != len(tri_accs):
+                continue
+            #z, p = scipy.stats.wilcoxon(base_accs, tri_accs)
+            p = 1.0
+            delta =  (sum(tri_accs) / len(tri_accs)) - (sum(base_accs) / len(base_accs))
+            results.append((delta, ngram, p))
+        results.sort(reverse=True)
+        for delta, ngram, p in results:
+            print delta, ngram, p
+
+            
 
 def combine_ngrams(name, k=4, n=1, size=10000):
     exp_dir = REMOTE_PARSERS.join(name)
