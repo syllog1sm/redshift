@@ -54,13 +54,13 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
     elif ngrams.startswith('tri'):
         idx = int(ngrams[3:])
         trigram = trigrams[idx]
-        ngrams = [trigram, (trigrams[0], trigrams[1]), (trigrams[0], trigrams[1]),
-                  (trigrams[1], trigrams[2])]
+        ngrams = [trigram, (trigram[0], trigram[1]), (trigram[0], trigram[1]),
+                  (trigram[1], trigram[2])]
     elif ngrams.startswith('btri'):
-        idx = int(ngrams[3:])
+        idx = int(ngrams[4:])
         trigram = trigrams[idx]
-        ngrams = [trigram, (trigrams[0], trigrams[1]), (trigrams[0], trigrams[1]),
-                  (trigrams[1], trigrams[2])]
+        ngrams = [trigram, (trigram[0], trigram[1]), (trigram[0], trigram[1]),
+                  (trigram[1], trigram[2])]
     else:
         raise StandardError, ngrams
     random.seed(seed)
