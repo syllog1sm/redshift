@@ -241,7 +241,7 @@ def trigram_add1(name, k=4, n=1, size=10000):
     ngrams = list(combinations(tokens, 3))
     n_ngrams = len(ngrams)
     n_models = n
-    for ngram_id, ngram_name in list(enumerate(ngrams))[208:]:
+    for ngram_id, ngram_name in list(enumerate(ngrams)):
         exp_name = '%d_%s' % (ngram_id, '_'.join(ngram_name))
         train_n(n, 'exp', pjoin(str(REMOTE_PARSERS), name, exp_name),
                 data, k=k, i=15, feat_str="iso", train_alg='max', label="NONE",
@@ -252,12 +252,13 @@ def trigram_add1(name, k=4, n=1, size=10000):
                 n_sents=size, ngrams='btri%d' % ngram_id)
         n_models += n
         # Sleep 5 mins after submitting n jobs
-        if n_models > 50:
+        if n_models > 100:
             time.sleep(300)
             n_models = 0
 
 def tritable(name):
-    exp_dir = REMOTE_PARSERS.join(name)
+    #exp_dir = REMOTE_PARSERS.join(name)
+    exp_dir = Path('/data1/mhonniba/').join(name)
     results = []
     with cd(str(exp_dir)):
         ngrams = run("ls %s" % exp_dir, quiet=True).split()
@@ -276,8 +277,9 @@ def tritable(name):
             results.append((delta, ngram, p))
         results.sort(reverse=True)
         for delta, ngram, p in results:
-            print delta, ngram, p
-
+            ngram = ngram.replace('s0le', 'n0le')
+            pieces = ngram.split('_')
+            print r'%s & %s & %s & %.1f \\' % (pieces[1], pieces[2], pieces[3], delta)
             
 
 def combine_ngrams(name, k=4, n=1, size=10000):
@@ -309,28 +311,32 @@ def combine_ngrams(name, k=4, n=1, size=10000):
         results.sort()
         results.reverse()
         for acc, ngram, stdev, p in results:
-            print ngram, acc, p
+            ngram = ngram.replace('s0le', 'n0le')
+            pieces = ngram.split('_')
+            t1 = pieces[1]
+            t2 = pieces[2]
             if acc > base_acc and p < 0.01:
                 good_ngrams.append(int(ngram.split('_')[0]))
+                print r'%s & %s & %.1f & \\' % (t1, t2, acc - base_acc)
     print good_ngrams
         
 
-def vocab_thresholds(name, k=4, n=1, size=10000):
+def vocab_thresholds(name, k=8, n=1, size=10000):
     base_dir = REMOTE_PARSERS.join(name)
     n = int(n)
     k = int(k)
     size = int(size)
-    data = str(REMOTE_MALT)
+    data = str(REMOTE_STANFORD)
     repo = str(REMOTE_REPO)
     train_name = 'train.txt'
     eval_pos = 'devi.txt' 
     eval_parse = 'devr.txt'
  
-    thresholds = [0, 1, 10, 25, 50, 75, 100, 1000]
+    thresholds = [0, 10, 50, 100, 1000]
     for t in thresholds:
         thresh = 'thresh%d' % t
         train_n(n, thresh, base_dir, data, k=k, i=15, t=t,
-            add_feats=False, train_alg='max', label="NONE", n_sents=size)
+                train_alg='max', label="Stanford", n_sents=size)
 
 def vocab_table(name):
     exp_dir = REMOTE_PARSERS.join(name)
@@ -406,7 +412,7 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=1gb,nodes=1:ppn=2
+#PBS -l walltime=20:00:00,mem=4gb,nodes=1:ppn=2
 source /home/mhonniba/py27/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
