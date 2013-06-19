@@ -149,21 +149,21 @@ def get_kernel_tokens():
     return [S0w, N0w, N1w, N2w, N0lw, N0l2w, S0hw, S0h2w, S0rw, S0r2w, S0lw,
             S0l2w, S0re_w, N0le_w, N3w, S0l0w, S0r0w]
 
-def get_best_bigrams(all_bigrams):
+def get_best_bigrams(all_bigrams, n=50):
     best = [0, 26, 12, 126, 1, 5, 41, 16, 40, 86, 20, 87, 18, 27, 22, 30,
             3, 104, 24, 65, 117, 132, 29, 11, 34, 131, 7, 116, 32, 36, 81,
             15, 9, 21, 44, 6, 128, 95, 89, 17, 96, 38, 19, 84, 14, 43, 4,
             2, 82, 90, 54, 76, 58, 77, 53, 23, 13, 31, 28, 42, 101, 35, 111,
             121, 122, 25, 10, 127, 106, 129, 130, 33, 120, 37, 100, 66, 135,
-            59, 110, 8, 61, 107]
+            59, 110, 8, 61, 107][:n]
     return [all_bigrams[i] for i in best]
 
-def get_best_trigrams(all_trigrams):
+def get_best_trigrams(all_trigrams, n=25):
     best = [2, 199, 158, 61, 66, 5, 150, 1, 88, 154, 85, 25, 53, 10, 3, 60,
             73, 175, 114, 4, 6, 148, 205, 197, 0, 71, 127, 200, 142, 84, 43,
             89, 45, 95, 33, 110, 182, 20, 24, 159, 51, 106, 26, 8, 178, 151, 12,
-            166, 192, 7, 190, 147, 13, 194, 50, 129, 174]
-    return [all_trigrams[i] for i in best]
+            166, 192, 7, 190, 147, 13, 194, 50, 129, 174][:25]
+    return [all_trigrams[i] for i in best][:n]
 
 
 def unigram(word, add_clusters=False):

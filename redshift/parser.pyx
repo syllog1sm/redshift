@@ -119,7 +119,8 @@ cdef class Parser:
     cdef bint label_beam
 
     def __cinit__(self, model_dir, clean=False, train_alg='static',
-                  feat_set="zhang", label_set='MALT', vocab_thresh=5,
+                  feat_set="zhang", label_set='MALT',
+                  feat_thresh=0, vocab_thresh=5,
                   allow_reattach=False, allow_reduce=False,
                   reuse_idx=False, beam_width=1, label_beam=True,
                   ngrams=None, add_clusters=False):
@@ -155,8 +156,7 @@ cdef class Parser:
         self.features = FeatureSet(len(labels), mask_value=index.hashes.get_mask_value(),
                                    feat_set=feat_set, ngrams=ngrams, add_clusters=add_clusters)
         self.label_set = label_set
-        # TODO: Fix this
-        self.feat_thresh = 10
+        self.feat_thresh = feat_thresh
         self.train_alg = train_alg
         self.beam_width = beam_width
         self.label_beam = label_beam
@@ -227,7 +227,7 @@ cdef class Parser:
             self.guide.total = 0
             if n < 3:
                 self.guide.reindex()
-            if self.feat_thresh > 1:
+            if n % 2 == 1 and self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
         self.guide.finalize()
 
@@ -499,7 +499,7 @@ cdef class Parser:
         self.guide.save(str(self.model_dir.join('model')))
 
     def load(self):
-        self.guide.load(str(self.model_dir.join('model')))
+        self.guide.load(str(self.model_dir.join('model')), thresh=self.feat_thresh)
 
     def new_idx(self, model_dir, size_t n_predicates):
         index.hashes.init_word_idx(model_dir.join('words'))

@@ -322,7 +322,7 @@ cdef class Perceptron:
                 out.write(u'%d\t%d\t%s\n' % (feat_id, nr_seen, ' '.join(non_zeroes)))
         out.close()
 
-    def load(self, in_):
+    def load(self, in_, size_t thresh=0):
         cdef SquareFeature* feat
         cdef size_t i
         nr_feat = 0
@@ -342,7 +342,7 @@ cdef class Perceptron:
             f = int(f_str)
             if f == 0:
                 continue
-            if int(nr_seen) < 100:
+            if int(nr_seen) < thresh:
                 continue
             if nr_raws < self.nr_raws:
                 seen_cls = False
@@ -385,7 +385,6 @@ cdef class Perceptron:
         self.cache.flush()
 
     def prune(self, size_t thresh):
-        print "Pruning < %d" % thresh
         assert thresh > 1
         cdef dense_hash_map[uint64_t, size_t].iterator it = self.W.begin()
         cdef pair[uint64_t, size_t] data
@@ -405,7 +404,7 @@ cdef class Perceptron:
                 free_square_feat(feat, self.div)
                 self.W.erase(f_id)
                 n_pruned += 1
-        print "%d pruned" % n_pruned
+        print "%d pruned (f=%d)" % (n_pruned, thresh)
 
     def reindex(self):
         """For efficiency, move the most frequent features to dense feature
