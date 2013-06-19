@@ -392,6 +392,7 @@ cdef class Perceptron:
         cdef uint64_t f_id
         cdef SquareFeature* feat
         cdef size_t n_pruned = 0
+        cdef size_t n_feats = 0
         while it != self.W.end():
             data = deref(it)
             inc(it)
@@ -404,7 +405,8 @@ cdef class Perceptron:
                 free_square_feat(feat, self.div)
                 self.W.erase(f_id)
                 n_pruned += 1
-        print "%d pruned (f=%d)" % (n_pruned, thresh)
+            n_feats += 1
+        print "%d/%d pruned (f=%d)" % (n_pruned, n_feats, thresh)
 
     def reindex(self):
         """For efficiency, move the most frequent features to dense feature
