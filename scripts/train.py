@@ -43,10 +43,10 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
     kernels = redshift.features.get_kernel_tokens()
     all_bigrams = list(combinations(kernels, 2))
     all_trigrams = list(combinations(kernels, 3))
-    ngrams = redshift.features.get_best_bigrams(all_bigrams,
-                                                n=int(n_ngrams * 0.66))
-    ngrams.extend(redshift.features.get_best_trigrams(all_trigrams,
-                                                      n=int(n_ngrams * 0.33)))
+    n_trigrams = n_ngrams / 3
+    n_bigrams = n_ngrams - n_trigrams
+    ngrams = redshift.features.get_best_bigrams(all_bigrams, n=n_bigrams)
+    ngrams.extend(redshift.features.get_best_trigrams(all_trigrams, n=n_trigrams))
     random.seed(seed)
     train_loc = Path(train_loc)
     model_loc = Path(model_loc)
