@@ -36,15 +36,15 @@ USE_HELD_OUT = False
     n_sents=("Number of sentences to train from", "option", "n", int)
 )
 def main(train_loc, model_loc, train_alg="online", n_iter=15,
-         feat_set="zhang", label_set="Stanford", vocab_thresh=0, feat_thresh=0,
+         feat_set="zhang", label_set="Stanford", vocab_thresh=0, feat_thresh=1,
          allow_reattach=False, allow_reduce=False, n_ngrams=0,
          add_clusters=False, n_sents=0,
          profile=False, debug=False, seed=0, beam_width=1):
     kernels = redshift.features.get_kernel_tokens()
     all_bigrams = list(combinations(kernels, 2))
     all_trigrams = list(combinations(kernels, 3))
-    n_trigrams = n_ngrams / 3
-    n_bigrams = n_ngrams - n_trigrams
+    n_bigrams = (n_ngrams / 3) * 2
+    n_trigrams = n_ngrams - max((n_bigrams, len(all_bigrams)))
     ngrams = redshift.features.get_best_bigrams(all_bigrams, n=n_bigrams)
     ngrams.extend(redshift.features.get_best_trigrams(all_trigrams, n=n_trigrams))
     random.seed(seed)
