@@ -156,7 +156,7 @@ cdef class Parser:
                                    feat_set=feat_set, ngrams=ngrams, add_clusters=add_clusters)
         self.label_set = label_set
         # TODO: Fix this
-        self.feat_thresh = 1
+        self.feat_thresh = 10
         self.train_alg = train_alg
         self.beam_width = beam_width
         self.label_beam = label_beam
@@ -227,9 +227,8 @@ cdef class Parser:
             self.guide.total = 0
             if n < 3:
                 self.guide.reindex()
-            
-        if self.feat_thresh > 1:
-            self.guide.prune(self.feat_thresh)
+            if self.feat_thresh > 1:
+                self.guide.prune(self.feat_thresh)
         self.guide.finalize()
 
     cdef object decode_beam(self, Sentence* sent, size_t k, object stats):
@@ -245,12 +244,12 @@ cdef class Parser:
         cdef Violation violn
         cdef double* scores
         cdef bint cache_hit = False
-        self.guide.cache.flush()
         cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
         memcpy(beam.gold.tags, g_pos, (sent.length + 4) * sizeof(size_t))
         stats['sents'] += 1
         beam_scores = <double**>malloc(beam.k * sizeof(double*))
         while not beam.gold.is_finished:
+            self.guide.cache.flush()
             gold_kernel = beam.gold_kernel()
             scores = self.guide.cache.lookup(sizeof(Kernel), gold_kernel, &cache_hit)
             if not cache_hit:
@@ -266,7 +265,6 @@ cdef class Parser:
                     feats = self.features.extract(sent, kernel)
                     self.guide.fill_scores(self.features.n, feats, scores)
                 beam_scores[p_idx] = scores
-            self.guide.cache.flush()
             beam.extend_states(beam_scores)
             beam.check_violation()
             if self.train_alg == 'early' and beam.violn != None:
@@ -445,7 +443,6 @@ cdef class Parser:
     cdef int beam_parse(self, Sentence* sent, size_t k, dict prune_freqs) except -1:
         cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg,
                               prune_freqs=prune_freqs)
-        self.guide.cache.flush()
         cdef size_t p_idx, i
         cdef double* scores
         cdef bint cache_hit
@@ -453,6 +450,7 @@ cdef class Parser:
         cdef uint64_t* feats
         cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
         while not beam.is_finished:
+            self.guide.cache.flush()
             for p_idx in range(beam.bsize):
                 memcpy(beam.beam[p_idx].tags, sent.pos, (sent.length + 4)* sizeof(size_t))
                 kernel = beam.next_state(p_idx)

@@ -189,7 +189,7 @@ def _bigram(a, b, add_clusters=True):
     p2 = b + 1
     c2 = b + 2
     cp2 = b + 3
-    basic = ((w1, w2), (w1, p1, w2, p2), (p1, p2), (w1, p2), (p1, w2))
+    basic = ((w1, w2), (p1, p2), (w1, p2), (p1, w2))
     clusters = ((c1, c2), (cp1, p1, cp2, p2))
     if add_clusters:
         return basic + clusters
@@ -601,8 +601,10 @@ cdef class FeatureSet:
                 print "No extra feats"
             if feat_level == 'full':
                 print "Full feats"
-                feats += third_order
                 feats += from_single
+                feats += zhang_unigrams
+                feats += third_order
                 feats += from_word_pairs
                 feats += from_three_words
-        return tuple(set(feats))
+        # Sort each feature, and sort and unique the set of them
+        return tuple(sorted(set([tuple(sorted(f)) for f in feats])))
