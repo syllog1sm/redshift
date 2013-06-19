@@ -80,7 +80,8 @@ cdef class Perceptron:
         self.scores = <double *>calloc(max_classes, sizeof(double))
         self.W = dense_hash_map[uint64_t, size_t]()
         self.W.set_empty_key(0)
-        self.div = <size_t>math.sqrt(max_classes) + 1
+        # TODO: This was +1 before. Are we off-by-one now??
+        self.div = <size_t>math.sqrt(max_classes)
         self.now = 0
         self.nr_raws = 10000
         self.raws = <DenseFeature**>malloc(self.nr_raws * sizeof(DenseFeature*))
@@ -183,15 +184,12 @@ cdef class Perceptron:
         self.now += 1
         if gold_i == pred_i:
             return 0
-        weight = 1.0
         cdef size_t feat_addr
         cdef SquareFeature* feat
         for i in range(n_feats):
             f = features[i]
             if f == 0:
                 break
-            if weight == 0:
-                continue
             feat_addr = self.W[f]
             if feat_addr == 0:
                 self.add_feature(f)
@@ -386,8 +384,28 @@ cdef class Perceptron:
     def flush_cache(self):
         self.cache.flush()
 
-    def prune(self, thresh):
-        pass
+    def prune(self, size_t thresh):
+        print "Pruning < %d" % thresh
+        assert thresh > 1
+        cdef dense_hash_map[uint64_t, size_t].iterator it = self.W.begin()
+        cdef pair[uint64_t, size_t] data
+        # Build priority queue of the top N scores
+        cdef uint64_t f_id
+        cdef SquareFeature* feat
+        cdef size_t n_pruned = 0
+        while it != self.W.end():
+            data = deref(it)
+            inc(it)
+            f_id = data.first
+            feat_addr = data.second
+            if f_id == 0 or feat_addr < self.nr_raws:
+                continue
+            feat = <SquareFeature*>feat_addr
+            if feat.nr_seen < thresh:
+                free_square_feat(feat, self.div)
+                self.W.erase(f_id)
+                n_pruned += 1
+        print "%d pruned" % n_pruned
 
     def reindex(self):
         """For efficiency, move the most frequent features to dense feature
