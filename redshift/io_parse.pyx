@@ -74,6 +74,7 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.parse.moves = <size_t*>calloc(length * 2, sizeof(size_t))
     
     s.words = <size_t*>calloc(length, sizeof(size_t))
+    s.owords = <size_t*>calloc(length, sizeof(size_t))
     s.pos = <size_t*>calloc(length, sizeof(size_t))       
     s.ids = <size_t*>calloc(length, sizeof(size_t))
     s.clusters = <size_t*>calloc(length, sizeof(size_t))
@@ -90,9 +91,10 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     cdef size_t quote_cnt = 0
     for i in range(length):
         s.words[i] = index.hashes.encode_word(py_words[i])
+        s.owords[i] = s.words[i]
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
         # TODO: Fix this!!
-        if s.words[i] < brown_idx.n:
+        if s.words[i] > brown_idx.n:
             s.clusters[i] = brown_idx.table[s.words[i]].full
             s.cprefixes[i] = brown_idx.table[s.words[i]].prefix
         if thresh != 0 and index.hashes.get_freq(py_words[i]) <= thresh:
