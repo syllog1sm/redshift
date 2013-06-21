@@ -222,6 +222,7 @@ def _trigram(a, b, c, add_clusters=True):
     c3 = c + 2
     cp3 = c + 3
 
+    #basic = ((w1, w2, w3), (w1, p2, p3), (p1, w2, p3), (p1, p2, w3), (p1, p2, p3))
     basic = ((w1, w2, w3), (w1, p2, p3), (p1, w2, p3), (p1, p2, w3), (p1, p2, p3))
     clusters = ((c1, c2, c3), (cp1, p1, cp2, p2, cp3, p3))
     #clusters = ((c1, c2, p3), (c1, p2, w3), (p1, c2, c3), (c1, p2, p3),
@@ -538,26 +539,15 @@ cdef class FeatureSet:
         )
 
         extra = (
-            (S0p, N0p, S0ll),
-            (S0w, N0p, S0ll),
-            (S0p, N0p, S0rp, S0ll),
-            (S0w, S0rw),
-            (S0rw, N0p),
-            (S0rw, N0w),
-            (S0p, S0rw, N0p),
-            (S0w, S0rw, N0w),
-            (N0orth),
-            (N1orth),
-            (N0paren),
-            (N1paren),
-            (N0quote),
-            (N1quote),
+            (N0orth,),
+            (N1orth,),
+            (N0paren, N0w),
+            (N0paren, S0w),
+            (N0quote,),
+            (N0quote, N0w),
+            (N0quote, S0w),
             (S0rw, N0orth),
             (S0rw, N0orth, N1orth),
-            (S0re_p, N0le_orth),
-            (S0re_p, N0le_p),
-            (S0re_p, N0le_w),
-            (S0re_p, N0le_p, N0p)
         )
 
         unigrams = (
@@ -598,19 +588,15 @@ cdef class FeatureSet:
                     feats += trigram(*ngram_feat)
                 else:
                     raise StandardError, ngram_feat
-            if feat_level != 'iso':
-                feats += valency
-                feats += distance
-                feats += label_sets
-                feats += labels
-            else:
-                print "No extra feats"
-            if feat_level == 'full':
+            if feat_level == 'full' or feat_level != 'iso':
                 print "Full feats"
                 feats += from_single
                 feats += zhang_unigrams
                 feats += third_order
                 feats += from_word_pairs
                 feats += from_three_words
+                #feats += extra
+            else:
+                print "No extra feats"
         # Sort each feature, and sort and unique the set of them
         return tuple(sorted(set([tuple(sorted(f)) for f in feats])))
