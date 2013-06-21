@@ -31,22 +31,28 @@ USE_HELD_OUT = False
     seed=("Set random seed", "option", "s", int),
     beam_width=("Beam width", "option", "k", int),
     feat_set=("Name of feat set [zhang, iso, full]", "option", "x", str),
-    n_ngrams=("How many ngrams to include", "option", "g", int),
+    ngrams=("How many ngrams to include", "option", "g", str),
     add_clusters=("Add brown cluster features", "flag", "c", bool),
     n_sents=("Number of sentences to train from", "option", "n", int)
 )
 def main(train_loc, model_loc, train_alg="online", n_iter=15,
          feat_set="zhang", label_set="Stanford", vocab_thresh=0, feat_thresh=1,
-         allow_reattach=False, allow_reduce=False, n_ngrams=0,
+         allow_reattach=False, allow_reduce=False, ngrams='0',
          add_clusters=False, n_sents=0,
          profile=False, debug=False, seed=0, beam_width=1):
     kernels = redshift.features.get_kernel_tokens()
     all_bigrams = list(combinations(kernels, 2))
     all_trigrams = list(combinations(kernels, 3))
-    n_bigrams = (n_ngrams / 3) * 2
-    n_trigrams = n_ngrams - min((n_bigrams, len(all_bigrams)))
-    ngrams = redshift.features.get_best_bigrams(all_bigrams, n=n_bigrams)
-    ngrams.extend(redshift.features.get_best_trigrams(all_trigrams, n=n_trigrams))
+    if '_' not in ngrams:
+        n_ngrams = int(ngrams)
+        ngrams = []
+        n_bigrams = (n_ngrams / 3) * 2
+        n_trigrams = n_ngrams - min((n_bigrams, len(all_bigrams)))
+        ngrams = redshift.features.get_best_bigrams(all_bigrams, n=n_bigrams)
+        ngrams.extend(redshift.features.get_best_trigrams(all_trigrams, n=n_trigrams))
+    else:
+        ngrams = [tuple(int(t) for t in ngram.split('_')) for ngram in ngrams.split(',')]
+    print ngrams
     random.seed(seed)
     train_loc = Path(train_loc)
     model_loc = Path(model_loc)
