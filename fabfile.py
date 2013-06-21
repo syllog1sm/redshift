@@ -256,6 +256,83 @@ def trigram_add1(name, k=4, n=1, size=10000):
             time.sleep(300)
             n_models = 0
 
+def combine_ngrams(name, k=4, n=1, size=10000):
+    def make_ngram_str(ngrams):
+        strings = ['_'.join([str(t) for t in ngram]) for ngram in ngrams]
+        return ','.join(strings)
+    import redshift.features
+    kernel_tokens = redshift.features.get_kernel_tokens()
+    all_bigrams = list(combinations(kernel_tokens, 2))
+    all_trigrams = list(combinations(kernel_tokens, 3))
+    bigrams = redshift.features.get_best_bigrams(all_bigrams, n=len(all_bigrams))
+    trigrams = redshift.features.get_best_trigrams(all_trigrams, n=len(all_trigrams))
+    n_bigrams = 10
+    n_trigrams = 5
+    base_set = bigrams[:n_bigrams] + trigrams[:n_trigrams]
+    bigrams = bigrams[n_bigrams:]
+    trigrams = trigrams[n_trigrams:]
+    ngram_str = make_ngram_str(base_set)
+    train_n(n, exp_name, pjoin(str(REMOTE_PARSERS), name),
+            data, k=k, i=15, feat_str="full", train_alg='max', label="NONE",
+            n_sents=size, ngrams=make_ngram_str)
+    exp_dir = pjoin(str(REMOTE_PARSERS), name, ngram_str)
+    n_finished = 0
+    while n_finished < n:
+        n_finished = count_finished(exp_dir)
+        if accs is None:
+            time.sleep(120)
+    base_accs = get_accs(exp_dir)
+    print base_accs
+    return False
+    n_misses = 0
+    while True:
+        if not bigrams and not trigrams:
+            break
+        elif not bigrams:
+            next_token = trigrams.pop(0)
+        elif not trigrams:
+            next_token = bigrams.pop(0)
+        elif n_bigrams > (n_trigrams * 2):
+            n_trigrams += 1
+            next_token = trigrams.pop(0)
+        else:
+            next_token = bigrams.pop(0)
+        ngram_str = make_ngram_str(base_set + [next_ngram])
+        train_n(n, ngram_str, pjoin(str(REMOTE_PARSERS), name),
+                data, k=k, i=15, feat_str="full", train_alg='max', label="NONE",
+                n_sents=size, ngrams=ngram_str)
+        exp_dir = pjoin(str(REMOTE_PARSERS), name, ngram_str)
+        n_finished = 0
+        while n_finished < n:
+            n_finished = count_finished(exp_dir)
+            if accs is None:
+                time.sleep(120)
+        exp_accs = get_accs(exp_dir)
+        exp_avg = sum(exp_accs) / len(exp_accs)
+        z, p = scipy.wilcoxon(exp_accs, base_accs)
+        if exp_avg > base_avg and p < 0.01:
+            base_set.append(next_ngram)
+            base_acc = exp_avg
+            base_accs = exp_accs
+            n_misses = 0
+        else:
+            n_misses += 1
+            if n_misses >= 5:
+                break
+
+def get_best_trigrams(all_trigrams, n=25):
+    best = [2, 199, 158, 61, 66, 5, 150, 1, 88, 154, 85, 25, 53, 10, 3, 60, 73,
+            175, 114, 4, 6, 148, 205, 197, 0, 71, 127, 200, 142, 84, 43, 89, 45,
+            95, 419, 33, 110, 182, 20, 24, 159, 51, 106, 26, 8, 178, 151, 12, 166,
+            192, 7, 209, 190, 147, 13, 194, 50, 129, 174, 186, 28, 116, 193, 179,
+            262, 23, 44, 172, 133, 191, 562, 38, 124, 195, 123, 72, 202, 187, 101,
+            92, 104, 115, 596, 29, 99, 132, 169, 42, 206, 592, 67, 323, 69, 9, 74,
+            14, 136, 64, 561, 161, 19, 77, 171, 300, 204, 310, 121, 15, 201, 235,
+            657, 70, 198, 22, 68, 48, 153, 54, 286, 83, 162, 100, 506, 98, 80, 433,
+            420, 63, 613, 149, 90, 139, 31, 91, 86, 203, 248, 173, 130, 165, 346,
+            157, 616, 18, 145, 451, 410, 75, 55, 603, 156, 52, 622, 210, 332, 120]
+ 
+
 def tritable(name):
     #exp_dir = REMOTE_PARSERS.join(name)
     exp_dir = Path('/data1/mhonniba/').join(name)
@@ -276,13 +353,18 @@ def tritable(name):
             delta =  (sum(tri_accs) / len(tri_accs)) - (sum(base_accs) / len(base_accs))
             results.append((delta, ngram, p))
         results.sort(reverse=True)
+        good_trigrams = []
         for delta, ngram, p in results:
             ngram = ngram.replace('s0le', 'n0le')
             pieces = ngram.split('_')
             print r'%s & %s & %s & %.1f \\' % (pieces[1], pieces[2], pieces[3], delta)
+            if delta > 0.1:
+                good_trigrams.append(int(ngram.split('_')[0]))
+        print good_trigrams
+        print len(good_trigrams)
             
 
-def combine_ngrams(name, k=4, n=1, size=10000):
+def bitable(name):
     exp_dir = REMOTE_PARSERS.join(name)
     bigrams = []
     trigrams = []
@@ -332,11 +414,22 @@ def vocab_thresholds(name, k=8, n=1, size=10000):
     eval_pos = 'devi.txt' 
     eval_parse = 'devr.txt'
  
-    thresholds = [0, 10, 50, 100, 1000]
-    for t in thresholds:
-        thresh = 'thresh%d' % t
-        train_n(n, thresh, base_dir, data, k=k, i=15, t=t,
-                train_alg='max', label="Stanford", n_sents=size)
+    thresholds = [75]
+    ngram_sizes = [60, 90, 120]
+    for n_ngrams in ngram_sizes:
+        if n_ngrams == 0:
+            feat_name = 'zhang'
+        else:
+            feat_name = 'full'
+        exp_dir = str(base_dir.join('%d_ngrams' % n_ngrams))
+        #if n_ngrams < 100:
+        #    train_n(n, 'unpruned', exp_dir, data, k=k, i=15, t=0, f=0,
+        #            train_alg="max", label="Stanford", n_sents=size, feat_str=feat_name)
+        for t in thresholds:
+            thresh = 'thresh%d' % t
+            train_n(n, thresh, exp_dir, data, k=k, i=15, t=t, f=100,
+                    train_alg='max', label="Stanford", n_sents=size,
+                    feat_str=feat_name, ngrams=n_ngrams)
 
 def vocab_table(name):
     exp_dir = REMOTE_PARSERS.join(name)
@@ -349,7 +442,7 @@ def vocab_table(name):
 # 119_s0_s0r2_s0l2
 def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
             train_alg="online", label="Stanford", n_sents=0,
-            ngrams="base", t=0):
+            ngrams=0, t=0, f=0):
     exp_dir = str(exp_dir)
     repo = str(REMOTE_REPO)
     for seed in range(n):
@@ -358,7 +451,8 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
         run("mkdir -p %s" % model)
         train_str = _train(pjoin(data, 'train.txt'), model, k=k, i=15,
                            feat_str=feat_str, train_alg=train_alg, seed=seed,
-                           label=label, n_sents=n_sents, ngrams=ngrams, vocab_thresh=t)
+                           label=label, n_sents=n_sents, ngrams=ngrams,
+                           vocab_thresh=t, feat_thresh=f)
         parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'))
         eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.txt'))
         grep_str = "grep 'U:' %s >> %s" % (pjoin(model, 'dev', 'acc'),
@@ -370,6 +464,15 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
             err_loc = pjoin(model, 'stderr')
             out_loc = pjoin(model, 'stdout')
             run('qsub -N %s %s -e %s -o %s' % (exp_name, script_loc, err_loc, out_loc))
+
+
+def count_finished(exp_dir):
+    with cd(exp_dir):
+        try:
+            samples = run("ls %s/*/stdout" % exp_dir).split()
+        except:
+            samples = []
+    return len(samples)
 
 
 def get_accs(exp_dir, eval_name='dev'):
@@ -389,12 +492,12 @@ def get_accs(exp_dir, eval_name='dev'):
 
 def _train(data, model, debug=False, k=1, feat_str='zhang', i=15, upd='early',
            train_alg="online", seed=0, args='', label="Stanford",
-           n_sents=0, ngrams="base", vocab_thresh=0):
-    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -l {label} -n {n_sents} -b {ngrams} -t {vocab_thresh} {args}'
+           n_sents=0, ngrams=0, vocab_thresh=0, feat_thresh=10):
+    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -l {label} -n {n_sents} -g {ngrams} -t {vocab_thresh} -f {feat_thresh} {args}'
     if debug:
         template += ' -debug'
     return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i,
-                           vocab_thresh=vocab_thresh,
+                           vocab_thresh=vocab_thresh, feat_thresh=feat_thresh,
                           upd=upd, alg=train_alg, seed=seed,
                           label=label, args=args, n_sents=n_sents, ngrams=ngrams)
 
@@ -412,7 +515,7 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=4gb,nodes=1:ppn=2
+#PBS -l walltime=20:00:00,mem=16gb,nodes=1:ppn=16
 source /home/mhonniba/py27/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
