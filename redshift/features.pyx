@@ -219,7 +219,7 @@ def _bigram(a, b, add_clusters=True):
     c2 = b + 2
     cp2 = b + 3
     basic = ((w1, w2), (p1, p2), (w1, p2), (p1, w2))
-    clusters = ((c1, c2), (cp1, p1, cp2, p2))
+    clusters = ((c1, c2), (cp1, cp2), (c1, p2), (cp2, p2), (p1, c2), (p1, cp2))
     if add_clusters:
         return basic + clusters
     else:
@@ -247,9 +247,10 @@ def _trigram(a, b, c, add_clusters=True):
 
     #basic = ((w1, w2, w3), (w1, p2, p3), (p1, w2, p3), (p1, p2, w3), (p1, p2, p3))
     basic = ((w1, w2, w3), (w1, p2, p3), (p1, w2, p3), (p1, p2, w3), (p1, p2, p3))
-    clusters = ((c1, c2, c3), (cp1, p1, cp2, p2, cp3, p3))
     #clusters = ((c1, c2, p3), (c1, p2, w3), (p1, c2, c3), (c1, p2, p3),
     #            (p1, c2, p3), (p1, c2, c3), (p1, p2, p3))
+    clusters = ((c1, c2, c3), (c1, p2, p3), (cp1, p2, p3), (p1, c2, p3), (p1, cp2, p3),
+                (p1, p2, c3), (p1, p2, cp3))
 
     if add_clusters:
         return basic + clusters
@@ -265,46 +266,46 @@ def trigram_with_clusters(a, b, c):
 
 
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
-                       size_t* clusters, size_t* cprefixes,
+                       size_t* clusters, size_t* cprefix4s, size_t* cprefix6s,
                        size_t* orths, size_t* parens, size_t* quotes,
                        Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
     context[N0w] = words[k.i]
     context[N0p] = k.n0p
     context[N0c] = clusters[k.i]
-    context[N0cp] = cprefixes[k.i]
+    context[N0cp] = cprefix6s[k.i]
 
     context[N1w] = words[k.i + 1]
     context[N1p] = k.n1p
     context[N1c] = clusters[k.i + 1]
-    context[N1cp] = cprefixes[k.i + 1]
+    context[N1cp] = cprefix6s[k.i + 1]
 
     context[N2w] = words[k.i + 2]
     context[N2p] = k.n2p
     context[N2c] = clusters[k.i + 2]
-    context[N2cp] = cprefixes[k.i + 2]
+    context[N2cp] = cprefix6s[k.i + 2]
 
     context[N3w] = words[k.i + 3]
     context[N3p] = k.n3p
     context[N3c] = clusters[k.i + 3]
-    context[N3cp] = cprefixes[k.i + 3]
+    context[N3cp] = cprefix6s[k.i + 3]
 
     context[S0w] = words[k.s0]
     context[S0p] = k.s0p
     context[S0c] = clusters[k.s0]
-    context[S0cp] = cprefixes[k.s0]
+    context[S0cp] = cprefix6s[k.s0]
     context[S0l] = k.Ls0
 
     context[S0hw] = words[k.hs0]
     context[S0hp] = k.hs0p
     context[S0hc] = clusters[k.hs0]
-    context[S0hcp] = cprefixes[k.hs0]
+    context[S0hcp] = cprefix6s[k.hs0]
     context[S0hl] = k.Lhs0
     context[S0hb] = k.hs0 != 0
 
     context[S0h2w] = words[k.h2s0]
     context[S0h2p] = k.h2s0p
     context[S0h2c] = clusters[k.h2s0]
-    context[S0h2cp] = cprefixes[k.h2s0]
+    context[S0h2cp] = cprefix6s[k.h2s0]
     context[S0h2l] = k.Lh2s0
  
     context[S0lv] = s0l.val
@@ -314,42 +315,42 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S0lw] = words[s0l.idx[0]]
     context[S0lp] = s0l.tags[0]
     context[S0lc] = clusters[s0l.idx[0]]
-    context[S0lcp] = cprefixes[s0l.idx[0]]
+    context[S0lcp] = cprefix6s[s0l.idx[0]]
 
     context[S0rw] = words[s0r.idx[0]]
     context[S0rp] = s0r.tags[0]
     context[S0rc] = clusters[s0r.idx[0]]
-    context[S0rcp] = cprefixes[s0r.idx[0]]
+    context[S0rcp] = cprefix6s[s0r.idx[0]]
 
     context[S0l2w] = words[s0l.idx[1]]
     context[S0l2p] = s0l.tags[1]
     context[S0l2c] = clusters[s0l.idx[1]]
-    context[S0l2cp] = cprefixes[s0l.idx[1]]
+    context[S0l2cp] = cprefix6s[s0l.idx[1]]
 
     context[S0r2w] = words[s0r.idx[1]]
     context[S0r2p] = s0r.tags[1]
     context[S0r2c] = clusters[s0r.idx[1]]
-    context[S0r2cp] = cprefixes[s0r.idx[1]]
+    context[S0r2cp] = cprefix6s[s0r.idx[1]]
 
     context[S0l0w] = words[s0l.idx[2]]
     context[S0l0p] = s0l.tags[2]
     context[S0l0c] = clusters[s0l.idx[2]]
-    context[S0l0cp] = cprefixes[s0l.idx[2]]
+    context[S0l0cp] = cprefix6s[s0l.idx[2]]
 
     context[S0r0w] = words[s0r.idx[2]]
     context[S0r0p] = s0r.tags[2]
     context[S0r0c] = clusters[s0r.idx[2]]
-    context[S0r0cp] = cprefixes[s0r.idx[2]]
+    context[S0r0cp] = cprefix6s[s0r.idx[2]]
 
     context[N0lw] = words[n0l.idx[0]]
     context[N0lp] = n0l.tags[0]
     context[N0lc] = clusters[n0l.idx[0]]
-    context[N0lcp] = cprefixes[n0l.idx[0]]
+    context[N0lcp] = cprefix6s[n0l.idx[0]]
 
     context[N0l2w] = words[n0l.idx[1]]
     context[N0l2p] = n0l.tags[1]
     context[N0l2c] = clusters[n0l.idx[1]]
-    context[N0l2cp] = cprefixes[n0l.idx[1]]
+    context[N0l2cp] = cprefix6s[n0l.idx[1]]
 
     context[S0ll] = s0l.lab[0]
     context[S0l2l] = s0l.lab[1]
@@ -382,12 +383,12 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N0le_w] = words[k.n0ledge]
     context[N0le_p] = k.n0ledgep
     context[N0le_c] = clusters[k.n0ledge]
-    context[N0le_cp] = cprefixes[k.n0ledge]
+    context[N0le_cp] = cprefix6s[k.n0ledge]
     context[S0re_orth] = orths[k.s0redge]
     context[S0re_w] = words[k.s0redge]
     context[S0re_p] = k.s0redgep
     context[S0re_c] = clusters[k.s0redge]
-    context[S0re_cp] = cprefixes[k.s0redge]
+    context[S0re_cp] = cprefix6s[k.s0redge]
  
 
 cdef class FeatureSet:
@@ -424,7 +425,7 @@ cdef class FeatureSet:
         cdef size_t* context = self.context
         cdef uint64_t* features = self.features
         fill_context(context, self.nr_label, sent.words,
-                     sent.clusters, sent.cprefixes,
+                     sent.clusters, sent.cprefix4s, sent.cprefix6s,
                      sent.orths, sent.parens, sent.quotes,
                      k, &k.s0l, &k.s0r, &k.n0l)
         f = 0
@@ -602,13 +603,17 @@ cdef class FeatureSet:
             print "Use %d ngram feats" % len(ngrams)
             feats = tuple(unigrams)
             kernel_tokens = get_kernel_tokens()
-            bigram = bigram_with_clusters if add_clusters else bigram_no_clusters
-            trigram = trigram_with_clusters if add_clusters else trigram_no_clusters
             for ngram_feat in ngrams:
                 if len(ngram_feat) == 2:
-                    feats += bigram(*ngram_feat)
+                    if add_clusters:
+                        feats += bigram_with_clusters(*ngram_feat)
+                    else:
+                        feats += bigram_no_clusters(*ngram_feat)
                 elif len(ngram_feat) == 3:
-                    feats += trigram(*ngram_feat)
+                    if add_clusters:
+                        feats += trigram_with_clusters(*ngram_feat)
+                    else:
+                        feats += trigram_no_clusters(*ngram_feat)
                 else:
                     raise StandardError, ngram_feat
             if feat_level == 'full' or feat_level != 'iso':

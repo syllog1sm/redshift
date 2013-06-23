@@ -78,7 +78,8 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.pos = <size_t*>calloc(length, sizeof(size_t))       
     s.ids = <size_t*>calloc(length, sizeof(size_t))
     s.clusters = <size_t*>calloc(length, sizeof(size_t))
-    s.cprefixes = <size_t*>calloc(length, sizeof(size_t))
+    s.cprefix4s = <size_t*>calloc(length, sizeof(size_t))
+    s.cprefix6s = <size_t*>calloc(length, sizeof(size_t))
     s.orths = <size_t*>calloc(length, sizeof(size_t))
     s.parens = <size_t*>calloc(length, sizeof(size_t))
     s.quotes = <size_t*>calloc(length, sizeof(size_t))
@@ -93,10 +94,10 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
         s.words[i] = index.hashes.encode_word(py_words[i])
         s.owords[i] = s.words[i]
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
-        # TODO: Fix this!!
         if s.words[i] < brown_idx.n:
             s.clusters[i] = brown_idx.table[s.words[i]].full
-            s.cprefixes[i] = brown_idx.table[s.words[i]].prefix
+            s.cprefix4s[i] = brown_idx.table[s.words[i]].prefix4
+            s.cprefix6s[i] = brown_idx.table[s.words[i]].prefix6
         if thresh != 0 and index.hashes.get_freq(py_words[i]) <= thresh:
             s.words[i] = mask_value
         s.ids[i] = py_ids[i]
@@ -323,7 +324,7 @@ cdef class Sentences:
             size_t* words
             size_t* pos
             size_t* clusters
-            size_t* cprefixes
+            size_t* cprefix4s
             size_t* heads
             size_t* labels
             size_t* orths
@@ -356,7 +357,7 @@ cdef class Sentences:
             words = <size_t*>calloc(length, sizeof(size_t))
             pos = <size_t*>calloc(length, sizeof(size_t))
             clusters = <size_t*>calloc(length, sizeof(size_t))
-            cprefixes = <size_t*>calloc(length, sizeof(size_t))
+            cprefix4s = <size_t*>calloc(length, sizeof(size_t))
             heads = <size_t*>calloc(length, sizeof(size_t))
             labels = <size_t*>calloc(length, sizeof(size_t))
             orths = <size_t*>calloc(length, sizeof(size_t))
@@ -367,7 +368,7 @@ cdef class Sentences:
             words[0] = self.s[i].words[0]
             pos[0] = self.s[i].pos[0]
             clusters[0] = self.s[i].clusters[0]
-            cprefixes[0] = self.s[i].cprefixes[0]
+            cprefix4s[0] = self.s[i].cprefix4s[0]
             prev_head = 0
             offset = 0
             for j in range(n):
@@ -381,7 +382,7 @@ cdef class Sentences:
                     words[new_id] = sent.words[old_id]
                     pos[new_id] = sent.pos[old_id]
                     clusters[new_id] = sent.clusters[old_id]
-                    cprefixes[new_id] = sent.cprefixes[old_id]
+                    cprefix4s[new_id] = sent.cprefix4s[old_id]
                     orths[new_id] = sent.orths[old_id]
                     parens[new_id] = sent.parens[old_id]
                     quotes[new_id] = sent.quotes[old_id]
@@ -402,7 +403,8 @@ cdef class Sentences:
                 free(sent.quotes)
                 free(sent.parens)
                 free(sent.clusters)
-                free(sent.cprefixes)
+                free(sent.cprefix4s)
+                free(sent.cprefix6s)
                 free(sent.parse.heads)
                 free(sent.parse.labels)
                 free(sent.parse.moves)
@@ -414,7 +416,7 @@ cdef class Sentences:
             words[new_id] = sent.words[old_id]
             pos[new_id] = sent.pos[old_id]
             clusters[new_id] = sent.clusters[old_id]
-            cprefixes[new_id] = sent.cprefixes[old_id]
+            cprefix4s[new_id] = sent.cprefix4s[old_id]
             ids[new_id] = sent.ids[old_id]
             merged[m_id] = <Sentence*>malloc(sizeof(Sentence))
             merged[m_id].id = m_id
@@ -425,7 +427,7 @@ cdef class Sentences:
             merged[m_id].words = words
             merged[m_id].pos = pos
             merged[m_id].clusters = clusters
-            merged[m_id].cprefixes = cprefixes
+            merged[m_id].cprefix4s = cprefix4s
             merged[m_id].orths = orths
             merged[m_id].parens = parens
             merged[m_id].quotes = quotes
