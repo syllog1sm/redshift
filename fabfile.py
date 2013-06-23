@@ -256,69 +256,88 @@ def trigram_add1(name, k=4, n=1, size=10000):
             time.sleep(300)
             n_models = 0
 
-def combine_ngrams(name, k=4, n=1, size=10000):
+def combine_ngrams(name, k=4, n=5, size=10000):
     def make_ngram_str(ngrams):
         strings = ['_'.join([str(t) for t in ngram]) for ngram in ngrams]
         return ','.join(strings)
+    n = int(n)
+    k = int(k)
+    size = int(size)
+    data = str(REMOTE_MALT)
+    repo = str(REMOTE_REPO)
+    train_name = 'train.txt'
+    eval_pos = 'devi.txt' 
+    eval_parse = 'devr.txt'
+ 
     import redshift.features
     kernel_tokens = redshift.features.get_kernel_tokens()
+    named_kernels = 's0 n0 n1 n2 n0l n0l2 s0h s0h2 s0r s0r2 s0l s0l2 s0re n0le n3 s0l0 s0r0'.split()
     all_bigrams = list(combinations(kernel_tokens, 2))
+    ngram_names = dict(zip(all_bigrams, combinations(named_kernels, 2)))
     all_trigrams = list(combinations(kernel_tokens, 3))
+    ngram_names.update(dict(zip(all_trigrams, combinations(named_kernels, 3))))
     bigrams = redshift.features.get_best_bigrams(all_bigrams, n=len(all_bigrams))
     trigrams = redshift.features.get_best_trigrams(all_trigrams, n=len(all_trigrams))
-    n_bigrams = 10
-    n_trigrams = 5
-    base_set = bigrams[:n_bigrams] + trigrams[:n_trigrams]
-    bigrams = bigrams[n_bigrams:]
-    trigrams = trigrams[n_trigrams:]
+
+    base_set = [bigrams.pop(0)]
+
+    n_added = 0
     ngram_str = make_ngram_str(base_set)
-    train_n(n, exp_name, pjoin(str(REMOTE_PARSERS), name),
-            data, k=k, i=15, feat_str="full", train_alg='max', label="NONE",
-            n_sents=size, ngrams=make_ngram_str)
-    exp_dir = pjoin(str(REMOTE_PARSERS), name, ngram_str)
-    n_finished = 0
-    while n_finished < n:
-        n_finished = count_finished(exp_dir)
-        if accs is None:
-            time.sleep(120)
+    exp_dir = pjoin(str(REMOTE_PARSERS), name, str(n_added))
+    n_finished = count_finished(exp_dir)
+    if n_finished < n: 
+        train_n(n, str(n_added), pjoin(str(REMOTE_PARSERS), name),
+                data, k=k, i=15, feat_str="full", train_alg='max', label="NONE",
+                n_sents=size, ngrams=ngram_str)
+        n_finished = 0
+        while n_finished < n:
+            time.sleep(60)
+            n_finished = count_finished(exp_dir)
     base_accs = get_accs(exp_dir)
-    print base_accs
-    return False
-    n_misses = 0
+    base_avg = sum(base_accs) / len(base_accs)
+    rejected = []
+    try_next = 'bigram'
     while True:
         if not bigrams and not trigrams:
             break
         elif not bigrams:
-            next_token = trigrams.pop(0)
+            next_ngram = trigrams.pop(0)
         elif not trigrams:
-            next_token = bigrams.pop(0)
-        elif n_bigrams > (n_trigrams * 2):
-            n_trigrams += 1
-            next_token = trigrams.pop(0)
+            next_ngram = bigrams.pop(0)
+        elif try_next == 'bigram':
+            next_ngram = bigrams.pop(0)
         else:
-            next_token = bigrams.pop(0)
+            next_ngram = trigrams.pop(0)
+        n_added += 1
+        print "Testing", ngram_names[next_ngram]
         ngram_str = make_ngram_str(base_set + [next_ngram])
-        train_n(n, ngram_str, pjoin(str(REMOTE_PARSERS), name),
-                data, k=k, i=15, feat_str="full", train_alg='max', label="NONE",
-                n_sents=size, ngrams=ngram_str)
-        exp_dir = pjoin(str(REMOTE_PARSERS), name, ngram_str)
-        n_finished = 0
-        while n_finished < n:
-            n_finished = count_finished(exp_dir)
-            if accs is None:
-                time.sleep(120)
+        exp_dir = pjoin(str(REMOTE_PARSERS), name, str(n_added))
+        n_finished = count_finished(exp_dir)
+        if n_finished < n:
+            train_n(n, str(n_added), pjoin(str(REMOTE_PARSERS), name),
+                    data, k=k, i=15, feat_str="full", train_alg='max',
+                    label="NONE", n_sents=size, ngrams=ngram_str)
+            n_finished = 0
+            while n_finished < n:
+                time.sleep(60)
+                n_finished = count_finished(exp_dir)
         exp_accs = get_accs(exp_dir)
         exp_avg = sum(exp_accs) / len(exp_accs)
-        z, p = scipy.wilcoxon(exp_accs, base_accs)
-        if exp_avg > base_avg and p < 0.01:
-            base_set.append(next_ngram)
-            base_acc = exp_avg
-            base_accs = exp_accs
-            n_misses = 0
+        if n >= 20:
+            _, p = scipy.stats.wilcoxon(exp_accs, base_accs)
         else:
-            n_misses += 1
-            if n_misses >= 5:
-                break
+            p = 0.0
+        if exp_avg > base_avg and p < 0.1:
+            print "Accepted!", next_ngram, base_avg, exp_avg, p
+            base_set.append(next_ngram)
+            base_avg = exp_avg
+            base_accs = exp_accs
+        else:
+            print "Rejected!", next_ngram, base_avg, exp_avg, p
+            rejected.append(next_ngram)
+            try_next = 'trigram' if try_next == 'bigram' else 'bigram'
+        print "Current set: ", ' '.join('_'.join(ngram_names[ngram]) for ngram in base_set)
+        print "Rejected:", ' '.join('_'.join(ngram_names[ngram]) for ngram in rejected)
 
 def get_best_trigrams(all_trigrams, n=25):
     best = [2, 199, 158, 61, 66, 5, 150, 1, 88, 154, 85, 25, 53, 10, 3, 60, 73,
@@ -448,7 +467,7 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
     for seed in range(n):
         exp_name = '%s_%d' % (name, seed)
         model = pjoin(exp_dir, name, str(seed))
-        run("mkdir -p %s" % model)
+        run("mkdir -p %s" % model, quiet=True)
         train_str = _train(pjoin(data, 'train.txt'), model, k=k, i=15,
                            feat_str=feat_str, train_alg=train_alg, seed=seed,
                            label=label, n_sents=n_sents, ngrams=ngrams,
@@ -463,15 +482,13 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
             put(StringIO(script), script_loc)
             err_loc = pjoin(model, 'stderr')
             out_loc = pjoin(model, 'stdout')
-            run('qsub -N %s %s -e %s -o %s' % (exp_name, script_loc, err_loc, out_loc))
+            run('qsub -N %s %s -e %s -o %s' % (exp_name, script_loc, err_loc, out_loc), quiet=True)
 
 
 def count_finished(exp_dir):
     with cd(exp_dir):
-        try:
-            samples = run("ls %s/*/stdout" % exp_dir).split()
-        except:
-            samples = []
+        samples = [s for s in run("ls %s/*/" % exp_dir, quiet=True).split()
+                   if s.endswith('stdout')]
     return len(samples)
 
 
@@ -515,7 +532,7 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=16gb,nodes=1:ppn=16
+#PBS -l walltime=20:00:00,mem=4gb,nodes=1:ppn=4
 source /home/mhonniba/py27/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
