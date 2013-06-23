@@ -43,7 +43,9 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
     kernels = redshift.features.get_kernel_tokens()
     all_bigrams = list(combinations(kernels, 2))
     all_trigrams = list(combinations(kernels, 3))
-    if '_' not in ngrams:
+    if ngrams == 'best':
+        ngrams = redshift.features.get_best_features()
+    elif '_' not in ngrams:
         n_ngrams = int(ngrams)
         ngrams = []
         n_bigrams = (n_ngrams / 3) * 2

@@ -171,6 +171,29 @@ def get_best_trigrams(all_trigrams, n=25):
             157, 616, 18, 145, 451, 410, 75, 55, 603, 156, 52, 622, 210, 332, 120]
     return [all_trigrams[i] for i in best][:n]
 
+def get_best_features():
+    # s0_n0 n0_s0re s0_n0le s0_n0_n0l s0_n1 s0_s0h n1_n0le n0_n0l_s0r0
+    # s0_n0l2_n0le s0_s0r_s0l s0_n1_n0le s0_n0l2_s0re n0_s0h_s0re n0_n1_s0l
+    # n0_s0h2 s0_n1_s0r s0_n0_n3
+    # Rejected: s0re_n0le n0_s0r2_s0re n0_n1 s0_s0h_s0r n1_s0re s0_n0_s0h2
+    # s0h_s0re n0_n0l_s0r n0_s0h s0_n0_n2 s0h_n0le s0_s0r_n0le n0_n0l n0_n0l_s0re
+    # n0_n0le s0_n0l_s0r0 n0_s0r s0_n0_s0re n0_s0r0 s0_n0_n0l2 s0_n0l s0_s0h_s0l0
+    # s0r_n0le s0_n0le_n3 n0_s0l s0_n0_s0h n0l_s0re s0_n0_s0r s0l_n0le n0_n0l_s0h
+    # n0le_s0r0 n0_s0l_s0re n0_s0l0 n0_s0r2_s0l s0_s0re s0_n0_n1 n1_s0h s0_s0h_n0le
+    # n0le_s0l0 n0_s0r2_n0le s0_s0r n0_n2_s0re s0l_s0re s0_s0r_s0r2 n1_n0l
+    # s0_n0l_s0h n1_s0r s0_s0r_n3 s0h_s0h2 s0_n0l_s0r s0_s0r0 s0_s0r2_n0le s0_s0l
+    # n0l_s0h2_s0re n1_s0r0 s0_n2_s0r s0_s0h2 s0_s0re_n0le s0re_s0l0 n0_s0h2_s0l
+    # s0h2_s0re s0_n1_s0re s0h_s0l0 n0_n0l2_s0h n0_n2 s0_n0l_n3 s0h2_n0le
+    # s0_s0l2_n0le n1_s0l s0_n1_n3 n0_n0l2 s0_n0_s0l s0h_s0l n0_s0h_s0l0 s0_s0l0
+    # n0_n0l_s0r2 n1_s0l0 n0_n0l2_n0le s0_n0l2 n0_s0r_s0re s0_n2 s0_n0_s0r2 s0h_s0r
+    # n0_s0l_s0r0 s0h_s0r0 n0_s0r_s0l n2_n0le n0_n0l_n0l2 n0l2_s0re s0_n0_s0l0
+    # n0l_n0l2 n0_s0r_n3 n0l2_n0le s0_n0l_n0le n2_s0re n0_n1_s0re n0_s0r2 n0_s0h_s0l2
+    # s0_n3 n0_s0h2_n3 n1_n2 s0_n1_s0r0 n0_n3 s0_n0le_s0r0 n1_n3 n0_s0r_n0le s0r_s0l
+    # n0_s0h_s0r0 n1_s0h2 n1_s0h_s0r s0r2_n0le s0_n1_s0l2 s0l2_s0re s0_n0l_s0h2
+    # s0l2_n0le
+    return [(27, 0), (0, 86), (27, 91), (27, 0, 4), (27, 15), (27, 32), (15, 91),
+            (0, 4, 64), (27, 10, 91), (27, 43, 38), (27, 15, 91), (27, 10, 86),
+            (0, 32, 86), (0, 15, 38), (0, 68), (27, 15, 43), (27, 0, 23)]
 
 def unigram(word, add_clusters=False):
     pos = word + 1
