@@ -305,7 +305,7 @@ def get_max_context():
 
 
 cdef class ClusterIndex:
-    def __cinit__(self, thresh=1, prefix_len=5):
+    def __cinit__(self, thresh=1, prefix_len=6):
         self.thresh = thresh
         self.prefix_len = prefix_len
         self.n = 0
@@ -333,7 +333,8 @@ cdef class ClusterIndex:
         for cluster_str, word_id, freq in entries:
             cluster = &self.table[word_id]
             cluster.full = int(cluster_str, 2) + 1
-            cluster.prefix = int(cluster_str[:self.prefix_len], 2) + 1
+            cluster.prefix4 = int(cluster_str[:4], 2) + 1
+            cluster.prefix6 = int(cluster_str[:6], 2) + 1
 
 
     def __dealloc__(self):

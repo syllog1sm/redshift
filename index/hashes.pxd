@@ -77,7 +77,8 @@ cdef class StrIndex(Index):
 
 
 cdef struct Cluster:
-    size_t prefix
+    size_t prefix4
+    size_t prefix6
     size_t full
 
 
