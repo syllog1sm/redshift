@@ -142,12 +142,17 @@ cdef enum:
     N0le_p
     N0le_c
     N0le_cp
+
     CONTEXT_SIZE
 
 
+#def get_kernel_tokens():
+#    return [S0w, N0w, N1w, N2w, N0lw, N0l2w, S0hw, S0h2w, S0rw, S0r2w, S0lw,
+#            S0l2w, S0re_w, N0le_w, N3w, S0l0w, S0r0w]
+
 def get_kernel_tokens():
     return [S0w, N0w, N1w, N2w, N0lw, N0l2w, S0hw, S0h2w, S0rw, S0r2w, S0lw,
-            S0l2w, S0re_w, N0le_w, N3w, S0l0w, S0r0w]
+            S0l2w]
 
 def get_best_bigrams(all_bigrams, n=50):
     best = [0, 26, 12, 126, 1, 5, 41, 16, 40, 86, 20, 87, 18, 27, 22, 30,
@@ -384,11 +389,11 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N0le_p] = k.n0ledgep
     context[N0le_c] = clusters[k.n0ledge]
     context[N0le_cp] = cprefix6s[k.n0ledge]
-    context[S0re_orth] = orths[k.s0redge]
-    context[S0re_w] = words[k.s0redge]
+    context[S0re_orth] = orths[k.n0ledge - 1]
+    context[S0re_w] = words[k.n0ledge - 1]
     context[S0re_p] = k.s0redgep
-    context[S0re_c] = clusters[k.s0redge]
-    context[S0re_cp] = cprefix6s[k.s0redge]
+    context[S0re_c] = clusters[k.n0ledge - 1]
+    context[S0re_cp] = cprefix6s[k.n0ledge - 1]
  
 
 cdef class FeatureSet:
@@ -587,11 +592,11 @@ cdef class FeatureSet:
             + unigram(N2w, add_clusters)
             + unigram(N0lw, add_clusters)
             + unigram(N0l2w, add_clusters)
-            + unigram(S0re_w, add_clusters)
-            + unigram(N0le_w, add_clusters)
-            + unigram(N3w, add_clusters)
-            + unigram(S0l0w, add_clusters)
-            + unigram(S0r0w, add_clusters)
+            #+ unigram(S0re_w, add_clusters)
+            #+ unigram(N0le_w, add_clusters)
+            #+ unigram(N3w, add_clusters)
+            #+ unigram(S0l0w, add_clusters)
+            #+ unigram(S0r0w, add_clusters)
         )
         if feat_level == 'zhang':
             print "Use Zhang feats"

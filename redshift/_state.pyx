@@ -13,7 +13,6 @@ cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
             s.l_children[head][s.l_valencies[head]] = child
             s.l_valencies[head] += 1
     else:
-        s.redges[head] = s.redges[child]
         if s.r_valencies[head] < MAX_VALENCY:
             r = get_r(s, head)
             s.r_children[head][s.r_valencies[head]] = child
@@ -27,10 +26,6 @@ cdef int del_r_child(State *s, size_t head) except -1:
     s.r_valencies[head] -= 1
     s.heads[child] = 0
     s.labels[child] = 0
-    if s.r_valencies[head] != 0:
-        s.redges[head] = s.redges[get_r(s, head)]
-    else:
-        s.redges[head] = head
 
 
 cdef int del_l_child(State *s, size_t head) except -1:
@@ -107,14 +102,13 @@ cdef uint64_t hash_kernel(Kernel* k):
     return MurmurHash64A(k, sizeof(Kernel), 0)
 
 
-cdef int fill_kernel(State *s):
+cdef int fill_kernel(State *s) except -1:
     cdef size_t i, val
     s.kernel.i = s.i
     s.kernel.n0p = s.tags[s.i]
     s.kernel.n1p = s.tags[s.i + 1]
-    #s.kernel.n2p = s.tags[s.i + 2]
+    s.kernel.n2p = s.tags[s.i + 2]
     #s.kernel.n3p = s.tags[s.i + 3]
-    s.kernel.n2p = 0
     s.kernel.n3p = 0
     s.kernel.s0 = s.top
     s.kernel.s0p = s.tags[s.top]
@@ -125,10 +119,12 @@ cdef int fill_kernel(State *s):
     s.kernel.Ls0 = s.labels[s.top]
     s.kernel.Lhs0 = s.labels[s.heads[s.top]]
     s.kernel.Lh2s0 = s.labels[s.heads[s.heads[s.top]]]
-    s.kernel.s0redge = s.redges[s.top]
-    s.kernel.s0redgep = s.tags[s.redges[s.top]]
     s.kernel.n0ledge = s.ledges[s.i]
     s.kernel.n0ledgep = s.tags[s.ledges[s.i]]
+    if s.ledges[s.i] != 0:
+        s.kernel.s0redgep = s.tags[s.ledges[s.i] - 1]
+    else:
+        s.kernel.s0redgep = 0
 
     fill_subtree(s.l_valencies[s.top], s.l_children[s.top],
                  s.labels, s.tags, &s.kernel.s0l)
@@ -291,10 +287,8 @@ cdef State* init_state(size_t n):
     s.l_children = <size_t**>malloc(n * sizeof(size_t*))
     s.r_children = <size_t**>malloc(n * sizeof(size_t*))
     s.ledges = <size_t*>malloc(n * sizeof(size_t))
-    s.redges = <size_t*>malloc(n * sizeof(size_t))
     for i in range(n):
         s.ledges[i] = i
-        s.redges[i] = i
         s.l_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
         s.r_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
     s.history = <size_t*>calloc(n * 3, sizeof(size_t))
@@ -319,7 +313,6 @@ cdef copy_state(State* s, State* old):
     memcpy(s.stack, old.stack, old.n * sizeof(size_t))
     memcpy(s.tags, old.tags, old.n * sizeof(size_t))
     memcpy(s.ledges, old.ledges, old.n * sizeof(size_t))
-    memcpy(s.redges, old.redges, old.n * sizeof(size_t))
     memcpy(s.l_valencies, old.l_valencies, nbytes)
     memcpy(s.r_valencies, old.r_valencies, nbytes)
     memcpy(s.heads, old.heads, nbytes)
@@ -340,7 +333,6 @@ cdef free_state(State* s):
     free(s.l_valencies)
     free(s.r_valencies)
     free(s.ledges)
-    free(s.redges)
     for i in range(s.n + PADDING):
         free(s.l_children[i])
         free(s.r_children[i])

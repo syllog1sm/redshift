@@ -29,7 +29,6 @@ cdef struct Kernel:
     size_t h2s0p
     size_t Lhs0
     size_t Lh2s0
-    size_t s0redge
     size_t s0redgep
     size_t n0ledge
     size_t n0ledgep
@@ -69,14 +68,13 @@ cdef struct State:
     size_t* l_valencies
     size_t* r_valencies
     size_t* ledges
-    size_t* redges
     size_t** l_children
     size_t** r_children
     size_t* history
     Kernel kernel
 
 cdef uint64_t hash_kernel(Kernel* k)
-cdef int fill_kernel(State* s)
+cdef int fill_kernel(State* s) except -1
 
 #cdef Kernel* kernel_from_s(Kernel* parent) except NULL
 #cdef Kernel* kernel_from_r(Kernel* parent, size_t label) except NULL
