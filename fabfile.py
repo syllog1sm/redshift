@@ -197,6 +197,7 @@ def conll(name, lang, n=20, debug=False):
  
 
 def bigram_add1(name, k=4, n=1, size=10000):
+    import redshift.features
     n = int(n)
     k = int(k)
     size = int(size)
@@ -205,19 +206,23 @@ def bigram_add1(name, k=4, n=1, size=10000):
     train_name = 'train.txt'
     eval_pos = 'devi.txt' 
     eval_parse = 'devr.txt'
-    arg_str = 'base'
-    #train_n(n, 'base', pjoin(str(REMOTE_PARSERS), name), data, k=k, i=15,
-    #        add_feats=True, train_alg='max', label="NONE", n_sents=size,
-    #        ngrams="base")
-    tokens = 's0,n0,n1,n2,n0l,n0l2,s0h,s0h2,s0r,s0r2,s0l,s0l2,s0re,s0le,n3,s0l0,s0r0'.split(',')
-    ngrams = ['%s_%s' % (p) for p in combinations(tokens, 2)]
+    arg_str = 'full'
+    train_n(n, 'base', pjoin(str(REMOTE_PARSERS), name), data, k=k, i=15,
+            feat_str="full", train_alg='max', label="NONE", n_sents=size,
+            ngrams="")
+    tokens = 'S0,N0,N1,N2,N0l,N0l2,S0h,S0h2,S0r,S0r2,S0l,S0l2'.split(',')
+    ngram_names = ['%s_%s' % (p) for p in combinations(tokens, 2)]
+    kernel_tokens = redshift.features.get_kernel_tokens()
+    ngrams = list(combinations(kernel_tokens, 2))
     #ngrams.extend('%s_%s_%s' % (p) for p in combinations(tokens, 3))
     n_ngrams = len(ngrams)
+    print n_ngrams
     n_models = n
-    for ngram_id, ngram_name in list(enumerate(ngrams))[83:]:
+    for ngram_id, ngram in list(enumerate(ngrams)):
+        ngram_name = ngram_names[ngram_id]
         train_n(n, '%d_%s' % (ngram_id, ngram_name), pjoin(str(REMOTE_PARSERS), name),
                 data, k=k, i=15, add_feats=True, train_alg='max', label="NONE",
-                n_sents=size, ngrams='in%d' % ngram_id)
+                n_sents=size, ngrams='_'.join([str(i) for i in ngram])
         n_models += n
         # Sleep 5 mins after submitting 50 jobs
         if n_models > 100:
@@ -476,7 +481,9 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
         eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.txt'))
         grep_str = "grep 'U:' %s >> %s" % (pjoin(model, 'dev', 'acc'),
                                            pjoin(model, 'dev', 'uas')) 
-        script = _pbsify(repo, (train_str, parse_str, eval_str, grep_str))
+        # Save disk space by removing models
+        del_str = "rm %s %s" % (pjoin(model, "model"), pjoin(model, "words"))
+        script = _pbsify(repo, (train_str, parse_str, eval_str, grep_str, del_str))
         script_loc = pjoin(repo, 'pbs', exp_name)
         with cd(repo):
             put(StringIO(script), script_loc)
