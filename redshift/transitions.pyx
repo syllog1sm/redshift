@@ -35,7 +35,8 @@ cdef class TransitionSystem:
                   allow_reduce=False):
         self.assign_pos = False
         self.n_labels = len(labels)
-        self.n_tags = max(tags)
+        #self.n_tags = max(tags)
+        self.n_tags = 100
         self.py_labels = labels
         self.allow_reattach = allow_reattach
         self.allow_reduce = allow_reduce
