@@ -392,11 +392,18 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N0le_p] = k.n0ledgep
     context[N0le_c] = clusters[k.n0ledge]
     context[N0le_cp] = cprefix6s[k.n0ledge]
-    context[S0re_orth] = orths[k.s0redge]
-    context[S0re_w] = words[k.s0redge]
+    
     context[S0re_p] = k.s0redgep
-    context[S0re_c] = clusters[k.s0redge]
-    context[S0re_cp] = cprefix6s[k.s0redge]
+    if k.n0ledge != 0:
+        context[S0re_orth] = orths[k.n0ledge - 1]
+        context[S0re_w] = words[k.n0ledge - 1]
+        context[S0re_c] = clusters[k.n0ledge - 1]
+        context[S0re_cp] = cprefix6s[k.n0ledge - 1]
+    else:
+        context[S0re_w] = 0
+        context[S0re_c] = 0
+        context[S0re_cp] = 0
+        context[S0re_orth] = 0
  
 
 cdef class FeatureSet:
