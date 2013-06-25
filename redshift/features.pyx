@@ -225,7 +225,7 @@ def _bigram(a, b, add_clusters=True):
     p2 = b + 1
     c2 = b + 2
     cp2 = b + 3
-    basic = ((w1, p1, p2, w2), (w1, w2), (w1, p1, p2), (p1, w2, p2), (p1, p2))
+    basic = ((w1, w2), (p1, p2), (p1, w2), (w1, p2))
     clusters = ((c1, c2), (cp1, cp2), (c1, p2), (cp2, p2), (p1, c2), (p1, cp2))
     if add_clusters:
         return basic + clusters
@@ -253,7 +253,7 @@ def _trigram(a, b, c, add_clusters=True):
     cp3 = c + 3
 
     #basic = ((w1, w2, w3), (w1, p2, p3), (p1, w2, p3), (p1, p2, w3), (p1, p2, p3))
-    basic = ((w1, w2, w3), (w1, p1, p2, p3), (p1, p2, w2, p3), (p1, p2, p3, w3),
+    basic = ((w1, w2, w3), (w1, p2, p3), (p1, w2, p3), (p1, p2, w3),
              (p1, p2, p3))
     #clusters = ((c1, c2, p3), (c1, p2, w3), (p1, c2, c3), (c1, p2, p3),
     #            (p1, c2, p3), (p1, c2, c3), (p1, p2, p3))
