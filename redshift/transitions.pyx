@@ -35,8 +35,7 @@ cdef class TransitionSystem:
                   allow_reduce=False):
         self.assign_pos = False
         self.n_labels = len(labels)
-        #self.n_tags = max(tags)
-        self.n_tags = 100
+        self.n_tags = max(tags) if tags else 0
         self.py_labels = labels
         self.allow_reattach = allow_reattach
         self.allow_reduce = allow_reduce
@@ -59,7 +58,7 @@ cdef class TransitionSystem:
         self.p_end = 0
 
     def set_labels(self, tags, left_labels, right_labels):
-        self.n_tags = <size_t>max(tags)
+        self.n_tags = <size_t>max(tags) if tags else 0
         self.left_labels = [self.py_labels[l] for l in sorted(left_labels)]
         self.right_labels = [self.py_labels[l] for l in sorted(right_labels)]
         self.labels[self.s_id] = 0
