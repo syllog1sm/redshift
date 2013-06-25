@@ -251,7 +251,7 @@ def _trigram(a, b, c, add_clusters=True):
     cp3 = c + 3
 
     #basic = ((w1, w2, w3), (w1, p2, p3), (p1, w2, p3), (p1, p2, w3), (p1, p2, p3))
-    basic = ((w1, w2, w3), (w1, p1, p2, p3), (p1, w2, w2, p3), (p1, p2, w3, w3),
+    basic = ((w1, w2, w3), (w1, p1, p2, p3), (p1, p2, w2, p3), (p1, p2, p3, w3),
              (p1, p2, p3))
     #clusters = ((c1, c2, p3), (c1, p2, w3), (p1, c2, c3), (c1, p2, p3),
     #            (p1, c2, p3), (p1, c2, c3), (p1, p2, p3))
