@@ -325,6 +325,7 @@ cdef class Sentences:
             size_t* pos
             size_t* clusters
             size_t* cprefix4s
+            size_t* cprefix6s
             size_t* heads
             size_t* labels
             size_t* orths
@@ -332,6 +333,7 @@ cdef class Sentences:
             size_t* quotes
             bint* sbd
             Sentence* sent
+        raise StandardError
         if n == 0:
             n = self.length
         cdef size_t n_merged = (self.length / n) + 1
