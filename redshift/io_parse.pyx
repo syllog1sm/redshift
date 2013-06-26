@@ -61,28 +61,28 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
         char* raw_word
         char* raw_pos
         Sentence* s
-        
+    cdef size_t PADDING = 5
     s = <Sentence*>malloc(sizeof(Sentence))
     s.length = length
     s.id = id_
     s.parse = <_Parse*>malloc(sizeof(_Parse))
     s.parse.n_moves = 0
-
-    s.parse.heads = <size_t*>calloc(length, sizeof(size_t))
-    s.parse.labels = <size_t*>calloc(length, sizeof(size_t))
-    s.parse.sbd = <bint*>calloc(length, sizeof(bint))
-    s.parse.moves = <size_t*>calloc(length * 2, sizeof(size_t))
+    size = length + PADDING
+    s.parse.heads = <size_t*>calloc(size, sizeof(size_t))
+    s.parse.labels = <size_t*>calloc(size, sizeof(size_t))
+    s.parse.sbd = <bint*>calloc(size, sizeof(bint))
+    s.parse.moves = <size_t*>calloc(size * 2, sizeof(size_t))
     
-    s.words = <size_t*>calloc(length, sizeof(size_t))
-    s.owords = <size_t*>calloc(length, sizeof(size_t))
-    s.pos = <size_t*>calloc(length, sizeof(size_t))       
-    s.ids = <size_t*>calloc(length, sizeof(size_t))
-    s.clusters = <size_t*>calloc(length, sizeof(size_t))
-    s.cprefix4s = <size_t*>calloc(length, sizeof(size_t))
-    s.cprefix6s = <size_t*>calloc(length, sizeof(size_t))
-    s.orths = <size_t*>calloc(length, sizeof(size_t))
-    s.parens = <size_t*>calloc(length, sizeof(size_t))
-    s.quotes = <size_t*>calloc(length, sizeof(size_t))
+    s.words = <size_t*>calloc(size, sizeof(size_t))
+    s.owords = <size_t*>calloc(size, sizeof(size_t))
+    s.pos = <size_t*>calloc(size, sizeof(size_t))       
+    s.ids = <size_t*>calloc(size, sizeof(size_t))
+    s.clusters = <size_t*>calloc(size, sizeof(size_t))
+    s.cprefix4s = <size_t*>calloc(size, sizeof(size_t))
+    s.cprefix6s = <size_t*>calloc(size, sizeof(size_t))
+    s.orths = <size_t*>calloc(size, sizeof(size_t))
+    s.parens = <size_t*>calloc(size, sizeof(size_t))
+    s.quotes = <size_t*>calloc(size, sizeof(size_t))
 
     cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
     py_ids.insert(0, 0)
