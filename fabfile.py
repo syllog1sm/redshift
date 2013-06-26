@@ -196,7 +196,7 @@ def conll(name, lang, n=20, debug=False):
                 run('qsub -N %s_bl %s' % (exp_name, script_loc))
  
 
-def bigram_add1(name, k=4, n=1, size=10000):
+def bigram_add1(name, k=8, n=1, size=10000):
     import redshift.features
     n = int(n)
     k = int(k)
@@ -207,26 +207,27 @@ def bigram_add1(name, k=4, n=1, size=10000):
     eval_pos = 'devi.txt' 
     eval_parse = 'devr.txt'
     arg_str = 'full'
-    train_n(n, 'base', pjoin(str(REMOTE_PARSERS), name), data, k=k, i=15,
-            feat_str="full", train_alg='max', label="NONE", n_sents=size,
-            ngrams="")
+    #train_n(n, 'base', pjoin(str(REMOTE_PARSERS), name), data, k=k, i=15,
+    #        feat_str="full", train_alg='max', label="NONE", n_sents=size,
+    #        ngrams=0)
     tokens = 'S0,N0,N1,N2,N0l,N0l2,S0h,S0h2,S0r,S0r2,S0l,S0l2'.split(',')
     ngram_names = ['%s_%s' % (p) for p in combinations(tokens, 2)]
+    ngram_names.extend('%s_%s_%s' % (p) for p in combinations(tokens, 3))
     kernel_tokens = redshift.features.get_kernel_tokens()
     ngrams = list(combinations(kernel_tokens, 2))
-    #ngrams.extend('%s_%s_%s' % (p) for p in combinations(tokens, 3))
+    ngrams.extend(combinations(kernel_tokens, 3))
     n_ngrams = len(ngrams)
-    print n_ngrams
     n_models = n
-    for ngram_id, ngram in list(enumerate(ngrams)):
+    for ngram_id, ngram in list(sorted(enumerate(ngrams))):
         ngram_name = ngram_names[ngram_id]
         train_n(n, '%d_%s' % (ngram_id, ngram_name), pjoin(str(REMOTE_PARSERS), name),
-                data, k=k, i=15, add_feats=True, train_alg='max', label="NONE",
-                n_sents=size, ngrams='_'.join([str(i) for i in ngram])
+                data, k=k, i=15, feat_str="full", train_alg='max', label="NONE",
+                n_sents=size, ngrams='_'.join([str(i) for i in ngram]),
+                train_name=train_name, dev_names=(eval_pos, eval_parse))
         n_models += n
         # Sleep 5 mins after submitting 50 jobs
         if n_models > 100:
-            time.sleep(300)
+            time.sleep(200)
             n_models = 0
 
 def trigram_add1(name, k=4, n=1, size=10000):
@@ -392,7 +393,7 @@ def bitable(name):
     exp_dir = REMOTE_PARSERS.join(name)
     bigrams = []
     trigrams = []
-    base_accs = get_accs(str(exp_dir.join('base')))
+    base_accs = get_accs(str(exp_dir.join('0_S0_N0')))
     base_acc = sum(base_accs) / len(base_accs)
     print "Base:", sum(base_accs) / len(base_accs)
     with cd(str(exp_dir)):
@@ -401,10 +402,12 @@ def bitable(name):
             if ngram == 'base':
                 continue
             accs = get_accs(str(exp_dir.join(ngram)))
+            print ngram, len(accs)
             if not accs:
                 continue
             _, avg, stdev = _get_stdev(accs)
-            z, p = scipy.stats.wilcoxon(accs, base_accs)
+            #z, p = scipy.stats.wilcoxon(accs, base_accs)
+            p = 0.0
             parts = ngram.split('_')
             if ngram.startswith('base'):
                 base_acc = avg
@@ -466,19 +469,19 @@ def vocab_table(name):
 # 119_s0_s0r2_s0l2
 def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
             train_alg="online", label="Stanford", n_sents=0,
-            ngrams=0, t=0, f=0):
+            ngrams=0, t=0, f=0, train_name='train.txt', dev_names=('devi.txt', 'devr.txt')):
     exp_dir = str(exp_dir)
     repo = str(REMOTE_REPO)
     for seed in range(n):
         exp_name = '%s_%d' % (name, seed)
         model = pjoin(exp_dir, name, str(seed))
         run("mkdir -p %s" % model, quiet=True)
-        train_str = _train(pjoin(data, 'train.txt'), model, k=k, i=15,
+        train_str = _train(pjoin(data, train_name), model, k=k, i=15,
                            feat_str=feat_str, train_alg=train_alg, seed=seed,
                            label=label, n_sents=n_sents, ngrams=ngrams,
                            vocab_thresh=t, feat_thresh=f)
-        parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'))
-        eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.txt'))
+        parse_str = _parse(model, pjoin(data, dev_names[0]), pjoin(model, 'dev'))
+        eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, dev_names[1]))
         grep_str = "grep 'U:' %s >> %s" % (pjoin(model, 'dev', 'acc'),
                                            pjoin(model, 'dev', 'uas')) 
         # Save disk space by removing models
@@ -502,15 +505,9 @@ def count_finished(exp_dir):
 def get_accs(exp_dir, eval_name='dev'):
     results = []
     with cd(exp_dir):
-        samples = run("ls %s" % exp_dir, quiet=True).split()
-        for sample in samples:
-            sample = Path(exp_dir).join(sample)
-            acc_loc = sample.join(eval_name).join('uas')
-            try:
-                text = run("cat %s" % acc_loc, quiet=True).stdout
-                results.append(_get_acc(text, score='U'))
-            except:
-                continue
+        results = [float(s.split()[1]) for s in
+                   run("grep 'U:' %s/*/dev/acc" % exp_dir, quiet=True).split('\n')
+                   if s.strip()]
     return results
 
 
@@ -539,7 +536,7 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=4gb,nodes=1:ppn=4
+#PBS -l walltime=20:00:00,mem=2gb,nodes=1:ppn=2
 source /home/mhonniba/py27/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
