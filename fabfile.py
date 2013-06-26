@@ -203,9 +203,9 @@ def bigram_add1(name, k=8, n=1, size=10000):
     size = int(size)
     data = str(REMOTE_MALT)
     repo = str(REMOTE_REPO)
-    train_name = 'train.txt'
-    eval_pos = 'devi.txt' 
-    eval_parse = 'devr.txt'
+    train_name = '0.train'
+    eval_pos = '0.testi' 
+    eval_parse = '0.testr'
     arg_str = 'full'
     #train_n(n, 'base', pjoin(str(REMOTE_PARSERS), name), data, k=k, i=15,
     #        feat_str="full", train_alg='max', label="NONE", n_sents=size,
@@ -416,17 +416,15 @@ def bitable(name):
             else:
                 trigrams.append((avg, ngram, stdev, p))
     good_ngrams = []
-    for results in [bigrams, trigrams]:
-        results.sort()
-        results.reverse()
-        for acc, ngram, stdev, p in results:
-            ngram = ngram.replace('s0le', 'n0le')
-            pieces = ngram.split('_')
-            t1 = pieces[1]
-            t2 = pieces[2]
-            if acc > base_acc and p < 0.01:
-                good_ngrams.append(int(ngram.split('_')[0]))
-                print r'%s & %s & %.1f & \\' % (t1, t2, acc - base_acc)
+    results = bigrams + trigrams
+    results.sort()
+    results.reverse()
+    for acc, ngram, stdev, p in results:
+        ngram = ngram.replace('s0le', 'n0le')
+        ngram = '_'.join(ngram.split('_')[1:])
+        if acc > base_acc and p < 0.01:
+            print r'%s & %.3f & \\' % (ngram, acc - base_acc)
+            good_ngrams.append(ngram)
     print good_ngrams
         
 
