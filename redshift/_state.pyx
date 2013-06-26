@@ -254,7 +254,7 @@ cdef bint has_root_child(State *s, size_t token):
     # stack to S0
     #return s.labels[get_l(s, token)] == 1
 
-DEF PADDING = 4
+DEF PADDING = 5
 
 cdef State* init_state(size_t n):
     cdef size_t i, j
@@ -311,8 +311,8 @@ cdef copy_state(State* s, State* old):
     s.is_finished = old.is_finished
     s.at_end_of_buffer = old.at_end_of_buffer
     memcpy(s.stack, old.stack, old.n * sizeof(size_t))
-    memcpy(s.tags, old.tags, old.n * sizeof(size_t))
-    memcpy(s.ledges, old.ledges, old.n * sizeof(size_t))
+    memcpy(s.tags, old.tags, (old.n + PADDING) * sizeof(size_t))
+    memcpy(s.ledges, old.ledges, (old.n + PADDING) * sizeof(size_t))
     memcpy(s.l_valencies, old.l_valencies, nbytes)
     memcpy(s.r_valencies, old.r_valencies, nbytes)
     memcpy(s.heads, old.heads, nbytes)
