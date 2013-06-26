@@ -338,23 +338,26 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S0l0w] = words[s0l.idx[2]]
     context[S0l0p] = s0l.tags[2]
     context[S0l0c] = clusters[s0l.idx[2]]
-    context[S0l0cp] = cprefix6s[s0l.idx[2]]
-    context[S0l0cp] = cprefix6s[s0l.idx[2]]
+    context[S0l0c6] = cprefix6s[s0l.idx[2]]
+    context[S0l0c4] = cprefix4s[s0l.idx[2]]
 
     context[S0r0w] = words[s0r.idx[2]]
     context[S0r0p] = s0r.tags[2]
     context[S0r0c] = clusters[s0r.idx[2]]
-    context[S0r0cp] = cprefix6s[s0r.idx[2]]
+    context[S0r0c6] = cprefix6s[s0r.idx[2]]
+    context[S0r0c4] = cprefix6s[s0r.idx[2]]
 
     context[N0lw] = words[n0l.idx[0]]
     context[N0lp] = n0l.tags[0]
     context[N0lc] = clusters[n0l.idx[0]]
-    context[N0lcp] = cprefix6s[n0l.idx[0]]
+    context[N0lc6] = cprefix6s[n0l.idx[0]]
+    context[N0lc4] = cprefix6s[n0l.idx[0]]
 
     context[N0l2w] = words[n0l.idx[1]]
     context[N0l2p] = n0l.tags[1]
     context[N0l2c] = clusters[n0l.idx[1]]
-    context[N0l2cp] = cprefix6s[n0l.idx[1]]
+    context[N0l2c6] = cprefix6s[n0l.idx[1]]
+    context[N0l2c4] = cprefix4s[n0l.idx[1]]
 
     context[S0ll] = s0l.lab[0]
     context[S0l2l] = s0l.lab[1]
@@ -387,7 +390,8 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N0le_w] = words[k.n0ledge]
     context[N0le_p] = k.n0ledgep
     context[N0le_c] = clusters[k.n0ledge]
-    context[N0le_cp] = cprefix6s[k.n0ledge]
+    context[N0le_c6] = cprefix6s[k.n0ledge]
+    context[N0le_c4] = cprefix4s[k.n0ledge]
     
     context[S0re_p] = k.s0redgep
     if k.n0ledge != 0:
