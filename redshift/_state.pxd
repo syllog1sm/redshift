@@ -74,7 +74,7 @@ cdef struct State:
     Kernel kernel
 
 cdef uint64_t hash_kernel(Kernel* k)
-cdef int fill_kernel(State* s) except -1
+cdef int fill_kernel(State* s, size_t* pos) except -1
 
 #cdef Kernel* kernel_from_s(Kernel* parent) except NULL
 #cdef Kernel* kernel_from_r(Kernel* parent, size_t label) except NULL

@@ -245,20 +245,20 @@ cdef class Parser:
         cdef double* scores
         cdef bint cache_hit = False
         cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
-        memcpy(beam.gold.tags, g_pos, (sent.length + 4) * sizeof(size_t))
+        #memcpy(beam.gold.tags, g_pos, (sent.length + 4) * sizeof(size_t))
         stats['sents'] += 1
         beam_scores = <double**>malloc(beam.k * sizeof(double*))
         while not beam.gold.is_finished:
             self.guide.cache.flush()
-            gold_kernel = beam.gold_kernel()
+            gold_kernel = beam.gold_kernel(sent.pos)
             scores = self.guide.cache.lookup(sizeof(Kernel), gold_kernel, &cache_hit)
             if not cache_hit:
                 feats = self.features.extract(sent, gold_kernel)
                 self.guide.fill_scores(self.features.n, feats, scores)
             beam.advance_gold(scores, g_pos, g_heads, g_labels)
             for p_idx in range(beam.bsize):
-                memcpy(beam.beam[p_idx].tags, sent.pos, (sent.length + 4)* sizeof(size_t))
-                kernel = beam.next_state(p_idx)
+                #memcpy(beam.beam[p_idx].tags, sent.pos, (sent.length + 4)* sizeof(size_t))
+                kernel = beam.next_state(p_idx, sent.pos)
                 beam.cost_next(p_idx, g_pos, g_heads, g_labels)
                 scores = self.guide.cache.lookup(sizeof(Kernel), kernel, &cache_hit)
                 if not cache_hit:
@@ -289,8 +289,8 @@ cdef class Parser:
         cdef size_t clas
         cdef State* gold_state = init_state(sent.length)
         cdef State* pred_state = init_state(sent.length)
-        memcpy(gold_state.tags, sent.pos, (sent.length + 4) * sizeof(size_t))
-        memcpy(pred_state.tags, sent.pos, (sent.length + 4) * sizeof(size_t))
+        #memcpy(gold_state.tags, sent.pos, (sent.length + 4) * sizeof(size_t))
+        #memcpy(pred_state.tags, sent.pos, (sent.length + 4) * sizeof(size_t))
         # Find where the states diverge
         for d in range(t):
             if ghist[d] == phist[d]:
@@ -302,7 +302,7 @@ cdef class Parser:
             return {}
         cdef dict counts = {}
         for i in range(d, t):
-            fill_kernel(gold_state)
+            fill_kernel(gold_state, sent.pos)
             feats = self.features.extract(sent, &gold_state.kernel)
             clas = ghist[i]
             if clas not in counts:
@@ -318,7 +318,7 @@ cdef class Parser:
             self.moves.transition(clas, gold_state)
         free_state(gold_state)
         for i in range(d, t):
-            fill_kernel(pred_state)
+            fill_kernel(pred_state, sent.pos)
             feats = self.features.extract(sent, &pred_state.kernel)
             clas = phist[i]
             if clas not in counts:
@@ -343,15 +343,15 @@ cdef class Parser:
 
         cdef size_t n_feats = self.features.n
         cdef State* s = init_state(sent.length)
-        if not self.moves.assign_pos:
-            memcpy(s.tags, g_pos, sizeof(size_t) * (s.n + 4))
+        #if not self.moves.assign_pos:
+        #    memcpy(s.tags, g_pos, sizeof(size_t) * (s.n + 4))
         cdef size_t move = 0
         cdef size_t label = 0
         cdef size_t _ = 0
         cdef bint online = self.train_alg == 'online'
         pos_idx = index.hashes.reverse_pos_index()
         while not s.is_finished:
-            fill_kernel(s)
+            fill_kernel(s, sent.pos)
             self.moves.fill_valid(s, valid)
             feats = self.features.extract(sent, &s.kernel)
             pred = self.predict(n_feats, feats, valid, &s.guess_labels[s.i])
@@ -396,11 +396,11 @@ cdef class Parser:
         cdef size_t n_preds = self.features.n
         cdef uint64_t* feats
         s = init_state(sent.length)
-        if not self.moves.assign_pos:
-            memcpy(s.tags, sent.pos, sizeof(size_t) * (s.n + 4))
+        #if not self.moves.assign_pos:
+        #    memcpy(s.tags, sent.pos, sizeof(size_t) * (s.n + 4))
         sent.parse.n_moves = 0
         while not s.is_finished:
-            fill_kernel(s)
+            fill_kernel(s, sent.pos)
             feats = self.features.extract(sent, &s.kernel)
             try:
                 self.moves.fill_valid(s, self.moves._costs)
@@ -452,8 +452,8 @@ cdef class Parser:
         while not beam.is_finished:
             self.guide.cache.flush()
             for p_idx in range(beam.bsize):
-                memcpy(beam.beam[p_idx].tags, sent.pos, (sent.length + 4)* sizeof(size_t))
-                kernel = beam.next_state(p_idx)
+                #memcpy(beam.beam[p_idx].tags, sent.pos, (sent.length + 4)* sizeof(size_t))
+                kernel = beam.next_state(p_idx, sent.pos)
                 scores = self.guide.cache.lookup(sizeof(kernel[0]), <void*>kernel,
                                                  &cache_hit)
                 if not cache_hit:

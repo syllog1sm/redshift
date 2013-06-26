@@ -43,8 +43,8 @@ cdef class Beam:
         self.violn = None
         self._prune_freqs = prune_freqs
 
-    cdef Kernel* gold_kernel(self):
-        fill_kernel(self.gold)
+    cdef Kernel* gold_kernel(self, size_t* tags):
+        fill_kernel(self.gold, tags)
         return &self.gold.kernel
 
     cdef int advance_gold(self, double* scores, size_t* tags,
@@ -53,14 +53,14 @@ cdef class Beam:
         self.gold.score += scores[oracle]
         self.trans.transition(oracle, self.gold)
 
-    cdef Kernel* next_state(self, size_t idx):
+    cdef Kernel* next_state(self, size_t idx, size_t* tags):
         self.trans.fill_valid(self.beam[idx], self.valid[idx])
-        fill_kernel(self.beam[idx])
+        fill_kernel(self.beam[idx], tags)
         return &self.beam[idx].kernel
 
     cdef int cost_next(self, size_t i, size_t* tags, size_t* heads, size_t* labels) except -1:
         self.trans.fill_static_costs(self.beam[i], tags, heads, labels, self.costs[i])
-        fill_kernel(self.beam[i])
+        fill_kernel(self.beam[i], tags)
 
     cdef int extend_states(self, double** ext_scores) except -1:
         global merged

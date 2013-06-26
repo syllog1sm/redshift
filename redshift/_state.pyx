@@ -102,36 +102,35 @@ cdef uint64_t hash_kernel(Kernel* k):
     return MurmurHash64A(k, sizeof(Kernel), 0)
 
 
-cdef int fill_kernel(State *s) except -1:
+cdef int fill_kernel(State *s, size_t* tags) except -1:
     cdef size_t i, val
     s.kernel.i = s.i
-    s.kernel.n0p = s.tags[s.i]
-    s.kernel.n1p = s.tags[s.i + 1]
-    s.kernel.n2p = s.tags[s.i + 2]
-    #s.kernel.n3p = s.tags[s.i + 3]
-    s.kernel.n3p = 0
+    s.kernel.n0p = tags[s.i]
+    s.kernel.n1p = tags[s.i + 1]
+    s.kernel.n2p = tags[s.i + 2]
+    s.kernel.n3p = tags[s.i + 3]
     s.kernel.s0 = s.top
-    s.kernel.s0p = s.tags[s.top]
+    s.kernel.s0p = tags[s.top]
     s.kernel.hs0 = s.heads[s.top]
-    s.kernel.hs0p = s.tags[s.heads[s.top]]
+    s.kernel.hs0p = tags[s.heads[s.top]]
     s.kernel.h2s0 = s.heads[s.heads[s.top]]
-    s.kernel.h2s0p = s.tags[s.heads[s.heads[s.top]]]
+    s.kernel.h2s0p = tags[s.heads[s.heads[s.top]]]
     s.kernel.Ls0 = s.labels[s.top]
     s.kernel.Lhs0 = s.labels[s.heads[s.top]]
     s.kernel.Lh2s0 = s.labels[s.heads[s.heads[s.top]]]
     s.kernel.n0ledge = s.ledges[s.i]
-    s.kernel.n0ledgep = s.tags[s.ledges[s.i]]
+    s.kernel.n0ledgep = tags[s.ledges[s.i]]
     if s.ledges[s.i] != 0:
-        s.kernel.s0redgep = s.tags[s.ledges[s.i] - 1]
+        s.kernel.s0redgep = tags[s.ledges[s.i] - 1]
     else:
         s.kernel.s0redgep = 0
 
     fill_subtree(s.l_valencies[s.top], s.l_children[s.top],
-                 s.labels, s.tags, &s.kernel.s0l)
+                 s.labels, tags, &s.kernel.s0l)
     fill_subtree(s.r_valencies[s.top], s.r_children[s.top],
-                 s.labels, s.tags, &s.kernel.s0r)
+                 s.labels, tags, &s.kernel.s0r)
     fill_subtree(s.l_valencies[s.i], s.l_children[s.i],
-                 s.labels, s.tags, &s.kernel.n0l)
+                 s.labels, tags, &s.kernel.n0l)
 
 
 #cdef Kernel* kernel_from_s(Kernel* parent) except NULL:
