@@ -107,10 +107,8 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
     s.kernel.i = s.i
     s.kernel.n0p = tags[s.i]
     s.kernel.n1p = tags[s.i + 1]
-    #s.kernel.n2p = tags[s.i + 2]
-    #s.kernel.n3p = tags[s.i + 3]
-    s.kernel.n2p = 0
-    s.kernel.n3p = 0
+    s.kernel.n2p = tags[s.i + 2]
+    s.kernel.n3p = tags[s.i + 3]
     s.kernel.s0 = s.top
     s.kernel.s0p = tags[s.top]
     s.kernel.hs0 = s.heads[s.top]
@@ -272,13 +270,7 @@ cdef State* init_state(size_t n):
     s.at_end_of_buffer = n == 2
     n = n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
-    s.tags = <size_t*>calloc(n, sizeof(size_t))
     # These make the tags match the OOB/ROOT/NONE values.
-    # TODO: Need better way to do this.
-    for i in range(1, s.n):
-        s.tags[i] = 2
-    s.tags[0] = 3
-    s.tags[s.n] = 1
     s.heads = <size_t*>calloc(n, sizeof(size_t))
     s.labels = <size_t*>calloc(n, sizeof(size_t))
     s.guess_labels = <size_t*>calloc(n, sizeof(size_t))
@@ -312,7 +304,6 @@ cdef copy_state(State* s, State* old):
     s.is_finished = old.is_finished
     s.at_end_of_buffer = old.at_end_of_buffer
     memcpy(s.stack, old.stack, old.n * sizeof(size_t))
-    memcpy(s.tags, old.tags, (old.n + PADDING) * sizeof(size_t))
     memcpy(s.ledges, old.ledges, (old.n + PADDING) * sizeof(size_t))
     memcpy(s.l_valencies, old.l_valencies, nbytes)
     memcpy(s.r_valencies, old.r_valencies, nbytes)
@@ -328,7 +319,6 @@ cdef copy_state(State* s, State* old):
 cdef free_state(State* s):
     free(s.stack)
     free(s.heads)
-    free(s.tags)
     free(s.labels)
     free(s.guess_labels)
     free(s.l_valencies)

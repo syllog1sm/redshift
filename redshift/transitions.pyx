@@ -117,8 +117,8 @@ cdef class TransitionSystem:
             head = s.top
             add_dep(s, head, child, label)
             push_stack(s)
-        elif move == ASSIGN_POS:
-            s.tags[s.i + 1] = label
+        #elif move == ASSIGN_POS:
+        #    s.tags[s.i + 1] = label
         else:
             print clas
             print move

@@ -421,7 +421,6 @@ cdef class Parser:
             assert s.heads[i] != 0, i
             sent.parse.heads[i] = s.heads[i]
             sent.parse.labels[i] = s.labels[i]
-            sent.pos[i] = s.tags[i]
             continue
             if s.r_valencies[i] == 0:
                 root = i

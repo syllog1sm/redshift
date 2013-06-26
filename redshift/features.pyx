@@ -23,12 +23,14 @@ cdef enum:
     N0w
     N0p
     N0c
-    N0cp
+    N0c4
+    N0c6
 
     N0lw
     N0lp
     N0lc
-    N0lcp
+    N0lc4
+    N0lc6
     
     N0ll
     N0lv
@@ -36,84 +38,94 @@ cdef enum:
     N0l2w
     N0l2p
     N0l2c
-    N0l2cp
+    N0l2c4
+    N0l2c6
     
     N0l2l
     
     N1w
     N1p
     N1c
-    N1cp
+    N1c4
+    N1c6
     
     N2w
     N2p
     N2c
-    N2cp
+    N2c4
+    N2c6
     
     N3w
     N3p
     N3c
-    N3cp
+    N3c4
+    N3c6
     
     S0w
     S0p
     S0c
-    S0cp
+    S0c4
+    S0c6
     
     S0l
     
     S0hw
     S0hp
     S0hc
-    S0hcp
+    S0hc4
+    S0hc6
     
     S0hl
-    S0hb
 
     S0lw
     S0lp
     S0lc
-    S0lcp
+    S0lc4
+    S0lc6
     
     S0ll
     
     S0rw
     S0rp
     S0rc
-    S0rcp
+    S0rc4
+    S0rc6
     
     S0rl
     
     S0l2w
     S0l2p
     S0l2c
-    S0l2cp
+    S0l2c4
+    S0l2c6
     
     S0l2l
-    S0l2b
 
     S0r2w
     S0r2p
     S0r2c
-    S0r2cp
+    S0r2c4
+    S0r2c6
     
     S0r2l
-    S0r2b
 
     S0l0w
     S0l0p
     S0l0c
-    S0l0cp
+    S0l0c4
+    S0l0c6
 
     S0r0w
     S0r0p
     S0r0c
-    S0r0cp
+    S0r0c4
+    S0r0c6
 
     S0h2w
     S0h2p
     S0h2c
-    S0h2cp
+    S0h2c4
+    S0h2c6
     
     S0h2l
     
@@ -134,14 +146,16 @@ cdef enum:
     S0re_w
     S0re_p
     S0re_c
-    S0re_cp
+    S0re_c4
+    S0re_c6
     
     N0le_orth
     
     N0le_w
     N0le_p
     N0le_c
-    N0le_cp
+    N0le_c4
+    N0le_c6
 
     CONTEXT_SIZE
 
@@ -155,26 +169,9 @@ def get_kernel_tokens():
             S0l2w]
 
 def get_best_bigrams(all_bigrams, n=0):
-    #best = [0, 26, 12, 126, 1, 5, 41, 16, 40, 86, 20, 87, 18, 27, 22, 30,
-    #        3, 104, 24, 65, 117, 132, 29, 11, 34, 131, 7, 116, 32, 36, 81,
-    #        15, 9, 21, 44, 6, 128, 95, 89, 17, 96, 38, 19, 84, 14, 43, 4,
-    #        2, 82, 90, 54, 76, 58, 77, 53, 23, 13, 31, 28, 42, 101, 35, 111,
-    #        121, 122, 25, 10, 127, 106, 129, 130, 33, 120, 37, 100, 66, 135,
-    #        59, 110, 8, 61, 107][:n]
-    #return [all_bigrams[i] for i in best]
     return []
 
 def get_best_trigrams(all_trigrams, n=0):
-    #best = [2, 199, 158, 61, 66, 5, 150, 1, 88, 154, 85, 25, 53, 10, 3, 60, 73,
-    #        175, 114, 4, 6, 148, 205, 197, 0, 71, 127, 200, 142, 84, 43, 89, 45,
-    #        95, 419, 33, 110, 182, 20, 24, 159, 51, 106, 26, 8, 178, 151, 12, 166,
-    #        192, 7, 209, 190, 147, 13, 194, 50, 129, 174, 186, 28, 116, 193, 179,
-    #        262, 23, 44, 172, 133, 191, 562, 38, 124, 195, 123, 72, 202, 187, 101,
-    #        92, 104, 115, 596, 29, 99, 132, 169, 42, 206, 592, 67, 323, 69, 9, 74,
-    #        14, 136, 64, 561, 161, 19, 77, 171, 300, 204, 310, 121, 15, 201, 235,
-    #        657, 70, 198, 22, 68, 48, 153, 54, 286, 83, 162, 100, 506, 98, 80, 433,
-    #        420, 63, 613, 149, 90, 139, 31, 91, 86, 203, 248, 173, 130, 165, 346,
-    #        157, 616, 18, 145, 451, 410, 75, 55, 603, 156, 52, 622, 210, 332, 120]
     return []
     #return [all_trigrams[i] for i in best][:n]
 
@@ -182,34 +179,17 @@ def get_best_features():
     # s0_n0 n0_s0re s0_n0le s0_n0_n0l s0_n1 s0_s0h n1_n0le n0_n0l_s0r0
     # s0_n0l2_n0le s0_s0r_s0l s0_n1_n0le s0_n0l2_s0re n0_s0h_s0re n0_n1_s0l
     # n0_s0h2 s0_n1_s0r s0_n0_n3
-    # Rejected: s0re_n0le n0_s0r2_s0re n0_n1 s0_s0h_s0r n1_s0re s0_n0_s0h2
-    # s0h_s0re n0_n0l_s0r n0_s0h s0_n0_n2 s0h_n0le s0_s0r_n0le n0_n0l n0_n0l_s0re
-    # n0_n0le s0_n0l_s0r0 n0_s0r s0_n0_s0re n0_s0r0 s0_n0_n0l2 s0_n0l s0_s0h_s0l0
-    # s0r_n0le s0_n0le_n3 n0_s0l s0_n0_s0h n0l_s0re s0_n0_s0r s0l_n0le n0_n0l_s0h
-    # n0le_s0r0 n0_s0l_s0re n0_s0l0 n0_s0r2_s0l s0_s0re s0_n0_n1 n1_s0h s0_s0h_n0le
-    # n0le_s0l0 n0_s0r2_n0le s0_s0r n0_n2_s0re s0l_s0re s0_s0r_s0r2 n1_n0l
-    # s0_n0l_s0h n1_s0r s0_s0r_n3 s0h_s0h2 s0_n0l_s0r s0_s0r0 s0_s0r2_n0le s0_s0l
-    # n0l_s0h2_s0re n1_s0r0 s0_n2_s0r s0_s0h2 s0_s0re_n0le s0re_s0l0 n0_s0h2_s0l
-    # s0h2_s0re s0_n1_s0re s0h_s0l0 n0_n0l2_s0h n0_n2 s0_n0l_n3 s0h2_n0le
-    # s0_s0l2_n0le n1_s0l s0_n1_n3 n0_n0l2 s0_n0_s0l s0h_s0l n0_s0h_s0l0 s0_s0l0
-    # n0_n0l_s0r2 n1_s0l0 n0_n0l2_n0le s0_n0l2 n0_s0r_s0re s0_n2 s0_n0_s0r2 s0h_s0r
-    # n0_s0l_s0r0 s0h_s0r0 n0_s0r_s0l n2_n0le n0_n0l_n0l2 n0l2_s0re s0_n0_s0l0
-    # n0l_n0l2 n0_s0r_n3 n0l2_n0le s0_n0l_n0le n2_s0re n0_n1_s0re n0_s0r2 n0_s0h_s0l2
-    # s0_n3 n0_s0h2_n3 n1_n2 s0_n1_s0r0 n0_n3 s0_n0le_s0r0 n1_n3 n0_s0r_n0le s0r_s0l
-    # n0_s0h_s0r0 n1_s0h2 n1_s0h_s0r s0r2_n0le s0_n1_s0l2 s0l2_s0re s0_n0l_s0h2
-    # s0l2_n0le
-    return [(27, 0), (0, 86), (27, 91), (27, 0, 4), (27, 15), (27, 32), (15, 91),
-            (0, 4, 64), (27, 10, 91), (27, 43, 38), (27, 15, 91), (27, 10, 86),
-            (0, 32, 86), (0, 15, 38), (0, 68), (27, 15, 43), (27, 0, 23)]
+    return []
 
 def unigram(word, add_clusters=False):
     pos = word + 1
     cluster = word + 2
-    cluster_prefix = word + 3
+    cluster6 = word + 3
+    cluster4 = word + 4
     basic = ((word, pos), (word,), (pos,))
-    clusters = ((word, pos, cluster_prefix), (word, pos, cluster),
-                (word, cluster), (word, cluster_prefix),
-                (pos, cluster), (pos, cluster_prefix))
+    clusters = ((cluster,), (cluster6,), (cluster4,),
+                (pos, cluster), (pos, cluster6), (pos, cluster4),
+                (word, cluster6), (word, cluster4))
     if add_clusters:
         return basic + clusters
     else:
@@ -220,13 +200,17 @@ def _bigram(a, b, add_clusters=True):
     w1 = a
     p1 = a + 1
     c1 = a + 2
-    cp1 = a + 3
+    c6_1 = a + 3
+    c4_1 = a + 4
     w2 = b
     p2 = b + 1
     c2 = b + 2
-    cp2 = b + 3
+    c6_2 = b + 3
+    c4_2 = b + 4
     basic = ((w1, w2), (p1, p2), (p1, w2), (w1, p2))
-    clusters = ((c1, c2), (cp1, cp2), (c1, p2), (cp2, p2), (p1, c2), (p1, cp2))
+    clusters = ((c1, c2), (c1, w2), (w1, c2), (c6_1, c6_2), (c4_1, c4_2),
+                (c6_1, p1, p2), (p1, c6_2, p2), (c4_1, p1, w2),
+                (w1, c4_2, p2))
     if add_clusters:
         return basic + clusters
     else:
@@ -281,44 +265,46 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N0w] = words[k.i]
     context[N0p] = k.n0p
     context[N0c] = clusters[k.i]
-    context[N0cp] = cprefix6s[k.i]
+    context[N0c6] = cprefix6s[k.i]
+    context[N0c4] = cprefix4s[k.i]
 
     context[N1w] = words[k.i + 1]
     context[N1p] = k.n1p
     context[N1c] = clusters[k.i + 1]
     context[N1cp] = cprefix6s[k.i + 1]
+    context[N1c4] = cprefix4s[k.i + 1]
 
     context[N2w] = words[k.i + 2]
     context[N2p] = tags[k.i + 2]
     context[N2c] = clusters[k.i + 2]
-    context[N2cp] = cprefix6s[k.i + 2]
+    context[N2c6] = cprefix6s[k.i + 2]
+    context[N2c4] = cprefix4s[k.i + 2]
 
-    #context[N3w] = words[k.i + 3]
-    #context[N3p] = k.n3p
-    #context[N3c] = clusters[k.i + 3]
-    #context[N3cp] = cprefix6s[k.i + 3]
-    context[N3w] = 0
-    context[N3p] = 0
-    context[N3c] = 0
-    context[N3cp] = 0
+    context[N3w] = words[k.i + 3]
+    context[N3p] = k.n3p
+    context[N3c] = clusters[k.i + 3]
+    context[N3c6] = cprefix6s[k.i + 3]
+    context[N3c4] = cprefix4s[k.i + 3]
 
     context[S0w] = words[k.s0]
     context[S0p] = k.s0p
     context[S0c] = clusters[k.s0]
-    context[S0cp] = cprefix6s[k.s0]
+    context[S0c6] = cprefix6s[k.s0]
+    context[S0c4] = cprefix4s[k.s0]
     context[S0l] = k.Ls0
 
     context[S0hw] = words[k.hs0]
     context[S0hp] = k.hs0p
     context[S0hc] = clusters[k.hs0]
-    context[S0hcp] = cprefix6s[k.hs0]
+    context[S0hc6] = cprefix6s[k.hs0]
+    context[S0hc4] = cprefix4s[k.hs0]
     context[S0hl] = k.Lhs0
-    context[S0hb] = k.hs0 != 0
 
     context[S0h2w] = words[k.h2s0]
     context[S0h2p] = k.h2s0p
     context[S0h2c] = clusters[k.h2s0]
-    context[S0h2cp] = cprefix6s[k.h2s0]
+    context[S0h2c6] = cprefix6s[k.h2s0]
+    context[S0h2c4] = cprefix4s[k.h2s0]
     context[S0h2l] = k.Lh2s0
  
     context[S0lv] = s0l.val
@@ -328,26 +314,31 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S0lw] = words[s0l.idx[0]]
     context[S0lp] = s0l.tags[0]
     context[S0lc] = clusters[s0l.idx[0]]
-    context[S0lcp] = cprefix6s[s0l.idx[0]]
+    context[S0lc6] = cprefix6s[s0l.idx[0]]
+    context[S0lc4] = cprefix4s[s0l.idx[0]]
 
     context[S0rw] = words[s0r.idx[0]]
     context[S0rp] = s0r.tags[0]
     context[S0rc] = clusters[s0r.idx[0]]
-    context[S0rcp] = cprefix6s[s0r.idx[0]]
+    context[S0rc6] = cprefix6s[s0r.idx[0]]
+    context[S0rc4] = cprefix4s[s0r.idx[0]]
 
     context[S0l2w] = words[s0l.idx[1]]
     context[S0l2p] = s0l.tags[1]
     context[S0l2c] = clusters[s0l.idx[1]]
-    context[S0l2cp] = cprefix6s[s0l.idx[1]]
+    context[S0l2c6] = cprefix6s[s0l.idx[1]]
+    context[S0l2c4] = cprefix4s[s0l.idx[1]]
 
     context[S0r2w] = words[s0r.idx[1]]
     context[S0r2p] = s0r.tags[1]
     context[S0r2c] = clusters[s0r.idx[1]]
-    context[S0r2cp] = cprefix6s[s0r.idx[1]]
+    context[S0r2c6] = cprefix6s[s0r.idx[1]]
+    context[S0r2c4] = cprefix4s[s0r.idx[1]]
 
     context[S0l0w] = words[s0l.idx[2]]
     context[S0l0p] = s0l.tags[2]
     context[S0l0c] = clusters[s0l.idx[2]]
+    context[S0l0cp] = cprefix6s[s0l.idx[2]]
     context[S0l0cp] = cprefix6s[s0l.idx[2]]
 
     context[S0r0w] = words[s0r.idx[2]]
@@ -403,11 +394,13 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[S0re_orth] = orths[k.n0ledge - 1]
         context[S0re_w] = words[k.n0ledge - 1]
         context[S0re_c] = clusters[k.n0ledge - 1]
-        context[S0re_cp] = cprefix6s[k.n0ledge - 1]
+        context[S0re_c6] = cprefix6s[k.n0ledge - 1]
+        context[S0re_c4] = cprefix4s[k.n0ledge - 1]
     else:
         context[S0re_w] = 0
         context[S0re_c] = 0
-        context[S0re_cp] = 0
+        context[S0re_c6] = 0
+        context[S0re_c4] = 0
         context[S0re_orth] = 0
  
 
@@ -444,7 +437,7 @@ cdef class FeatureSet:
 
         cdef size_t* context = self.context
         cdef uint64_t* features = self.features
-        fill_context(context, self.nr_label, sent.words, sent.pos
+        fill_context(context, self.nr_label, sent.words, sent.pos,
                      sent.clusters, sent.cprefix4s, sent.cprefix6s,
                      sent.orths, sent.parens, sent.quotes,
                      k, &k.s0l, &k.s0r, &k.n0l)
