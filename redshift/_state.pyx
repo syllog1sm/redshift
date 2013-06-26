@@ -107,8 +107,10 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
     s.kernel.i = s.i
     s.kernel.n0p = tags[s.i]
     s.kernel.n1p = tags[s.i + 1]
-    s.kernel.n2p = tags[s.i + 2]
-    s.kernel.n3p = tags[s.i + 3]
+    #s.kernel.n2p = tags[s.i + 2]
+    #s.kernel.n3p = tags[s.i + 3]
+    s.kernel.n2p = 0
+    s.kernel.n3p = 0
     s.kernel.s0 = s.top
     s.kernel.s0p = tags[s.top]
     s.kernel.hs0 = s.heads[s.top]

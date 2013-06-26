@@ -274,6 +274,7 @@ def trigram_with_clusters(a, b, c):
 
 
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
+                       size_t* tags,
                        size_t* clusters, size_t* cprefix4s, size_t* cprefix6s,
                        size_t* orths, size_t* parens, size_t* quotes,
                        Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
@@ -288,7 +289,7 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N1cp] = cprefix6s[k.i + 1]
 
     context[N2w] = words[k.i + 2]
-    context[N2p] = k.n2p
+    context[N2p] = tags[k.i + 2]
     context[N2c] = clusters[k.i + 2]
     context[N2cp] = cprefix6s[k.i + 2]
 
@@ -443,7 +444,7 @@ cdef class FeatureSet:
 
         cdef size_t* context = self.context
         cdef uint64_t* features = self.features
-        fill_context(context, self.nr_label, sent.words,
+        fill_context(context, self.nr_label, sent.words, sent.pos
                      sent.clusters, sent.cprefix4s, sent.cprefix6s,
                      sent.orths, sent.parens, sent.quotes,
                      k, &k.s0l, &k.s0r, &k.n0l)
