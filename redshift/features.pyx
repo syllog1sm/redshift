@@ -292,10 +292,14 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N2c] = clusters[k.i + 2]
     context[N2cp] = cprefix6s[k.i + 2]
 
-    context[N3w] = words[k.i + 3]
-    context[N3p] = k.n3p
-    context[N3c] = clusters[k.i + 3]
-    context[N3cp] = cprefix6s[k.i + 3]
+    #context[N3w] = words[k.i + 3]
+    #context[N3p] = k.n3p
+    #context[N3c] = clusters[k.i + 3]
+    #context[N3cp] = cprefix6s[k.i + 3]
+    context[N3w] = 0
+    context[N3p] = 0
+    context[N3c] = 0
+    context[N3cp] = 0
 
     context[S0w] = words[k.s0]
     context[S0p] = k.s0p
