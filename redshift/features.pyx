@@ -23,14 +23,14 @@ cdef enum:
     N0w
     N0p
     N0c
-    N0c4
     N0c6
+    N0c4
 
     N0lw
     N0lp
     N0lc
-    N0lc4
     N0lc6
+    N0lc4
     
     N0ll
     N0lv
@@ -38,94 +38,94 @@ cdef enum:
     N0l2w
     N0l2p
     N0l2c
-    N0l2c4
     N0l2c6
+    N0l2c4
     
     N0l2l
     
     N1w
     N1p
     N1c
-    N1c4
     N1c6
+    N1c4
     
     N2w
     N2p
     N2c
-    N2c4
     N2c6
+    N2c4
     
     N3w
     N3p
     N3c
-    N3c4
     N3c6
+    N3c4
     
     S0w
     S0p
     S0c
-    S0c4
     S0c6
+    S0c4
     
     S0l
     
     S0hw
     S0hp
     S0hc
-    S0hc4
     S0hc6
+    S0hc4
     
     S0hl
 
     S0lw
     S0lp
     S0lc
-    S0lc4
     S0lc6
+    S0lc4
     
     S0ll
     
     S0rw
     S0rp
     S0rc
-    S0rc4
     S0rc6
+    S0rc4
     
     S0rl
     
     S0l2w
     S0l2p
     S0l2c
-    S0l2c4
     S0l2c6
+    S0l2c4
     
     S0l2l
 
     S0r2w
     S0r2p
     S0r2c
-    S0r2c4
     S0r2c6
+    S0r2c4
     
     S0r2l
 
     S0l0w
     S0l0p
     S0l0c
-    S0l0c4
     S0l0c6
+    S0l0c4
 
     S0r0w
     S0r0p
     S0r0c
-    S0r0c4
     S0r0c6
+    S0r0c4
 
     S0h2w
     S0h2p
     S0h2c
-    S0h2c4
     S0h2c6
+    S0h2c4
     
     S0h2l
     
@@ -146,16 +146,16 @@ cdef enum:
     S0re_w
     S0re_p
     S0re_c
-    S0re_c4
     S0re_c6
+    S0re_c4
     
     N0le_orth
     
     N0le_w
     N0le_p
     N0le_c
-    N0le_c4
     N0le_c6
+    N0le_c4
 
     CONTEXT_SIZE
 
@@ -182,6 +182,9 @@ def get_best_features():
     return []
 
 def unigram(word, add_clusters=False):
+    assert a >= 0
+    assert a < (CONTEXT_SIZE - 5)
+ 
     pos = word + 1
     cluster = word + 2
     cluster6 = word + 3
@@ -197,6 +200,10 @@ def unigram(word, add_clusters=False):
 
 
 def _bigram(a, b, add_clusters=True):
+    assert a >= 0
+    assert b >= 0
+    assert a < (CONTEXT_SIZE - 5)
+    assert b < (context_SIZE - 5)
     w1 = a
     p1 = a + 1
     c1 = a + 2
@@ -223,6 +230,13 @@ def bigram_with_clusters(a, b):
     return _bigram(a, b, True)
 
 def _trigram(a, b, c, add_clusters=True):
+    assert a >= 0
+    assert b >= 0
+    assert c >= 0
+    assert a < (CONTEXT_SIZE - 5)
+    assert b < (context_SIZE - 5)
+    assert c < (context_SIZE - 5)
+
     w1 = a
     p1 = a + 1
     c1 = a + 2
@@ -259,7 +273,7 @@ def trigram_with_clusters(a, b, c):
 
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
                        size_t* tags,
-                       size_t* clusters, size_t* cprefix4s, size_t* cprefix6s,
+                       size_t* clusters, size_t* cprefix6s, size_t* cprefix4s,
                        size_t* orths, size_t* parens, size_t* quotes,
                        Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
     context[N0w] = words[k.i]
@@ -377,6 +391,7 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
     if k.s0 != 0:
+        assert k.i > k.s0
         context[dist] = k.i - k.s0
     else:
         context[dist] = 0
@@ -394,7 +409,7 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N0le_c4] = cprefix4s[k.n0ledge]
     
     context[S0re_p] = k.s0redgep
-    if k.n0ledge != 0:
+    if k.n0ledge > 0:
         context[S0re_orth] = orths[k.n0ledge - 1]
         context[S0re_w] = words[k.n0ledge - 1]
         context[S0re_c] = clusters[k.n0ledge - 1]
@@ -406,6 +421,12 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[S0re_c6] = 0
         context[S0re_c4] = 0
         context[S0re_orth] = 0
+
+
+cdef int free_predicate(Predicate* pred) except -1:
+    free(pred.raws)
+    free(pred.args)
+    free(pred)
  
 
 cdef class FeatureSet:
@@ -430,6 +451,8 @@ cdef class FeatureSet:
     def __dealloc__(self):
         free(self.context)
         free(self.features)
+        for i in range(self.n):
+            free_predicate(self.predicates[i])
         free(self.predicates)
 
     cdef uint64_t* extract(self, Sentence* sent, Kernel* k) except NULL:
@@ -452,10 +475,10 @@ cdef class FeatureSet:
             seen_masked = False
             for j in range(pred.n):
                 value = context[pred.args[j]]
-                if value == self.mask_value:
-                    seen_masked = True
-                    break
-                elif value != 0:
+                #if value == self.mask_value:
+                #    seen_masked = True
+                #    break
+                if value != 0:
                     seen_non_zero = True
                 pred.raws[j] = value
             if seen_non_zero and not seen_masked:
@@ -469,10 +492,13 @@ cdef class FeatureSet:
     def _make_predicates(self, object name, object ngrams, add_clusters):
         feats = self._get_feats(name, ngrams, add_clusters)
         self.n = len(feats)
-        self.predicates = <Predicate*>malloc(self.n * sizeof(Predicate))
+        self.predicates = <Predicate**>malloc(self.n * sizeof(Predicate*))
         cdef Predicate pred
         for id_, args in enumerate(feats):
-            pred = Predicate(id=id_, n=len(args), expected_size = 1000)
+            pred = <Predicate*>malloc(sizeof(Predicate))
+            pred.id = id_
+            pred.n = len(args)
+            pred.expected_size = 1000
             pred.raws = <uint64_t*>malloc((len(args) + 1) * sizeof(uint64_t))
             pred.args = <int*>malloc(len(args) * sizeof(int))
             for i, element in enumerate(sorted(args)):
