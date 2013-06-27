@@ -434,6 +434,8 @@ cdef class Perceptron:
             feat_nr_seen = get_nr_seen(feat_addr)
             q.append((feat_nr_seen, f_id))
         q.sort(reverse=True)
+        if not q:
+            return None
         cutoff = q[self.nr_raws][0]
         vacancies = []
         for i in range(1, self.nr_raws):
