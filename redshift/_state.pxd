@@ -101,5 +101,3 @@ cdef bint has_root_child(State *s, size_t token)
 cdef State* init_state(size_t n)
 cdef free_state(State* s)
 cdef copy_state(State* s, State* old)
-
-cdef free_fast_state(FastState* s)
