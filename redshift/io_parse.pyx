@@ -115,6 +115,26 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
         s.quotes[i] = quote_cnt
     return s
 
+cdef free_sentence(Sentence* s):
+   
+    free(s.words)
+    free(s.owords)
+    free(s.pos)
+    free(s.ids)
+    free(s.clusters)
+    free(s.cprefix4s)
+    free(s.cprefix6s)
+    free(s.orths)
+    free(s.parens)
+    free(s.quotes)
+
+    free(s.parse.heads)
+    free(s.parse.labels)
+    free(s.parse.sbd)
+    free(s.parse.moves)
+    free(s.parse)
+    free(s)
+
 
 def read_conll(conll_str, moves=None, vocab_thresh=0):
     cdef:
@@ -206,6 +226,11 @@ cdef class Sentences:
         self.s = <Sentence**>malloc(sizeof(Sentence*) * max_length)
         self.max_length = max_length
         self.vocab_thresh = vocab_thresh
+
+    def __dealloc__(self):
+        for i in range(self.length):
+            free_sent(self.s[i])
+        free(self.s) 
 
     cpdef int add(self, size_t id_, ids, words, tags, heads, labels) except -1:
         cdef Sentence* s
@@ -398,20 +423,7 @@ cdef class Sentences:
                             heads[prev_head] = new_id
                         prev_head = new_id
                 offset += (sent.length - 2)
-                free(sent.ids)
-                free(sent.words)
-                free(sent.pos)
-                free(sent.orths)
-                free(sent.quotes)
-                free(sent.parens)
-                free(sent.clusters)
-                free(sent.cprefix4s)
-                free(sent.cprefix6s)
-                free(sent.parse.heads)
-                free(sent.parse.labels)
-                free(sent.parse.moves)
-                free(sent.parse.sbd)
-                free(sent)
+                free_sent(sent)
             # Dummy root symbol
             new_id += 1
             old_id += 1
@@ -442,11 +454,6 @@ cdef class Sentences:
         self.s = merged
         self.length = m_id
         self.strings = new_strings
-
-    def __dealloc__(self):
-        # TODO
-        #free(self.s)
-        pass
-        
+       
     property length:
         def __get__(self): return self.length
