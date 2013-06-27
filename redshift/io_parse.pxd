@@ -26,6 +26,8 @@ cdef struct Sentence:
 cdef Sentence* make_sentence(size_t id_, size_t length, object py_ids,
                             object py_words, object py_tags, size_t vocab_thresh)
 
+cdef free_sent(Sentence* s)
+
 cdef class Sentences:
     cdef object strings
     cdef Sentence** s

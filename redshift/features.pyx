@@ -182,8 +182,8 @@ def get_best_features():
     return []
 
 def unigram(word, add_clusters=False):
-    assert a >= 0
-    assert a < (CONTEXT_SIZE - 5)
+    assert word >= 0
+    assert word < (CONTEXT_SIZE - 5)
  
     pos = word + 1
     cluster = word + 2
@@ -203,7 +203,7 @@ def _bigram(a, b, add_clusters=True):
     assert a >= 0
     assert b >= 0
     assert a < (CONTEXT_SIZE - 5)
-    assert b < (context_SIZE - 5)
+    assert b < (CONTEXT_SIZE - 5)
     w1 = a
     p1 = a + 1
     c1 = a + 2
@@ -234,8 +234,8 @@ def _trigram(a, b, c, add_clusters=True):
     assert b >= 0
     assert c >= 0
     assert a < (CONTEXT_SIZE - 5)
-    assert b < (context_SIZE - 5)
-    assert c < (context_SIZE - 5)
+    assert b < (CONTEXT_SIZE - 5)
+    assert c < (CONTEXT_SIZE - 5)
 
     w1 = a
     p1 = a + 1
@@ -470,7 +470,7 @@ cdef class FeatureSet:
                      k, &k.s0l, &k.s0r, &k.n0l)
         f = 0
         for i in range(self.n):
-            pred = &self.predicates[i]
+            pred = self.predicates[i]
             seen_non_zero = False
             seen_masked = False
             for j in range(pred.n):
@@ -493,7 +493,7 @@ cdef class FeatureSet:
         feats = self._get_feats(name, ngrams, add_clusters)
         self.n = len(feats)
         self.predicates = <Predicate**>malloc(self.n * sizeof(Predicate*))
-        cdef Predicate pred
+        cdef Predicate* pred
         for id_, args in enumerate(feats):
             pred = <Predicate*>malloc(sizeof(Predicate))
             pred.id = id_

@@ -115,7 +115,7 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
         s.quotes[i] = quote_cnt
     return s
 
-cdef free_sentence(Sentence* s):
+cdef free_sent(Sentence* s):
    
     free(s.words)
     free(s.owords)
