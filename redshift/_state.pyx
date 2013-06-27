@@ -331,17 +331,3 @@ cdef free_state(State* s):
     free(s.r_children)
     free(s.history)
     free(s)
-
-
-cdef free_fast_state(FastState* s):
-    cdef FastState* prev = s.previous
-    prev.nr_kids -= 1
-    free(s.k)
-    free(s)
-    while prev.nr_kids == 0:
-        s = prev.previous
-        s.nr_kids -= 1
-        free(prev)
-        free(prev.k)
-        prev = s
-
