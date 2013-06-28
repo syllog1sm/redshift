@@ -36,10 +36,10 @@ cdef class Beam:
         self.t = 0
         self.is_full = self.bsize >= self.k
         self.costs = <int**>malloc(self.k * sizeof(int*))
-        self.valid = <bint**>malloc(self.k * sizeof(bint*))
+        self.valid = <int**>malloc(self.k * sizeof(bint*))
         for i in range(self.k):
             self.costs[i] = <int*>calloc(self.trans.nr_class, sizeof(int*))
-            self.valid[i] = <bint*>calloc(self.trans.nr_class, sizeof(bint*))
+            self.valid[i] = <int*>calloc(self.trans.nr_class, sizeof(int*))
         self.violn = None
         self._prune_freqs = prune_freqs
 

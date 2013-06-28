@@ -75,7 +75,7 @@ cdef class Beam:
     cdef State** parents
     cdef State** beam
     cdef int** costs
-    cdef bint** valid
+    cdef int** valid
     cdef object _prune_freqs
     
     cdef object upd_strat
