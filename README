@@ -1,10 +1,14 @@
-redshift is a natural-language syntactic dependency parser. If you don't know what that means, this blog post is helpful:
-http://googleresearch.blogspot.com.au/2013/05/syntactic-ngrams-over-time.html . If you're an NLP person,
+A fast is a natural-language syntactic dependency parser that aims to stay up-to-the-minute with the latest improved tricks and techniques, without compromising
+practicality and usability for non-experts:
+
+If you don't know what a syntactic dependency is, read this:
+http://googleresearch.blogspot.com.au/2013/05/syntactic-ngrams-over-time.html .
+
+If you're an NLP person,
 it's a transition-based parser using averaged perceptron that features all the latest trimmings, implemented
 efficiently in Cython.
 
-redshift aims to stay up-to-the-minute with the latest improved tricks and techniques, without compromising
-practicality and usability for non-experts:
+Example usage:
 
 >>> redshift.load_parser(priority='accuracy', text_type='web', labels=True)
 >>> tokens, deps = redshift.deps_from_string(u'Redshift requires no preprocessing!', standoff=False)
@@ -48,3 +52,4 @@ separately. redshift's immediate dependencies:
 git clone https://github.com/syllog1sm/redshift.git
 cd redshift
 export PYTHONPATH=`pwd`:$PYTHONPATH
+python setup.py build_ext --inplace
