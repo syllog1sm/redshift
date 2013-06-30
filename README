@@ -1,60 +1,50 @@
-Transition-based shift-reduce parser with dynamic oracle and state repair.
+redshift is a natural-language syntactic dependency parser. If you don't know what that means, this blog post is helpful:
+http://googleresearch.blogspot.com.au/2013/05/syntactic-ngrams-over-time.html . If you're an NLP person,
+it's a transition-based parser using averaged perceptron that features all the latest trimmings, implemented
+efficiently in Cython.
 
-Setup:
-cd svm/ext
-./get_liblinear.sh
-make -C redshift && make -C svm/ && make -C index
-Put svm/lib/ on LD_LIBRARY_PATH (DYLD_LIBRARY_PATH for osx)
-Put the repo directory on the PYTHONPATH
-scripts/write_grammar.py train_dir/train.txt train_dir/rgrammar
+redshift aims to stay up-to-the-minute with the latest improved tricks and techniques, without compromising
+practicality and usability for non-experts:
 
-Usage:
-python scripts/train.py train_file.txt parser_model_dir/
-python scripts/parse.py parser_model_dir/ pos_tagged_file.txt output_dir/
-python scripts/evaluate.py output_dir/parses gold_parses.txt
+>>> redshift.load_parser(priority='accuracy', text_type='web', labels=True)
+>>> tokens, deps = redshift.deps_from_string(u'Redshift requires no preprocessing!', standoff=False)
+>>> print tokens
+((u'Redshift', u'NOUN'), (u'requires', u'VERB'), (u'no', u'ADV'), (u'preprocessing', u'NOUN'))
+>>> print deps
+((1, 0, u'subj'), (1, 2, u'dobj'), (3, 2, u'nmod'))
 
-The iterative training script currently requires a server with pbs installed. The pbs-specific
-scripts are currenly missing from the repo.
+Advantages:
+- All-in-one processing. Most other parses require you to chain together a tokenizer, sentence boundary detector,
+  part-of-speech tagger, etc. Making those long pipeline work well on your data can take both time and nous.
+- The fastest English config parses at over 1,000 sentences a second, with 91% accuracy.
+- The most accurate English config gets 9X.XX% labelled accuracy (93.XX unlabelled), and still parses at XX
+  sentences a second. The compromise model gets 9X.XX% at XX sentences per second.
+- Specially tweaked model for web text
+- Comes with models for many languages and types of text.
 
-I usually use fabric for running the experiments; it's a python package that
-handles server-side execution very well. For instance:
+INSTALLATION
 
-fab run_static:repairs_model,reattach=True,lower=True,labels=Stanford
+THE LAZIEST WAY
 
-would start a model training on our server. Site-specific configuration for this
-should go in a _paths.py file imported by the fabfile.
+This will set-up a fully local install using virtualenv, with all the required dependencies. But, the script
+does that by downloading everything -- XXmb in total.
 
-Where the action is:
-redshift/parser.pyx
-all the algorithmic code
+git clone https://github.com/syllog1sm/redshift.git
+cd redshift
+./install_local_from_scratch.sh
 
-redshift/features.pyx
-the feature definitions. All features are binary, and the context vector is a fixed size.
-So there's a long enum of state properties (e.g. word-of-head-of-stack, etc).
-We first fill the full context, and then predicates are masks over it.
+WITHOUT DEPENDENCIES
 
-redshift/_state.pyx
-struct representing the parser state, and functions operating on it. This could be a class,
-but I thought I'd want a beam at some point, so it's nice to have the state as just a struct
-instead of a reference-counted Python object.
+These instructions just tell you how to set up the redshift package, and assume you'll set up the dependencies
+separately. redshift's immediate dependencies:
 
-svm/cy_svm.pyx
-Wrapper for LibLinear
+- Python 2.7 (it'll probably be easy to make it work with Python 3)
+- plac
+- scipy
+- Google sparsehash (a C++ library)
+- Cython 0.17+
+- fabric (not strictly required, but quite useful)
 
-Dependencies
-* Cython 0.17 (untested with 0.18)
-* Python 2.7
-* liblinear (run svm/ext/get_liblinear.sh)
-* sparsehash (formerly googlesparsehash)
-* pathlib, sh, plac (all Python modules available over pip/easy_install
-* The setup scripts are written for use with virtualenv, but it's not strictly necessary
-
-Biggest uglinesses
-* The package organisation sucks. I don't know how to organise cython packages properly
-* I've had trouble cimport'ing global variables across cython modules, so some things that should refer to constants don't
-* The code in TransitionSystem is pretty rickety from repeated experimentation
-* E.g. the names of repair moves don't currently make sense
-* Some code is unnecessarily complex for historical reasons, e.g. the way labels and moves are coupled. This needs to be refactored.
-* Raw arrays are used throughout the code; it might've been a better idea to forsake the
-  efficiency and use numpy. There are likely to be memory leaks, but in the use-case of
-  the experiments it's not important.
+git clone https://github.com/syllog1sm/redshift.git
+cd redshift
+export PYTHONPATH=`pwd`:$PYTHONPATH
