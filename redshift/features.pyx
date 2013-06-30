@@ -636,15 +636,14 @@ cdef class FeatureSet:
             #+ unigram(S0l0w, add_clusters)
             #+ unigram(S0r0w, add_clusters)
         )
-        if feat_level == 'zhang':
-            print "Use Zhang feats"
-            feats = from_single + from_word_pairs + from_three_words + distance
-            feats += valency + zhang_unigrams + third_order
-            feats += labels
-            feats += label_sets
-        else:
+        print "Use Zhang feats"
+        feats = from_single + from_word_pairs + from_three_words + distance
+        feats += valency + zhang_unigrams + third_order
+        feats += labels
+        feats += label_sets
+        if ngrams:
             print "Use %d ngram feats" % len(ngrams)
-            feats = tuple(unigrams)
+            feats += tuple(unigrams)
             kernel_tokens = get_kernel_tokens()
             for ngram_feat in ngrams:
                 if len(ngram_feat) == 2:
@@ -659,15 +658,5 @@ cdef class FeatureSet:
                         feats += trigram_no_clusters(*ngram_feat)
                 else:
                     raise StandardError, ngram_feat
-            if feat_level == 'full' or feat_level != 'iso':
-                print "Full feats"
-                feats += from_single
-                feats += zhang_unigrams
-                feats += third_order
-                feats += from_word_pairs
-                feats += from_three_words
-                #feats += extra
-            else:
-                print "No extra feats"
         # Sort each feature, and sort and unique the set of them
         return tuple(sorted(set([tuple(sorted(f)) for f in feats])))
