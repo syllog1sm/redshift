@@ -446,7 +446,7 @@ cdef class FeatureSet:
         # Sets "n"
         self._make_predicates(self.name, ngrams, add_clusters)
         self.context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
-        self.features = <uint64_t*>calloc(self.n + self.nr_match + 1, sizeof(uint64_t))
+        self.features = <uint64_t*>calloc(self.n + (self.nr_match*2) + 1, sizeof(uint64_t))
 
     def __dealloc__(self):
         free(self.context)
@@ -492,8 +492,12 @@ cdef class FeatureSet:
             match_pred = self.match_preds[match_id]
             value = context[match_pred.idx1]
             if value != 0 and value == context[match_pred.idx2]:
-                #features[f] = (self.nr_match * i) + match_id
-                features[f] = (value * (self.nr_match + self.n)) + match_id + i
+                match_pred.raws[0] = value
+                match_pred.raws[1] = match_pred.id
+                features[f] = MurmurHash64A(match_pred.raws, 2 * sizeof(size_t), match_pred.id)
+                f += 1
+                match_pred.raws[0] = 0
+                features[f] = MurmurHash64A(match_pred.raws, 2 * sizeof(size_t), match_pred.id)
                 f += 1
         features[f] = 0
         return features
@@ -514,11 +518,11 @@ cdef class FeatureSet:
                 pred.args[i] = element
             self.predicates[id_] = pred
         self.nr_match = len(match_feats)
-        self.match_preds = <MatchPred**>malloc(self.nr_match * sizeof(MatchPred))
+        self.match_preds = <MatchPred**>malloc(len(match_feats) * sizeof(MatchPred))
         cdef MatchPred* match_pred
         for id_, (idx1, idx2) in enumerate(match_feats):
             match_pred = <MatchPred*>malloc(sizeof(MatchPred))
-            match_pred.id = id_
+            match_pred.id = id_ + self.n
             match_pred.idx1 = idx1
             match_pred.idx2 = idx2
             self.match_preds[id_] = match_pred

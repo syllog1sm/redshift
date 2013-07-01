@@ -291,10 +291,13 @@ cdef class Parser:
         #memcpy(gold_state.tags, sent.pos, (sent.length + 4) * sizeof(size_t))
         #memcpy(pred_state.tags, sent.pos, (sent.length + 4) * sizeof(size_t))
         # Find where the states diverge
+        cdef bint use_dyn_amb = False
         for d in range(t):
             if ghist[d] == phist[d]:
                 self.moves.transition(ghist[d], gold_state)
                 self.moves.transition(phist[d], pred_state)
+            elif use_dyn_amb and pred_state.cost == 0:
+                continue
             else:
                 break
         else:

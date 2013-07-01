@@ -65,9 +65,10 @@ cdef struct Predicate:
     int* args
 
 cdef struct MatchPred:
-    int id
-    uint64_t idx1
-    uint64_t idx2
+    size_t id
+    size_t idx1
+    size_t idx2
+    size_t[2] raws
 
 cdef class FeatureSet:
     cdef object name

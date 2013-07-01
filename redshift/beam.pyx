@@ -49,7 +49,18 @@ cdef class Beam:
 
     cdef int advance_gold(self, double* scores, size_t* tags,
                           size_t* heads, size_t* labels) except -1:
-        cdef size_t oracle = self.trans.break_tie(self.gold, tags, heads, labels)
+        cdef size_t oracle
+        cdef double best_score = -100000
+        cdef int* costs = self.trans.get_costs(self.gold, tags, heads, labels)
+        cdef bint use_dyn_amb = False
+        if use_dyn_amb:
+            for i in range(self.guide.nr_class):
+                if scores[i] >= best_score and costs[i] == 0:
+                    oracle = i
+                    best_score = scores[i]
+        else:
+            oracle = self.trans.break_tie(self.gold, tags, heads, labels)
+
         self.gold.score += scores[oracle]
         self.trans.transition(oracle, self.gold)
 
