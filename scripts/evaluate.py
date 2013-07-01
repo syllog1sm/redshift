@@ -20,27 +20,29 @@ def gen_toks(loc):
     i = 0
     for sent_str in sent_strs:
         tokens = [Token(i, tok_str.split()) for i, tok_str in enumerate(sent_str.split('\n'))]
-        propagate_edits(tokens)
+        flatten_edits(tokens)
         tokens[-1].sbd = True
         for token in tokens:
-            yield token
+            yield sent_str, token
 
-def propagate_edits(tokens):
+def flatten_edits(tokens):
     by_head = defaultdict(list)
     edits = []
     for token in tokens:
-        if token.head == token.id:
-            continue
-        head = token.head + token.id
-        if head >= len(tokens):
-            continue
-        by_head[head].append(token)
-        if token.label == 'erased':
-            edits.append(token)
-    for edit in edits:
-        edits.extend(by_head[edit.id])
-        edit.label = 'erased'
-
+        if token.head >= len(tokens):
+            token.head = -1
+    subtrees = defaultdict(set)
+    for token in tokens:
+        if token.head > 0:
+            subtrees[token.head].add(token)
+    edits = [t for t in tokens if t.label == 'erased']
+    visited = set()
+    for token in edits:
+        for child in subtrees[token.id]:
+            assert child not in visited
+            child.label = 'erased'
+            edits.append(child)
+    
 
 class Token(object):
     def __init__(self, id_, attrs):
@@ -58,15 +60,16 @@ class Token(object):
         self.label = attrs.pop()
         if self.label.lower() == 'root':
             self.label = 'ROOT'
-        # Make head an offset from the token id, for sent variation
         head = int(attrs.pop())
-        if head == -1 or self.label.upper() == 'ROOT':
-            self.head = id_
-        else:
-            self.head = head - id_
+        self.head = head
+        # Make head an offset from the token id, for sent variation
+        #if head == -1 or self.label.upper() == 'ROOT':
+        #    self.head = id_
+        #else:
+        #    self.head = head - id_
         self.pos = attrs.pop()
         self.word = attrs.pop()
-        self.dir = 'R' if head > self.id else 'L'
+        self.dir = 'R' if head >= 0 and head < self.id else 'L'
     
 
 @plac.annotations(
@@ -81,10 +84,6 @@ def main(test_loc, gold_loc, eval_punct=False):
     N = 0
     u_nc = 0
     l_nc = 0
-    sb_tp = 0
-    sb_fp = 0
-    sb_fn = 0
-    sb_n = 0
     ed_tp = 0
     ed_fp = 0
     ed_fn = 0
@@ -92,38 +91,24 @@ def main(test_loc, gold_loc, eval_punct=False):
     tags_corr = 0
     tags_tot = 0
     open_ip = False
-    for t, g in zip(gen_toks(test_loc), gen_toks(gold_loc)):
-        sb_n += g.sbd
-        if g.sbd:
-            sb_tp += t.sbd
-            sb_fn += not t.sbd
-        else:
-            sb_fp += t.sbd
-            if t.sbd:
-                print 'SBD Err: ', t.word, g.word
+    for (sst, t), (ss, g) in zip(gen_toks(test_loc), gen_toks(gold_loc)):
         tags_corr += t.pos == g.pos
         tags_tot += 1
         if g.label in ["P", 'punct'] and not eval_punct:
             continue
-        elif g.label == 'erased' and t.label == 'erased':
-            ed_tp += 1
-            ed_n += 1
-            continue
         elif g.label == 'discourse':
             continue
-        elif g.pos == '-DFL-':
-            if g.word == r'\[':
-                open_ip = True
-            elif g.word == r'\]':
-                open_ip = False
-            continue
-        elif open_ip:
-            continue
-        assert t.word == g.word, '%s vs %s' %(t.word, g.word)
-        ed_fp += t.label == 'erased'
-        ed_fn += g.label == 'erased'
+        #if (t.label == 'erased' or g.label == 'erased') and t.label != g.label:
+        #    print ss
+        #    print ''
+        #    print sst
+        #    print t.word, 'Test:', t.label, 'Gold:', g.label
+        #    print 'RPRERR'
+        ed_tp += (t.label == 'erased') and (g.label == 'erased')
+        ed_fp += (t.label == 'erased') and (g.label != 'erased')
+        ed_fn += (g.label == 'erased') and (t.label != 'erased')
         ed_n += g.label == 'erased'
-        u_c = g.head == t.head and g.label != 'erased' and t.label != 'erased'
+        u_c = g.head == t.head
         l_c = u_c and g.label == t.label
         N += 1
         l_nc += l_c
@@ -140,7 +125,7 @@ def main(test_loc, gold_loc, eval_punct=False):
         for label, n in sorted(n_by_label[D].items(), key=lambda i: i[1], reverse=True):
             if n == 0:
                 continue
-            elif n < 400:
+            elif n < 100:
                 n_other += n
                 l_other += l_by_label[D][label]
                 u_other += u_by_label[D][label]
@@ -151,9 +136,6 @@ def main(test_loc, gold_loc, eval_punct=False):
         yield fmt_acc('Other', n_other, l_other, u_other, n_l_err) 
     yield 'U: %.3f' % pc(u_nc, N)
     yield 'L: %.3f' % pc(l_nc, N)
-    sb_p = pc(sb_tp, sb_tp + sb_fp)
-    sb_r = pc(sb_tp, sb_n)
-    sb_f = 2 * ((sb_p * sb_r) / (sb_p + sb_r + 1e-100))
     if ed_n != 0:
         ed_p = pc(ed_tp, ed_tp + ed_fp)
         ed_r = pc(ed_tp, ed_n)
@@ -161,9 +143,6 @@ def main(test_loc, gold_loc, eval_punct=False):
         yield 'DIS P: %.2f' % ed_p
         yield 'DIS R: %.2f' % ed_r
         yield 'DIS F: %.2f' % ed_f
-    yield 'SBD P: %.2f' % sb_p
-    yield 'SBD R: %.2f' % sb_r
-    yield 'SBD F: %.2f' % sb_f
     yield 'POS Acc: %.2f' % (pc(tags_corr, tags_tot))
 
 
