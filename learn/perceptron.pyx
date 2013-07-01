@@ -127,8 +127,8 @@ cdef class Perceptron:
             instances[i][j + 1] = 0
         for _ in range(n_iters):
             for i in range(length):
-                pred = self.predict_best_class(0, instances[i])
-                self.update(pred, labels[i], 0, instances[i], 1.0)
+                pred = self.predict_best_class(instances[i])
+                self.update(pred, labels[i], instances[i], 1.0)
         self.finalize()
         free(labels)
         for i in range(length):
@@ -156,8 +156,8 @@ cdef class Perceptron:
         """
         Add instance with 1 good label. Generalise to multi-label soon.
         """
-        cdef int64_t pred = self.predict_best_class(n, feats)
-        self.update(pred, label, n, feats, 1)
+        cdef int64_t pred = self.predict_best_class(feats)
+        self.update(pred, label, feats, 1)
         return pred
 
     def batch_update(self, deltas, margin):
@@ -178,7 +178,7 @@ cdef class Perceptron:
                                       self.now, d, clas, <SquareFeature*>feat_addr)
 
     cdef int64_t update(self, size_t pred_i, size_t gold_i,
-                    uint64_t n_feats, uint64_t* features, double margin) except -1:
+                    uint64_t* features, double margin) except -1:
         cdef size_t i
         cdef uint64_t f
         self.now += 1
@@ -186,8 +186,10 @@ cdef class Perceptron:
             return 0
         cdef size_t feat_addr
         cdef SquareFeature* feat
-        for i in range(n_feats):
+        i = 0
+        while True:
             f = features[i]
+            i += 1
             if f == 0:
                 break
             feat_addr = self.W[f]
@@ -202,7 +204,7 @@ cdef class Perceptron:
                 update_square(self.nr_class, self.div,
                               self.now, -1.0, pred_i, <SquareFeature*>feat_addr)
    
-    cdef inline int fill_scores(self, size_t n, uint64_t* features, double* scores) except -1:
+    cdef inline int fill_scores(self, uint64_t* features, double* scores) except -1:
         cdef size_t i, f, j, k, c
         cdef size_t feat_addr
         cdef SquareFeature* feat
@@ -238,9 +240,9 @@ cdef class Perceptron:
                     for k in range(self.nr_class - part_idx):
                         scores[part_idx + k] += feat.parts[j].w[k]
 
-    cdef uint64_t predict_best_class(self, uint64_t n_feats, uint64_t* features):
+    cdef uint64_t predict_best_class(self, uint64_t* features):
         cdef uint64_t i
-        self.fill_scores(n_feats, features, self.scores)
+        self.fill_scores(features, self.scores)
         cdef int best_i = 0
         cdef double best = self.scores[0]
         for i in range(self.nr_class):

@@ -446,7 +446,7 @@ cdef class FeatureSet:
         # Sets "n"
         self._make_predicates(self.name, ngrams, add_clusters)
         self.context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
-        self.features = <uint64_t*>calloc(self.n + 1, sizeof(uint64_t))
+        self.features = <uint64_t*>calloc(self.n + self.nr_match + 1, sizeof(uint64_t))
 
     def __dealloc__(self):
         free(self.context)
@@ -486,11 +486,20 @@ cdef class FeatureSet:
                 size = (pred.n + 1) * sizeof(uint64_t)
                 features[f] = MurmurHash64A(pred.raws, size, i)
                 f += 1
+        cdef MatchPred* match_pred
+        cdef size_t match_id
+        for match_id in range(self.nr_match):
+            match_pred = self.match_preds[match_id]
+            value = context[match_pred.idx1]
+            if value != 0 and value == context[match_pred.idx2]:
+                #features[f] = (self.nr_match * i) + match_id
+                features[f] = (value * (self.nr_match + self.n)) + match_id + i
+                f += 1
         features[f] = 0
         return features
 
     def _make_predicates(self, object name, object ngrams, add_clusters):
-        feats = self._get_feats(name, ngrams, add_clusters)
+        feats, match_feats = self._get_feats(name, ngrams, add_clusters)
         self.n = len(feats)
         self.predicates = <Predicate**>malloc(self.n * sizeof(Predicate*))
         cdef Predicate* pred
@@ -504,6 +513,15 @@ cdef class FeatureSet:
             for i, element in enumerate(sorted(args)):
                 pred.args[i] = element
             self.predicates[id_] = pred
+        self.nr_match = len(match_feats)
+        self.match_preds = <MatchPred**>malloc(self.nr_match * sizeof(MatchPred))
+        cdef MatchPred* match_pred
+        for id_, (idx1, idx2) in enumerate(match_feats):
+            match_pred = <MatchPred*>malloc(sizeof(MatchPred))
+            match_pred.id = id_
+            match_pred.idx1 = idx1
+            match_pred.idx2 = idx2
+            self.match_preds[id_] = match_pred
 
     def _get_feats(self, object feat_level, object ngrams, bint add_clusters):
 
@@ -641,10 +659,16 @@ cdef class FeatureSet:
         feats += valency + zhang_unigrams + third_order
         feats += labels
         feats += label_sets
+        match_feats = []
+        kernel_tokens = get_kernel_tokens()
+        for w1, w2 in combinations(kernel_tokens, 2):
+            # Words match
+            match_feats.append((w1, w2))
+            # POS match
+            match_feats.append((w1 + 1, w2 + 1))
+        print "Use %d ngram feats and %d match feats" % (len(ngrams), len(match_feats))
         if ngrams:
-            print "Use %d ngram feats" % len(ngrams)
             feats += tuple(unigrams)
-            kernel_tokens = get_kernel_tokens()
             for ngram_feat in ngrams:
                 if len(ngram_feat) == 2:
                     if add_clusters:
@@ -659,4 +683,4 @@ cdef class FeatureSet:
                 else:
                     raise StandardError, ngram_feat
         # Sort each feature, and sort and unique the set of them
-        return tuple(sorted(set([tuple(sorted(f)) for f in feats])))
+        return tuple(sorted(set([tuple(sorted(f)) for f in feats]))), match_feats

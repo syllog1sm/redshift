@@ -254,7 +254,7 @@ cdef class Parser:
             scores = self.guide.cache.lookup(sizeof(Kernel), gold_kernel, &cache_hit)
             if not cache_hit:
                 feats = self.features.extract(sent, gold_kernel)
-                self.guide.fill_scores(self.features.n, feats, scores)
+                self.guide.fill_scores(feats, scores)
             beam.advance_gold(scores, g_pos, g_heads, g_labels)
             for p_idx in range(beam.bsize):
                 #memcpy(beam.beam[p_idx].tags, sent.pos, (sent.length + 4)* sizeof(size_t))
@@ -263,7 +263,7 @@ cdef class Parser:
                 scores = self.guide.cache.lookup(sizeof(Kernel), kernel, &cache_hit)
                 if not cache_hit:
                     feats = self.features.extract(sent, kernel)
-                    self.guide.fill_scores(self.features.n, feats, scores)
+                    self.guide.fill_scores(feats, scores)
                 beam_scores[p_idx] = scores
             beam.extend_states(beam_scores)
             beam.check_violation()
@@ -284,7 +284,6 @@ cdef class Parser:
 
     cdef dict _count_feats(self, Sentence* sent, size_t t, size_t* phist, size_t* ghist):
         cdef size_t d, i, f
-        cdef size_t n_feats = self.features.n
         cdef uint64_t* feats
         cdef size_t clas
         cdef State* gold_state = init_state(sent.length)
@@ -308,8 +307,10 @@ cdef class Parser:
             if clas not in counts:
                 counts[clas] = {}
             clas_counts = counts[clas]
-            for f in range(n_feats):
+            f = 0
+            while True:
                 value = feats[f]
+                f += 1
                 if value == 0:
                     break
                 if value not in clas_counts:
@@ -324,8 +325,10 @@ cdef class Parser:
             if clas not in counts:
                 counts[clas] = {}
             clas_counts = counts[clas]
-            for f in range(n_feats):
+            f = 0
+            while True:
                 value = feats[f]
+                f += 1 
                 if value == 0:
                     break
                 if value not in clas_counts:
@@ -341,7 +344,6 @@ cdef class Parser:
         cdef size_t* g_heads = sent.parse.heads
         cdef size_t* g_pos = sent.pos
 
-        cdef size_t n_feats = self.features.n
         cdef State* s = init_state(sent.length)
         #if not self.moves.assign_pos:
         #    memcpy(s.tags, g_pos, sizeof(size_t) * (s.n + 4))
@@ -354,13 +356,13 @@ cdef class Parser:
             fill_kernel(s, sent.pos)
             self.moves.fill_valid(s, valid)
             feats = self.features.extract(sent, &s.kernel)
-            pred = self.predict(n_feats, feats, valid, &s.guess_labels[s.i])
+            pred = self.predict(feats, valid, &s.guess_labels[s.i])
             if online:
                 costs = self.moves.get_costs(s, g_pos, g_heads, g_labels)
-                gold = self.predict(n_feats, feats, costs, &_) if costs[pred] != 0 else pred
+                gold = self.predict(feats, costs, &_) if costs[pred] != 0 else pred
             else:
                 gold = self.moves.break_tie(s, g_pos, g_heads, g_labels)
-            self.guide.update(pred, gold, n_feats, feats, 1)
+            self.guide.update(pred, gold, feats, 1)
             if pred != gold and self.moves.moves[pred] == 5:
                 pred_pos = self.moves.labels[pred]
                 gold_pos = self.moves.labels[gold]
@@ -393,7 +395,6 @@ cdef class Parser:
 
     cdef int parse(self, Sentence* sent, words) except -1:
         cdef State* s
-        cdef size_t n_preds = self.features.n
         cdef uint64_t* feats
         s = init_state(sent.length)
         #if not self.moves.assign_pos:
@@ -404,7 +405,7 @@ cdef class Parser:
             feats = self.features.extract(sent, &s.kernel)
             try:
                 self.moves.fill_valid(s, self.moves._costs)
-                clas = self.predict(n_preds, feats, self.moves._costs,
+                clas = self.predict(feats, self.moves._costs,
                                     &s.guess_labels[s.i])
             except:
                 print '%d stack, buffer=%d, len=%d' % (s.stack_len, s.i, s.n)
@@ -457,7 +458,7 @@ cdef class Parser:
                                                  &cache_hit)
                 if not cache_hit:
                     feats = self.features.extract(sent, kernel)
-                    self.guide.fill_scores(self.features.n, feats, scores)
+                    self.guide.fill_scores(feats, scores)
                 beam_scores[p_idx] = scores
             beam.extend_states(beam_scores)
         sent.parse.n_moves = beam.t
@@ -465,7 +466,7 @@ cdef class Parser:
                         sent.parse.sbd)
         free(beam_scores)
 
-    cdef int predict(self, uint64_t n_preds, uint64_t* feats, int* valid,
+    cdef int predict(self, uint64_t* feats, int* valid,
                      size_t* rlabel) except -1:
         cdef:
             size_t i
@@ -477,7 +478,7 @@ cdef class Parser:
         cdef double valid_score = -10000
         cdef double right_score = -10000
         scores = self.guide.scores
-        self.guide.fill_scores(n_preds, feats, scores)
+        self.guide.fill_scores(feats, scores)
         seen_valid = False
         for clas in range(self.guide.nr_class):
             score = scores[clas]

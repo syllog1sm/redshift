@@ -64,14 +64,21 @@ cdef struct Predicate:
     uint64_t* raws
     int* args
 
+cdef struct MatchPred:
+    int id
+    uint64_t idx1
+    uint64_t idx2
+
 cdef class FeatureSet:
     cdef object name
     cdef object ngrams
     cdef bint add_clusters
     cdef uint64_t mask_value
     cdef Predicate** predicates
+    cdef MatchPred** match_preds
     cdef size_t* context
     cdef uint64_t* features 
     cdef int n
+    cdef int nr_match
     cdef int nr_label
     cdef uint64_t* extract(self, Sentence* sent, Kernel* k) except NULL

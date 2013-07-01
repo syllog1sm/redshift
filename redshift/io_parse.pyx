@@ -20,7 +20,13 @@ def set_labels(name):
     elif name == 'NONE':
         LABEL_STRS.extend(('ERR', 'ROOT', 'P', 'NONE'))
     elif name == 'Stanford':
-        LABEL_STRS.extend('ERR,ROOT,P,abbrev,acomp,advcl,advmod,amod,appos,attr,aux,auxpass,cc,ccomp,complm,conj,cop,csubj,csubjpass,dep,det,dobj,expl,infmod,iobj,mark,mwe,neg,nn,npadvmod,nsubj,nsubjpass,num,number,parataxis,partmod,pcomp,pobj,poss,preconj,predet,prep,prt,ps,purpcl,quantmod,rcmod,rel,tmod,xcomp,discourse,erased,parataxis,cop,goeswith'.split(','))
+        LABEL_STRS.extend('ERR,ROOT,P,abbrev,acomp,advcl,advmod,amod,appos,attr,'
+                          'aux,auxpass,cc,ccomp,complm,conj,cop,csubj,csubjpass,'
+                          'dep,det,dobj,expl,infmod,iobj,mark,mwe,neg,nn,npadvmod,'
+                          'nsubj,nsubjpass,num,number,parataxis,partmod,pcomp,pobj,'
+                          'poss,possessive,preconj,predet,prep,prt,ps,purpcl,quantmod,rcmod,'
+                          'rel,tmod,xcomp,discourse,erased,parataxis,'
+                          'cop,goeswith'.split(','))
     elif name.endswith(".conll"):
         labels_set = set()
         for line in file(name):
@@ -147,10 +153,6 @@ def read_conll(conll_str, moves=None, vocab_thresh=0):
     cdef size_t word_idx = 0
     cdef size_t id_
     for id_, sent_str in enumerate(sent_strs):
-        if sent_str == first_sent:
-            id_ = 0
-        else:
-            id_ += 1
         words = ['<start>']
         tags = ['OOB']
         heads = [0]
@@ -173,6 +175,8 @@ def read_conll(conll_str, moves=None, vocab_thresh=0):
                 except:
                     print pieces
                     raise
+            # For SWBD
+            pos = pos.split('^')[-1]
             words.append(word)
             tags.append(pos)
             if head == '-1':
@@ -217,6 +221,8 @@ def read_pos(file_str, vocab_thresh=0):
                 print sent_str
                 print token_str
                 raise
+            # For SWBD
+            pos = pos.split('^')[-1]
             words.append(word)
             tags.append(pos)
             ids.append(w_id)
