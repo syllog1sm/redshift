@@ -20,7 +20,7 @@ def set_labels(name):
     elif name == 'NONE':
         LABEL_STRS.extend(('ERR', 'ROOT', 'P', 'NONE'))
     elif name == 'Stanford':
-        LABEL_STRS.extend('ERR,ROOT,P,abbrev,acomp,advcl,advmod,amod,appos,attr,aux,auxpass,cc,ccomp,complm,conj,cop,csubj,csubjpass,dep,det,dobj,expl,infmod,iobj,mark,mwe,neg,nn,npadvmod,nsubj,nsubjpass,num,number,parataxis,partmod,pcomp,pobj,poss,preconj,predet,prep,prt,ps,purpcl,quantmod,rcmod,rel,tmod,xcomp,discourse,erased'.split(','))
+        LABEL_STRS.extend('ERR,ROOT,P,abbrev,acomp,advcl,advmod,amod,appos,attr,aux,auxpass,cc,ccomp,complm,conj,cop,csubj,csubjpass,dep,det,dobj,expl,infmod,iobj,mark,mwe,neg,nn,npadvmod,nsubj,nsubjpass,num,number,parataxis,partmod,pcomp,pobj,poss,preconj,predet,prep,prt,ps,purpcl,quantmod,rcmod,rel,tmod,xcomp,discourse,erased,parataxis,cop,goeswith'.split(','))
     elif name.endswith(".conll"):
         labels_set = set()
         for line in file(name):
@@ -178,6 +178,10 @@ def read_conll(conll_str, moves=None, vocab_thresh=0):
             if head == '-1':
                 head = len(token_strs)
             heads.append(int(head) + 1)
+            if label.upper() == 'ROOT':
+                label = 'ROOT'
+            elif label.upper() == 'PUNCT':
+                label = 'P'
             labels.append(STR_TO_LABEL.get(label, 0))
             ids.append(word_idx)
             word_idx += 1
@@ -207,7 +211,12 @@ def read_pos(file_str, vocab_thresh=0):
         tags = ['OOB']
         ids = []
         for token_str in sent_str.split():
-            word, pos = token_str.rsplit('/', 1)
+            try:
+                word, pos = token_str.rsplit('/', 1)
+            except:
+                print sent_str
+                print token_str
+                raise
             words.append(word)
             tags.append(pos)
             ids.append(w_id)

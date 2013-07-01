@@ -15,42 +15,58 @@ def fmt_acc(label, n, l_corr, u_corr, total_errs):
 
 
 def gen_toks(loc):
-    lines = open(str(loc))
+    sent_strs = open(str(loc)).read().strip().split('\n\n')
     token = None
     i = 0
-    for line in lines:
-        line = line.strip()
-        if not line:
-            assert token is not None
-            token.append(True)
-            yield Token(i, token)
-            i = 0
-            token = None
-        else:
-            if token is not None:
-                token.append(False)
-                yield Token(i, token)
-            i += 1
-            token = list(line.strip().split())
-    if token is not None:
-        token.append(False)
-        yield Token(i, token)
+    for sent_str in sent_strs:
+        tokens = [Token(i, tok_str.split()) for i, tok_str in enumerate(sent_str.split('\n'))]
+        propagate_edits(tokens)
+        tokens[-1].sbd = True
+        for token in tokens:
+            yield token
+
+def propagate_edits(tokens):
+    by_head = defaultdict(list)
+    edits = []
+    for token in tokens:
+        if token.head == token.id:
+            continue
+        head = token.head + token.id
+        if head >= len(tokens):
+            continue
+        by_head[head].append(token)
+        if token.label == 'erased':
+            edits.append(token)
+    for edit in edits:
+        edits.extend(by_head[edit.id])
+        edit.label = 'erased'
 
 
 class Token(object):
     def __init__(self, id_, attrs):
         self.id = id_
-        self.sbd = attrs.pop()
+        #self.sbd = attrs.pop()
+        self.sbd = False
+        # CoNLL format
+        if len(attrs) == 10:
+            new_attrs = [str(int(attrs[0]) - 1)]
+            new_attrs.append(attrs[1])
+            new_attrs.append(attrs[3])
+            new_attrs.append(str(int(attrs[6]) - 1))
+            new_attrs.append(attrs[7])
+            attrs = new_attrs
         self.label = attrs.pop()
+        if self.label.lower() == 'root':
+            self.label = 'ROOT'
         # Make head an offset from the token id, for sent variation
         head = int(attrs.pop())
-        if head == -1 or self.label == 'ROOT':
+        if head == -1 or self.label.upper() == 'ROOT':
             self.head = id_
         else:
             self.head = head - id_
         self.pos = attrs.pop()
         self.word = attrs.pop()
-        self.dir = 'R' if self.head else 'L'
+        self.dir = 'R' if head > self.id else 'L'
     
 
 @plac.annotations(
@@ -69,8 +85,13 @@ def main(test_loc, gold_loc, eval_punct=False):
     sb_fp = 0
     sb_fn = 0
     sb_n = 0
+    ed_tp = 0
+    ed_fp = 0
+    ed_fn = 0
+    ed_n = 0
     tags_corr = 0
     tags_tot = 0
+    open_ip = False
     for t, g in zip(gen_toks(test_loc), gen_toks(gold_loc)):
         sb_n += g.sbd
         if g.sbd:
@@ -82,12 +103,27 @@ def main(test_loc, gold_loc, eval_punct=False):
                 print 'SBD Err: ', t.word, g.word
         tags_corr += t.pos == g.pos
         tags_tot += 1
-        if g.label == "P" and not eval_punct:
+        if g.label in ["P", 'punct'] and not eval_punct:
             continue
-        elif g.label == 'erased' or g.label == 'discourse':
+        elif g.label == 'erased' and t.label == 'erased':
+            ed_tp += 1
+            ed_n += 1
+            continue
+        elif g.label == 'discourse':
+            continue
+        elif g.pos == '-DFL-':
+            if g.word == r'\[':
+                open_ip = True
+            elif g.word == r'\]':
+                open_ip = False
+            continue
+        elif open_ip:
             continue
         assert t.word == g.word, '%s vs %s' %(t.word, g.word)
-        u_c = g.head == t.head
+        ed_fp += t.label == 'erased'
+        ed_fn += g.label == 'erased'
+        ed_n += g.label == 'erased'
+        u_c = g.head == t.head and g.label != 'erased' and t.label != 'erased'
         l_c = u_c and g.label == t.label
         N += 1
         l_nc += l_c
@@ -118,6 +154,13 @@ def main(test_loc, gold_loc, eval_punct=False):
     sb_p = pc(sb_tp, sb_tp + sb_fp)
     sb_r = pc(sb_tp, sb_n)
     sb_f = 2 * ((sb_p * sb_r) / (sb_p + sb_r + 1e-100))
+    if ed_n != 0:
+        ed_p = pc(ed_tp, ed_tp + ed_fp)
+        ed_r = pc(ed_tp, ed_n)
+        ed_f = 2 * ((ed_p * ed_r) / (ed_p + ed_r + 1e-100))
+        yield 'DIS P: %.2f' % ed_p
+        yield 'DIS R: %.2f' % ed_r
+        yield 'DIS F: %.2f' % ed_f
     yield 'SBD P: %.2f' % sb_p
     yield 'SBD R: %.2f' % sb_r
     yield 'SBD F: %.2f' % sb_f
