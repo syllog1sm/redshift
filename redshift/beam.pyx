@@ -52,9 +52,9 @@ cdef class Beam:
         cdef size_t oracle
         cdef double best_score = -100000
         cdef int* costs = self.trans.get_costs(self.gold, tags, heads, labels)
-        cdef bint use_dyn_amb = False
+        cdef bint use_dyn_amb = True
         if use_dyn_amb:
-            for i in range(self.guide.nr_class):
+            for i in range(self.trans.nr_class):
                 if scores[i] >= best_score and costs[i] == 0:
                     oracle = i
                     best_score = scores[i]
@@ -70,7 +70,9 @@ cdef class Beam:
         return &self.beam[idx].kernel
 
     cdef int cost_next(self, size_t i, size_t* tags, size_t* heads, size_t* labels) except -1:
-        self.trans.fill_static_costs(self.beam[i], tags, heads, labels, self.costs[i])
+        #self.trans.fill_static_costs(self.beam[i], tags, heads, labels, self.costs[i])
+        cdef int* costs = self.trans.get_costs(self.beam[i], tags, heads, labels)
+        memcpy(self.costs[i], costs, sizeof(int) * self.trans.nr_class)
         fill_kernel(self.beam[i], tags)
 
     cdef int extend_states(self, double** ext_scores) except -1:
@@ -125,10 +127,6 @@ cdef class Beam:
         cdef bint out_of_beam
         if self.bsize < self.k:
             return False
-        if self.beam[0].cost == 0:
-            return False
-        if self.gold.score > self.beam[0].score:
-            return False
         if self.upd_strat == 'early' and self.violn != None:
             return False
         out_of_beam = True
@@ -139,6 +137,8 @@ cdef class Beam:
                 break
         else:
             gold = self.gold
+        if gold.score > self.beam[0].score:
+            return None
         violn = Violation()
         violn.set(self.beam[0], gold, out_of_beam)
         if self.upd_strat == 'max':

@@ -282,6 +282,7 @@ cdef class Parser:
             stats['moves'] += beam.gold.t
             return ({}, 0)
 
+
     cdef dict _count_feats(self, Sentence* sent, size_t t, size_t* phist, size_t* ghist):
         cdef size_t d, i, f
         cdef uint64_t* feats
@@ -291,25 +292,47 @@ cdef class Parser:
         #memcpy(gold_state.tags, sent.pos, (sent.length + 4) * sizeof(size_t))
         #memcpy(pred_state.tags, sent.pos, (sent.length + 4) * sizeof(size_t))
         # Find where the states diverge
-        cdef bint use_dyn_amb = False
         for d in range(t):
             if ghist[d] == phist[d]:
-                self.moves.transition(ghist[d], gold_state)
+                self.moves.transition(phist[d], gold_state)
                 self.moves.transition(phist[d], pred_state)
-            elif use_dyn_amb and pred_state.cost == 0:
-                continue
+            else:
+                break
+        else:
+            return {}
+        # Continue following phist if phist is 0-cost
+        cdef int* costs
+        use_dyn_amb = False
+        for e in range(d, t):
+            costs = self.moves.get_costs(pred_state, sent.pos, sent.parse.heads,
+                                         sent.parse.labels)
+            if costs[phist[e]] == 0:
+                self.moves.transition(phist[e], pred_state)
+                self.moves.transition(phist[e], gold_state)
+                use_dyn_amb = True
             else:
                 break
         else:
             return {}
         cdef dict counts = {}
-        for i in range(d, t):
+        for clas in range(self.moves.nr_class):
+            counts[clas] = {}
+        cdef double* scores = self.guide.scores
+        for i in range(e, t):
+            costs = self.moves.get_costs(gold_state, sent.pos, sent.parse.heads,
+                                         sent.parse.labels)
             fill_kernel(gold_state, sent.pos)
             feats = self.features.extract(sent, &gold_state.kernel)
-            clas = ghist[i]
-            if clas not in counts:
-                counts[clas] = {}
-            clas_counts = counts[clas]
+            # If we followed phist, we need to find the new best 0-cost path
+            self.guide.fill_scores(feats, scores)
+            best_score = -9000
+            oracle = 9000
+            for clas in range(self.moves.nr_class):
+                if costs[clas] == 0 and scores[clas] > best_score:
+                    oracle = clas
+                    best_score = scores[clas]
+            assert oracle != 9000
+            clas_counts = counts[oracle]
             f = 0
             while True:
                 value = feats[f]
@@ -319,9 +342,9 @@ cdef class Parser:
                 if value not in clas_counts:
                     clas_counts[value] = 0
                 clas_counts[value] += 1
-            self.moves.transition(clas, gold_state)
+            self.moves.transition(oracle, gold_state)
         free_state(gold_state)
-        for i in range(d, t):
+        for i in range(e, t):
             fill_kernel(pred_state, sent.pos)
             feats = self.features.extract(sent, &pred_state.kernel)
             clas = phist[i]
