@@ -1,6 +1,7 @@
 # cython: profile=True
 from _state cimport *
 from libc.stdlib cimport malloc, calloc, free
+import redshift.io_parse
 
 cdef enum:
     ERR
@@ -29,7 +30,6 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
             child = s.i if s.i < len(tokens) else 0
         return u'%s(%s)' % (tokens[head], tokens[child])
 
-
 cdef class TransitionSystem:
     def __cinit__(self, object tags, object labels, allow_reattach=False,
                   allow_reduce=False):
@@ -56,6 +56,8 @@ cdef class TransitionSystem:
         self.r_end = 0
         self.p_start = 4
         self.p_end = 0
+        # TODO: Fix this
+        self.erase_label = redshift.io_parse.STR_TO_LABEL.get('erased', 9000)
 
     def set_labels(self, tags, left_labels, right_labels):
         self.n_tags = <size_t>max(tags)
@@ -111,11 +113,19 @@ cdef class TransitionSystem:
             if s.heads[child] != 0:
                 del_r_child(s, s.heads[child])
             head = s.i
-            add_dep(s, head, child, label)
+            if label == self.erase_label:
+                s.heads[child] = child
+                s.labels[child] = self.erase_label
+            else:
+                add_dep(s, head, child, label)
         elif move == RIGHT:
             child = s.i
             head = s.top
-            add_dep(s, head, child, label)
+            if label == self.erase_label:
+                s.heads[child] = child
+                s.labels[child] = self.erase_label
+            else:
+                add_dep(s, head, child, label)
             push_stack(s)
         #elif move == ASSIGN_POS:
         #    s.tags[s.i + 1] = label

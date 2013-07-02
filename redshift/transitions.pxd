@@ -29,6 +29,7 @@ cdef class TransitionSystem:
     cdef size_t r_end
     cdef size_t p_start
     cdef size_t p_end
+    cdef size_t erase_label
 
     cdef int transition(self, size_t clas, State *s) except -1
     cdef int* get_costs(self, State* s, size_t* tags, size_t* heads, size_t* labels) except NULL

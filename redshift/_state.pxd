@@ -32,6 +32,9 @@ cdef struct Kernel:
     size_t s0redgep
     size_t n0ledge
     size_t n0ledgep
+    bint prev_edit
+    bint prev_prev_edit
+    size_t prev_tag
     Subtree s0l
     Subtree s0r
     Subtree n0l

@@ -157,6 +157,12 @@ cdef enum:
     N0le_c6
     N0le_c4
 
+    prev_edit
+    prev_edit_wmatch
+    prev_edit_pmatch
+    prev_edit_word
+    prev_edit_pos
+    prev_prev_edit
     CONTEXT_SIZE
 
 
@@ -421,6 +427,20 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[S0re_c6] = 0
         context[S0re_c4] = 0
         context[S0re_orth] = 0
+    if k.prev_edit and k.i != 0:
+        context[prev_edit] = 1
+        context[prev_edit_wmatch] = 1 if words[k.i - 1] == words[k.i] else 0
+        context[prev_edit_pmatch] = 1 if k.prev_tag == tags[k.i] else 0
+        context[prev_prev_edit] = 1 if k.prev_prev_edit else 0
+        context[prev_edit_word] = words[k.i - 1]
+        context[prev_edit_pos] = k.prev_tag
+    else:
+        context[prev_edit] = 0
+        context[prev_edit_wmatch] = 0
+        context[prev_edit_pmatch] = 0
+        context[prev_prev_edit] = 0
+        context[prev_edit_word] = 0
+        context[prev_edit_pos] = 0
 
 
 cdef int free_predicate(Predicate* pred) except -1:
@@ -658,11 +678,22 @@ cdef class FeatureSet:
             #+ unigram(S0l0w, add_clusters)
             #+ unigram(S0r0w, add_clusters)
         )
+
+        disfl = (
+            (prev_edit,),
+            (prev_prev_edit,),
+            (prev_edit_wmatch,),
+            (prev_edit_pmatch,),
+            (prev_edit_word,),
+            (prev_edit_pos,),
+        )
         print "Use Zhang feats"
         feats = from_single + from_word_pairs + from_three_words + distance
         feats += valency + zhang_unigrams + third_order
         feats += labels
         feats += label_sets
+        print "Using disfl feats"
+        feats += disfl
         match_feats = []
         kernel_tokens = get_kernel_tokens()
         for w1, w2 in combinations(kernel_tokens, 2):

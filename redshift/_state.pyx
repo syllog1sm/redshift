@@ -124,6 +124,19 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
         s.kernel.s0redgep = tags[s.ledges[s.i] - 1]
     else:
         s.kernel.s0redgep = 0
+    cdef size_t prev
+    cdef size_t prev_prev
+    if s.i > 0:
+        prev = s.i - 1
+        s.kernel.prev_edit = True if s.heads[prev] == prev else False
+        s.kernel.prev_tag = tags[prev]
+        if s.i > 1:
+            prev_prev = s.i - 2
+            s.kernel.prev_prev_edit = True if s.heads[prev_prev] == prev_prev else False
+    else:
+        s.kernel.prev_edit = False
+        s.kernel.prev_prev_edit = False
+        s.kernel.prev_tag = False
 
     fill_subtree(s.l_valencies[s.top], s.l_children[s.top],
                  s.labels, tags, &s.kernel.s0l)
