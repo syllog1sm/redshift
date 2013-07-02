@@ -182,7 +182,7 @@ cdef class Parser:
             assert loc.is_dir()
         else:
             loc.mkdir()
-        sh.git.log(n=1, _out=loc.join('version').open('wb'), _bg=True) 
+        #sh.git.log(n=1, _out=loc.join('version').open('wb'), _bg=True) 
         return loc
 
     def train(self, Sentences sents, C=None, eps=None, n_iter=15, held_out=None):
