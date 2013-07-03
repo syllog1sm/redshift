@@ -60,6 +60,7 @@ cdef class TransitionSystem:
         self.p_end = 0
         # TODO: Fix this
         self.erase_label = redshift.io_parse.STR_TO_LABEL.get('erased', 9000)
+        self.counter = 0
 
     def set_labels(self, tags, left_labels, right_labels):
         self.n_tags = <size_t>max(tags)
@@ -99,6 +100,7 @@ cdef class TransitionSystem:
         
     cdef int transition(self, size_t clas, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc, move, label
+        cdef int idx
         move = self.moves[clas]
         label = self.labels[clas]
         s.history[s.t] = clas
@@ -245,8 +247,8 @@ cdef class TransitionSystem:
                 return self.d_id
         elif not s.at_end_of_buffer and self.s_cost(s, heads, labels) == 0:
             return self.s_id
-        #elif heads[s.top] == s.top:
-        #    return self.e_id
+        elif s.top != 0 and edits[s.top]:
+            return self.e_id
         else:
             return self.nr_class + 1
 
