@@ -33,14 +33,17 @@ def flatten_edits(tokens):
             token.head = -1
     subtrees = defaultdict(set)
     for token in tokens:
-        if token.head > 0:
+        if token.head > 0 and token.head != token.id:
             subtrees[token.head].add(token)
     edits = [t for t in tokens if t.label == 'erased']
     visited = set()
     for token in edits:
+        if token.id in visited:
+            continue
+        visited.add(token.id)
+        token.label = 'erased'
+        token.head = token.id
         for child in subtrees[token.id]:
-            assert child not in visited
-            child.label = 'erased'
             edits.append(child)
     
 
@@ -108,6 +111,8 @@ def main(test_loc, gold_loc, eval_punct=False):
         ed_fp += (t.label == 'erased') and (g.label != 'erased')
         ed_fn += (g.label == 'erased') and (t.label != 'erased')
         ed_n += g.label == 'erased'
+        if g.label == 'erased':
+            continue
         u_c = g.head == t.head
         l_c = u_c and g.label == t.label
         N += 1

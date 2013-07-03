@@ -77,6 +77,7 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.parse.heads = <size_t*>calloc(size, sizeof(size_t))
     s.parse.labels = <size_t*>calloc(size, sizeof(size_t))
     s.parse.sbd = <bint*>calloc(size, sizeof(bint))
+    s.parse.edits = <bint*>calloc(size, sizeof(bint))
     s.parse.moves = <size_t*>calloc(size * 2, sizeof(size_t))
     
     s.words = <size_t*>calloc(size, sizeof(size_t))
@@ -137,6 +138,7 @@ cdef free_sent(Sentence* s):
     free(s.parse.heads)
     free(s.parse.labels)
     free(s.parse.sbd)
+    free(s.parse.edits)
     free(s.parse.moves)
     free(s.parse)
     free(s)
@@ -159,7 +161,8 @@ def read_conll(conll_str, moves=None, vocab_thresh=0):
         labels = [0]
         token_strs = sent_str.split('\n')
         ids = []
-        for token_str in token_strs:
+        edits = [False]
+        for tok_id, token_str in enumerate(token_strs):
             pieces = token_str.split()
             if len(pieces) == 10:
                 word = pieces[1]
@@ -167,11 +170,14 @@ def read_conll(conll_str, moves=None, vocab_thresh=0):
                 head = pieces[6]
                 label = pieces[7]
                 head = str(int(head) - 1)
+                is_edit = pieces[9] == 'True'
             else:
                 if len(pieces) == 5:
                     pieces.pop(0)
                 try:
                     word, pos, head, label = pieces
+                    head = int(head)
+                    is_edit = False
                 except:
                     print pieces
                     raise
@@ -179,6 +185,7 @@ def read_conll(conll_str, moves=None, vocab_thresh=0):
             pos = pos.split('^')[-1]
             words.append(word)
             tags.append(pos)
+            edits.append(is_edit)
             if head == '-1':
                 head = len(token_strs)
             heads.append(int(head) + 1)
@@ -193,9 +200,8 @@ def read_conll(conll_str, moves=None, vocab_thresh=0):
         tags.append('ROOT')
         heads.append(0)
         labels.append(0)
-        #for i, (word, head) in enumerate(zip(words, heads)):
-        #    print i, word, head
-        sentences.add(id_, ids, words, tags, heads, labels)
+        edits.append(False)
+        sentences.add(id_, ids, words, tags, heads, labels, edits)
     if moves is not None and moves.strip():
         sentences.add_moves(moves)
     return sentences
@@ -229,7 +235,7 @@ def read_pos(file_str, vocab_thresh=0):
             w_id += 1
         words.append('<root>')
         tags.append('ROOT')
-        sentences.add(i, ids, words, tags, None, None)
+        sentences.add(i, ids, words, tags, None, None, None)
     return sentences
 
 
@@ -247,7 +253,7 @@ cdef class Sentences:
             free_sent(self.s[i])
         free(self.s) 
 
-    cpdef int add(self, size_t id_, ids, words, tags, heads, labels) except -1:
+    cpdef int add(self, size_t id_, ids, words, tags, heads, labels, edits) except -1:
         cdef Sentence* s
         cdef size_t n
         cdef size_t i
@@ -258,6 +264,8 @@ cdef class Sentences:
             for i in range(s.length):
                 s.parse.heads[i] = <size_t>heads[i]
                 s.parse.labels[i] = <size_t>labels[i]
+                if edits:
+                    s.parse.edits[i] = <bint>edits[i]
         self.s[self.length] = s
         self.length += 1
         self.strings.append((words, tags))

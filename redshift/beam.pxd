@@ -92,8 +92,10 @@ cdef class Beam:
 
     cdef Kernel* next_state(self, size_t i, size_t* tags)
     cdef Kernel* gold_kernel(self, size_t* tags)
-    cdef int advance_gold(self, double* scores, size_t* tags, size_t* heads, size_t* labels) except -1
-    cdef int cost_next(self, size_t i, size_t* tags, size_t* heads, size_t* labels) except -1
+    cdef int advance_gold(self, double* scores, size_t* tags, size_t* heads,
+                          size_t* labels, bint* edits) except -1
+    cdef int cost_next(self, size_t i, size_t* tags, size_t* heads,
+                       size_t* labels, bint* edits) except -1
     cdef int extend_states(self, double** scores) except -1
     cdef bint check_violation(self)
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,

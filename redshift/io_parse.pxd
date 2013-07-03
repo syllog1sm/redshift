@@ -5,6 +5,7 @@ cdef struct _Parse:
     size_t* heads
     size_t* labels
     bint* sbd
+    bint* edits
     size_t* moves
 
 cdef struct Sentence:
@@ -36,4 +37,4 @@ cdef class Sentences:
     cdef size_t max_length
 
     cpdef int add(self, size_t id_, object ids, object words, object tags,
-                  object heads, object labels) except -1
+                  object heads, object labels, object edits) except -1
