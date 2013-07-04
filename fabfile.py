@@ -108,27 +108,23 @@ def draxx_repair(name, extra_feats='False', repairs='True', k=0):
             put(StringIO(script), script_loc)
             run('qsub -N %s_%d %s' % (name, i, script_loc))
 
+def beam(name, k=8, n=1, size=0, tb='wsj'):
+    size = int(size)
+    k = int(k)
+    n = int(n)
+    if tb == 'wsj':
+        data = str(REMOTE_STANFORD)
+        train_name = 'train.txt'
+        eval_pos = 'devi.txt'
+        eval_parse = 'devr.txt'
 
-def draxx_beam(name, model=None, k=5, i=10, add_feats='False', upd='early', alg='static',
-              train_size="train.txt"):
-    add_feats = True if add_feats == 'True' else False
-    if name is not None:
-        assert model is None
-        model = pjoin(str(REMOTE_PARSERS), name)
-    else:
-        pieces = model.split('/')
-        name = '%s_%s' % (pieces[-2], pieces[-1])
-    data = str(REMOTE_STANFORD)
-    repo = str(REMOTE_REPO)
-    train_str = _train(pjoin(data, train_size), model, k=int(k), i=int(i),
-                             add_feats=bool(add_feats), upd=upd, train_alg=alg)
-    parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'), k=k)
-    eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.txt'))
-    script = _pbsify(repo, [train_str, parse_str, eval_str])
-    script_loc = pjoin(repo, 'pbs', '%s_draxx_baseline.pbs' % name)
-    with cd(repo):
-        put(StringIO(script), script_loc)
-        run('qsub -N %s_bl %s' % (name, script_loc))
+    exp_dir = str(REMOTE_PARSERS)
+    train_n(n, name, exp_dir,
+            data, k=k, i=15, feat_str="full", train_alg='max', label="Stanford",
+            n_sents=size, train_name=train_name, 
+            dev_names=(eval_pos, eval_parse))
+ 
+
 
 
 def conll_table(name):
