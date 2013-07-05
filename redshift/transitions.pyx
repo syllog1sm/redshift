@@ -133,13 +133,13 @@ cdef class TransitionSystem:
             s.heads[s.top] = s.top
             s.labels[s.top] = self.erase_label
             edited = pop_stack(s)
-            #while s.l_valencies[edited]:
-            #    child = get_l(s, edited)
-            #    s.second = s.top
-            #    s.top = child
-            #    del_l_child(s, edited)
-            #    s.stack[s.stack_len] = child
-            #    s.stack_len += 1
+            while s.l_valencies[edited]:
+                child = get_l(s, edited)
+                del_l_child(s, edited)
+                s.second = s.top
+                s.top = child
+                s.stack[s.stack_len] = child
+                s.stack_len += 1
         #elif move == ASSIGN_POS:
         #    s.tags[s.i + 1] = label
         else:
