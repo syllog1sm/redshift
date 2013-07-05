@@ -46,7 +46,7 @@ cdef int del_l_child(State *s, size_t head) except -1:
 
 cdef size_t pop_stack(State *s) except 0:
     cdef size_t popped
-    assert s.stack_len > 1
+    assert s.stack_len >= 1
     popped = s.top
     s.stack_len -= 1
     s.top = s.second
@@ -217,7 +217,7 @@ cdef size_t get_r2(State *s, size_t head):
         return 0
     return s.r_children[head][s.r_valencies[head] - 2]
 
-cdef int has_child_in_buffer(State *s, size_t word, size_t* heads):
+cdef int has_child_in_buffer(State *s, size_t word, size_t* heads) except -1:
     assert word != 0
     cdef size_t buff_i
     cdef int n = 0
@@ -226,7 +226,7 @@ cdef int has_child_in_buffer(State *s, size_t word, size_t* heads):
             n += 1
     return n
 
-cdef int has_head_in_buffer(State *s, size_t word, size_t* heads):
+cdef int has_head_in_buffer(State *s, size_t word, size_t* heads) except -1:
     assert word != 0
     cdef size_t buff_i
     for buff_i in range(s.i, s.n):
@@ -234,11 +234,12 @@ cdef int has_head_in_buffer(State *s, size_t word, size_t* heads):
             return 1
     return 0
 
-cdef int has_child_in_stack(State *s, size_t word, size_t* heads):
+cdef int has_child_in_stack(State *s, size_t word, size_t* heads) except -1:
     assert word != 0
     cdef size_t i, stack_i
     cdef int n = 0
-    for i in range(1, s.stack_len):
+    # TODO: Should this be zero indexed?? It was 1 indexed...
+    for i in range(s.stack_len):
         stack_i = s.stack[i]
         # Should this be sensitie to whether the word has a head already?
         if heads[stack_i] == word:
@@ -273,7 +274,7 @@ cdef State* init_state(size_t n):
     cdef State* s = <State*>malloc(sizeof(State))
     s.n = n
     s.t = 0
-    s.i = 0
+    s.i = 1
     s.cost = 0
     s.score = 0
     s.top = 0

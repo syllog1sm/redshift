@@ -101,6 +101,8 @@ cdef class TransitionSystem:
     cdef int transition(self, size_t clas, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc, move, label
         cdef int idx
+        if s.stack_len >= 1:
+            assert s.top != 0
         move = self.moves[clas]
         label = self.labels[clas]
         s.history[s.t] = clas
@@ -143,10 +145,13 @@ cdef class TransitionSystem:
             raise StandardError(clas)
         if s.i == (s.n - 1):
             s.at_end_of_buffer = True
-        if s.at_end_of_buffer and s.stack_len == 1:
+        if s.at_end_of_buffer and s.stack_len == 0:
             s.is_finished = True
   
-    cdef int* get_costs(self, State* s, size_t* tags, size_t* heads, size_t* labels) except NULL:
+    cdef int* get_costs(self, State* s, size_t* tags, size_t* heads,
+                        size_t* labels, bint* edits) except NULL:
+        if s.stack_len >= 1:
+            assert s.top != 0, s.stack_len
         cdef size_t i
         cdef int* costs = self._costs
         for i in range(self.nr_class):
@@ -195,15 +200,15 @@ cdef class TransitionSystem:
             return 0
         if not s.at_end_of_buffer:
             valid[self.s_id] = 0
-            if s.stack_len < 2:
+            if s.stack_len < 1:
                 return 0
             if not has_root_child(s, s.i):
                 for i in range(self.r_start, self.r_end):
                     valid[i] = 0
-        if s.stack_len >= 1:
+        if s.top != 0:
             valid[self.e_id] = 0
-        if s.stack_len >= 2:
-            if s.heads[s.top] != 0 or (s.stack_len >= 3 and self.allow_reattach):
+        if s.stack_len >= 1:
+            if s.heads[s.top] != 0 or (s.stack_len >= 2 and self.allow_reattach):
                 valid[self.d_id] = 0
             if self.allow_reattach or s.heads[s.top] == 0:
                 #if has_root_child(s, s.i) or has_root_child(s, s.top):
@@ -231,7 +236,7 @@ cdef class TransitionSystem:
         if self.assign_pos and (s.i < (s.n - 2)) and \
           (last_move == SHIFT or last_move == RIGHT):
             return self.p_classes[tags[s.i + 1]]
-        if s.stack_len < 2 and not s.at_end_of_buffer:
+        if s.stack_len < 1 and not s.at_end_of_buffer:
             return self.s_id
         elif not s.at_end_of_buffer and heads[s.i] == s.top:
             return self.r_classes[labels[s.i]]
@@ -240,44 +245,44 @@ cdef class TransitionSystem:
                 return self.e_id
             else:
                 return self.l_classes[labels[s.top]]
-        elif self.d_cost(s, heads, labels) == 0:
+        elif self.d_cost(s, heads, labels, edits) == 0:
             if edits[s.top] and not edits[heads[s.top]]:
                 return self.e_id
             else:
                 return self.d_id
-        elif not s.at_end_of_buffer and self.s_cost(s, heads, labels) == 0:
+        elif not s.at_end_of_buffer and self.s_cost(s, heads, labels, edits) == 0:
             return self.s_id
         elif s.top != 0 and edits[s.top]:
             return self.e_id
         else:
             return self.nr_class + 1
 
-    cdef int s_cost(self, State *s, size_t* heads, size_t* labels):
+    cdef int s_cost(self, State *s, size_t* heads, size_t* labels, bint* edits):
         cdef int cost = 0
         cdef size_t i, stack_i
         if s.at_end_of_buffer:
             return -1
-        #if s.i != 0 and heads[s.i] == s.i:
-        #    return 0
-        if s.stack_len < 2:
+        if edits[s.i]:
+            return 0
+        if s.stack_len < 1:
             return 0
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
         return cost
 
-    cdef int r_cost(self, State *s, size_t* heads, size_t* labels):
+    cdef int r_cost(self, State *s, size_t* heads, size_t* labels, bint* edits):
         cdef int cost = 0
         cdef size_t i, buff_i, stack_i
         if s.at_end_of_buffer:
             return -1
-        if s.stack_len < 2:
+        if s.stack_len < 1:
             return -1
         if has_root_child(s, s.i):
             return -1
-        #if heads[s.top] == s.top and heads[s.i] != s.i:
-        #    return 1
-        #elif heads[s.i] == s.i:
-        #    return 0
+        if edits[s.top] and not edits[s.i]:
+            return 1
+        if edits[s.i]:
+            return 0
         if heads[s.i] == s.top:
             return 0
         cost += has_head_in_buffer(s, s.i, heads)
@@ -285,12 +290,13 @@ cdef class TransitionSystem:
         cost += has_head_in_stack(s, s.i, heads)
         return cost
 
-    cdef int d_cost(self, State *s, size_t* heads, size_t* labels):
+    cdef int d_cost(self, State *s, size_t* heads, size_t* labels, bint* edits):
         cdef int cost = 0
         if s.heads[s.top] == 0 and not self.allow_reduce:
             return -1
-        if s.stack_len < 2:
+        if s.stack_len < 1:
             return -1
+        # TODO; What's this?
         #if heads[s.top] == 0 and (s.stack_len == 2 or not self.allow_reattach):
         #    cost += 1
         cost += has_child_in_buffer(s, s.top, heads)
@@ -298,23 +304,24 @@ cdef class TransitionSystem:
             cost += has_head_in_buffer(s, s.top, heads)
             if cost == 0 and s.second == 0:
                 return -1
-        #if heads[s.top] == s.top:
-        #    cost += 1
+        if edits[s.top] and not edits[s.heads[s.top]]:
+            cost += 1
         return cost
 
-    cdef int l_cost(self, State *s, size_t* heads, size_t* labels):
+    cdef int l_cost(self, State *s, size_t* heads, size_t* labels, bint* edits) except -9000:
         cdef size_t buff_i, i
         cdef int cost = 0
-        if s.stack_len < 2:
+        if s.stack_len < 1:
             return -1
         if s.heads[s.top] != 0 and not self.allow_reattach:
             return -1
         if has_root_child(s, s.i):
             return -1
-        #if heads[s.i] == s.i and heads[s.top] != s.top:
-        #    return 1
-        #elif heads[s.top] == s.top and heads[s.i] == s.i:
-        #    return 0
+        # This will form a dep between an edit and non-edit word
+        if edits[s.top] and not edits[s.i]:
+            return 1
+        elif edits[s.top]:
+            return 0
         if heads[s.top] == s.i:
             return 0
         cost +=  has_head_in_buffer(s, s.top, heads)
