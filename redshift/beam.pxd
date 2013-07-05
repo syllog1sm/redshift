@@ -79,6 +79,7 @@ cdef class Beam:
     cdef object _prune_freqs
     
     cdef object upd_strat
+    cdef object cost_strat
     cdef size_t max_class
     cdef size_t k
     cdef size_t i
@@ -99,5 +100,5 @@ cdef class Beam:
     cdef int extend_states(self, double** scores) except -1
     cdef bint check_violation(self)
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
-                        size_t* labels, bint* sbd) except -1
+                        size_t* labels, bint* sbd, bint* edits) except -1
 

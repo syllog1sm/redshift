@@ -15,9 +15,11 @@ from cython.operator cimport dereference as deref
 
 cdef class Beam:
     def __cinit__(self, TransitionSystem trans, 
-                  size_t k, size_t length, upd_strat='early', prune_freqs=None):
+                  size_t k, size_t length, upd_strat='early',
+                  prune_freqs=None, cost_strat='dynamic'):
         self.trans = trans
         self.upd_strat = upd_strat
+        self.cost_strat = cost_strat
         self.length = length
         self.k = k
         self.i = 0
@@ -51,8 +53,8 @@ cdef class Beam:
                           size_t* heads, size_t* labels, bint* edits) except -1:
         cdef size_t oracle
         cdef double best_score = -100000
-        cdef int* costs = self.trans.get_costs(self.gold, tags, heads, labels)
-        cdef bint use_dyn_amb = False
+        cdef int* costs = self.trans.get_costs(self.gold, tags, heads, labels, edits)
+        cdef bint use_dyn_amb = True
         if use_dyn_amb:
             for i in range(self.trans.nr_class):
                 if scores[i] >= best_score and costs[i] == 0:
@@ -60,7 +62,6 @@ cdef class Beam:
                     best_score = scores[i]
         else:
             oracle = self.trans.break_tie(self.gold, tags, heads, labels, edits)
-
         self.gold.score += scores[oracle]
         self.trans.transition(oracle, self.gold)
 
@@ -71,10 +72,13 @@ cdef class Beam:
 
     cdef int cost_next(self, size_t i, size_t* tags, size_t* heads,
                        size_t* labels, bint* edits) except -1:
-        self.trans.fill_static_costs(self.beam[i], tags, heads, labels,
-                                     edits, self.costs[i])
-        #cdef int* costs = self.trans.get_costs(self.beam[i], tags, heads, labels)
-        #memcpy(self.costs[i], costs, sizeof(int) * self.trans.nr_class)
+        cdef int* costs
+        if self.cost_strat == 'static':
+            self.trans.fill_static_costs(self.beam[i], tags, heads, labels,
+                                         edits, self.costs[i])
+        else:
+            costs = self.trans.get_costs(self.beam[i], tags, heads, labels, edits)
+            memcpy(self.costs[i], costs, sizeof(int) * self.trans.nr_class)
         fill_kernel(self.beam[i], tags)
 
     cdef int extend_states(self, double** ext_scores) except -1:
@@ -153,7 +157,7 @@ cdef class Beam:
         return self.upd_strat == 'early' and bool(self.violn)
 
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
-                        size_t* labels, bint* sbd) except -1:
+                        size_t* labels, bint* sbd, bint* edits) except -1:
         cdef size_t rightmost = 1
         # No need to copy heads for root and start symbols
         for i in range(1, self.length - 1):
@@ -164,6 +168,7 @@ cdef class Beam:
             # Do sentence boundary detection
             # TODO: Set this as ROOT label
             #raise StandardError
+        fill_edits(self.beam[0], edits)
         survivors = set()
         cdef State* s
         if self._prune_freqs is not None:

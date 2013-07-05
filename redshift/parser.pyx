@@ -301,42 +301,14 @@ cdef class Parser:
                 break
         else:
             return {}
-        # Continue following phist if phist is 0-cost
-        #cdef int* costs
-        #use_dyn_amb = False
-        #for e in range(d, t):
-        #    costs = self.moves.get_costs(pred_state, sent.pos, sent.parse.heads,
-        #                                 sent.parse.labels)
-        #    if costs[phist[e]] == 0:
-        #        self.moves.transition(phist[e], pred_state)
-        #        self.moves.transition(phist[e], gold_state)
-        #        use_dyn_amb = True
-        #    else:
-        #        break
-        #else:
-        #    return {}
         cdef dict counts = {}
         for clas in range(self.moves.nr_class):
             counts[clas] = {}
         cdef double* scores = self.guide.scores
         for i in range(d, t):
-            #costs = self.moves.get_costs(gold_state, sent.pos, sent.parse.heads,
-            #                             sent.parse.labels)
             fill_kernel(gold_state, sent.pos)
             feats = self.features.extract(sent, &gold_state.kernel)
-            # If we followed phist, we need to find the new best 0-cost path
-            #self.guide.fill_scores(feats, scores)
-            #best_score = -9000
-            #oracle = 9000
-            #for clas in range(self.moves.nr_class):
-            #    if costs[clas] == 0 and scores[clas] > best_score:
-            #        oracle = clas
-            #        best_score = scores[clas]
-            #assert oracle != 9000, '%d, %d' % (sent.parse.heads[gold_state.top], gold_state.top)
-            #oracle = self.moves.break_tie(gold_state, sent.pos, sent.parse.heads,
-            #                              sent.parse.labels)
-            oracle = ghist[i]
-            clas_counts = counts[oracle]
+            clas_counts = counts[ghist[i]]
             f = 0
             while True:
                 value = feats[f]
@@ -346,15 +318,12 @@ cdef class Parser:
                 if value not in clas_counts:
                     clas_counts[value] = 0
                 clas_counts[value] += 1
-            self.moves.transition(oracle, gold_state)
+            self.moves.transition(ghist[i], gold_state)
         free_state(gold_state)
         for i in range(d, t):
             fill_kernel(pred_state, sent.pos)
             feats = self.features.extract(sent, &pred_state.kernel)
-            clas = phist[i]
-            if clas not in counts:
-                counts[clas] = {}
-            clas_counts = counts[clas]
+            clas_counts = counts[phist[i]]
             f = 0
             while True:
                 value = feats[f]
@@ -364,7 +333,7 @@ cdef class Parser:
                 if value not in clas_counts:
                     clas_counts[value] = 0
                 clas_counts[value] -= 1
-            self.moves.transition(clas, pred_state)
+            self.moves.transition(phist[i], pred_state)
         free_state(pred_state)
         return counts
 
@@ -389,12 +358,12 @@ cdef class Parser:
             feats = self.features.extract(sent, &s.kernel)
             pred = self.predict(feats, valid, &s.guess_labels[s.i])
             if online:
-                costs = self.moves.get_costs(s, g_pos, g_heads, g_labels)
+                costs = self.moves.get_costs(s, g_pos, g_heads, g_labels, g_edits)
                 gold = self.predict(feats, costs, &_) if costs[pred] != 0 else pred
             else:
                 gold = self.moves.break_tie(s, g_pos, g_heads, g_labels, g_edits)
             self.guide.update(pred, gold, feats, 1)
-            if pred != gold and self.moves.moves[pred] == 5:
+            if pred != gold and self.moves.moves[pred] == 6:
                 pred_pos = self.moves.labels[pred]
                 gold_pos = self.moves.labels[gold]
             if online and iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
@@ -416,6 +385,8 @@ cdef class Parser:
         self.guide.nr_class = self.moves.nr_class
         prune_freqs = {} if collect_stats else None
         for i in range(sents.length):
+            if DEBUG:
+                print ' '.join(sents.strings[i][0])
             if k == 0:
                 self.parse(sents.s[i], sents.strings[i][0])
             else:
@@ -445,7 +416,7 @@ cdef class Parser:
             self.moves.transition(clas, s)
         #sent.parse.n_moves = s.t
         # No need to copy heads for root and start symbols
-
+        fill_edits(s, sent.parse.edits)
         cdef size_t root
         quot = index.hashes.encode_pos("``")
         comma = index.hashes.encode_pos(",")
@@ -494,7 +465,7 @@ cdef class Parser:
             beam.extend_states(beam_scores)
         sent.parse.n_moves = beam.t
         beam.fill_parse(sent.parse.moves, sent.pos, sent.parse.heads, sent.parse.labels,
-                        sent.parse.sbd)
+                        sent.parse.sbd, sent.parse.edits)
         free(beam_scores)
 
     cdef int predict(self, uint64_t* feats, int* valid,

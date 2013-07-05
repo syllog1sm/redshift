@@ -247,14 +247,37 @@ cdef int has_child_in_stack(State *s, size_t word, size_t* heads) except -1:
     return n
 
 
-cdef int has_head_in_stack(State *s, size_t word, size_t* heads):
+cdef int has_head_in_stack(State *s, size_t word, size_t* heads) except -1:
     assert word != 0
     cdef size_t i, stack_i
-    for i in range(1, s.stack_len):
+    # TODO: Should this be zero indexed?? I was 1-indexed...
+    for i in range(s.stack_len):
         stack_i = s.stack[i]
         if heads[word] == stack_i:
             return 1
     return 0
+
+cdef int fill_edits(State* s, bint* edits) except -1:
+    cdef size_t i, j
+    i = 0
+    j = 0
+    while i <= s.n:
+        if i != 0 and s.heads[i] == i:
+            start = s.ledges[i]
+            j = 0
+            while s.ledges[j] < i:
+                j += 1
+                if j == s.n:
+                    end = j
+                    break
+            else:
+                end = s.ledges[j] + 1
+            #print "Editing %d-%d" % (start, end)
+            for k in range(start, end):
+                edits[k] = True
+            i = end
+        else:
+            i += 1
 
 
 cdef bint has_root_child(State *s, size_t token):

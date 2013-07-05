@@ -176,7 +176,6 @@ def read_conll(conll_str, moves=None, vocab_thresh=0):
                     pieces.pop(0)
                 try:
                     word, pos, head, label = pieces
-                    head = int(head)
                     is_edit = False
                 except:
                     print pieces
@@ -317,11 +316,11 @@ cdef class Sentences:
                     head = <int>(s.parse.heads[j]) - (j - w_id)
                 try:
                     fields = (w_id, py_words[j], pos_idx[s.pos[j]], head,
-                              LABEL_STRS[s.parse.labels[j]])
+                              LABEL_STRS[s.parse.labels[j]], str(bool(s.parse.edits[j])))
                 except:
                     print j, s.length, s.parse.labels[j], len(py_words), len(py_pos)
                     raise
-                out_file.write(u'%d\t%s\t%s\t%s\t%s\n' % fields)
+                out_file.write(u'%d\t%s\t%s\t%s\t%s\t%s\n' % fields)
                 w_id += 1
                 if s.parse.sbd[j] or j == (s.length - 2):
                     out_file.write(u'\n')

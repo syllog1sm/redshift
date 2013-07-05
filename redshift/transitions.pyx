@@ -128,14 +128,18 @@ cdef class TransitionSystem:
             add_dep(s, head, child, label)
             push_stack(s)
         elif move == EDIT:
-            #for i in range(s.ledges[s.top], s.top):
-            #    s.heads[i] = i
-            #    s.labels[i] = self.erase_label
             if s.heads[s.top] != 0:
                 del_r_child(s, s.heads[s.top])
             s.heads[s.top] = s.top
             s.labels[s.top] = self.erase_label
-            pop_stack(s)
+            edited = pop_stack(s)
+            #while s.l_valencies[edited]:
+            #    child = get_l(s, edited)
+            #    s.second = s.top
+            #    s.top = child
+            #    del_l_child(s, edited)
+            #    s.stack[s.stack_len] = child
+            #    s.stack_len += 1
         #elif move == ASSIGN_POS:
         #    s.tags[s.i + 1] = label
         else:
@@ -163,16 +167,16 @@ cdef class TransitionSystem:
                 costs[i] = 1
             costs[self.p_classes[tags[s.i + 1]]] = 0
             return costs
-        costs[self.s_id] = self.s_cost(s, heads, labels)
-        costs[self.d_id] = self.d_cost(s, heads, labels)
-        #costs[self.e_id] = self.e_cost(s, heads, labels)
-        r_cost = self.r_cost(s, heads, labels)
+        costs[self.s_id] = self.s_cost(s, heads, labels, edits)
+        costs[self.d_id] = self.d_cost(s, heads, labels, edits)
+        costs[self.e_id] = self.e_cost(s, heads, labels, edits)
+        r_cost = self.r_cost(s, heads, labels, edits)
         if r_cost != -1:
             for i in range(self.r_start, self.r_end):
                 costs[i] = r_cost
                 if heads[s.i] == s.top and self.labels[i] != labels[s.i]:
                     costs[i] += 1
-        l_cost = self.l_cost(s, heads, labels)
+        l_cost = self.l_cost(s, heads, labels, edits)
         if l_cost != -1:
             for i in range(self.l_start, self.l_end):
                 costs[i] = l_cost
@@ -180,8 +184,8 @@ cdef class TransitionSystem:
                     costs[i] += 1
             # Add an additional penalty for using the ROOT label inappropriately,
             # as it signals SBD
-            if labels[s.top] != 1:
-                costs[self.l_classes[1]] += 1
+            #if labels[s.top] != 1:
+            #    costs[self.l_classes[1]] += 1
         return costs
 
     cdef int fill_valid(self, State* s, int* valid) except -1:
