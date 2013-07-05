@@ -35,7 +35,7 @@ def flatten_edits(tokens):
     for token in tokens:
         if token.head > 0 and token.head != token.id:
             subtrees[token.head].add(token)
-    edits = [t for t in tokens if t.label == 'erased']
+    edits = [t for t in tokens if t.is_edit or t.label == 'erased']
     visited = set()
     for token in edits:
         if token.id in visited:
@@ -43,6 +43,7 @@ def flatten_edits(tokens):
         visited.add(token.id)
         token.label = 'erased'
         token.head = token.id
+        token.is_edit = True
         for child in subtrees[token.id]:
             edits.append(child)
     
@@ -53,13 +54,16 @@ class Token(object):
         #self.sbd = attrs.pop()
         self.sbd = False
         # CoNLL format
+        is_edit = False
         if len(attrs) == 10:
             new_attrs = [str(int(attrs[0]) - 1)]
             new_attrs.append(attrs[1])
             new_attrs.append(attrs[3])
             new_attrs.append(str(int(attrs[6]) - 1))
             new_attrs.append(attrs[7])
+            new_attrs.append(attrs[9])
             attrs = new_attrs
+        self.is_edit = attrs.pop() == 'True'
         self.label = attrs.pop()
         if self.label.lower() == 'root':
             self.label = 'ROOT'
@@ -101,17 +105,11 @@ def main(test_loc, gold_loc, eval_punct=False):
             continue
         elif g.label == 'discourse':
             continue
-        #if (t.label == 'erased' or g.label == 'erased') and t.label != g.label:
-        #    print ss
-        #    print ''
-        #    print sst
-        #    print t.word, 'Test:', t.label, 'Gold:', g.label
-        #    print 'RPRERR'
-        ed_tp += (t.label == 'erased') and (g.label == 'erased')
-        ed_fp += (t.label == 'erased') and (g.label != 'erased')
-        ed_fn += (g.label == 'erased') and (t.label != 'erased')
-        ed_n += g.label == 'erased'
-        if g.label == 'erased':
+        ed_tp += t.is_edit and g.is_edit
+        ed_fp += t.is_edit and not g.is_edit
+        ed_fn += g.is_edit and not t.is_edit
+        if g.is_edit:
+            ed_n += 1
             continue
         u_c = g.head == t.head
         l_c = u_c and g.label == t.label

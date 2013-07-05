@@ -43,8 +43,6 @@ class Sentence(object):
         for token in self.tokens:
             if token.word == r'\[':
                 self.n_dfl += 1
-            if token.is_edit:
-                token.label = 'erased'
 
     def to_str(self):
         return '\n'.join(token.to_str() for token in self.tokens)
@@ -100,7 +98,7 @@ def main(in_loc, ignore_unfinished=False):
             continue
         orig_str = sent.to_str()
         try:
-            sent.label_edits()
+            #sent.label_edits()
             sent.rm_tokens(lambda token: token.pos == '-DFL-')
             sent.rm_tokens(lambda token: token.pos in punct)
             sent.rm_tokens(lambda token: token.word.endswith('-'))
