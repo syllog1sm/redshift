@@ -181,7 +181,9 @@ def read_conll(conll_str, moves=None, vocab_thresh=0):
                     print pieces
                     raise
             # For SWBD
-            pos = pos.split('^')[-1]
+            if pos.startswith('^'):
+                pos = pos[1:]
+            pos = pos.split('^')[0]
             words.append(word)
             tags.append(pos)
             edits.append(is_edit)
