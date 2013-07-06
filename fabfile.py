@@ -53,62 +53,7 @@ def test1k(model="baseline", dbg=False):
         local(_parse('~/work_data/parsers/tmp', '~/work_data/stanford/dev_auto_pos.parse',
                      '/tmp/parse', gold=True))
 
-
-def draxx_baseline(name):
-    model = pjoin(str(REMOTE_PARSERS), name)
-    data = str(REMOTE_STANFORD)
-    repo = str(REMOTE_REPO)
-    train_str = _train(pjoin(data, 'train.txt'), model)
-    parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'))
-    eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.txt'))
-    script = _pbsify(repo, [train_str, parse_str, eval_str])
-    script_loc = pjoin(repo, 'pbs', '%s_draxx_baseline.pbs' % name)
-    with cd(repo):
-        put(StringIO(script), script_loc)
-        run('qsub -N %s_bl %s' % (name, script_loc))
-
-
-def draxx_repair(name, extra_feats='False', repairs='True', k=0):
-    extra_feats = True if extra_feats == 'True' else False
-    repairs = True if repairs == 'True' else False
-    k = int(k)
-    if extra_feats:
-        name += '_x'
-    if not repairs:
-        name += '_bl'
-    if k != 0:
-        name += '_k%d' % k
-    print name
-    data = str(REMOTE_STANFORD)
-    repo = str(REMOTE_REPO)
-    model_dir = pjoin(str(REMOTE_PARSERS), name)
-    repair_str = '-r -d' if repairs else ''
-    if repairs:
-        train_alg = 'online'
-        upd = 'cost'
-    elif k == 0:
-        train_alg = 'online'
-        upd = 'cost'
-    else:
-        train_alg = 'static'
-        upd = 'max'
-    try:
-        run('mkdir %s' % model_dir)
-    except:
-        pass
-    for i in range(20):
-        model = pjoin(model_dir, str(i))
-        train_str = _train(pjoin(data, 'train.txt'), model, k=k, i=15,
-                           add_feats=extra_feats, train_alg=train_alg,
-                           args=repair_str, upd=upd, seed=i)
-        parse_str = _parse(model, pjoin(data, 'devi.txt'), pjoin(model, 'dev'), k=k)
-        eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, 'devr.txt'))
-        script = _pbsify(repo, [train_str, parse_str, eval_str])
-        script_loc = pjoin(repo, 'pbs', '%s.pbs' % name)
-        with cd(repo):
-            put(StringIO(script), script_loc)
-            run('qsub -N %s_%d %s' % (name, i, script_loc))
-
+        
 def beam(name, k=8, n=1, size=0, tb='wsj'):
     size = int(size)
     k = int(k)
@@ -490,7 +435,7 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=2gb,nodes=1:ppn=2
+#PBS -l walltime=20:00:00,mem=2gb,nodes=1:ppn=6
 source /home/mhonniba/ev/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
