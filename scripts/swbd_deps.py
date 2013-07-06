@@ -54,7 +54,7 @@ class Sentence(object):
             head = self.tokens[token.head - 1]
             if token.is_edit and (head.pos == '-DFL-' or not head.is_edit):
                 token.label = 'erased'
-    
+
     def rm_tokens(self, rejector):
         # 0 is root in conll format
         id_map = {0: 0}
@@ -87,8 +87,9 @@ class Sentence(object):
 
 @plac.annotations(
     ignore_unfinished=("Ignore unfinished sentences", "flag", "u", bool),
+    excise_edits=("Clean edits entirely", "flag", "e", bool),
 )
-def main(in_loc, ignore_unfinished=False):
+def main(in_loc, ignore_unfinished=False, excise_edits=False):
     sentences = [Sentence(sent_str) for sent_str in
                  open(in_loc).read().strip().split('\n\n')]
     punct = set([',', ':', '.', ';', 'RRB', 'LRB', '``', "''"])
@@ -98,7 +99,9 @@ def main(in_loc, ignore_unfinished=False):
             continue
         orig_str = sent.to_str()
         try:
-            #sent.label_edits()
+            if excise_edits:
+                sent.rm_tokens(lambda token: token.is_edit)
+                sent.rm_tokens(lambda token: token.label == 'discourse')
             sent.rm_tokens(lambda token: token.pos == '-DFL-')
             sent.rm_tokens(lambda token: token.pos in punct)
             sent.rm_tokens(lambda token: token.word.endswith('-'))
