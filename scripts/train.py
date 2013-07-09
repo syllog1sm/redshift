@@ -65,7 +65,7 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
                             ngrams=ngrams, add_clusters=add_clusters)
     else:
         parser = GreedyParser(model_loc, clean=True, train_alg=train_alg,
-                              feat_set=feat_srt, feat_thresh=feat_thresh,
+                              feat_set=feat_set, feat_thresh=feat_thresh,
                               allow_reduce=allow_reduce, allow_reattach=allow_reattach,
                               ngrams=ngrams, add_clusters=add_clusters)
     train_sent_strs = open(train_loc).read().strip().split('\n\n')
