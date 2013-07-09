@@ -102,6 +102,7 @@ def main(in_loc, ignore_unfinished=False, excise_edits=False):
             if excise_edits:
                 sent.rm_tokens(lambda token: token.is_edit)
                 sent.rm_tokens(lambda token: token.label == 'discourse')
+            sent.label_edits()
             sent.rm_tokens(lambda token: token.pos == '-DFL-')
             sent.rm_tokens(lambda token: token.pos in punct)
             sent.rm_tokens(lambda token: token.word.endswith('-'))
