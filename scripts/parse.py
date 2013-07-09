@@ -36,7 +36,7 @@ def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False, debug=Fal
     if debug:
         redshift.parser.set_debug(debug)
     if not os.path.exists(out_dir):
-        os.path.mkdir(out_dir)
+        os.mkdir(out_dir)
     yield "Loading parser"
     parser = redshift.parser.load_parser(parser_dir)
     sentences = redshift.io_parse.read_pos(open(text_loc).read())
