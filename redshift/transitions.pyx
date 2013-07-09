@@ -35,6 +35,7 @@ cdef class TransitionSystem:
     def __cinit__(self, object tags, object labels, allow_reattach=False,
                   allow_reduce=False):
         self.assign_pos = False
+        self.use_edit = True 
         self.n_labels = len(labels)
         self.n_tags = max(tags)
         self.py_labels = labels
@@ -122,11 +123,17 @@ cdef class TransitionSystem:
                 del_r_child(s, s.heads[child])
             head = s.i
             add_dep(s, head, child, label)
+            if not self.use_edit and label == self.erase_label:
+                s.heads[child] = child
+                s.labels[child] = self.erase_label
         elif move == RIGHT:
             child = s.i
             head = s.top
             add_dep(s, head, child, label)
             push_stack(s)
+            if not self.use_edit and label == self.erase_label:
+                s.heads[child] = child
+                s.labels[child] = self.erase_label
         elif move == EDIT:
             if s.heads[s.top] != 0:
                 del_r_child(s, s.heads[s.top])
@@ -197,6 +204,19 @@ cdef class TransitionSystem:
             last_move = self.moves[s.history[s.t - 1]]
         else:
             last_move = SHIFT
+        #can_push = not s.at_end_of_buffer
+        #can_pop = s.top != 0
+        #can_arc = can_push and can_pop
+        #if can_push:
+        #    valid[self.s_id] = 0
+        #if can_pop and (s.heads[s.top] != 0 or (self.allow_reduce and s.stack_len >= 2)):
+        #    valid[self.d_id] = 0
+        #if can_push and can_push:
+        #    for i in range(self.r_start, self.r_end):
+        #        valid[i] = 0
+        #if can_pop and s.heads[s.top] == 0 or self.allow_reattach:
+        #    for i in range(self.l_start, self.l_end):
+        #        valid[i] = 0
         if self.assign_pos and (s.i < (s.n - 2)) and \
           (last_move == SHIFT or last_move == RIGHT):
             for i in range(self.p_start, self.p_end):
@@ -209,7 +229,7 @@ cdef class TransitionSystem:
             if not has_root_child(s, s.i):
                 for i in range(self.r_start, self.r_end):
                     valid[i] = 0
-        if s.top != 0:
+        if self.use_edit and s.top != 0:
             valid[self.e_id] = 0
         if s.stack_len >= 1:
             if s.heads[s.top] != 0 or (s.stack_len >= 2 and self.allow_reattach):
@@ -243,20 +263,29 @@ cdef class TransitionSystem:
         if s.stack_len < 1 and not s.at_end_of_buffer:
             return self.s_id
         elif not s.at_end_of_buffer and heads[s.i] == s.top:
-            return self.r_classes[labels[s.i]]
+            if edits[s.i] and not edits[heads[s.i]]:
+                if self.use_edit:
+                    return self.e_id
+                else:
+                    return self.r_classes[self.erase_label]
+            else:
+                return self.r_classes[labels[s.i]]
         elif heads[s.top] == s.i and (self.allow_reattach or s.heads[s.top] == 0):
             if edits[s.top] and not edits[heads[s.top]]:
-                return self.e_id
+                if self.use_edit:
+                    return self.e_id
+                else:
+                    return self.l_classes[self.erase_label]
             else:
                 return self.l_classes[labels[s.top]]
         elif self.d_cost(s, heads, labels, edits) == 0:
-            if edits[s.top] and not edits[heads[s.top]]:
+            if self.use_edit and edits[s.top] and not edits[heads[s.top]]:
                 return self.e_id
             else:
                 return self.d_id
         elif not s.at_end_of_buffer and self.s_cost(s, heads, labels, edits) == 0:
             return self.s_id
-        elif s.top != 0 and edits[s.top]:
+        elif self.use_edit and s.top != 0 and edits[s.top]:
             return self.e_id
         else:
             return self.nr_class + 1
@@ -266,7 +295,7 @@ cdef class TransitionSystem:
         cdef size_t i, stack_i
         if s.at_end_of_buffer:
             return -1
-        if edits[s.i]:
+        if self.use_edit and edits[s.i]:
             return 0
         if s.stack_len < 1:
             return 0
@@ -283,9 +312,9 @@ cdef class TransitionSystem:
             return -1
         if has_root_child(s, s.i):
             return -1
-        if edits[s.top] and not edits[s.i]:
+        if self.use_edit and edits[s.top] and not edits[s.i]:
             return 1
-        if edits[s.i]:
+        if self.use_edit and edits[s.i]:
             return 0
         if heads[s.i] == s.top:
             return 0
@@ -308,7 +337,7 @@ cdef class TransitionSystem:
             cost += has_head_in_buffer(s, s.top, heads)
             if cost == 0 and s.second == 0:
                 return -1
-        if edits[s.top] and not edits[s.heads[s.top]]:
+        if self.use_edit and edits[s.top] and not edits[s.heads[s.top]]:
             cost += 1
         return cost
 
@@ -321,10 +350,10 @@ cdef class TransitionSystem:
             return -1
         if has_root_child(s, s.i):
             return -1
-        # This will form a dep between an edit and non-edit word
-        if edits[s.top] and not edits[s.i]:
+        # This would form a dep between an edit and non-edit word
+        if self.use_edit and edits[s.top] and not edits[s.i]:
             return 1
-        elif edits[s.top]:
+        elif self.use_edit and edits[s.top]:
             return 0
         if heads[s.top] == s.i:
             return 0
@@ -337,6 +366,8 @@ cdef class TransitionSystem:
         return cost
     
     cdef int e_cost(self, State *s, size_t* heads, size_t* labels, bint* edits):
+        if not self.use_edit:
+            return -1
         if s.top == 0:
             return -1
         if edits[s.top]:
