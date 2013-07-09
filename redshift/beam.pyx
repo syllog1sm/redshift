@@ -38,7 +38,7 @@ cdef class Beam:
         self.t = 0
         self.is_full = self.bsize >= self.k
         self.costs = <int**>malloc(self.k * sizeof(int*))
-        self.valid = <int**>malloc(self.k * sizeof(bint*))
+        self.valid = <int**>malloc(self.k * sizeof(int*))
         for i in range(self.k):
             self.costs[i] = <int*>calloc(self.trans.nr_class, sizeof(int*))
             self.valid[i] = <int*>calloc(self.trans.nr_class, sizeof(int*))
@@ -77,7 +77,11 @@ cdef class Beam:
                                          edits, self.costs[i])
         else:
             costs = self.trans.get_costs(self.beam[i], tags, heads, labels, edits)
-            memcpy(self.costs[i], costs, sizeof(int) * self.trans.nr_class)
+            for clas in range(self.trans.nr_class):
+                if costs[clas] != 0:
+                    self.costs[i][clas] = self.beam[i].cost + 1
+                else:
+                    self.costs[i][clas] = self.beam[i].cost
         fill_kernel(self.beam[i], tags)
 
     cdef int extend_states(self, double** ext_scores) except -1:
