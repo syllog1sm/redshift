@@ -1,12 +1,14 @@
-A fast is a natural-language syntactic dependency parser that aims to stay up-to-the-minute with the latest improved tricks and techniques, without compromising
-practicality and usability for non-experts:
+(This readme is not correct to the current state of the parser --- it describes intentions, particularly around
+the example usage.)
+
+redshift is a natural-language syntactic dependency parser that aims to stay up-to-the-minute with the latest
+improved tricks and techniques, without compromising practicality and usability for non-experts.
 
 If you don't know what a syntactic dependency is, read this:
 http://googleresearch.blogspot.com.au/2013/05/syntactic-ngrams-over-time.html .
 
-If you're an NLP person,
-it's a transition-based parser using averaged perceptron that features all the latest trimmings, implemented
-efficiently in Cython.
+For NLP people: redshift is a transition-based parser using averaged perceptron that features all the
+latest trimmings, implemented efficiently in Cython.
 
 Example usage:
 
@@ -18,8 +20,8 @@ Example usage:
 ((1, 0, u'subj'), (1, 2, u'dobj'), (3, 2, u'nmod'))
 
 Advantages:
-- All-in-one processing. Most other parses require you to chain together a tokenizer, sentence boundary detector,
-  part-of-speech tagger, etc. Making those long pipeline work well on your data can take both time and nous.
+- All-in-one processing. Most other parsers require you to chain together a tokenizer, sentence boundary detector,
+  part-of-speech tagger, etc. Making those long pipelines work well on your data can take both time and nous.
 - The fastest English config parses at over 1,000 sentences a second, with 91% accuracy.
 - The most accurate English config gets 9X.XX% labelled accuracy (93.XX unlabelled), and still parses at XX
   sentences a second. The compromise model gets 9X.XX% at XX sentences per second.
