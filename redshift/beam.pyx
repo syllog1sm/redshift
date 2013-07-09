@@ -54,14 +54,13 @@ cdef class Beam:
         cdef size_t oracle
         cdef double best_score = -100000
         cdef int* costs = self.trans.get_costs(self.gold, tags, heads, labels, edits)
-        cdef bint use_dyn_amb = True
-        if use_dyn_amb:
+        if self.cost_strat == 'static':
+            oracle = self.trans.break_tie(self.gold, tags, heads, labels, edits)
+        else:
             for i in range(self.trans.nr_class):
                 if scores[i] >= best_score and costs[i] == 0:
                     oracle = i
                     best_score = scores[i]
-        else:
-            oracle = self.trans.break_tie(self.gold, tags, heads, labels, edits)
         self.gold.score += scores[oracle]
         self.trans.transition(oracle, self.gold)
 
@@ -130,6 +129,7 @@ cdef class Beam:
 
     cdef bint check_violation(self):
         cdef Violation violn
+        cdef size_t i
         cdef bint out_of_beam
         if self.bsize < self.k:
             return False
@@ -158,31 +158,15 @@ cdef class Beam:
 
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
                         size_t* labels, bint* sbd, bint* edits) except -1:
-        cdef size_t rightmost = 1
+        cdef size_t i
         # No need to copy heads for root and start symbols
         for i in range(1, self.length - 1):
             assert self.beam[0].heads[i] != 0
             #tags[i] = self.beam[0].tags[i]
             heads[i] = self.beam[0].heads[i]
             labels[i] = self.beam[0].labels[i]
-            # Do sentence boundary detection
-            # TODO: Set this as ROOT label
-            #raise StandardError
+            # TODO: Do sentence boundary detection here
         fill_edits(self.beam[0], edits)
-        survivors = set()
-        cdef State* s
-        if self._prune_freqs is not None:
-            for idx in range(self.bsize):
-                prefix = []
-                s = self.beam[idx]
-                for i in range(s.t):
-                    prefix.append(s.history[i])
-                    key = tuple(prefix)
-                    if key not in survivors:
-                        survivors.add(key)
-                        for survived_for in range(1, s.t - len(key)):
-                            self._prune_freqs.setdefault(survived_for, 0)
-                            self._prune_freqs[survived_for] += 1
  
     def __dealloc__(self):
         free_state(self.gold)
