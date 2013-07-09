@@ -4,9 +4,9 @@ cdef transition_to_str(State* s, size_t move, label, object tokens)
 
 
 cdef class TransitionSystem:
+    cdef bint use_edit
     cdef bint allow_reattach
     cdef bint allow_reduce
-    cdef bint use_edit
     cdef bint assign_pos
     cdef size_t n_labels
     cdef size_t n_tags
@@ -37,6 +37,8 @@ cdef class TransitionSystem:
     cdef int transition(self, size_t clas, State *s) except -1
     cdef int* get_costs(self, State* s, size_t* tags, size_t* heads,
                         size_t* labels, bint* costs) except NULL
+    cdef int _label_costs(self, size_t start, size_t end, size_t label, bint add, 
+                          int c, int* costs) except -1
     cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
                                size_t* labels, bint* edits, int* costs) except -1
     cdef int fill_valid(self, State* s, int* valid)
@@ -45,7 +47,6 @@ cdef class TransitionSystem:
     cdef int s_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
     cdef int r_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
     cdef int d_cost(self, State *s, size_t* g_heads, size_t* g_labels, bint* edits)
-    cdef int l_cost(self, State *s, size_t* heads, size_t* labels, bint* edits) except -9000
+    cdef int l_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
     cdef int e_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
-
-    
+    cdef int p_cost(self, State *s)

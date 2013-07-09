@@ -175,80 +175,51 @@ cdef class TransitionSystem:
         cdef int* costs = self._costs
         for i in range(self.nr_class):
             costs[i] = -1
-        cdef size_t last_move = self.moves[s.history[s.t - 1]] if s.t != 0 else SHIFT
-        if self.assign_pos and (s.i < (s.n - 2)) and \
-          (last_move == SHIFT or last_move == RIGHT):
-            for i in range(self.p_start, self.p_end):
-                costs[i] = 1
-            costs[self.p_classes[tags[s.i + 1]]] = 0
-            return costs
+        p_cost = self.p_cost(s)
+        self._label_costs(self.p_start, self.p_end, tags[s.i + 1], True, p_cost, costs)
         costs[self.s_id] = self.s_cost(s, heads, labels, edits)
         costs[self.d_id] = self.d_cost(s, heads, labels, edits)
         costs[self.e_id] = self.e_cost(s, heads, labels, edits)
         r_cost = self.r_cost(s, heads, labels, edits)
-        if r_cost != -1:
-            for i in range(self.r_start, self.r_end):
-                costs[i] = r_cost
-                if heads[s.i] == s.top and self.labels[i] != labels[s.i]:
-                    costs[i] += 1
+        self._label_costs(self.r_start, self.r_end, labels[s.i], heads[s.i] == s.top,
+                          r_cost, costs)
         l_cost = self.l_cost(s, heads, labels, edits)
-        if l_cost != -1:
-            for i in range(self.l_start, self.l_end):
-                costs[i] = l_cost
-                if heads[s.top] == s.i and self.labels[i] != labels[s.top]:
-                    costs[i] += 1
-            # Add an additional penalty for using the ROOT label inappropriately,
-            # as it signals SBD
-            #if labels[s.top] != 1:
-            #    costs[self.l_classes[1]] += 1
+        self._label_costs(self.l_start, self.l_end, labels[s.top],
+                          heads[s.top] == s.i, l_cost, costs)
         return costs
+
+    cdef int _label_costs(self, size_t start, size_t end, size_t label, bint add,
+                          int c, int* costs) except -1:
+        if c == -1:
+            return 0
+        cdef size_t i
+        for i in range(start, end):
+            costs[i] = c
+            if add and self.labels[i] != label:
+                costs[i] += 1
 
     cdef int fill_valid(self, State* s, int* valid) except -1:
         cdef size_t i
         for i in range(self.nr_class):
             valid[i] = -1
-        cdef size_t last_move
-        if s.t != 0:
-            last_move = self.moves[s.history[s.t - 1]]
-        else:
-            last_move = SHIFT
-        #can_push = not s.at_end_of_buffer
-        #can_pop = s.top != 0
-        #can_arc = can_push and can_pop
-        #if can_push:
-        #    valid[self.s_id] = 0
-        #if can_pop and (s.heads[s.top] != 0 or (self.allow_reduce and s.stack_len >= 2)):
-        #    valid[self.d_id] = 0
-        #if can_push and can_push:
-        #    for i in range(self.r_start, self.r_end):
-        #        valid[i] = 0
-        #if can_pop and s.heads[s.top] == 0 or self.allow_reattach:
-        #    for i in range(self.l_start, self.l_end):
-        #        valid[i] = 0
-        if self.assign_pos and (s.i < (s.n - 2)) and \
-          (last_move == SHIFT or last_move == RIGHT):
+        if self.p_cost(s) != -1:
             for i in range(self.p_start, self.p_end):
                 valid[i] = 0
             return 0
-        if not s.at_end_of_buffer:
+        cdef bint can_push = not s.at_end_of_buffer
+        cdef bint can_pop = s.top != 0
+        if can_push:
             valid[self.s_id] = 0
-            if s.stack_len < 1:
-                return 0
-            if not has_root_child(s, s.i):
-                for i in range(self.r_start, self.r_end):
-                    valid[i] = 0
-        if self.use_edit and s.top != 0:
+        if can_pop and (s.heads[s.top] != 0 or (self.allow_reduce and s.stack_len >= 2)):
+            valid[self.d_id] = 0
+        if can_pop and self.use_edit:
             valid[self.e_id] = 0
-        if s.stack_len >= 1:
-            if s.heads[s.top] != 0 or (s.stack_len >= 2 and self.allow_reattach):
-                valid[self.d_id] = 0
-            if self.allow_reattach or s.heads[s.top] == 0:
-                #if has_root_child(s, s.i) or has_root_child(s, s.top):
-                #    valid[self.l_classes[1]] = 0
-                #else:
-                if not has_root_child(s, s.i):
-                    for i in range(self.l_start, self.l_end):
-                        valid[i] = 0
+        if can_push and can_pop:
+            for i in range(self.r_start, self.r_end):
+                valid[i] = 0
+        if can_pop and (s.heads[s.top] == 0 or self.allow_reattach):
+            for i in range(self.l_start, self.l_end):
+                valid[i] = 0
 
     cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
                                size_t* labels, bint* edits, int* costs) except -1:
@@ -260,41 +231,20 @@ cdef class TransitionSystem:
 
     cdef int break_tie(self, State* s, size_t* tags, size_t* heads,
                        size_t* labels, bint* edits) except -1:
-        cdef size_t last_move
-        if s.t != 0:
-            last_move = self.moves[s.history[s.t - 1]]
-        else:
-            last_move = SHIFT
-        if self.assign_pos and (s.i < (s.n - 2)) and \
-          (last_move == SHIFT or last_move == RIGHT):
+        if self.p_cost(s) != -1:
             return self.p_classes[tags[s.i + 1]]
-        if s.stack_len < 1 and not s.at_end_of_buffer:
+        cdef bint can_push = not s.at_end_of_buffer
+        cdef bint can_pop = s.top != 0
+        if can_push and not can_pop:
             return self.s_id
-        elif not s.at_end_of_buffer and heads[s.i] == s.top:
-            if edits[s.i] and not edits[heads[s.i]]:
-                if self.use_edit:
-                    return self.e_id
-                else:
-                    return self.r_classes[self.erase_label]
-            else:
-                return self.r_classes[labels[s.i]]
+        elif can_push and heads[s.i] == s.top:
+            return self.r_classes[labels[s.i]]
         elif heads[s.top] == s.i and (self.allow_reattach or s.heads[s.top] == 0):
-            if edits[s.top] and not edits[heads[s.top]]:
-                if self.use_edit:
-                    return self.e_id
-                else:
-                    return self.l_classes[self.erase_label]
-            else:
-                return self.l_classes[labels[s.top]]
+            return self.l_classes[labels[s.top]]
         elif self.d_cost(s, heads, labels, edits) == 0:
-            if self.use_edit and edits[s.top] and not edits[heads[s.top]]:
-                return self.e_id
-            else:
-                return self.d_id
-        elif not s.at_end_of_buffer and self.s_cost(s, heads, labels, edits) == 0:
+            return self.d_id
+        elif can_push and self.s_cost(s, heads, labels, edits) == 0:
             return self.s_id
-        elif self.use_edit and s.top != 0 and edits[s.top]:
-            return self.e_id
         else:
             return self.nr_class + 1
 
@@ -383,4 +333,15 @@ cdef class TransitionSystem:
         else:
             return 1
 
+    cdef int p_cost(self, State* s):
+        if not self.assign_pos:
+            return -1
+        if s.i >= (s.n - 2):
+            return -1
+        if s.t == 0:
+            return 0
+        cdef size_t last_move = self.moves[s.history[s.t - 1]]
+        if last_move == SHIFT or last_move == RIGHT:
+            return 0
+        return -1
 
