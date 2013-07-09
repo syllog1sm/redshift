@@ -163,6 +163,13 @@ cdef enum:
     prev_edit_word
     prev_edit_pos
     prev_prev_edit
+
+    wcopy 
+    pcopy
+
+    wexact
+    pexact
+
     CONTEXT_SIZE
 
 
@@ -441,7 +448,29 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[prev_prev_edit] = 0
         context[prev_edit_word] = 0
         context[prev_edit_pos] = 0
-
+    # These features find how much of S0's span matches N0's span, starting from
+    # the left. A 3-match span will fire features for 1-match, 2-match and 3-match.
+    context[wcopy] = 0
+    context[wexact] = 1
+    for i in range(5):
+        if ((k.n0ledge + i) > k.i) or ((k.s0ledge + i) >= k.n0ledge):
+            break
+        if words[k.n0ledge + i] == words[k.s0ledge + i]:
+            context[wcopy] += 1
+        else:
+            context[wexact] = 0
+            break
+    context[pcopy] = 0
+    context[pexact] = 1
+    for i in range(5):
+        if ((k.n0ledge + i) > k.i) or ((k.s0ledge + i) >= k.n0ledge):
+            break
+        if tags[k.n0ledge + i] == tags[k.s0ledge + i]:
+            context[pcopy] += 1
+        else:
+            context[pexact] = 0
+            break
+        
 
 cdef int free_predicate(Predicate* pred) except -1:
     free(pred.raws)
@@ -686,6 +715,14 @@ cdef class FeatureSet:
             (prev_edit_pmatch,),
             (prev_edit_word,),
             (prev_edit_pos,),
+            (wcopy,),
+            (pcopy,),
+            (wexact,),
+            (pexact,),
+            (wcopy, pcopy),
+            (wexact, pexact),
+            (wexact, pcopy),
+            (wcopy, pexact)
         )
         print "Use Zhang feats"
         feats = from_single + from_word_pairs + from_three_words + distance
