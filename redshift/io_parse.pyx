@@ -254,6 +254,22 @@ cdef class Sentences:
             free_sent(self.s[i])
         free(self.s) 
 
+    def get_labels(self):
+        """Get the set of tags, left labels and right labels in the data"""
+        seen_l_labels = set([])
+        seen_r_labels = set([])
+        seen_tags = set([1, 2, 3])
+        for i in range(sents.length):
+            sent = sents.s[i]
+            for j in range(1, sent.length - 1):
+                seen_tags.add(sent.pos[j])
+                label = sent.parse.labels[j]
+                if sent.parse.heads[j] > j:
+                    seen_l_labels.add(label)
+                else:
+                    seen_r_labels.add(label)
+        return seen_tags, seen_l_labels, seen_r_labels
+
     cpdef int add(self, size_t id_, ids, words, tags, heads, labels, edits) except -1:
         cdef Sentence* s
         cdef size_t n
