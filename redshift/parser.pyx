@@ -93,7 +93,6 @@ cdef class BaseParser:
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
         self.beam_width = beam_width
-        self.say_config()
         if clean == True:
             self.new_idx(self.model_dir, self.features.n)
         else:
@@ -101,6 +100,7 @@ cdef class BaseParser:
         self.moves = TransitionSystem(allow_reattach=allow_reattach,
                                       allow_reduce=allow_reduce)
         self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model'))
+        self.say_config()
 
     def setup_model_dir(self, loc, clean):
         # TODO: Replace this with normal shell
@@ -229,28 +229,50 @@ cdef class BeamParser(BaseParser):
         cdef bint cache_hit = False
         cdef size_t k = self.beam_width
         cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
+        cdef Beam gold_beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
         beam_scores = <double**>malloc(beam.k * sizeof(double*))
-        while not beam.gold.is_finished:
+        gold_scores = <double**>malloc(beam.k * sizeof(double*))
+        cdef double delta = 0
+        cdef double max_violn = 0
+        cdef size_t t = 0
+        cdef size_t* ghist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
+        cdef size_t* phist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
+        while not beam.is_finished:
             self.guide.cache.flush()
-            gold_kernel = beam.gold_kernel(sent.pos)
-            scores = self._predict(sent, gold_kernel)
-            beam.advance_gold(scores, g_pos, g_heads, g_labels, g_edits)
-            for p_idx in range(beam.bsize):
-                kernel = beam.next_state(p_idx, sent.pos)
-                beam.cost_next(p_idx, g_pos, g_heads, g_labels, g_edits)
-                beam_scores[p_idx] = self._predict(sent, kernel)
+            for i in range(beam.bsize):
+                kernel = beam.next_state(i, sent.pos)
+                beam_scores[i] = self._predict(sent, kernel)
             beam.extend_states(beam_scores)
-            beam.check_violation()
-            if self.train_alg == 'early' and beam.violn != None:
-                break
-            elif beam.beam[0].cost == 0:
+            for i in range(gold_beam.bsize):
+                kernel = gold_beam.next_state(i, sent.pos)
+                gold_scores[i] = self._predict(sent, kernel)
+                costs = self.moves.get_costs(gold_beam.beam[i], g_pos, g_heads,
+                                             g_labels, g_edits)
+                for clas in range(self.moves.nr_class):
+                    if costs[clas] != 0:
+                        gold_beam.valid[i][clas] = -1
+            gold_beam.extend_states(gold_scores)
+            delta = beam.beam[0].score - gold_beam.beam[0].score
+            if delta >= max_violn:
+                max_violn = delta
+                t = gold_beam.beam[0].t
+                assert t < (sent.length * 3)
+                memcpy(ghist, gold_beam.beam[0].history, t * sizeof(size_t))
+                memcpy(phist, beam.beam[0].history, t * sizeof(size_t))
+            #beam.check_violation()
+            #if self.train_alg == 'early' and beam.violn != None:
+            #    break
+            if beam.beam[0].score == gold_beam.beam[0].score:
                 self.guide.n_corr += 1
+            self.guide.total += 1
         free(beam_scores)
+        free(gold_scores)
         self.guide.total += beam.gold.t
-        if beam.violn is not None:
-            counted = self._count_feats(sent, beam.violn.t, beam.violn.phist,
-                                        beam.violn.ghist)
+        if t > 0:
+            counted = self._count_feats(sent, t, phist, ghist)
             self.guide.batch_update(counted)
+        free(ghist)
+        free(phist)
 
     def say_config(self):
         beam_settings = (self.beam_width, self.train_alg)
@@ -333,6 +355,10 @@ cdef class GreedyParser(BaseParser):
                                 &s.guess_labels[s.i])
             self.moves.transition(clas, s)
         # No need to copy heads for root and start symbols
+        cdef size_t i
+        for i in range(1, sent.length - 1):
+            sent.parse.heads[i] = s.heads[i]
+            sent.parse.labels[i] = s.labels[i]
         fill_edits(s, sent.parse.edits)
         free_state(s)
  
