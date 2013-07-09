@@ -14,14 +14,12 @@ cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
             s.l_valencies[head] += 1
     else:
         if s.r_valencies[head] < MAX_VALENCY:
-            r = get_r(s, head)
             s.r_children[head][s.r_valencies[head]] = child
             s.r_valencies[head] += 1
-    return 1
 
 
 cdef int del_r_child(State *s, size_t head) except -1:
-    child = get_r(s, head)
+    cdef size_t child = get_r(s, head)
     s.r_children[head][s.r_valencies[head] - 1] = 0
     s.r_valencies[head] -= 1
     s.heads[child] = 0
@@ -38,6 +36,8 @@ cdef int del_l_child(State *s, size_t head) except -1:
     s.l_valencies[head] -= 1
     s.heads[child] = 0
     s.labels[child] = 0
+    # This assertion ensures the left-edge above stays correct.
+    assert s.heads[head] == 0 or s.heads[head] <= head
     if s.l_valencies[head] != 0:
         s.ledges[head] = s.ledges[get_l(s, head)]
     else:
@@ -118,6 +118,8 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
     s.kernel.Ls0 = s.labels[s.top]
     s.kernel.Lhs0 = s.labels[s.heads[s.top]]
     s.kernel.Lh2s0 = s.labels[s.heads[s.heads[s.top]]]
+    s.kernel.s0ledge = s.ledges[s.top]
+    s.kernel.s0ledgep = tags[s.ledges[s.top]]
     s.kernel.n0ledge = s.ledges[s.i]
     s.kernel.n0ledgep = tags[s.ledges[s.i]]
     if s.ledges[s.i] != 0:

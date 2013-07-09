@@ -29,6 +29,8 @@ cdef struct Kernel:
     size_t h2s0p
     size_t Lhs0
     size_t Lh2s0
+    size_t s0ledge
+    size_t s0ledgep
     size_t s0redgep
     size_t n0ledge
     size_t n0ledgep
