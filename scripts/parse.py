@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 #PBS -l walltime=1:00:00,mem=4gb,nodes=1:ppn=2
 import os
+import os.path
 import sys
 import plac
-from pathlib import Path
 import time
 import pstats
 import cProfile
@@ -35,15 +35,11 @@ def get_pos(conll_str):
 def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False, debug=False):
     if debug:
         redshift.parser.set_debug(debug)
-    parser_dir = Path(parser_dir)
-    text_loc = Path(text_loc)
-    out_dir = Path(out_dir)
-    if not out_dir.exists():
-        out_dir.mkdir()
+    if not os.path.exists(out_dir):
+        os.path.mkdir(out_dir)
     yield "Loading parser"
-    parser = redshift.parser.Parser(parser_dir)
-    parser.load()
-    sentences = redshift.io_parse.read_pos(text_loc.open().read())
+    parser = redshift.parser.load_parser(parser_dir)
+    sentences = redshift.io_parse.read_pos(open(text_loc).read())
     #sentences.connect_sentences(1700)
     if profile:
         cProfile.runctx("parser.add_parses(sentences,gold=gold_sents)",
@@ -57,7 +53,7 @@ def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False, debug=Fal
         print '%d sents took %0.3f ms' % (sentences.length, (t2-t1)*1000.0)
 
     #sentences.write_moves(out_dir.join('moves').open('w'))
-    sentences.write_parses(out_dir.join('parses').open('w'))
+    sentences.write_parses(open(os.path.join(out_dir, 'parses'), 'w'))
 
 
 if __name__ == '__main__':

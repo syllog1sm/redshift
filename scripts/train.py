@@ -6,12 +6,12 @@ import os
 import sys
 import plac
 import time
-from pathlib import Path
 import pstats
 import cProfile
 from itertools import combinations
 
 import redshift.parser
+from redshift.parser import GreedyParser, BeamParser
 import redshift.io_parse
 import redshift.features
 
@@ -21,7 +21,6 @@ USE_HELD_OUT = False
     train_loc=("Training location", "positional"),
     train_alg=("Learning algorithm [static, online, max, early]", "option", "a", str),
     n_iter=("Number of Perceptron iterations", "option", "i", int),
-    label_set=("Name of label set to use.", "option", "l", str),
     vocab_thresh=("Vocab pruning threshold", "option", "t", int),
     feat_thresh=("Feature pruning threshold", "option", "f", int),
     allow_reattach=("Allow left-clobber", "flag", "r", bool),
@@ -36,7 +35,7 @@ USE_HELD_OUT = False
     n_sents=("Number of sentences to train from", "option", "n", int)
 )
 def main(train_loc, model_loc, train_alg="online", n_iter=15,
-         feat_set="zhang", label_set="Stanford", vocab_thresh=0, feat_thresh=1,
+         feat_set="zhang", vocab_thresh=0, feat_thresh=1,
          allow_reattach=False, allow_reduce=False, ngrams='0',
          add_clusters=False, n_sents=0,
          profile=False, debug=False, seed=0, beam_width=1):
@@ -56,21 +55,20 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
         ngrams = [tuple(int(t) for t in ngram.split('_')) for ngram in ngrams.split(',')]
     print ngrams
     random.seed(seed)
-    train_loc = Path(train_loc)
-    model_loc = Path(model_loc)
-    if label_set == 'conll':
-        label_set = str(train_loc)
     if debug:
         redshift.parser.set_debug(True)
-    parser = redshift.parser.Parser(model_loc, clean=True,
-                                    train_alg=train_alg, feat_set=feat_set,
-                                    label_set=label_set,
-                                    allow_reattach=allow_reattach,
-                                    allow_reduce=allow_reduce,
-                                    feat_thresh=feat_thresh,
-                                    beam_width=beam_width,
-                                    ngrams=ngrams, add_clusters=add_clusters)
-    train_sent_strs = train_loc.open().read().strip().split('\n\n')
+    if beam_width >= 2:
+        parser = BeamParser(model_loc, clean=True,
+                            train_alg=train_alg, feat_set=feat_set,
+                            feat_thresh=feat_thresh,
+                            beam_width=beam_width,
+                            ngrams=ngrams, add_clusters=add_clusters)
+    else:
+        parser = GreedyParser(model_loc, clean=True, train_alg=train_alg,
+                              feat_set=feat_srt, feat_thresh=feat_thresh,
+                              allow_reduce=allow_reduce, allow_reattach=allow_reattach,
+                              ngrams=ngrams, add_clusters=add_clusters)
+    train_sent_strs = open(train_loc).read().strip().split('\n\n')
     if n_sents != 0:
         print "Using %d sents for training" % n_sents
         random.shuffle(train_sent_strs)

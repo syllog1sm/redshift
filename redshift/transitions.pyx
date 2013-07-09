@@ -2,6 +2,12 @@
 from _state cimport *
 from libc.stdlib cimport malloc, calloc, free
 import redshift.io_parse
+import index.hashes
+
+# TODO: Link these with other compile constants
+DEF MAX_TAGS = 100
+DEF MAX_LABELS = 200
+
 
 cdef enum:
     ERR
@@ -32,13 +38,11 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
         return u'%s(%s)' % (tokens[head], tokens[child])
 
 cdef class TransitionSystem:
-    def __cinit__(self, object tags, object labels, allow_reattach=False,
-                  allow_reduce=False):
+    def __cinit__(self, allow_reattach=False, allow_reduce=False):
         self.assign_pos = False
         self.use_edit = True 
-        self.n_labels = len(labels)
-        self.n_tags = max(tags)
-        self.py_labels = labels
+        self.n_labels = MAX_LABELS
+        self.n_tags = MAX_TAGS
         self.allow_reattach = allow_reattach
         self.allow_reduce = allow_reduce
         self.nr_class = 0
@@ -59,25 +63,28 @@ cdef class TransitionSystem:
         self.r_end = 0
         self.p_start = self.r_start + 1
         self.p_end = 0
-        # TODO: Fix this
-        self.erase_label = redshift.io_parse.STR_TO_LABEL.get('erased', 9000)
         self.counter = 0
+        self.erase_label = index.hashes.encode_label('erased')
+        # TODO: Clean this up, or rename them or something
+        self.left_labels = []
+        self.right_labels = []
+
 
     def set_labels(self, tags, left_labels, right_labels):
         self.n_tags = <size_t>max(tags)
-        self.left_labels = [self.py_labels[l] for l in sorted(left_labels)]
-        self.right_labels = [self.py_labels[l] for l in sorted(right_labels)]
         self.labels[self.s_id] = 0
         self.labels[self.d_id] = 0
         self.labels[self.e_id] = 0
         self.moves[self.s_id] = <size_t>SHIFT
         self.moves[self.d_id] = <size_t>REDUCE
         self.moves[self.e_id] = <size_t>EDIT
+        label_idx = index.hashes.reverse_label_index()
         clas = self.l_start
         for label in left_labels:
             self.moves[clas] = <size_t>LEFT
             self.labels[clas] = label
             self.l_classes[label] = clas
+            self.left_labels.append(label_idx[label])
             clas += 1
         self.l_end = clas
         self.r_start = clas
@@ -85,6 +92,7 @@ cdef class TransitionSystem:
             self.moves[clas] = <size_t>RIGHT
             self.labels[clas] = label
             self.r_classes[label] = clas
+            self.right_labels.append(label_idx[label])
             clas += 1
         self.r_end = clas
         cdef size_t tag
@@ -97,7 +105,7 @@ cdef class TransitionSystem:
                 clas += 1
             self.p_end = clas
         self.nr_class = clas
-        return clas
+        return clas, len(left_labels) + len(right_labels)
         
     cdef int transition(self, size_t clas, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc, move, label
@@ -167,80 +175,51 @@ cdef class TransitionSystem:
         cdef int* costs = self._costs
         for i in range(self.nr_class):
             costs[i] = -1
-        cdef size_t last_move = self.moves[s.history[s.t - 1]] if s.t != 0 else SHIFT
-        if self.assign_pos and (s.i < (s.n - 2)) and \
-          (last_move == SHIFT or last_move == RIGHT):
-            for i in range(self.p_start, self.p_end):
-                costs[i] = 1
-            costs[self.p_classes[tags[s.i + 1]]] = 0
-            return costs
+        p_cost = self.p_cost(s)
+        self._label_costs(self.p_start, self.p_end, tags[s.i + 1], True, p_cost, costs)
         costs[self.s_id] = self.s_cost(s, heads, labels, edits)
         costs[self.d_id] = self.d_cost(s, heads, labels, edits)
         costs[self.e_id] = self.e_cost(s, heads, labels, edits)
         r_cost = self.r_cost(s, heads, labels, edits)
-        if r_cost != -1:
-            for i in range(self.r_start, self.r_end):
-                costs[i] = r_cost
-                if heads[s.i] == s.top and self.labels[i] != labels[s.i]:
-                    costs[i] += 1
+        self._label_costs(self.r_start, self.r_end, labels[s.i], heads[s.i] == s.top,
+                          r_cost, costs)
         l_cost = self.l_cost(s, heads, labels, edits)
-        if l_cost != -1:
-            for i in range(self.l_start, self.l_end):
-                costs[i] = l_cost
-                if heads[s.top] == s.i and self.labels[i] != labels[s.top]:
-                    costs[i] += 1
-            # Add an additional penalty for using the ROOT label inappropriately,
-            # as it signals SBD
-            #if labels[s.top] != 1:
-            #    costs[self.l_classes[1]] += 1
+        self._label_costs(self.l_start, self.l_end, labels[s.top],
+                          heads[s.top] == s.i, l_cost, costs)
         return costs
+
+    cdef int _label_costs(self, size_t start, size_t end, size_t label, bint add,
+                          int c, int* costs) except -1:
+        if c == -1:
+            return 0
+        cdef size_t i
+        for i in range(start, end):
+            costs[i] = c
+            if add and self.labels[i] != label:
+                costs[i] += 1
 
     cdef int fill_valid(self, State* s, int* valid) except -1:
         cdef size_t i
         for i in range(self.nr_class):
             valid[i] = -1
-        cdef size_t last_move
-        if s.t != 0:
-            last_move = self.moves[s.history[s.t - 1]]
-        else:
-            last_move = SHIFT
-        #can_push = not s.at_end_of_buffer
-        #can_pop = s.top != 0
-        #can_arc = can_push and can_pop
-        #if can_push:
-        #    valid[self.s_id] = 0
-        #if can_pop and (s.heads[s.top] != 0 or (self.allow_reduce and s.stack_len >= 2)):
-        #    valid[self.d_id] = 0
-        #if can_push and can_push:
-        #    for i in range(self.r_start, self.r_end):
-        #        valid[i] = 0
-        #if can_pop and s.heads[s.top] == 0 or self.allow_reattach:
-        #    for i in range(self.l_start, self.l_end):
-        #        valid[i] = 0
-        if self.assign_pos and (s.i < (s.n - 2)) and \
-          (last_move == SHIFT or last_move == RIGHT):
+        if self.p_cost(s) != -1:
             for i in range(self.p_start, self.p_end):
                 valid[i] = 0
             return 0
-        if not s.at_end_of_buffer:
+        cdef bint can_push = not s.at_end_of_buffer
+        cdef bint can_pop = s.top != 0
+        if can_push:
             valid[self.s_id] = 0
-            if s.stack_len < 1:
-                return 0
-            if not has_root_child(s, s.i):
-                for i in range(self.r_start, self.r_end):
-                    valid[i] = 0
-        if self.use_edit and s.top != 0:
+        if can_pop and (s.heads[s.top] != 0 or (self.allow_reduce and s.stack_len >= 2)):
+            valid[self.d_id] = 0
+        if can_pop and self.use_edit:
             valid[self.e_id] = 0
-        if s.stack_len >= 1:
-            if s.heads[s.top] != 0 or (s.stack_len >= 2 and self.allow_reattach):
-                valid[self.d_id] = 0
-            if self.allow_reattach or s.heads[s.top] == 0:
-                #if has_root_child(s, s.i) or has_root_child(s, s.top):
-                #    valid[self.l_classes[1]] = 0
-                #else:
-                if not has_root_child(s, s.i):
-                    for i in range(self.l_start, self.l_end):
-                        valid[i] = 0
+        if can_push and can_pop:
+            for i in range(self.r_start, self.r_end):
+                valid[i] = 0
+        if can_pop and (s.heads[s.top] == 0 or self.allow_reattach):
+            for i in range(self.l_start, self.l_end):
+                valid[i] = 0
 
     cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
                                size_t* labels, bint* edits, int* costs) except -1:
@@ -252,41 +231,20 @@ cdef class TransitionSystem:
 
     cdef int break_tie(self, State* s, size_t* tags, size_t* heads,
                        size_t* labels, bint* edits) except -1:
-        cdef size_t last_move
-        if s.t != 0:
-            last_move = self.moves[s.history[s.t - 1]]
-        else:
-            last_move = SHIFT
-        if self.assign_pos and (s.i < (s.n - 2)) and \
-          (last_move == SHIFT or last_move == RIGHT):
+        if self.p_cost(s) != -1:
             return self.p_classes[tags[s.i + 1]]
-        if s.stack_len < 1 and not s.at_end_of_buffer:
+        cdef bint can_push = not s.at_end_of_buffer
+        cdef bint can_pop = s.top != 0
+        if can_push and not can_pop:
             return self.s_id
-        elif not s.at_end_of_buffer and heads[s.i] == s.top:
-            if edits[s.i] and not edits[heads[s.i]]:
-                if self.use_edit:
-                    return self.e_id
-                else:
-                    return self.r_classes[self.erase_label]
-            else:
-                return self.r_classes[labels[s.i]]
+        elif can_push and heads[s.i] == s.top:
+            return self.r_classes[labels[s.i]]
         elif heads[s.top] == s.i and (self.allow_reattach or s.heads[s.top] == 0):
-            if edits[s.top] and not edits[heads[s.top]]:
-                if self.use_edit:
-                    return self.e_id
-                else:
-                    return self.l_classes[self.erase_label]
-            else:
-                return self.l_classes[labels[s.top]]
+            return self.l_classes[labels[s.top]]
         elif self.d_cost(s, heads, labels, edits) == 0:
-            if self.use_edit and edits[s.top] and not edits[heads[s.top]]:
-                return self.e_id
-            else:
-                return self.d_id
-        elif not s.at_end_of_buffer and self.s_cost(s, heads, labels, edits) == 0:
+            return self.d_id
+        elif can_push and self.s_cost(s, heads, labels, edits) == 0:
             return self.s_id
-        elif self.use_edit and s.top != 0 and edits[s.top]:
-            return self.e_id
         else:
             return self.nr_class + 1
 
@@ -375,4 +333,15 @@ cdef class TransitionSystem:
         else:
             return 1
 
+    cdef int p_cost(self, State* s):
+        if not self.assign_pos:
+            return -1
+        if s.i >= (s.n - 2):
+            return -1
+        if s.t == 0:
+            return 0
+        cdef size_t last_move = self.moves[s.history[s.t - 1]]
+        if last_move == SHIFT or last_move == RIGHT:
+            return 0
+        return -1
 

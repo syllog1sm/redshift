@@ -1,8 +1,8 @@
 # cython: profile=True
-from pathlib import Path
 
 DEF VOCAB_SIZE = 1e6
 DEF TAG_SET_SIZE = 100
+DEF LABEL_SIZE = 200
 DEF MASK_VALUE = 1
 
 from libc.stdint cimport uint64_t
@@ -15,7 +15,7 @@ import os.path
 cdef class Index:
     cpdef set_path(self, path):
         self.path = path
-        self.out_file = path.open('w')
+        self.out_file = open(path, 'w')
         self.save_entries = True
 
     cpdef save(self):
@@ -31,7 +31,7 @@ cdef class Index:
         cdef uint64_t value
         self.path = path
         nlines = 0
-        for line in self.path.open():
+        for line in open(self.path):
             nlines += 1
             fields = line.strip().split()
             i = int(fields[0])
@@ -45,7 +45,7 @@ cdef class Index:
         if self.out_file is not None:
             self.out_file.close()
         index = {}
-        for line in self.path.open():
+        for line in open(self.path):
             if not line.strip():
                 continue
             i, feat_str, hashed, value = line.split()
@@ -238,11 +238,11 @@ cdef class InstanceCounter:
         return freq
 
 
-
-
 _pos_idx = StrIndex(TAG_SET_SIZE)
 _word_idx = StrIndex(VOCAB_SIZE, i=TAG_SET_SIZE)
+_label_idx = StrIndex(LABEL_SIZE)
 _cluster_idx = ClusterIndex()
+
 
 def init_word_idx(path):
     global _word_idx, _cluster_idx
@@ -257,15 +257,32 @@ def init_pos_idx(path):
     encode_pos('NONE')
     encode_pos('OOB')
 
+
+def init_label_idx(path):
+    global _label_idx
+    _label_idx.set_path(path)
+    encode_label('ERR')
+    encode_label('ROOT')
+    encode_label('P')
+    encode_label('erased')
+
+
 def load_word_idx(path):
     global _word_idx
     _word_idx.load(path)
     _word_idx.load_vocab(os.path.join(os.path.dirname(__file__), 'vocab.txt'))
     _cluster_idx.load(os.path.join(os.path.dirname(__file__), 'browns.txt'))
 
+
 def load_pos_idx(path):
     global _pos_idx
     _pos_idx.load(path)
+
+
+def load_label_idx(path):
+    global _label_idx
+    _label_idx.load(path)
+
 
 cpdef encode_word(object word):
     global _word_idx
@@ -274,6 +291,7 @@ cpdef encode_word(object word):
     raw_word = py_word
     return idx.encode(raw_word)
 
+
 def encode_pos(object pos):
     global _pos_idx
     cdef StrIndex idx = _pos_idx
@@ -281,10 +299,38 @@ def encode_pos(object pos):
     raw_pos = py_pos
     return idx.encode(raw_pos)
 
+
+def encode_label(object label):
+    global _label_idx
+    cdef StrIndex idx = _label_idx
+    if label.upper() == 'ROOT':
+        label = 'ROOT'
+    elif label.upper() == 'PUNCT':
+        label = 'P'
+    py_label = label.encode('ascii')
+    raw_label = py_label
+    return idx.encode(raw_label)
+
+
 def reverse_pos_index():
     global _pos_idx
     cdef StrIndex idx = _pos_idx
     return idx.get_reverse_index()
+
+
+def reverse_label_index():
+    global _label_idx
+    cdef StrIndex idx = _label_idx
+    return idx.get_reverse_index()
+
+
+def is_root_label(label):
+    global _label_idx
+    if type(label) == str:
+        return encode_label(label) == encode_label('ROOT')
+    else:
+        return label == encode_label('ROOT')
+
 
 def get_mask_value():
     return MASK_VALUE

@@ -36,5 +36,4 @@ cdef class Sentences:
     cdef size_t vocab_thresh 
     cdef size_t max_length
 
-    cpdef int add(self, size_t id_, object ids, object words, object tags,
-                  object heads, object labels, object edits) except -1
+    cdef int add(self, Sentence* sent, object words, object tags) except -1

@@ -479,16 +479,16 @@ cdef int free_predicate(Predicate* pred) except -1:
  
 
 cdef class FeatureSet:
-    def __cinit__(self, nr_label, uint64_t mask_value=1, feat_set="zhang",
+    def __cinit__(self, uint64_t mask_value=1, feat_set="zhang",
                   ngrams=None, add_clusters=False):
         if ngrams is None:
             ngrams = []
+        self.nr_label = 0
         self.name = feat_set
         self.ngrams = ngrams
         self.add_clusters = add_clusters
         if add_clusters:
             print "Adding cluster feats"
-        self.nr_label = nr_label
         # Value that indicates the value has been "masked", e.g. it was pruned
         # as a rare word. If a feature contains any masked values, it is dropped.
         self.mask_value = mask_value
@@ -504,13 +504,16 @@ cdef class FeatureSet:
             free_predicate(self.predicates[i])
         free(self.predicates)
 
+    def set_nr_label(self, size_t nr_label):
+        self.nr_label = nr_label
+
     cdef uint64_t* extract(self, Sentence* sent, Kernel* k) except NULL:
         cdef:
             size_t i, j, f, size
             uint64_t value
             bint seen_non_zero, seen_masked
             Predicate* pred
-
+        assert self.nr_label != 0
         cdef size_t* context = self.context
         cdef uint64_t* features = self.features
         fill_context(context, self.nr_label, sent.words, sent.pos,
