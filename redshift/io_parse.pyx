@@ -3,60 +3,6 @@ from libc.string cimport strcpy, memcpy
 import index.hashes
 cimport index.hashes
 
-from pathlib import Path
-
-# Ensure ERR is always specified first, so 0 remains null label
-LABEL_STRS = []
-MOVE_STRS = []
-STR_TO_LABEL = {}
-ROOT_LABEL = 1
-PUNCT_LABEL = 2
-
-
-def set_labels(name):
-    global LABEL_STRS, STR_TO_LABEL, PUNCT_LABEL, ROOT_LABEL
-    if name == 'MALT':
-        LABEL_STRS.extend('ERR,ROOT,P,NMOD,VMOD,PMOD,SUB,OBJ,AMOD,VC,SBAR,PRD,DEP'.split(','))
-    elif name == 'NONE':
-        LABEL_STRS.extend(('ERR', 'ROOT', 'P', 'NONE'))
-    elif name == 'Stanford':
-        LABEL_STRS.extend('ERR,ROOT,P,abbrev,acomp,advcl,advmod,amod,appos,attr,'
-                          'aux,auxpass,cc,ccomp,complm,conj,cop,csubj,csubjpass,'
-                          'dep,det,dobj,expl,infmod,iobj,mark,mwe,neg,nn,npadvmod,'
-                          'nsubj,nsubjpass,num,number,parataxis,partmod,pcomp,pobj,'
-                          'poss,possessive,preconj,predet,prep,prt,ps,purpcl,quantmod,rcmod,'
-                          'rel,tmod,xcomp,discourse,erased,parataxis,'
-                          'cop,goeswith'.split(','))
-    elif name.endswith(".conll"):
-        labels_set = set()
-        for line in file(name):
-           line = line.strip().split()
-           if not line: continue
-           labels_set.add(line[-3])
-        LABEL_STRS.extend(labels_set)
-    elif name.endswith(".malt"):
-        labels_set = set()
-        for line in file(name):
-           line = line.strip().split()
-           if not line: continue
-           labels_set.add(line[-1])
-        LABEL_STRS.extend(['ERR','ROOT','P'])
-        LABEL_STRS.extend(labels_set)
-    else:
-        raise StandardError, "Unrecognised label set: %s" % name
-    for i, label in enumerate(LABEL_STRS):
-        STR_TO_LABEL[label] = i
-    print "Loaded %s labels" % name
-    ROOT_LABEL = STR_TO_LABEL['ROOT']
-    PUNCT_LABEL = STR_TO_LABEL['P']
-    return LABEL_STRS
-
-
-def set_moves(moves):
-    global MOVE_STRS
-    for move in moves:
-        MOVE_STRS.append(move)
-
 
 cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tags,
                              size_t thresh):
@@ -92,8 +38,6 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.quotes = <size_t*>calloc(size, sizeof(size_t))
 
     cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
-    py_ids.insert(0, 0)
-    py_ids.append(0)
     mask_value = index.hashes.get_mask_value()
     cdef size_t paren_cnt = 0
     cdef size_t quote_cnt = 0
@@ -122,8 +66,16 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
         s.quotes[i] = quote_cnt
     return s
 
+
+cdef int add_parse(Sentence* sent, list heads, list labels, edits) except -1:
+    for i in range(sent.length):
+        sent.parse.heads[i] = <size_t>heads[i]
+        sent.parse.labels[i] = index.hashes.encode_label(labels[i])
+        if edits:
+            sent.parse.edits[i] = <size_t>edits[i]
+
+
 cdef free_sent(Sentence* s):
-   
     free(s.words)
     free(s.owords)
     free(s.pos)
@@ -158,9 +110,9 @@ def read_conll(conll_str, moves=None, vocab_thresh=0):
         words = ['<start>']
         tags = ['OOB']
         heads = [0]
-        labels = [0]
+        labels = ['ERR']
+        ids = [0]
         token_strs = sent_str.split('\n')
-        ids = []
         edits = [False]
         for tok_id, token_str in enumerate(token_strs):
             pieces = token_str.split()
@@ -169,17 +121,14 @@ def read_conll(conll_str, moves=None, vocab_thresh=0):
                 pos = pieces[3]
                 head = pieces[6]
                 label = pieces[7]
-                head = str(int(head) - 1)
+                head = int(head) - 1
                 is_edit = pieces[9] == 'True'
             else:
                 if len(pieces) == 5:
                     pieces.pop(0)
-                try:
-                    word, pos, head, label = pieces
-                    is_edit = False
-                except:
-                    print pieces
-                    raise
+                word, pos, head, label = pieces
+                head = int(head)
+                is_edit = False
             # For SWBD
             if pos.startswith('^'):
                 pos = pos[1:]
@@ -187,22 +136,21 @@ def read_conll(conll_str, moves=None, vocab_thresh=0):
             words.append(word)
             tags.append(pos)
             edits.append(is_edit)
-            if head == '-1':
+            if head == -1:
                 head = len(token_strs)
             heads.append(int(head) + 1)
-            if label.upper() == 'ROOT':
-                label = 'ROOT'
-            elif label.upper() == 'PUNCT':
-                label = 'P'
-            labels.append(STR_TO_LABEL.get(label, 0))
+            labels.append(label)
             ids.append(word_idx)
             word_idx += 1
+        ids.append(0)
         words.append('<root>')
         tags.append('ROOT')
         heads.append(0)
-        labels.append(0)
+        labels.append('ERR')
         edits.append(False)
-        sentences.add(id_, ids, words, tags, heads, labels, edits)
+        sent = make_sentence(id_, len(ids), ids, words, tags, vocab_thresh)
+        add_parse(sent, heads, labels, edits)
+        sentences.add(sent, words, tags)
     if moves is not None and moves.strip():
         sentences.add_moves(moves)
     return sentences
@@ -220,7 +168,7 @@ def read_pos(file_str, vocab_thresh=0):
     for i, sent_str in enumerate(sent_strs):
         words = ['<start>']
         tags = ['OOB']
-        ids = []
+        ids = [0]
         for token_str in sent_str.split():
             try:
                 word, pos = token_str.rsplit('/', 1)
@@ -236,7 +184,9 @@ def read_pos(file_str, vocab_thresh=0):
             w_id += 1
         words.append('<root>')
         tags.append('ROOT')
-        sentences.add(i, ids, words, tags, None, None, None)
+        ids.append(0)
+        sent = make_sentence(i, len(ids), ids, words, tags, vocab_thresh)
+        sentences.add(sent, words, tags)
     return sentences
 
 
@@ -254,129 +204,51 @@ cdef class Sentences:
             free_sent(self.s[i])
         free(self.s) 
 
-    def get_labels(self):
-        """Get the set of tags, left labels and right labels in the data"""
-        seen_l_labels = set([])
-        seen_r_labels = set([])
-        seen_tags = set([1, 2, 3])
-        for i in range(sents.length):
-            sent = sents.s[i]
-            for j in range(1, sent.length - 1):
-                seen_tags.add(sent.pos[j])
-                label = sent.parse.labels[j]
-                if sent.parse.heads[j] > j:
-                    seen_l_labels.add(label)
-                else:
-                    seen_r_labels.add(label)
-        return seen_tags, seen_l_labels, seen_r_labels
-
-    cpdef int add(self, size_t id_, ids, words, tags, heads, labels, edits) except -1:
-        cdef Sentence* s
-        cdef size_t n
-        cdef size_t i
-        n = len(words)
-        s = make_sentence(id_, n, ids, words, tags, self.vocab_thresh)
-        # NB: This doesn't initialise moves, or set sentence boundaries
-        if heads and labels:
-            for i in range(s.length):
-                s.parse.heads[i] = <size_t>heads[i]
-                s.parse.labels[i] = <size_t>labels[i]
-                if edits:
-                    s.parse.edits[i] = <bint>edits[i]
-        self.s[self.length] = s
+    cdef int add(self, Sentence* sent, words, tags) except -1:
+        self.s[self.length] = sent
         self.length += 1
         self.strings.append((words, tags))
 
-    def add_moves(self, object all_moves):
-        # TODO: Update this for new format
-        raise StandardError
-        all_moves = all_moves.strip().split('\n\n')
-        assert len(all_moves) == self.length
-        for i, sent_moves in enumerate(all_moves):
-            self.s[i].parse.n_moves = 0
-            for j, move_str in enumerate(sent_moves.split('\n')):
-                name, move_id, move_label = move_str.split()
-                move_id = int(move_id)
-                self.s[i].parse.moves[j] = int(move_id)
-                self.s[i].parse.move_labels[j] = int(move_label)
-                self.s[i].parse.n_moves += 1
-
-    def write_moves(self, out_file):
-        cdef Sentence* s
-        cdef size_t i, j, move_and_label
-        cdef object move
-        move_strs = ['E', 'S', 'D', 'R', 'L', 'W', 'V']
+    def get_labels(self):
+        tags = set()
+        left_labels = set()
+        right_labels = set()
+        cdef size_t i
+        cdef Sentence* sent
         for i in range(self.length):
-            s = self.s[i]
-            for j in range(s.parse.n_moves):
-                # TODO: THis is quite a hack, because we shouldn't need the details
-                # of how the move/labels are coupled here. But, shrug.
-                paired = s.parse.moves[j]
-                move = paired / len(LABEL_STRS)
-                label = paired % len(LABEL_STRS)
-                line = u'%d\t%s\t%s\n' % (paired, move_strs[move], LABEL_STRS[label])
-                out_file.write(line)
-            out_file.write(u'\n')
+            sent = self.s[i]
+            for j in range(sent.length):
+                tags.add(sent.pos[j])
+                if sent.parse.heads[j] > j:
+                    left_labels.add(sent.parse.labels[j])
+                else:
+                    right_labels.add(sent.parse.labels[j])
+        return tags, left_labels, right_labels
+
 
     def write_parses(self, out_file):
         cdef Sentence* s
         cdef size_t i, j, w_id
         cdef int head
         pos_idx = index.hashes.reverse_pos_index()
+        label_idx = index.hashes.reverse_label_index()
         for i in range(self.length):
             s = self.s[i]
             py_words, py_pos = self.strings[i]
             w_id = 0
             for j in range(1, s.length - 1):
-                if s.parse.labels[j] == ROOT_LABEL:
+                if index.hashes.is_root_label(s.parse.labels[j]):
                     head = -1
                 else:
                     head = <int>(s.parse.heads[j]) - (j - w_id)
-                try:
-                    fields = (w_id, py_words[j], pos_idx[s.pos[j]], head,
-                              LABEL_STRS[s.parse.labels[j]], str(bool(s.parse.edits[j])))
-                except:
-                    print j, s.length, s.parse.labels[j], len(py_words), len(py_pos)
-                    raise
+                fields = (w_id, py_words[j], pos_idx[s.pos[j]], head,
+                          label_idx[s.parse.labels[j]],
+                          str(bool(s.parse.edits[j])))
                 out_file.write(u'%d\t%s\t%s\t%s\t%s\t%s\n' % fields)
                 w_id += 1
                 if s.parse.sbd[j] or j == (s.length - 2):
                     out_file.write(u'\n')
                     w_id = 0
-
-    def evaluate(self, Sentences gold):
-        def gen_words(Sentences sents):
-            cdef:
-                size_t* ids
-                size_t* heads
-                size_t* labels
-                bint* sbd
-            for i in range(sents.length):
-                ids = sents.s[i].ids
-                heads = sents.s[i].parse.heads
-                labels = sents.s[i].parse.labels
-                sbd = sents.s[i].parse.sbd
-                for j in range(1, sents.s[i].length - 1):
-                    yield j, ids[j], ids[heads[j]], labels[j], sbd[j]
-        cdef Sentence* t_sent
-        cdef Sentence* g_sent
-        cdef double nc = 0
-        cdef double n = 0
-        cdef double sbd_nc = 0
-        cdef double sbd_n = 0
-        for t_tok, g_tok in zip(gen_words(self), gen_words(gold)):
-            g_w, g_id, g_head, g_label, g_sbd = g_tok
-            t_w, t_id, t_head, t_label, t_sbd = t_tok
-            sbd_nc += g_sbd == t_sbd
-            sbd_n += 1
-            if g_label == PUNCT_LABEL:
-                continue
-            if g_label == ROOT_LABEL and t_label == ROOT_LABEL:
-                nc += 1
-            else:
-                nc += g_head == t_head
-            n += 1
-        return nc/n
 
     def connect_sentences(self, size_t n):
         """

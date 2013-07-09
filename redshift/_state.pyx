@@ -292,7 +292,9 @@ cdef bint has_root_child(State *s, size_t token):
     # stack to S0
     #return s.labels[get_l(s, token)] == 1
 
+
 DEF PADDING = 5
+
 
 cdef State* init_state(size_t n):
     cdef size_t i, j

@@ -2,6 +2,12 @@
 from _state cimport *
 from libc.stdlib cimport malloc, calloc, free
 import redshift.io_parse
+import index.hashes
+
+# TODO: Link these with other compile constants
+DEF MAX_TAGS = 100
+DEF MAX_LABELS = 200
+
 
 cdef enum:
     ERR
@@ -32,13 +38,11 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
         return u'%s(%s)' % (tokens[head], tokens[child])
 
 cdef class TransitionSystem:
-    def __cinit__(self, object tags, object labels, allow_reattach=False,
-                  allow_reduce=False):
+    def __cinit__(self, allow_reattach=False, allow_reduce=False):
         self.assign_pos = False
         self.use_edit = True 
-        self.n_labels = len(labels)
-        self.n_tags = max(tags)
-        self.py_labels = labels
+        self.n_labels = MAX_LABELS
+        self.n_tags = MAX_TAGS
         self.allow_reattach = allow_reattach
         self.allow_reduce = allow_reduce
         self.nr_class = 0
@@ -59,25 +63,28 @@ cdef class TransitionSystem:
         self.r_end = 0
         self.p_start = self.r_start + 1
         self.p_end = 0
-        # TODO: Fix this
-        self.erase_label = redshift.io_parse.STR_TO_LABEL.get('erased', 9000)
         self.counter = 0
+        self.erase_label = index.hashes.encode_label('erased')
+        # TODO: Clean this up, or rename them or something
+        self.left_labels = []
+        self.right_labels = []
+
 
     def set_labels(self, tags, left_labels, right_labels):
         self.n_tags = <size_t>max(tags)
-        self.left_labels = [self.py_labels[l] for l in sorted(left_labels)]
-        self.right_labels = [self.py_labels[l] for l in sorted(right_labels)]
         self.labels[self.s_id] = 0
         self.labels[self.d_id] = 0
         self.labels[self.e_id] = 0
         self.moves[self.s_id] = <size_t>SHIFT
         self.moves[self.d_id] = <size_t>REDUCE
         self.moves[self.e_id] = <size_t>EDIT
+        label_idx = index.hashes.reverse_label_index()
         clas = self.l_start
         for label in left_labels:
             self.moves[clas] = <size_t>LEFT
             self.labels[clas] = label
             self.l_classes[label] = clas
+            self.left_labels.append(label_idx[label])
             clas += 1
         self.l_end = clas
         self.r_start = clas
@@ -85,6 +92,7 @@ cdef class TransitionSystem:
             self.moves[clas] = <size_t>RIGHT
             self.labels[clas] = label
             self.r_classes[label] = clas
+            self.right_labels.append(label_idx[label])
             clas += 1
         self.r_end = clas
         cdef size_t tag
@@ -97,7 +105,7 @@ cdef class TransitionSystem:
                 clas += 1
             self.p_end = clas
         self.nr_class = clas
-        return clas
+        return clas, len(left_labels) + len(right_labels)
         
     cdef int transition(self, size_t clas, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc, move, label
