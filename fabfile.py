@@ -435,7 +435,7 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs, size=5):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=2gb,nodes=1:ppn={n_proces}
+#PBS -l walltime=20:00:00,mem=2gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
