@@ -160,7 +160,7 @@ cdef class Perceptron:
         self.update(pred, label, feats, 1)
         return pred
 
-    def batch_update(self, deltas, margin):
+    def batch_update(self, deltas):
         cdef size_t feat_addr
         cdef SquareFeature* feat
         self.now += 1
