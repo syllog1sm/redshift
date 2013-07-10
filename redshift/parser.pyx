@@ -130,7 +130,10 @@ cdef class BaseParser:
             for i in indices:
                 if DEBUG:
                     print ' '.join(sents.strings[i][0])
-                self.train_one(n, sents.s[i])
+                if self.train_alg == 'static':
+                    self.static_train(n, sents.s[i])
+                else:
+                    self.dyn_train(n, sents.s[i])
             print_train_msg(n, self.guide.n_corr, self.guide.total, self.guide.cache.n_hit,
                             self.guide.cache.n_miss)
             self.guide.n_corr = 0
@@ -141,9 +144,12 @@ cdef class BaseParser:
                 self.guide.prune(self.feat_thresh)
         self.guide.finalize()
 
-    cdef int train_one(self, int iter_num, Sentence* sent) except -1:
+    cdef int dyn_train(self, int iter_num, Sentence* sent) except -1:
         raise NotImplementedError
 
+    cdef int static_train(self, int iter_num, Sentence* sent) except -1:
+        raise NotImplementedError
+    
     def add_parses(self, Sentences sents):
         self.guide.nr_class = self.moves.nr_class
         cdef size_t i
@@ -193,7 +199,6 @@ cdef class BaseParser:
     def __dealloc__(self):
         pass
 
-
 cdef class BeamParser(BaseParser):
     cdef int parse(self, Sentence* sent) except -1:
         cdef size_t k = self.beam_width
@@ -213,30 +218,21 @@ cdef class BeamParser(BaseParser):
                         sent.parse.sbd, sent.parse.edits)
         free(beam_scores)
 
-    cdef int train_one(self, int iter_num, Sentence* sent) except -1:
-        cdef size_t p_idx, i
+    cdef int dyn_train(self, int iter_num, Sentence* sent) except -1:
+        cdef size_t i
         cdef Kernel* kernel
-        cdef Kernel* gold_kernel
-        cdef uint64_t* feats
         cdef int* costs
-        cdef int cost
-        cdef size_t* g_heads = sent.parse.heads
-        cdef size_t* g_labels = sent.parse.labels
-        cdef bint* g_edits = sent.parse.edits
-        cdef size_t* g_pos = sent.pos
-        cdef Violation violn
-        cdef double* scores
-        cdef bint cache_hit = False
-        cdef size_t k = self.beam_width
-        cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
-        cdef Beam gold_beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
+        cdef Beam beam = Beam(self.moves, self.beam_width, sent.length,
+                              upd_strat=self.train_alg)
+        cdef Beam gold_beam = Beam(self.moves, self.beam_width, sent.length,
+                                   upd_strat=self.train_alg)
         beam_scores = <double**>malloc(beam.k * sizeof(double*))
         gold_scores = <double**>malloc(beam.k * sizeof(double*))
+        cdef size_t* ghist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
+        cdef size_t* phist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
         cdef double delta = 0
         cdef double max_violn = 0
         cdef size_t t = 0
-        cdef size_t* ghist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
-        cdef size_t* phist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
         while not beam.is_finished:
             self.guide.cache.flush()
             for i in range(beam.bsize):
@@ -246,8 +242,9 @@ cdef class BeamParser(BaseParser):
             for i in range(gold_beam.bsize):
                 kernel = gold_beam.next_state(i, sent.pos)
                 gold_scores[i] = self._predict(sent, kernel)
-                costs = self.moves.get_costs(gold_beam.beam[i], g_pos, g_heads,
-                                             g_labels, g_edits)
+                costs = self.moves.get_costs(gold_beam.beam[i], sent.pos,
+                                             sent.parse.heads, sent.parse.labels,
+                                             sent.parse.edits)
                 for clas in range(self.moves.nr_class):
                     if costs[clas] != 0:
                         gold_beam.valid[i][clas] = -1
@@ -256,23 +253,17 @@ cdef class BeamParser(BaseParser):
             if delta >= max_violn:
                 max_violn = delta
                 t = gold_beam.beam[0].t
-                assert t < (sent.length * 3)
                 memcpy(ghist, gold_beam.beam[0].history, t * sizeof(size_t))
                 memcpy(phist, beam.beam[0].history, t * sizeof(size_t))
-            #beam.check_violation()
-            #if self.train_alg == 'early' and beam.violn != None:
-            #    break
-            if beam.beam[0].score == gold_beam.beam[0].score:
-                self.guide.n_corr += 1
+            self.guide.n_corr += delta < 1
             self.guide.total += 1
-        free(beam_scores)
-        free(gold_scores)
-        self.guide.total += beam.gold.t
         if t > 0:
             counted = self._count_feats(sent, t, phist, ghist)
             self.guide.batch_update(counted)
         free(ghist)
         free(phist)
+        free(beam_scores)
+        free(gold_scores)
 
     def say_config(self):
         beam_settings = (self.beam_width, self.train_alg)
@@ -322,6 +313,45 @@ cdef class BeamParser(BaseParser):
             counts[feats[f]] += inc
             f += 1
 
+    cdef int static_train(self, int iter_num, Sentence* sent) except -1:
+        cdef size_t  i
+        cdef Kernel* kernel
+        cdef double* scores
+        cdef Beam beam = Beam(self.moves, self.beam_width, sent.length,
+                              upd_strat=self.train_alg)
+        cdef State* gold = init_state(sent.length)
+        cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
+        cdef size_t* ghist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
+        cdef size_t* phist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
+        cdef double max_violn = 0
+        cdef size_t t = 0
+        while not beam.is_finished:
+            self.guide.cache.flush()
+            for i in range(beam.bsize):
+                kernel = beam.next_state(i, sent.pos)
+                beam_scores[i] = self._predict(sent, kernel)
+            beam.extend_states(beam_scores)
+            oracle = self.moves.break_tie(gold, sent.pos, sent.parse.heads,
+                                          sent.parse.labels, sent.parse.edits)
+            fill_kernel(gold, sent.pos)
+            scores = self._predict(sent, &gold.kernel)
+            gold.score += scores[oracle]
+            self.moves.transition(oracle, gold)
+            if (beam.beam[0].score - gold.score) >= max_violn:
+                max_violn = beam.beam[0].score - gold.score
+                t = gold.t
+                memcpy(ghist, gold.history, t * sizeof(size_t))
+                memcpy(phist, beam.beam[0].history, t * sizeof(size_t))
+            self.guide.n_corr += beam.beam[0].score >= gold.score
+            self.guide.total += 1
+        if t > 0:
+            counted = self._count_feats(sent, t, phist, ghist)
+            self.guide.batch_update(counted)
+        free(ghist)
+        free(phist)
+        free(beam_scores)
+        free_state(gold)
+
 
 cdef double FOLLOW_ERR_PC = 0.90
 
@@ -346,13 +376,9 @@ cdef class GreedyParser(BaseParser):
         fill_edits(s, sent.parse.edits)
         free_state(s)
  
-    cdef int train_one(self, int iter_num, Sentence* sent) except -1:
+    cdef int dyn_train(self, int iter_num, Sentence* sent) except -1:
         cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))
-        cdef size_t* g_labels = sent.parse.labels
-        cdef size_t* g_heads = sent.parse.heads
-        cdef bint* g_edits = sent.parse.edits
         cdef State* s = init_state(sent.length)
-        cdef bint online = self.train_alg == 'online'
         cdef size_t pred
         cdef uint64_t* feats
         cdef size_t _ = 0
@@ -361,16 +387,34 @@ cdef class GreedyParser(BaseParser):
             self.moves.fill_valid(s, valid)
             feats = self.features.extract(sent, &s.kernel)
             pred = self._predict(feats, valid, &s.guess_labels[s.i])
-            if online:
-                costs = self.moves.get_costs(s, sent.pos, g_heads, g_labels, g_edits)
-                gold = self._predict(feats, costs, &_) if costs[pred] != 0 else pred
-            else:
-                gold = self.moves.break_tie(s, sent.pos, g_heads, g_labels, g_edits)
+            costs = self.moves.get_costs(s, sent.pos, sent.parse.heads,
+                                         sent.parse.labels, sent.parse.edits)
+            gold = pred if costs[pred] == 0 else self._predict(feats, costs, &_)
             self.guide.update(pred, gold, feats, 1)
-            if online and iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
+            if iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
                 self.moves.transition(pred, s)
             else:
                 self.moves.transition(gold, s)
+            self.guide.n_corr += (gold == pred)
+            self.guide.total += 1
+        free_state(s)
+        free(valid)
+
+    cdef int static_train(self, int iter_num, Sentence* sent) except -1:
+        cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))
+        cdef State* s = init_state(sent.length)
+        cdef size_t pred
+        cdef uint64_t* feats
+        cdef size_t _ = 0
+        while not s.is_finished:
+            fill_kernel(s, sent.pos)
+            feats = self.features.extract(sent, &s.kernel)
+            self.moves.fill_valid(s, valid)
+            pred = self._predict(feats, valid, &s.guess_labels[s.i])
+            gold = self.moves.break_tie(s, sent.pos, sent.parse.heads,
+                                         sent.parse.labels, sent.parse.edits)
+            self.guide.update(pred, gold, feats, 1)
+            self.moves.transition(gold, s)
             self.guide.n_corr += (gold == pred)
             self.guide.total += 1
         free_state(s)
