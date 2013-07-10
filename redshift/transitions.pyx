@@ -72,6 +72,7 @@ cdef class TransitionSystem:
 
     def set_labels(self, tags, left_labels, right_labels):
         self.n_tags = <size_t>max(tags)
+        label_idx = index.hashes.reverse_label_index()
         self.left_labels = [label_idx[label] for label in sorted(left_labels)]
         self.right_labels = [label_idx[label] for label in sorted(right_labels)]
         self.labels[self.s_id] = 0
@@ -80,7 +81,6 @@ cdef class TransitionSystem:
         self.moves[self.s_id] = <size_t>SHIFT
         self.moves[self.d_id] = <size_t>REDUCE
         self.moves[self.e_id] = <size_t>EDIT
-        label_idx = index.hashes.reverse_label_index()
         clas = self.l_start
         for label in left_labels:
             self.moves[clas] = <size_t>LEFT
@@ -105,7 +105,7 @@ cdef class TransitionSystem:
                 clas += 1
             self.p_end = clas
         self.nr_class = clas
-        return clas, len(set(left_labels + right_labels))
+        return clas, len(set(list(left_labels) + list(right_labels)))
         
     cdef int transition(self, size_t clas, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc, move, label

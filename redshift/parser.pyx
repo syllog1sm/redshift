@@ -293,53 +293,37 @@ cdef class BeamParser(BaseParser):
         cdef State* gold_state = init_state(sent.length)
         cdef State* pred_state = init_state(sent.length)
         # Find where the states diverge
-        for d in range(t):
-            if ghist[d] == phist[d]:
-                self.moves.transition(ghist[d], gold_state)
-                self.moves.transition(phist[d], pred_state)
-            else:
-                break
-        else:
-            return {}
         cdef dict counts = {}
         for clas in range(self.moves.nr_class):
             counts[clas] = {}
-        cdef double* scores = self.guide.scores
-        for i in range(d, t):
+        cdef bint seen_diff = False
+        for i in range(t):
+            if not seen_diff and ghist[i] == phist[i]:
+                self.moves.transition(ghist[i], gold_state)
+                self.moves.transition(phist[i], pred_state)
+                continue
+            seen_diff = True
             fill_kernel(gold_state, sent.pos)
-            feats = self.features.extract(sent, &gold_state.kernel)
-            clas_counts = counts[ghist[i]]
-            f = 0
-            while True:
-                value = feats[f]
-                f += 1
-                if value == 0:
-                    break
-                if value not in clas_counts:
-                    clas_counts[value] = 0
-                clas_counts[value] += 1
-            self.moves.transition(ghist[i], gold_state)
-        free_state(gold_state)
-        for i in range(d, t):
             fill_kernel(pred_state, sent.pos)
-            feats = self.features.extract(sent, &pred_state.kernel)
-            clas_counts = counts[phist[i]]
-            f = 0
-            while True:
-                value = feats[f]
-                f += 1 
-                if value == 0:
-                    break
-                if value not in clas_counts:
-                    clas_counts[value] = 0
-                clas_counts[value] -= 1
+            self._inc_feats(counts[ghist[i]], sent, &gold_state.kernel, 1)
+            self._inc_feats(counts[phist[i]], sent, &pred_state.kernel, -1)
+            self.moves.transition(ghist[i], gold_state)
             self.moves.transition(phist[i], pred_state)
+        free_state(gold_state)
         free_state(pred_state)
         return counts
 
+    cdef int _inc_feats(self, dict counts, Sentence* sent, Kernel* k, int inc) except -1:
+        cdef uint64_t* feats = self.features.extract(sent, k)
+        cdef size_t f = 0
+        while feats[f] != 0:
+            if feats[f] not in counts:
+                counts[feats[f]] = 0
+            counts[feats[f]] += inc
+            f += 1
+
 
 cdef double FOLLOW_ERR_PC = 0.90
-
 
 cdef class GreedyParser(BaseParser):
     cdef int parse(self, Sentence* sent) except -1:

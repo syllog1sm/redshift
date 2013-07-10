@@ -123,6 +123,7 @@ cdef class Beam:
             # So, s here will get manipulated, then copied into parents later.
             s = self.beam[self.bsize]
             copy_state(s, parent)
+            assert self.costs[parent_idx][clas] != -1
             s.cost += self.costs[parent_idx][clas]
             s.score = data.first
             self.trans.transition(clas, s)
