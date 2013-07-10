@@ -38,9 +38,9 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
         return u'%s(%s)' % (tokens[head], tokens[child])
 
 cdef class TransitionSystem:
-    def __cinit__(self, allow_reattach=False, allow_reduce=False):
+    def __cinit__(self, allow_reattach=False, allow_reduce=False, use_edit=False):
         self.assign_pos = False
-        self.use_edit = True 
+        self.use_edit = use_edit
         self.n_labels = MAX_LABELS
         self.n_tags = MAX_TAGS
         self.allow_reattach = allow_reattach
