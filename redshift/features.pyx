@@ -732,16 +732,17 @@ cdef class FeatureSet:
         feats += valency + zhang_unigrams + third_order
         feats += labels
         feats += label_sets
-        print "Using disfl feats"
-        feats += disfl
         match_feats = []
-        kernel_tokens = get_kernel_tokens()
-        for w1, w2 in combinations(kernel_tokens, 2):
-            # Words match
-            match_feats.append((w1, w2))
-            # POS match
-            match_feats.append((w1 + 1, w2 + 1))
-        print "Use %d ngram feats and %d match feats" % (len(ngrams), len(match_feats))
+        if feat_level == 'extra':
+            print "Using disfl+match feats"
+            feats += disfl
+            kernel_tokens = get_kernel_tokens()
+            for w1, w2 in combinations(kernel_tokens, 2):
+                # Words match
+                match_feats.append((w1, w2))
+                # POS match
+                match_feats.append((w1 + 1, w2 + 1))
+        print "Use %d ngram feats" % (len(ngrams))
         if ngrams:
             feats += tuple(unigrams)
             for ngram_feat in ngrams:

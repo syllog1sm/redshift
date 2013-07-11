@@ -40,6 +40,7 @@ def load_parser(model_dir, reuse_idx=False):
     feat_thresh = int(params['feat_thresh'])
     allow_reattach = params['allow_reattach'] == 'True'
     allow_reduce = params['allow_reduce'] == 'True'
+    use_edit = params['use_edit'] == 'True'
     l_labels = params['left_labels']
     r_labels = params['right_labels']
     beam_width = int(params['beam_width'])
@@ -52,9 +53,9 @@ def load_parser(model_dir, reuse_idx=False):
     params = {'clean': False, 'train_alg': train_alg,
               'feat_set': feat_set, 'feat_thresh': feat_thresh,
               'vocab_thresh': 1, 'allow_reattach': allow_reattach,
-              'allow_reduce': allow_reduce, 'reuse_idx': reuse_idx,
-              'beam_width': beam_width, 'ngrams': ngrams,
-              'add_clusters': add_clusters}
+              'use_edit': use_edit, 'allow_reduce': allow_reduce,
+              'reuse_idx': reuse_idx, 'beam_width': beam_width,
+              'ngrams': ngrams, 'add_clusters': add_clusters}
     if beam_width >= 2:
         parser = BeamParser(model_dir, **params)
     else:
@@ -83,7 +84,7 @@ cdef class BaseParser:
     def __cinit__(self, model_dir, clean=False, train_alg='static',
                   feat_set="zhang",
                   feat_thresh=0, vocab_thresh=5,
-                  allow_reattach=False, allow_reduce=False,
+                  allow_reattach=False, allow_reduce=False, use_edit=False,
                   reuse_idx=False, beam_width=1,
                   ngrams=None, add_clusters=False):
         self.model_dir = self.setup_model_dir(model_dir, clean)
@@ -98,7 +99,7 @@ cdef class BaseParser:
         else:
             self.load_idx(self.model_dir, self.features.n)
         self.moves = TransitionSystem(allow_reattach=allow_reattach,
-                                      allow_reduce=allow_reduce)
+                                      allow_reduce=allow_reduce, use_edit=use_edit)
         self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model'))
         self.say_config()
 
@@ -184,6 +185,7 @@ cdef class BaseParser:
             cfg.write(u'feat_thresh\t%d\n' % self.feat_thresh)
             cfg.write(u'allow_reattach\t%s\n' % self.moves.allow_reattach)
             cfg.write(u'allow_reduce\t%s\n' % self.moves.allow_reduce)
+            cfg.write(u'use_edit\t%s\n' % self.moves.use_edit)
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
             cfg.write(u'beam_width\t%d\n' % self.beam_width)
@@ -201,10 +203,8 @@ cdef class BaseParser:
 
 cdef class BeamParser(BaseParser):
     cdef int parse(self, Sentence* sent) except -1:
-        cdef size_t k = self.beam_width
-        cdef Beam beam = Beam(self.moves, k, sent.length, upd_strat=self.train_alg)
-        cdef size_t p_idx, i
-        cdef double* scores
+        cdef Beam beam = Beam(self.moves, self.beam_width, sent.length)
+        cdef size_t p_idx
         cdef Kernel* kernel
         cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
         while not beam.is_finished:
@@ -218,14 +218,51 @@ cdef class BeamParser(BaseParser):
                         sent.parse.sbd, sent.parse.edits)
         free(beam_scores)
 
+    cdef int static_train(self, int iter_num, Sentence* sent) except -1:
+        cdef size_t  i
+        cdef Kernel* kernel
+        cdef double* scores
+        cdef Beam beam = Beam(self.moves, self.beam_width, sent.length)
+        cdef State* gold = init_state(sent.length)
+        cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
+        cdef size_t* ghist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
+        cdef size_t* phist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
+        cdef double max_violn = 0
+        cdef size_t t = 0
+        while not beam.is_finished:
+            self.guide.cache.flush()
+            for i in range(beam.bsize):
+                kernel = beam.next_state(i, sent.pos)
+                beam_scores[i] = self._predict(sent, kernel)
+            beam.extend_states(beam_scores)
+            oracle = self.moves.break_tie(gold, sent.pos, sent.parse.heads,
+                                          sent.parse.labels, sent.parse.edits)
+            fill_kernel(gold, sent.pos)
+            scores = self._predict(sent, &gold.kernel)
+            gold.score += scores[oracle]
+            self.moves.transition(oracle, gold)
+            if (beam.beam[0].score - gold.score) >= max_violn:
+                max_violn = beam.beam[0].score - gold.score
+                t = gold.t
+                memcpy(ghist, gold.history, t * sizeof(size_t))
+                memcpy(phist, beam.beam[0].history, t * sizeof(size_t))
+        if t == 0:
+            self.guide.n_corr += beam.t
+            self.guide.total += beam.t
+        else:
+            counted = self._count_feats(sent, t, phist, ghist)
+            self.guide.batch_update(counted)
+        free(ghist)
+        free(phist)
+        free(beam_scores)
+        free_state(gold)
+
     cdef int dyn_train(self, int iter_num, Sentence* sent) except -1:
         cdef size_t i
         cdef Kernel* kernel
         cdef int* costs
-        cdef Beam beam = Beam(self.moves, self.beam_width, sent.length,
-                              upd_strat=self.train_alg)
-        cdef Beam gold_beam = Beam(self.moves, self.beam_width, sent.length,
-                                   upd_strat=self.train_alg)
+        cdef Beam beam = Beam(self.moves, self.beam_width, sent.length)
+        cdef Beam gold_beam = Beam(self.moves, self.beam_width, sent.length)
         beam_scores = <double**>malloc(beam.k * sizeof(double*))
         gold_scores = <double**>malloc(beam.k * sizeof(double*))
         cdef size_t* ghist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
@@ -255,9 +292,10 @@ cdef class BeamParser(BaseParser):
                 t = gold_beam.beam[0].t
                 memcpy(ghist, gold_beam.beam[0].history, t * sizeof(size_t))
                 memcpy(phist, beam.beam[0].history, t * sizeof(size_t))
-            self.guide.n_corr += delta < 1
-            self.guide.total += 1
-        if t > 0:
+        if t == 0:
+            self.guide.n_corr += beam.t
+            self.guide.total += beam.t
+        else:
             counted = self._count_feats(sent, t, phist, ghist)
             self.guide.batch_update(counted)
         free(ghist)
@@ -268,6 +306,7 @@ cdef class BeamParser(BaseParser):
     def say_config(self):
         beam_settings = (self.beam_width, self.train_alg)
         print 'Beam settings: k=%d; upd_strat=%s' % beam_settings
+        print 'Edits=%s' % self.moves.use_edit
 
     cdef double* _predict(self, Sentence* sent, Kernel* kernel) except NULL:
         cdef bint cache_hit = False
@@ -288,8 +327,10 @@ cdef class BeamParser(BaseParser):
         for clas in range(self.moves.nr_class):
             counts[clas] = {}
         cdef bint seen_diff = False
+        self.guide.total += t
         for i in range(t):
             if not seen_diff and ghist[i] == phist[i]:
+                self.guide.n_corr += 1
                 self.moves.transition(ghist[i], gold_state)
                 self.moves.transition(phist[i], pred_state)
                 continue
@@ -312,46 +353,6 @@ cdef class BeamParser(BaseParser):
                 counts[feats[f]] = 0
             counts[feats[f]] += inc
             f += 1
-
-    cdef int static_train(self, int iter_num, Sentence* sent) except -1:
-        cdef size_t  i
-        cdef Kernel* kernel
-        cdef double* scores
-        cdef Beam beam = Beam(self.moves, self.beam_width, sent.length,
-                              upd_strat=self.train_alg)
-        cdef State* gold = init_state(sent.length)
-        cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
-        cdef size_t* ghist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
-        cdef size_t* phist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
-        cdef double max_violn = 0
-        cdef size_t t = 0
-        while not beam.is_finished:
-            self.guide.cache.flush()
-            for i in range(beam.bsize):
-                kernel = beam.next_state(i, sent.pos)
-                beam_scores[i] = self._predict(sent, kernel)
-            beam.extend_states(beam_scores)
-            oracle = self.moves.break_tie(gold, sent.pos, sent.parse.heads,
-                                          sent.parse.labels, sent.parse.edits)
-            fill_kernel(gold, sent.pos)
-            scores = self._predict(sent, &gold.kernel)
-            gold.score += scores[oracle]
-            self.moves.transition(oracle, gold)
-            if (beam.beam[0].score - gold.score) >= max_violn:
-                max_violn = beam.beam[0].score - gold.score
-                t = gold.t
-                memcpy(ghist, gold.history, t * sizeof(size_t))
-                memcpy(phist, beam.beam[0].history, t * sizeof(size_t))
-            self.guide.n_corr += beam.beam[0].score >= gold.score
-            self.guide.total += 1
-        if t > 0:
-            counted = self._count_feats(sent, t, phist, ghist)
-            self.guide.batch_update(counted)
-        free(ghist)
-        free(phist)
-        free(beam_scores)
-        free_state(gold)
-
 
 cdef double FOLLOW_ERR_PC = 0.90
 

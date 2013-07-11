@@ -71,20 +71,14 @@ cdef class Beam:
     cdef Violation violn
     #cdef priority_queue[pair[double, size_t]]* next_moves
     
-    cdef State* gold
     cdef State** parents
     cdef State** beam
-    cdef int** costs
     cdef int** valid
-    cdef object _prune_freqs
     
-    cdef object upd_strat
-    cdef object cost_strat
     cdef size_t max_class
     cdef size_t k
     cdef size_t i
     cdef size_t t
-    cdef size_t nr_skip
     cdef size_t length
     cdef size_t bsize
     cdef size_t psize
@@ -92,13 +86,7 @@ cdef class Beam:
     cdef bint is_finished
 
     cdef Kernel* next_state(self, size_t i, size_t* tags)
-    cdef Kernel* gold_kernel(self, size_t* tags)
-    cdef int advance_gold(self, double* scores, size_t* tags, size_t* heads,
-                          size_t* labels, bint* edits) except -1
-    cdef int cost_next(self, size_t i, size_t* tags, size_t* heads,
-                       size_t* labels, bint* edits) except -1
     cdef int extend_states(self, double** scores) except -1
-    cdef bint check_violation(self)
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
                         size_t* labels, bint* sbd, bint* edits) except -1
 
