@@ -15,15 +15,11 @@ from cython.operator cimport dereference as deref
 
 cdef class Beam:
     def __cinit__(self, TransitionSystem trans, 
-                  size_t k, size_t length, upd_strat='early',
-                  prune_freqs=None, cost_strat='dynamic'):
+                  size_t k, size_t length):
         self.trans = trans
-        self.upd_strat = upd_strat
-        self.cost_strat = cost_strat
         self.length = length
         self.k = k
         self.i = 0
-        self.nr_skip = 0
         self.is_finished = False
         cdef size_t i
         self.parents = <State**>malloc(k * sizeof(State*))
@@ -32,57 +28,18 @@ cdef class Beam:
             self.parents[i] = init_state(length)
         for i in range(k):
             self.beam[i] = init_state(length)
-        self.gold = init_state(length)
         self.bsize = 1
         self.psize = 0
         self.t = 0
         self.is_full = self.bsize >= self.k
-        self.costs = <int**>malloc(self.k * sizeof(int*))
         self.valid = <int**>malloc(self.k * sizeof(int*))
         for i in range(self.k):
-            self.costs[i] = <int*>calloc(self.trans.nr_class, sizeof(int*))
             self.valid[i] = <int*>calloc(self.trans.nr_class, sizeof(int*))
-        self.violn = None
-        self._prune_freqs = prune_freqs
-
-    cdef Kernel* gold_kernel(self, size_t* tags):
-        fill_kernel(self.gold, tags)
-        return &self.gold.kernel
-
-    cdef int advance_gold(self, double* scores, size_t* tags,
-                          size_t* heads, size_t* labels, bint* edits) except -1:
-        cdef size_t oracle
-        cdef double best_score = -100000
-        cdef int* costs = self.trans.get_costs(self.gold, tags, heads, labels, edits)
-        if self.cost_strat == 'static':
-            oracle = self.trans.break_tie(self.gold, tags, heads, labels, edits)
-        else:
-            for i in range(self.trans.nr_class):
-                if scores[i] >= best_score and costs[i] == 0:
-                    oracle = i
-                    best_score = scores[i]
-        self.gold.score += scores[oracle]
-        self.trans.transition(oracle, self.gold)
 
     cdef Kernel* next_state(self, size_t idx, size_t* tags):
         self.trans.fill_valid(self.beam[idx], self.valid[idx])
         fill_kernel(self.beam[idx], tags)
         return &self.beam[idx].kernel
-
-    cdef int cost_next(self, size_t i, size_t* tags, size_t* heads,
-                       size_t* labels, bint* edits) except -1:
-        cdef int* costs
-        if self.cost_strat == 'static':
-            self.trans.fill_static_costs(self.beam[i], tags, heads, labels,
-                                         edits, self.costs[i])
-        else:
-            costs = self.trans.get_costs(self.beam[i], tags, heads, labels, edits)
-            for clas in range(self.trans.nr_class):
-                if costs[clas] != 0:
-                    self.costs[i][clas] = self.beam[i].cost + 1
-                else:
-                    self.costs[i][clas] = self.beam[i].cost
-        fill_kernel(self.beam[i], tags)
 
     cdef int extend_states(self, double** ext_scores) except -1:
         global merged
@@ -120,7 +77,6 @@ cdef class Beam:
             # So, s here will get manipulated, then copied into parents later.
             s = self.beam[self.bsize]
             copy_state(s, parent)
-            s.cost += self.costs[parent_idx][clas]
             s.score = data.first
             self.trans.transition(clas, s)
             self.bsize += 1
@@ -130,35 +86,6 @@ cdef class Beam:
         self.t += 1
         if self.beam[0].is_finished:
             self.is_finished = True
-
-    cdef bint check_violation(self):
-        cdef Violation violn
-        cdef size_t i
-        cdef bint out_of_beam
-        if self.bsize < self.k:
-            return False
-        if self.upd_strat == 'early' and self.violn != None:
-            return False
-        if self.beam[0].cost == 0:
-            return False
-        if self.gold.score > self.beam[0].score:
-            return False
-        out_of_beam = True
-        for i in range(self.bsize):
-            if self.beam[i].cost == 0:
-                out_of_beam = False
-                gold = self.beam[i]
-                break
-        else:
-            gold = self.gold
-        violn = Violation()
-        violn.set(self.beam[0], gold, out_of_beam)
-        if self.upd_strat == 'max':
-            if self.violn is None or violn.delta > self.violn.delta:
-                self.violn = violn
-        if out_of_beam and self.upd_strat == 'early' and self.violn == None:
-            self.violn = violn
-        return self.upd_strat == 'early' and bool(self.violn)
 
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
                         size_t* labels, bint* sbd, bint* edits) except -1:
@@ -173,16 +100,14 @@ cdef class Beam:
         fill_edits(self.beam[0], edits)
  
     def __dealloc__(self):
-        free_state(self.gold)
         for i in range(self.k):
             free_state(self.beam[i])
             free_state(self.parents[i])
             free(self.valid[i])
-            free(self.costs[i])
         free(self.beam)
         free(self.parents)
         free(self.valid)
-        free(self.costs)
+
 
 cdef class Violation:
     """

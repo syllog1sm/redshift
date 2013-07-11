@@ -38,9 +38,9 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
         return u'%s(%s)' % (tokens[head], tokens[child])
 
 cdef class TransitionSystem:
-    def __cinit__(self, allow_reattach=False, allow_reduce=False):
+    def __cinit__(self, allow_reattach=False, allow_reduce=False, use_edit=False):
         self.assign_pos = False
-        self.use_edit = True 
+        self.use_edit = use_edit
         self.n_labels = MAX_LABELS
         self.n_tags = MAX_TAGS
         self.allow_reattach = allow_reattach
@@ -72,19 +72,20 @@ cdef class TransitionSystem:
 
     def set_labels(self, tags, left_labels, right_labels):
         self.n_tags = <size_t>max(tags)
+        label_idx = index.hashes.reverse_label_index()
+        self.left_labels = [label_idx[label] for label in sorted(left_labels)]
+        self.right_labels = [label_idx[label] for label in sorted(right_labels)]
         self.labels[self.s_id] = 0
         self.labels[self.d_id] = 0
         self.labels[self.e_id] = 0
         self.moves[self.s_id] = <size_t>SHIFT
         self.moves[self.d_id] = <size_t>REDUCE
         self.moves[self.e_id] = <size_t>EDIT
-        label_idx = index.hashes.reverse_label_index()
         clas = self.l_start
         for label in left_labels:
             self.moves[clas] = <size_t>LEFT
             self.labels[clas] = label
             self.l_classes[label] = clas
-            self.left_labels.append(label_idx[label])
             clas += 1
         self.l_end = clas
         self.r_start = clas
@@ -92,7 +93,6 @@ cdef class TransitionSystem:
             self.moves[clas] = <size_t>RIGHT
             self.labels[clas] = label
             self.r_classes[label] = clas
-            self.right_labels.append(label_idx[label])
             clas += 1
         self.r_end = clas
         cdef size_t tag
@@ -105,7 +105,7 @@ cdef class TransitionSystem:
                 clas += 1
             self.p_end = clas
         self.nr_class = clas
-        return clas, len(left_labels) + len(right_labels)
+        return clas, len(set(list(left_labels) + list(right_labels)))
         
     cdef int transition(self, size_t clas, State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc, move, label
@@ -180,10 +180,10 @@ cdef class TransitionSystem:
         costs[self.s_id] = self.s_cost(s, heads, labels, edits)
         costs[self.d_id] = self.d_cost(s, heads, labels, edits)
         costs[self.e_id] = self.e_cost(s, heads, labels, edits)
-        r_cost = self.r_cost(s, heads, labels, edits)
+        cdef int r_cost = self.r_cost(s, heads, labels, edits)
         self._label_costs(self.r_start, self.r_end, labels[s.i], heads[s.i] == s.top,
                           r_cost, costs)
-        l_cost = self.l_cost(s, heads, labels, edits)
+        cdef int l_cost = self.l_cost(s, heads, labels, edits)
         self._label_costs(self.l_start, self.l_end, labels[s.top],
                           heads[s.top] == s.i, l_cost, costs)
         return costs
@@ -224,10 +224,9 @@ cdef class TransitionSystem:
     cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
                                size_t* labels, bint* edits, int* costs) except -1:
         cdef size_t oracle = self.break_tie(s, tags, heads, labels, edits)
-        cdef int cost = s.cost
         cdef size_t i
         for i in range(self.nr_class):
-            costs[i] = cost + (i != oracle)
+            costs[i] = i != oracle
 
     cdef int break_tie(self, State* s, size_t* tags, size_t* heads,
                        size_t* labels, bint* edits) except -1:
