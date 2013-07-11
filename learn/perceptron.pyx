@@ -162,7 +162,6 @@ cdef class Perceptron:
 
     def batch_update(self, deltas):
         cdef size_t feat_addr
-        cdef SquareFeature* feat
         self.now += 1
         for clas, feats in deltas.items():
             for f, d in feats.items():
@@ -297,7 +296,6 @@ cdef class Perceptron:
                 by_nr_seen.append((feat.nr_seen, data.first))
         by_nr_seen.sort(reverse=True)
         out = gzip.open(str(out_loc), 'w')
-        # Write LibSVM compatible format
         out.write(u'nr_class %d\n' % (self.nr_class))
         zeroes = '0 ' * self.nr_class 
         cdef DenseParams* params
@@ -390,7 +388,6 @@ cdef class Perceptron:
         assert thresh > 1
         cdef dense_hash_map[uint64_t, size_t].iterator it = self.W.begin()
         cdef pair[uint64_t, size_t] data
-        # Build priority queue of the top N scores
         cdef uint64_t f_id
         cdef SquareFeature* feat
         cdef size_t n_pruned = 0
