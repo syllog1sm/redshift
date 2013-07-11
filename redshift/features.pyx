@@ -495,7 +495,8 @@ cdef class FeatureSet:
         # Sets "n"
         self._make_predicates(self.name, ngrams, add_clusters)
         self.context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
-        self.features = <uint64_t*>calloc(self.n + (self.nr_match*2) + 1, sizeof(uint64_t))
+        # Add 2: one for prior, one for terminator
+        self.features = <uint64_t*>calloc(self.n + (self.nr_match*2) + 2, sizeof(uint64_t))
 
     def __dealloc__(self):
         free(self.context)
