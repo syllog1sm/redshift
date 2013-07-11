@@ -292,7 +292,14 @@ cdef class BeamParser(BaseParser):
                 t = gold_beam.beam[0].t
                 memcpy(ghist, gold_beam.beam[0].history, t * sizeof(size_t))
                 memcpy(phist, beam.beam[0].history, t * sizeof(size_t))
-        if t == 0:
+        n_errs = 0
+        for i in range(sent.length):
+            if sent.parse.edits[i] and beam.beam[0].heads[i] == i:
+                continue
+            if beam.beam[0].heads[i] != sent.parse.heads[i] or \
+               beam.beam[0].labels[i] != sent.parse.labels[i]:
+                n_errs += 1
+        if t == 0 or n_errs == 0:
             self.guide.n_corr += beam.t
             self.guide.total += beam.t
         else:
