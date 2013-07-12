@@ -262,20 +262,21 @@ cdef class BeamParser(BaseParser):
         cdef Kernel* kernel
         cdef int* costs
         cdef Beam beam = Beam(self.moves, self.beam_width, sent.length)
-        cdef Beam gold_beam = Beam(self.moves, self.beam_width, sent.length)
         beam_scores = <double**>malloc(beam.k * sizeof(double*))
-        gold_scores = <double**>malloc(beam.k * sizeof(double*))
-        cdef size_t* ghist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
-        cdef size_t* phist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
-        cdef double delta = 0
-        cdef double max_violn = 0
-        cdef size_t t = 0
         while not beam.is_finished:
             self.guide.cache.flush()
             for i in range(beam.bsize):
                 kernel = beam.next_state(i, sent.pos)
                 beam_scores[i] = self._predict(sent, kernel)
             beam.extend_states(beam_scores)
+        gold_scores = <double**>malloc(beam.k * sizeof(double*))
+        cdef Beam gold_beam = Beam(self.moves, self.beam_width, sent.length)
+        cdef size_t* ghist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
+        cdef size_t* phist = beam.beam[0].history
+        cdef double delta = 0
+        cdef double max_violn = 0
+        cdef size_t t = 0 
+        while not gold_beam.is_finished and gold_beam.t <= beam.t:
             for i in range(gold_beam.bsize):
                 kernel = gold_beam.next_state(i, sent.pos)
                 gold_scores[i] = self._predict(sent, kernel)
@@ -289,9 +290,8 @@ cdef class BeamParser(BaseParser):
             delta = beam.beam[0].score - gold_beam.beam[0].score
             if delta >= max_violn:
                 max_violn = delta
-                t = gold_beam.beam[0].t
+                t = gold_beam.t
                 memcpy(ghist, gold_beam.beam[0].history, t * sizeof(size_t))
-                memcpy(phist, beam.beam[0].history, t * sizeof(size_t))
         n_errs = 0
         for i in range(sent.length):
             if sent.parse.edits[i] and beam.beam[0].heads[i] == i:
