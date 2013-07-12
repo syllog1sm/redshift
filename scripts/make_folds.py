@@ -1,5 +1,6 @@
 import plac
 from pathlib import Path
+import re
 
 def main(tb_loc, out_loc):
     tb_loc = Path(tb_loc)
@@ -17,9 +18,13 @@ def main(tb_loc, out_loc):
         out_file.write(u'\n')
         out_file.close()
         test_file = out_loc.join('%s.mrg' % test_sec).open('w')
+        test_text = out_loc.join('%s.txt' % test_sec).open('w')
+        sent_re = re.compile(r'^\( \(')
         for file_ in tb_loc.join(test_sec):
             test_file.write(file_.open().read().strip())
             test_file.write(u'\n')
+            sentences = sent_re.split(file_.open().read().strip())
+            print repr(sentences[0])
         test_file.write(u'\n')
         test_file.close()
 
