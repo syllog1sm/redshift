@@ -306,7 +306,6 @@ cdef class BeamParser(BaseParser):
             counted = self._count_feats(sent, t, phist, ghist)
             self.guide.batch_update(counted)
         free(ghist)
-        free(phist)
         free(beam_scores)
         free(gold_scores)
 
