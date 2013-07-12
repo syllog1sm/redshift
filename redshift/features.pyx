@@ -506,7 +506,7 @@ cdef class FeatureSet:
         free(self.predicates)
         for i in range(self.nr_match):
             free(self.nr_match[i])
-        free(self.match_preds
+        free(self.match_preds)
 
     def set_nr_label(self, size_t nr_label):
         self.nr_label = nr_label
