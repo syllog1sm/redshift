@@ -523,8 +523,8 @@ cdef class FeatureSet:
                      k, &k.s0l, &k.s0r, &k.n0l)
         f = 0
         # Always include this feature to give classifier priors over the classes
-        features[0] = 1
-        f += 1
+        #features[0] = 1
+        #f += 1
         for i in range(self.n):
             pred = self.predicates[i]
             seen_non_zero = False
