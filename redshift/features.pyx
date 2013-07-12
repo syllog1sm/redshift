@@ -504,6 +504,9 @@ cdef class FeatureSet:
         for i in range(self.n):
             free_predicate(self.predicates[i])
         free(self.predicates)
+        for i in range(self.nr_match):
+            free(self.nr_match[i])
+        free(self.match_preds
 
     def set_nr_label(self, size_t nr_label):
         self.nr_label = nr_label
@@ -574,7 +577,7 @@ cdef class FeatureSet:
                 pred.args[i] = element
             self.predicates[id_] = pred
         self.nr_match = len(match_feats)
-        self.match_preds = <MatchPred**>malloc(len(match_feats) * sizeof(MatchPred))
+        self.match_preds = <MatchPred**>malloc(len(match_feats) * sizeof(MatchPred*))
         cdef MatchPred* match_pred
         for id_, (idx1, idx2) in enumerate(match_feats):
             match_pred = <MatchPred*>malloc(sizeof(MatchPred))
