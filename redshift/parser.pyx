@@ -207,8 +207,8 @@ cdef class BeamParser(BaseParser):
         cdef size_t p_idx
         cdef Kernel* kernel
         cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
+        self.guide.cache.flush()
         while not beam.is_finished:
-            self.guide.cache.flush()
             for p_idx in range(beam.bsize):
                 kernel = beam.next_state(p_idx, sent.pos)
                 beam_scores[p_idx] = self._predict(sent, kernel)

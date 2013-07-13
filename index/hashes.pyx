@@ -156,7 +156,7 @@ cdef class PruningFeatIndex(Index):
         self.threshold = threshold
 
 cdef class ScoresCache:
-    def __cinit__(self, size_t scores_size, size_t pool_size=500):
+    def __cinit__(self, size_t scores_size, size_t pool_size=10000):
         self._cache = dense_hash_map[uint64_t, size_t]()
         self._cache.set_empty_key(0)
         self._pool = <double**>malloc(pool_size * sizeof(double*))
@@ -169,6 +169,8 @@ cdef class ScoresCache:
     cdef double* lookup(self, size_t size, void* kernel, bint* is_hit):
         cdef double** resized
         cdef uint64_t hashed = MurmurHash64A(kernel, size, 0)
+        # Mix with a second hash for extra security -- collisions hurt here!!
+        hashed += MurmurHash64B(kernel, size, 1)
         cdef size_t addr = self._cache[hashed]
         if addr != 0:
             self.n_hit += 1
