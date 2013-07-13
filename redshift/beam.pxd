@@ -74,6 +74,7 @@ cdef class Beam:
     cdef State** parents
     cdef State** beam
     cdef int** valid
+    cdef int** costs
     
     cdef size_t max_class
     cdef size_t k

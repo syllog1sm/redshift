@@ -33,8 +33,10 @@ cdef class Beam:
         self.t = 0
         self.is_full = self.bsize >= self.k
         self.valid = <int**>malloc(self.k * sizeof(int*))
+        self.costs = <int**>malloc(self.k * sizeof(int*))
         for i in range(self.k):
             self.valid[i] = <int*>calloc(self.trans.nr_class, sizeof(int*))
+            self.costs[i] = <int*>calloc(self.trans.nr_class, sizeof(int*))
 
     cdef Kernel* next_state(self, size_t idx, size_t* tags):
         self.trans.fill_valid(self.beam[idx], self.valid[idx])
@@ -56,6 +58,12 @@ cdef class Beam:
         # Get best parent/clas pairs by score
         for parent_idx in range(self.psize):
             parent_score = self.parents[parent_idx].score
+            # Account for variable-length transition histories
+            if self.parents[parent_idx].is_finished:
+                move_id = (parent_idx * self.trans.nr_class) + 0
+                mean_score = parent_score / self.parents[parent_idx].t
+                next_moves.push(pair[double, size_t](parent_score + mean_score, move_id))
+                continue
             scores = ext_scores[parent_idx]
             for clas in range(self.trans.nr_class):
                 if self.valid[parent_idx][clas] != -1:
@@ -78,13 +86,20 @@ cdef class Beam:
             s = self.beam[self.bsize]
             copy_state(s, parent)
             s.score = data.first
-            self.trans.transition(clas, s)
+            if not s.is_finished:
+                assert self.costs[parent_idx][clas] != -1
+                s.cost += self.costs[parent_idx][clas]
+                self.trans.transition(clas, s)
             self.bsize += 1
             next_moves.pop()
         self.is_full = self.bsize >= self.k
         # Flush next_moves queue
         self.t += 1
-        if self.beam[0].is_finished:
+        for i in range(self.bsize):
+            if not self.beam[i].is_finished:
+                self.is_finished = False
+                break
+        else:
             self.is_finished = True
 
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
@@ -104,9 +119,11 @@ cdef class Beam:
             free_state(self.beam[i])
             free_state(self.parents[i])
             free(self.valid[i])
+            free(self.costs[i])
         free(self.beam)
         free(self.parents)
         free(self.valid)
+        free(self.costs)
 
 
 cdef class Violation:

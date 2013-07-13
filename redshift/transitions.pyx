@@ -112,6 +112,7 @@ cdef class TransitionSystem:
         cdef int idx
         if s.stack_len >= 1:
             assert s.top != 0
+        assert not s.is_finished
         move = self.moves[clas]
         label = self.labels[clas]
         s.history[s.t] = clas
@@ -161,6 +162,7 @@ cdef class TransitionSystem:
             print clas
             print move
             print label
+            print s.is_finished
             raise StandardError(clas)
         if s.i == (s.n - 1):
             s.at_end_of_buffer = True
@@ -175,6 +177,8 @@ cdef class TransitionSystem:
         cdef int* costs = self._costs
         for i in range(self.nr_class):
             costs[i] = -1
+        if s.is_finished:
+            return costs
         p_cost = self.p_cost(s)
         self._label_costs(self.p_start, self.p_end, tags[s.i + 1], True, p_cost, costs)
         costs[self.s_id] = self.s_cost(s, heads, labels, edits)
@@ -205,6 +209,8 @@ cdef class TransitionSystem:
         if self.p_cost(s) != -1:
             for i in range(self.p_start, self.p_end):
                 valid[i] = 0
+            return 0
+        if s.is_finished:
             return 0
         cdef bint can_push = not s.at_end_of_buffer
         cdef bint can_pop = s.top != 0
