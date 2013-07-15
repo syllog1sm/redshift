@@ -96,7 +96,7 @@ cdef free_sent(Sentence* s):
     free(s)
 
 
-def read_conll(conll_str, moves=None, vocab_thresh=0):
+def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
     cdef:
         size_t i
         object words, tags, heads, labels, token_str, word, pos, head, label
@@ -129,6 +129,8 @@ def read_conll(conll_str, moves=None, vocab_thresh=0):
                 word, pos, head, label = pieces
                 head = int(head)
                 is_edit = False
+            if unlabelled:
+                label = 'ERR'
             # For SWBD
             if pos.startswith('^'):
                 pos = pos[1:]
