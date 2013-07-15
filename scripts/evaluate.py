@@ -97,9 +97,15 @@ def main(test_loc, gold_loc, eval_punct=False):
     ed_fp = 0
     ed_fn = 0
     ed_n = 0
+    rep_tp = 0
+    rep_fp = 0
+    rep_fn = 0
+    rep_n = 0
     tags_corr = 0
     tags_tot = 0
     open_ip = False
+    prev_g = None
+    prev_t = None
     for (sst, t), (ss, g) in zip(gen_toks(test_loc), gen_toks(gold_loc)):
         tags_corr += t.pos == g.pos
         tags_tot += 1
@@ -110,6 +116,13 @@ def main(test_loc, gold_loc, eval_punct=False):
         ed_tp += t.is_edit and g.is_edit
         ed_fp += t.is_edit and not g.is_edit
         ed_fn += g.is_edit and not t.is_edit
+        if prev_g is not None and prev_g.word == g.word:
+            rep_tp += t.is_edit and g.is_edit
+            rep_fp += t.is_edit and not g.is_edit
+            rep_fn += g.is_edit and not t.is_edit
+            rep_n += g.is_edit
+        prev_g = g
+        prev_t = t
         if g.is_edit:
             ed_n += 1
             continue
@@ -148,7 +161,15 @@ def main(test_loc, gold_loc, eval_punct=False):
         yield 'DIS P: %.2f' % ed_p
         yield 'DIS R: %.2f' % ed_r
         yield 'DIS F: %.2f' % ed_f
+        rep_p = pc(rep_tp, rep_tp + rep_fp)
+        rep_r = pc(rep_tp, rep_n)
+        rep_f = 2 * ((rep_p * rep_r) / (rep_p + rep_r + 1e-100))
+        yield 'REP P: %.2f' % rep_p
+        yield 'REP R: %.2f' % rep_r
+        yield 'REP F: %.2f' % rep_f
     yield 'POS Acc: %.2f' % (pc(tags_corr, tags_tot))
+    yield rep_n
+    yield ed_n
 
 
 if __name__ == '__main__':
