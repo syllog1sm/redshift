@@ -759,6 +759,10 @@ cdef class FeatureSet:
             (wexact, pexact),
             (wexact, pcopy),
             (wcopy, pexact),
+            (prev_edit, wcopy),
+            (prev_prev_edit, wcopy),
+            (prev_edit, pcopy),
+            (prev_prev_edit, pcopy)
         )
         print "Use Zhang feats"
         feats = from_single + from_word_pairs + from_three_words + distance
