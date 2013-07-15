@@ -40,6 +40,12 @@ cdef enum:
     N0l2c
     N0l2c6
     N0l2c4
+
+    N0l0w
+    N0l0p
+    N0l0c
+    N0l0c6
+    N0l0c4
     
     N0l2l
     
@@ -142,6 +148,12 @@ cdef enum:
     N1paren
     N1quote
     S0re_orth
+
+    S0le_w
+    S0le_p
+    S0le_c
+    S0le_c6
+    S0le_c4
     
     S0re_w
     S0re_p
@@ -179,7 +191,7 @@ cdef enum:
 
 def get_kernel_tokens():
     return [S0w, N0w, N1w, N2w, N0lw, N0l2w, S0hw, S0h2w, S0rw, S0r2w, S0lw,
-            S0l2w]
+            S0l2w, S0le_w, S0re_w, N0le_w, S0l0w, N0l0w, N3w]
 
 def get_best_bigrams(all_bigrams, n=0):
     return []
@@ -386,6 +398,12 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N0l2c6] = cprefix6s[n0l.idx[1]]
     context[N0l2c4] = cprefix4s[n0l.idx[1]]
 
+    context[N0l0w] = words[n0l.idx[2]]
+    context[N0l0p] = n0l.tags[2]
+    context[N0l0c] = clusters[n0l.idx[2]]
+    context[N0l0c6] = cprefix6s[n0l.idx[2]]
+    context[N0l0c4] = cprefix4s[n0l.idx[2]]
+
     context[S0ll] = s0l.lab[0]
     context[S0l2l] = s0l.lab[1]
     context[S0rl] = s0r.lab[0]
@@ -414,6 +432,12 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N1paren] = parens[k.i + 1]
     context[N0quote] = quotes[k.i]
     context[N1quote] = quotes[k.i + 1]
+
+    context[S0le_w] = words[k.s0ledge]
+    context[S0le_p] = tags[k.s0ledge]
+    context[S0le_c] = clusters[k.s0ledge]
+    context[S0le_c6] = cprefix6s[k.s0ledge]
+    context[S0le_c4] = cprefix4s[k.s0ledge]
     context[N0le_orth] = orths[k.n0ledge]
     context[N0le_w] = words[k.n0ledge]
     context[N0le_p] = k.n0ledgep
@@ -711,11 +735,13 @@ cdef class FeatureSet:
             + unigram(N2w, add_clusters)
             + unigram(N0lw, add_clusters)
             + unigram(N0l2w, add_clusters)
-            #+ unigram(S0re_w, add_clusters)
-            #+ unigram(N0le_w, add_clusters)
-            #+ unigram(N3w, add_clusters)
-            #+ unigram(S0l0w, add_clusters)
-            #+ unigram(S0r0w, add_clusters)
+            + unigram(S0le_w, add_clusters)
+            + unigram(S0re_w, add_clusters)
+            + unigram(N0le_w, add_clusters)
+            + unigram(S0l0w, add_clusters)
+            + unigram(S0r0w, add_clusters)
+            + unigram(N0l0w, add_clusters)
+            + unigram(N3w, add_clusters)
         )
 
         disfl = (
@@ -732,7 +758,7 @@ cdef class FeatureSet:
             (wcopy, pcopy),
             (wexact, pexact),
             (wexact, pcopy),
-            (wcopy, pexact)
+            (wcopy, pexact),
         )
         print "Use Zhang feats"
         feats = from_single + from_word_pairs + from_three_words + distance
