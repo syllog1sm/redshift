@@ -265,15 +265,12 @@ cdef int fill_edits(State* s, bint* edits) except -1:
     j = 0
     while i <= s.n:
         if i != 0 and s.heads[i] == i:
+            edits[i] = True
             start = s.ledges[i]
-            j = 0
-            while s.ledges[j] < i:
-                j += 1
-                if j == s.n:
-                    end = j
-                    break
-            else:
-                end = s.ledges[j] + 1
+            end = i
+            while s.r_valencies[end] != 0:
+                end = get_r(s, end)
+            end += 1
             #print "Editing %d-%d" % (start, end)
             for k in range(start, end):
                 edits[k] = True
