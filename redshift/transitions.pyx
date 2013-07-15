@@ -108,7 +108,7 @@ cdef class TransitionSystem:
         return clas, len(set(list(left_labels) + list(right_labels)))
         
     cdef int transition(self, size_t clas, State *s) except -1:
-        cdef size_t head, child, new_parent, new_child, c, gc, move, label
+        cdef size_t head, child, new_parent, new_child, c, gc, move, label, end
         cdef int idx
         if s.stack_len >= 1:
             assert s.top != 0
@@ -132,17 +132,11 @@ cdef class TransitionSystem:
                 del_r_child(s, s.heads[child])
             head = s.i
             add_dep(s, head, child, label)
-            if not self.use_edit and label == self.erase_label:
-                s.heads[child] = child
-                s.labels[child] = self.erase_label
         elif move == RIGHT:
             child = s.i
             head = s.top
             add_dep(s, head, child, label)
             push_stack(s)
-            if not self.use_edit and label == self.erase_label:
-                s.heads[child] = child
-                s.labels[child] = self.erase_label
         elif move == EDIT:
             if s.heads[s.top] != 0:
                 del_r_child(s, s.heads[s.top])
@@ -156,6 +150,12 @@ cdef class TransitionSystem:
                 s.top = child
                 s.stack[s.stack_len] = child
                 s.stack_len += 1
+            end = edited
+            while s.r_valencies[end]:
+                end = get_r(s, end)
+            for i in range(edited, end + 1):
+                s.heads[i] = i
+                s.labels[i] = self.erase_label
         #elif move == ASSIGN_POS:
         #    s.tags[s.i + 1] = label
         else:
@@ -316,7 +316,9 @@ cdef class TransitionSystem:
         # This would form a dep between an edit and non-edit word
         if self.use_edit and edits[s.top] and not edits[s.i]:
             return 1
-        elif self.use_edit and edits[s.top]:
+        elif self.use_edit and edits[s.top] and edits[s.i]:
+            return 0
+        elif self.use_edit and edits[s.i]:
             return 0
         if heads[s.top] == s.i:
             return 0
