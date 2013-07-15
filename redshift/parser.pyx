@@ -70,6 +70,8 @@ def load_parser(model_dir, reuse_idx=False):
     parser.load()
     return parser
 
+cdef int get_length(Sentence* s):
+    return s.length
 
 cdef class BaseParser:
     cdef FeatureSet features
@@ -125,9 +127,9 @@ cdef class BaseParser:
         self.write_cfg(pjoin(self.model_dir, 'parser.cfg'))
         if self.beam_width >= 2:
             self.guide.use_cache = True
-        indices = range(sents.length)
+        # Potentially cute idea: sort by sentence length for first iteration
+        indices = list(sorted(range(sents.length), key=lambda i: get_length(sents.s[i])))
         for n in range(n_iter):
-            random.shuffle(indices)
             for i in indices:
                 if DEBUG:
                     print ' '.join(sents.strings[i][0])
@@ -143,6 +145,7 @@ cdef class BaseParser:
                 self.guide.reindex()
             if n % 2 == 1 and self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
+            random.shuffle(indices)
         self.guide.finalize()
 
     cdef int dyn_train(self, int iter_num, Sentence* sent) except -1:
