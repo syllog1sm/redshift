@@ -340,8 +340,10 @@ cdef class BeamParser(BaseParser):
         for clas in range(self.moves.nr_class):
             counts[clas] = {}
         cdef bint seen_diff = False
-        g_inc = float(pt) / float(gt)
-        p_inc = - (float(gt) / float(pt))
+        #g_inc = float(pt) / float(gt)
+        #p_inc = - (float(gt) / float(pt))
+        g_inc = 1.0
+        p_inc = -1.0
         for i in range(max((pt, gt))):
             self.guide.total += 1
             if not seen_diff and ghist[i] == phist[i]:
