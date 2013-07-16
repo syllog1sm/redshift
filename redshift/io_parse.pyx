@@ -244,7 +244,7 @@ cdef class Sentences:
                 else:
                     head = <int>(s.parse.heads[j]) - (j - w_id)
                 fields = (w_id, py_words[j], pos_idx[s.pos[j]], head,
-                          label_idx[s.parse.labels[j]],
+                          label_idx.get(s.parse.labels[j], 'ERR'),
                           str(bool(s.parse.edits[j])))
                 out_file.write(u'%d\t%s\t%s\t%s\t%s\t%s\n' % fields)
                 w_id += 1
