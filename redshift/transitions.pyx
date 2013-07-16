@@ -316,8 +316,6 @@ cdef class TransitionSystem:
         # This would form a dep between an edit and non-edit word
         if self.use_edit and edits[s.top] and not edits[s.i]:
             return 1
-        elif self.use_edit and edits[s.top] and edits[s.i]:
-            return 0
         elif self.use_edit and edits[s.i]:
             return 0
         if heads[s.top] == s.i:
