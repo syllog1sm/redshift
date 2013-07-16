@@ -62,8 +62,8 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
     if beam_width >= 2:
         parser = BeamParser(model_loc, clean=True, use_edit=use_edit,
                             train_alg=train_alg, feat_set=feat_set,
-                            feat_thresh=feat_thresh,
-                            beam_width=beam_width,
+                            feat_thresh=feat_thresh, allow_reduce=allow_reduce,
+                            allow_reattach=allow_reattach, beam_width=beam_width,
                             ngrams=ngrams, add_clusters=add_clusters)
     else:
         parser = GreedyParser(model_loc, clean=True, train_alg=train_alg,
