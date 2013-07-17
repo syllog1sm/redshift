@@ -55,6 +55,31 @@ class Sentence(object):
             if token.is_edit and (head.pos == '-DFL-' or not head.is_edit):
                 token.label = 'erased'
 
+    def merge_mwe(self, mwe, parent_label=None):
+        strings = mwe.split('_')
+        assert len(strings) == 2
+        for i, token in enumerate(self.tokens):
+            if i == 0: continue
+            prev = self.tokens[i - 1]
+            if prev.word.lower() != strings[0] or token.word.lower() != strings[1]:
+                continue
+            if token.head == i:
+                child = token
+                head = prev
+            elif prev.head == (i + 1):
+                child = prev
+                head = token
+            else:
+                print prev.word, token.word, prev.head, token.head, i
+                continue
+            if parent_label is not None and head.label != parent_label:
+                continue
+            head.word = mwe
+            head.pos = 'MWE'
+            child.word = '<erased>'
+        self.rm_tokens(lambda t: t.word == '<erased>')
+
+
     def rm_tokens(self, rejector):
         # 0 is root in conll format
         id_map = {0: 0}
@@ -99,6 +124,9 @@ def main(in_loc, ignore_unfinished=False, excise_edits=False):
             continue
         orig_str = sent.to_str()
         try:
+            sent.merge_mwe('you_know', parent_label='parataxis')
+            sent.merge_mwe('i_mean', parent_label='parataxis')
+
             if excise_edits:
                 sent.rm_tokens(lambda token: token.is_edit)
                 sent.rm_tokens(lambda token: token.label == 'discourse')
