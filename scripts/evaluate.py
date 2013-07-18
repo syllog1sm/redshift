@@ -111,7 +111,7 @@ def main(test_loc, gold_loc, eval_punct=False):
         tags_tot += 1
         if g.label in ["P", 'punct'] and not eval_punct:
             continue
-        elif g.label == 'discourse':
+        elif g.label == 'discourse' or g.label == 'interregnum' or g.label == 'parataxis':
             continue
         ed_tp += t.is_edit and g.is_edit
         ed_fp += t.is_edit and not g.is_edit
