@@ -1,6 +1,7 @@
 """Edit a SWBD conll format file in various ways"""
 
 import plac
+import sys
 
 class Token(object):
     def __init__(self, line):
@@ -10,7 +11,7 @@ class Token(object):
         self.pos = props[3].split('^')[-1]
         self.label = props[7]
         self.head = int(props[6])
-        self.is_edit = False
+        self.is_edit = props[-1] == 'True'
 
     def to_str(self):
         props = (self.id, self.word, self.pos, self.pos, self.head,
@@ -29,7 +30,7 @@ class Sentence(object):
             if token.word == r'\[':
                 edit_depth += 1
                 saw_ip = False
-            token.is_edit = edit_depth >= 1
+            token.is_edit = edit_depth >= 1 or token.is_edit
             if token.word == r'\+':
                 edit_depth -= 1
                 saw_ip = True
@@ -48,14 +49,23 @@ class Sentence(object):
         return '\n'.join(token.to_str() for token in self.tokens)
 
     def label_edits(self):
-        for token in self.tokens:
+        for i, token in enumerate(self.tokens):
             if token.pos == 'UH':
                 continue
             head = self.tokens[token.head - 1]
             if token.is_edit and (head.pos == '-DFL-' or not head.is_edit):
                 token.label = 'erased'
 
-    def merge_mwe(self, mwe, parent_label=None):
+    def label_interregna(self):
+        for i, token in enumerate(self.tokens):
+            if i == 0: continue
+            prev = self.tokens[i - 1]
+            if (prev.is_edit or prev.label == 'interregnum') \
+              and not token.is_edit \
+              and token.label in ('discourse', 'parataxis'):
+                token.label = 'interregnum'
+
+    def merge_mwe(self, mwe, parent_label=None, new_label=None):
         strings = mwe.split('_')
         assert len(strings) == 2
         for i, token in enumerate(self.tokens):
@@ -77,8 +87,9 @@ class Sentence(object):
             head.word = mwe
             head.pos = 'MWE'
             child.word = '<erased>'
+            if new_label is not None:
+                head.label = new_label
         self.rm_tokens(lambda t: t.word == '<erased>')
-
 
     def rm_tokens(self, rejector):
         # 0 is root in conll format
@@ -100,7 +111,11 @@ class Sentence(object):
         n = len(self.tokens)
         for token in self.tokens:
             token.id = id_map[token.id]
-            token.head = id_map[token.head]
+            try:
+                token.head = id_map[token.head]
+            except:
+                print >> sys.stderr, token.word
+                raise
             if token.head > n:
                 token.head = 0
             if token.head == token.id:
@@ -112,9 +127,12 @@ class Sentence(object):
 
 @plac.annotations(
     ignore_unfinished=("Ignore unfinished sentences", "flag", "u", bool),
+    merge_mwe=("Merge multi-word expressions", "flag", "m", bool),
     excise_edits=("Clean edits entirely", "flag", "e", bool),
+    label_edits=("Label edits", "flag", "l", bool),
 )
-def main(in_loc, ignore_unfinished=False, excise_edits=False):
+def main(in_loc, ignore_unfinished=False, excise_edits=False, label_edits=False,
+        merge_mwe=False):
     sentences = [Sentence(sent_str) for sent_str in
                  open(in_loc).read().strip().split('\n\n')]
     punct = set([',', ':', '.', ';', 'RRB', 'LRB', '``', "''"])
@@ -124,20 +142,24 @@ def main(in_loc, ignore_unfinished=False, excise_edits=False):
             continue
         orig_str = sent.to_str()
         try:
-            sent.merge_mwe('you_know', parent_label='parataxis')
-            sent.merge_mwe('i_mean', parent_label='parataxis')
+            if merge_mwe:
+                sent.merge_mwe('you_know')
+                sent.merge_mwe('i_mean')
+                sent.merge_mwe('of_course', new_label='discourse')
 
             if excise_edits:
                 sent.rm_tokens(lambda token: token.is_edit)
                 sent.rm_tokens(lambda token: token.label == 'discourse')
-            sent.label_edits()
-            sent.rm_tokens(lambda token: token.pos == '-DFL-')
-            sent.rm_tokens(lambda token: token.pos in punct)
+            if label_edits:
+                sent.label_edits()
             sent.rm_tokens(lambda token: token.word.endswith('-'))
+            sent.rm_tokens(lambda token: token.pos in punct)
+            sent.rm_tokens(lambda token: token.pos == '-DFL-')
             sent.rm_tokens(lambda token: token.word == 'MUMBLEx')
+            sent.label_interregna()
             sent.lower_case()
         except:
-            print orig_str
+            print >> sys.stderr, orig_str
             raise
         if len(sent.tokens) >= 3:
             print sent.to_str()
