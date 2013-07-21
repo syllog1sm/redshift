@@ -58,13 +58,13 @@ if sys.argv[1] == 'clean':
     map(clean, exts)
 
 distutils.core.setup(
-    name='Redshift',
+    name='Redshift shift-reduce dependency parser',
     packages=['redshift'],
     author='Matthew Honnibal',
     author_email='honnibal@gmail.com',
     version='1.0',
     cmdclass={'build_ext': Cython.Distutils.build_ext},
-    ext_modules=exts
+    ext_modules=exts,
 )
 
 
