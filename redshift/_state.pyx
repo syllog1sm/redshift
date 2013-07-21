@@ -240,7 +240,6 @@ cdef int has_child_in_stack(State *s, size_t word, size_t* heads) except -1:
     assert word != 0
     cdef size_t i, stack_i
     cdef int n = 0
-    # TODO: Should this be zero indexed?? It was 1 indexed...
     for i in range(s.stack_len):
         stack_i = s.stack[i]
         # Should this be sensitie to whether the word has a head already?
@@ -252,7 +251,6 @@ cdef int has_child_in_stack(State *s, size_t word, size_t* heads) except -1:
 cdef int has_head_in_stack(State *s, size_t word, size_t* heads) except -1:
     assert word != 0
     cdef size_t i, stack_i
-    # TODO: Should this be zero indexed?? I was 1-indexed...
     for i in range(s.stack_len):
         stack_i = s.stack[i]
         if heads[word] == stack_i:
