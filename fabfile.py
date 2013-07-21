@@ -66,9 +66,9 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj'):
         eval_parse = 'devr.txt'
     elif tb == 'swbd':
         data = str(REMOTE_SWBD)
-        train_name = 'sw.speech.train'
-        eval_pos = 'sw.speech.devi'
-        eval_parse = 'sw.speech.devr'
+        train_name = 'sw.mwe.train'
+        eval_pos = 'sw.mwe.devi'
+        eval_parse = 'sw.mwe.devr'
         if train_alg != 'static':
             use_edit = True
 
