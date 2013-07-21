@@ -503,8 +503,7 @@ cdef int free_predicate(Predicate* pred) except -1:
  
 
 cdef class FeatureSet:
-    def __cinit__(self, uint64_t mask_value=1, feat_set="zhang",
-                  ngrams=None, add_clusters=False):
+    def __cinit__(self, feat_set="zhang", ngrams=None, add_clusters=False):
         if ngrams is None:
             ngrams = []
         self.nr_label = 0
@@ -515,7 +514,7 @@ cdef class FeatureSet:
             print "Adding cluster feats"
         # Value that indicates the value has been "masked", e.g. it was pruned
         # as a rare word. If a feature contains any masked values, it is dropped.
-        self.mask_value = mask_value
+        self.mask_value = index.hashes.encode_word('<MASKED>')
         # Sets "n"
         self._make_predicates(self.name, ngrams, add_clusters)
         self.context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
@@ -549,6 +548,7 @@ cdef class FeatureSet:
                      sent.orths, sent.parens, sent.quotes,
                      k, &k.s0l, &k.s0r, &k.n0l)
         f = 0
+        # Extra trick:
         # Always include this feature to give classifier priors over the classes
         features[0] = 1
         f += 1
@@ -558,9 +558,11 @@ cdef class FeatureSet:
             seen_masked = False
             for j in range(pred.n):
                 value = context[pred.args[j]]
-                #if value == self.mask_value:
-                #    seen_masked = True
-                #    break
+                # Extra trick: provide a way to exclude features that depend on
+                # rare vocabulary items
+                if value == self.mask_value:
+                    seen_masked = True
+                    break
                 if value != 0:
                     seen_non_zero = True
                 pred.raws[j] = value

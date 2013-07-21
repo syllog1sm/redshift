@@ -88,8 +88,7 @@ cdef class BaseParser:
                   reuse_idx=False, beam_width=1,
                   ngrams=None, add_clusters=False):
         self.model_dir = self.setup_model_dir(model_dir, clean)
-        self.features = FeatureSet(mask_value=index.hashes.get_mask_value(),
-                                   feat_set=feat_set, ngrams=ngrams,
+        self.features = FeatureSet(feat_set=feat_set, ngrams=ngrams,
                                    add_clusters=add_clusters)
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
@@ -127,7 +126,7 @@ cdef class BaseParser:
             self.guide.use_cache = True
         indices = list(range(sents.length))
         if not DEBUG:
-            # Potentially cute idea: sort by sentence length for first iteration
+            # Extra trick: sort by sentence length for first iteration
             indices.sort(key=lambda i: sents.s[i].length)
         for n in range(n_iter):
             for i in indices:

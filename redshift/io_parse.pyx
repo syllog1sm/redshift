@@ -38,7 +38,7 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.quotes = <size_t*>calloc(size, sizeof(size_t))
 
     cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
-    mask_value = index.hashes.get_mask_value()
+    mask_value = index.hashes.encode_word('<MASKED>')
     cdef size_t paren_cnt = 0
     cdef size_t quote_cnt = 0
     for i in range(length):
