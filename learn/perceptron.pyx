@@ -80,7 +80,6 @@ cdef class Perceptron:
         self.scores = <double *>calloc(max_classes, sizeof(double))
         self.W = dense_hash_map[uint64_t, size_t]()
         self.W.set_empty_key(0)
-        # TODO: This was +1 before. Are we off-by-one now??
         self.div = <size_t>math.sqrt(max_classes)
         self.now = 0
         self.nr_raws = 10000
@@ -397,14 +396,15 @@ cdef class Perceptron:
             inc(it)
             f_id = data.first
             feat_addr = data.second
-            if f_id == 0 or feat_addr < self.nr_raws:
+            if f_id == 0 or (feat_addr <= self.nr_raws):
                 continue
             feat = <SquareFeature*>feat_addr
             if feat.nr_seen < thresh:
                 free_square_feat(feat, self.div)
-                self.W.erase(f_id)
+                self.W[f_id] = 0
                 n_pruned += 1
             n_feats += 1
+        self.W.clear_deleted_key()
         print "%d/%d pruned (f=%d)" % (n_pruned, n_feats, thresh)
 
     def reindex(self):
@@ -421,7 +421,7 @@ cdef class Perceptron:
         cdef pair[uint64_t, size_t] data
         # Build priority queue of the top N scores
         cdef uint64_t f_id
-        cdef int feat_nr_seen
+        cdef uint64_t feat_nr_seen
         q = []
         while it != self.W.end():
             data = deref(it)
@@ -513,7 +513,6 @@ cdef class Perceptron:
                     raw.last_upd[clas] = last_upd[k]
 
         free_square_feat(feat, self.div)
-        self.W.erase(f_id)
         self.W[f_id] = i
         assert self.W[f_id] < self.nr_raws
         assert raw.e <= self.nr_class, raw.e
