@@ -36,7 +36,7 @@ USE_HELD_OUT = False
     n_sents=("Number of sentences to train from", "option", "n", int)
 )
 def main(train_loc, model_loc, train_alg="online", n_iter=15,
-         feat_set="zhang", vocab_thresh=0, feat_thresh=1,
+         feat_set="zhang", vocab_thresh=0, feat_thresh=10,
          allow_reattach=False, allow_reduce=False, use_edit=False,
          ngrams='0',
          add_clusters=False, n_sents=0,
@@ -55,7 +55,6 @@ def main(train_loc, model_loc, train_alg="online", n_iter=15,
         ngrams.extend(redshift.features.get_best_trigrams(all_trigrams, n=n_trigrams))
     else:
         ngrams = [tuple(int(t) for t in ngram.split('_')) for ngram in ngrams.split(',')]
-    print ngrams
     random.seed(seed)
     if debug:
         redshift.parser.set_debug(True)
