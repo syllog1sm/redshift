@@ -1,5 +1,3 @@
-
-
 cdef struct _Parse:
     size_t n_moves
     size_t* heads

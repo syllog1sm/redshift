@@ -130,7 +130,7 @@ cdef class BaseParser:
         indices = list(range(sents.length))
         if not DEBUG:
             # Potentially cute idea: sort by sentence length for first iteration
-            indices.sort(key=lambda i: get_length(sents.s[i]))
+            indices.sort(key=lambda i: sents.s[i].length)
         for n in range(n_iter):
             for i in indices:
                 if DEBUG:
