@@ -1,9 +1,9 @@
 redshift is a natural-language syntactic dependency parser.  The current release features fast and accurate parsing,
 but requires the text to be pre-processed.  Future releases will integrate tokenisation and part-of-speech tagging,
-and have many special features for parsing speech.
+and have special features for parsing informal text.
 
 If you don't know what a syntactic dependency is, read this:
-http://googleresearch.blogspot.com.au/2013/05/syntactic-ngrams-over-time.html .
+http://googleresearch.blogspot.com.au/2013/05/syntactic-ngrams-over-time.html
 
 Main features:
 * Fast linear time parsing: the slowest model is still over 100 sentences/second
