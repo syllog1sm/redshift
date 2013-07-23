@@ -28,24 +28,24 @@ Example usage:
     >>> sentences = redshift.io_parse.read_pos('Barry/NNP Wright/NNP ,/, acquired/VBN by/IN Applied/NNP for/IN $/$ 147/CD million/CD ,/, makes/VBZ computer-room/JJ equipment/NN and/CC vibration-control/JJ systems/NNS ./.')
     >>> parser.add_parses(sentences)
     >>> import sys; sentences.write_parses(sys.stdout)
-0       Barry   NNP     1       nn
-1       Wright  NNP     11      nsubj
-2       ,       ,       1       P
-3       acquired        VBN     1       partmod
-4       by      IN      3       prep
-5       Applied NNP     4       pobj
-6       for     IN      3       prep
-7       $       $       6       pobj
-8       147     CD      7       number
-9       million CD      7       number
-10      ,       ,       1       P
-11      makes   VBZ     -1      ROOT
-12      computer-room   JJ      13      amod
-13      equipment       NN      11      dobj
-14      and     CC      13      cc
-15      vibration-control       JJ      16      amod
-16      systems NNS     13      conj
-17      .       .       11      P
+    0       Barry   NNP     1       nn
+    1       Wright  NNP     11      nsubj
+    2       ,       ,       1       P
+    3       acquired        VBN     1       partmod
+    4       by      IN      3       prep
+    5       Applied NNP     4       pobj
+    6       for     IN      3       prep
+    7       $       $       6       pobj
+    8       147     CD      7       number
+    9       million CD      7       number
+    10      ,       ,       1       P
+    11      makes   VBZ     -1      ROOT
+    12      computer-room   JJ      13      amod
+    13      equipment       NN      11      dobj
+    14      and     CC      13      cc
+    15      vibration-control       JJ      16      amod
+    16      systems NNS     13      conj
+    17      .       .       11      P
 
 The command-line interfaces have a lot of probably-confusing options for my current research. The main scripts I use are
 scripts/train.py, scripts/parse.py, and scripts/evaluate.py . All print usage information, and require the plac library.
