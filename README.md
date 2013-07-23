@@ -57,18 +57,19 @@ INSTALLATION
 
 The following commands will set up a virtualenv with Python 2.7.5, the parser, and its core dependencies from scratch:
 
-git clone https://github.com/syllog1sm/redshift.git
-cd redshift
-./make_virtualenv.sh
-source $HOME/rsve/bin/activate
-./install_sparsehash.sh
-pip install cython
-python setup.py build_ext --inplace
-export PYTHONPATH=`pwd`:$PYTHONPATH
+    git clone https://github.com/syllog1sm/redshift.git
+    cd redshift
+    ./make_virtualenv.sh
+    source $HOME/rsve/bin/activate
+    ./install_sparsehash.sh
+    pip install cython
+    python setup.py build_ext --inplace
+    export PYTHONPATH=`pwd`:$PYTHONPATH
 
-virtualenv is not a requirement, although it's useful.  If a virtualenv is not activate (i.e. if the $VIRTUALENV
+virtualenv is not a requirement, although it's useful.  If a virtualenv is not active (i.e. if the $VIRTUALENV
 environment variable is not set), install_sparsehash.sh will install the Google sparsehash library under redshift/ext/,
-to avoid assuming root privileges for the installation.
+to avoid assuming root privileges for the installation.  To install sparsehash elsewhere, add the path to the "includes"
+list in setup.py
 
 You might wish to handle the tasks covered by ./make_virtualenv.sh and ./install_sparsehash.sh yourself, depending on
 how you want your environment set up. The parser currently has cython as a requirement, instead of distributing
