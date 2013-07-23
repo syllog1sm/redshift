@@ -14,8 +14,7 @@ Main features:
 Tech notes:
 * Arc-eager transition-based dependency parser
 * Averaged perceptron for learning
-* redshift.parser.BeamParser is basically the model of Zhang and Nivre (2011). Main departure is we use the
-maximum violation update strategy of Huang et al (2012).
+* redshift.parser.BeamParser is basically the model of Zhang and Nivre (2011)
 * redshift.parser.GreedyParser adds the non-monotonic model of Honnibal et al (2013) to the dynamic oracle
 model of Goldberg and Nivre (2012)
 * redshift.features includes the standard Zhang and Nivre (2011) feature set, and also some work pending publication.
