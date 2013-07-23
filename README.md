@@ -22,13 +22,12 @@ model of Goldberg and Nivre (2012)
 
 Example usage:
 
->>> import redshift.parser
->>> parser = redshift.parser.load_parser('/tmp/stanford_beam8')
->>> import redshift.io_parse
->>> sentences = redshift.io_parse.read_pos('Barry/NNP Wright/NNP ,/, acquired/VBN by/IN Applied/NNP for/IN $/$ 147/CD million/CD ,/, makes/VBZ co
-mputer-room/JJ equipment/NN and/CC vibration-control/JJ systems/NNS ./.')
->>> parser.add_parses(sentences)
->>> import sys; sentences.write_parses(sys.stdout)
+    >>> import redshift.parser
+    >>> parser = redshift.parser.load_parser('/tmp/stanford_beam8')
+    >>> import redshift.io_parse
+    >>> sentences = redshift.io_parse.read_pos('Barry/NNP Wright/NNP ,/, acquired/VBN by/IN Applied/NNP for/IN $/$ 147/CD million/CD ,/, makes/VBZ computer-room/JJ equipment/NN and/CC vibration-control/JJ systems/NNS ./.')
+    >>> parser.add_parses(sentences)
+    >>> import sys; sentences.write_parses(sys.stdout)
 0       Barry   NNP     1       nn
 1       Wright  NNP     11      nsubj
 2       ,       ,       1       P
