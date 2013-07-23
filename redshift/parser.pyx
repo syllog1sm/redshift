@@ -104,7 +104,7 @@ cdef class BaseParser:
 
     def setup_model_dir(self, loc, clean):
         if clean and os.path.exists(loc):
-            shutil.rmtreeloc)
+            shutil.rmtree(loc)
         if os.path.exists(loc):
             assert os.path.isdir(loc)
         else:
