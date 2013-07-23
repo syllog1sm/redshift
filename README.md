@@ -54,7 +54,7 @@ scripts/train.py, scripts/parse.py, and scripts/evaluate.py . All print usage in
 Published results always refer to multiple runs (usually with 20 random seeds). These experiments are automated via fabric,
 which I also usually use for compilation (e.g. "fab make").
 
-## INSTALLATION ##
+## Installation ##
 
 The following commands will set up a virtualenv with Python 2.7.5, the parser, and its core dependencies from scratch:
 
