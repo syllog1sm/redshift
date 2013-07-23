@@ -27,7 +27,9 @@ virtual_env = os.environ.get('VIRTUAL_ENV', '')
 
 includes = [numpy.get_include(),
             os.path.join(virtual_env, 'include'),
-            os.path.join(pwd, 'ext')]
+            os.path.join(pwd, 'include'),
+            os.path.join(pwd, 'ext'),
+            os.path.join(pwd, 'ext/include')]
 libs = [os.path.join(pwd, 'ext')]
 
 exts = [
