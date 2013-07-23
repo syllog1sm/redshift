@@ -1,3 +1,4 @@
+#!/usr/bin/env python
 import Cython.Distutils
 from distutils.extension import Extension
 import distutils.core
