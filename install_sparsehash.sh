@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 
-if [ $VIRTUALENV ] 
+if [ $VIRTUAL_ENV ] 
   then 
-    dest="$VIRTUALENV"
+    dest="$VIRTUAL_ENV"
   else
     dest=`pwd`/ext
 fi
-echo $dest
-exit
 cd /tmp
 wget https://sparsehash.googlecode.com/files/sparsehash-2.0.2.tar.gz
 tar -xzf sparsehash-2.0.2.tar.gz
