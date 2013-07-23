@@ -6,7 +6,6 @@ import distutils.core
 import sys
 import os
 from os.path import join as pjoin
-import numpy
 
 
 def clean(ext):
@@ -26,8 +25,7 @@ def clean(ext):
 pwd = os.path.dirname(__file__)
 virtual_env = os.environ.get('VIRTUAL_ENV', '')
 
-includes = [numpy.get_include(),
-            os.path.join(virtual_env, 'include'),
+includes = [os.path.join(virtual_env, 'include'),
             os.path.join(pwd, 'include'),
             os.path.join(pwd, 'ext'),
             os.path.join(pwd, 'ext/include')]
@@ -42,10 +40,13 @@ exts = [
               include_dirs=includes),
     Extension('redshift.beam', ["redshift/beam.pyx"], language="c++",
               include_dirs=includes),
-    Extension('redshift._state', ["redshift/_state.pyx"], language="c++", include_dirs=includes),
+    Extension('redshift._state', ["redshift/_state.pyx", "ext/MurmurHash2.cpp",
+                                  "ext/MurmurHash3.cpp"],
+                                  language="c++", include_dirs=includes),
     Extension('redshift.io_parse', ["redshift/io_parse.pyx"], language="c++",
                include_dirs=includes),
-    Extension('redshift.features', ["redshift/features.pyx"],
+    Extension('redshift.features', ["redshift/features.pyx", "ext/MurmurHash2.cpp",
+                                    "ext/MurmurHash3.cpp"],
         language="c++", include_dirs=includes),
     Extension('redshift.transitions', ["redshift/transitions.pyx"],
         language="c++", include_dirs=includes),
