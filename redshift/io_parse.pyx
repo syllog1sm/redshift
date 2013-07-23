@@ -194,7 +194,6 @@ def read_pos(file_str, vocab_thresh=0):
 
 cdef class Sentences:
     def __cinit__(self, size_t max_length=100000, vocab_thresh=0):
-        print "Vocab thresh=%d" % vocab_thresh
         self.strings = []
         self.length = 0
         self.s = <Sentence**>malloc(sizeof(Sentence*) * max_length)
@@ -244,9 +243,8 @@ cdef class Sentences:
                 else:
                     head = <int>(s.parse.heads[j]) - (j - w_id)
                 fields = (w_id, py_words[j], pos_idx[s.pos[j]], head,
-                          label_idx.get(s.parse.labels[j], 'ERR'),
-                          str(bool(s.parse.edits[j])))
-                out_file.write(u'%d\t%s\t%s\t%s\t%s\t%s\n' % fields)
+                          label_idx.get(s.parse.labels[j], 'ERR'))
+                out_file.write(u'%d\t%s\t%s\t%s\t%s\n' % fields)
                 w_id += 1
                 if s.parse.sbd[j] or j == (s.length - 2):
                     out_file.write(u'\n')

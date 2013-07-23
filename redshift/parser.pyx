@@ -100,7 +100,6 @@ cdef class BaseParser:
         self.moves = TransitionSystem(allow_reattach=allow_reattach,
                                       allow_reduce=allow_reduce, use_edit=use_edit)
         self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model'))
-        self.say_config()
 
     def setup_model_dir(self, loc, clean):
         if clean and os.path.exists(loc):
@@ -116,6 +115,7 @@ cdef class BaseParser:
         cdef Sentence* sent
         cdef Sentences held_out_gold
         cdef Sentences held_out_parse
+        self.say_config()
         move_classes, nr_label = self.moves.set_labels(*sents.get_labels())
         self.features.set_nr_label(nr_label)
         self.guide.set_classes(range(move_classes))
