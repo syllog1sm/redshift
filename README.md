@@ -54,18 +54,18 @@ scripts/train.py, scripts/parse.py, and scripts/evaluate.py . All print usage in
 Published results always refer to multiple runs (usually with 20 random seeds). These experiments are automated via fabric,
 which I also usually use for compilation (e.g. "fab make").
 
-## INSTALLATION ##
+## Installation ##
 
 The following commands will set up a virtualenv with Python 2.7.5, the parser, and its core dependencies from scratch:
 
     git clone https://github.com/syllog1sm/redshift.git
     cd redshift
-    ./make_virtualenv.sh
+    ./make_virtualenv.sh # Downloads Python 2.7.5 and virtualenv
     source $HOME/rsve/bin/activate
-    ./install_sparsehash.sh
+    ./install_sparsehash.sh # Downloads the Google sparsehash 2.2 library and installs it under the virtualenv
     pip install cython
-    python setup.py build_ext --inplace
-    export PYTHONPATH=`pwd`:$PYTHONPATH
+    python setup.py build_ext --inplace # site-install currently broken, use --inplace
+    export PYTHONPATH=`pwd`:$PYTHONPATH # ...and set PYTHONPATH.
     pip install plac # For command-line interfaces
 
 virtualenv is not a requirement, although it's useful.  If a virtualenv is not active (i.e. if the $VIRTUALENV
@@ -74,8 +74,22 @@ to avoid assuming root privileges for the installation.  To install sparsehash e
 list in setup.py
 
 You might wish to handle the tasks covered by ./make_virtualenv.sh and ./install_sparsehash.sh yourself, depending on
-how you want your environment set up. The parser currently has cython as a requirement, instead of distributing
-the "compiled" .cpp files as part of the release (against Cython's recommendation). This will probably change in future.
+how you want your environment set up.
+
+## Cython ##
+
+redshift is written almost entirely in Cython, a superset of the Python language that additionally supports
+calling C/C++ functions and declaring C/C++ types on variables and class attributes. This allows the compiler to
+generate very efficient C/C++ code from Cython code. Many popular Python packages, such as numpy, scipy and lxml,
+rely heavily on Cython code.
+
+A Cython source file such as learn/perceptron.pyx is compiled into learn/perceptron.cpp and learn/perceptron.so by
+the project's setup.py file. The module can then by imported by standard Python code, although only the pure-Python
+functions (declared by "def", instead of "cdef") will be accessible.
+
+The parser currently has Cython as a requirement, instead of distributing
+the "compiled" .cpp files as part of the release (against Cython's recommendation). This could change in future,
+but currently it feels strange to have a "source" release that users wouldn't be able to modify. 
 
 ## LICENSE (LGPL 3) ##
 
