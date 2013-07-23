@@ -76,6 +76,7 @@ how you want your environment set up. The parser currently has cython as a requi
 the "compiled" .cpp files as part of the release (against Cython's recommendation). This will probably change in future.
 
 To use the command line scripts and all auxiliary gadgets, you'll also need:
-pip install plac
-pip install fabric
+
+    pip install plac
+    pip install fabric
 
