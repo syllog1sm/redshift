@@ -67,7 +67,6 @@ The following commands will set up a virtualenv with Python 2.7.5, the parser, a
     python setup.py build_ext --inplace
     export PYTHONPATH=`pwd`:$PYTHONPATH
     pip install plac # For command-line interfaces
-    pip install fabric # For additional gadgetry
 
 virtualenv is not a requirement, although it's useful.  If a virtualenv is not active (i.e. if the $VIRTUALENV
 environment variable is not set), install_sparsehash.sh will install the Google sparsehash library under redshift/ext/,
