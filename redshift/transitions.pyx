@@ -292,9 +292,6 @@ cdef class TransitionSystem:
             return -1
         if s.stack_len < 1:
             return -1
-        # TODO; What's this?
-        #if heads[s.top] == 0 and (s.stack_len == 2 or not self.allow_reattach):
-        #    cost += 1
         cost += has_child_in_buffer(s, s.top, heads)
         if self.allow_reattach:
             cost += has_head_in_buffer(s, s.top, heads)

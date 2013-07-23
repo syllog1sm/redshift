@@ -70,8 +70,6 @@ def load_parser(model_dir, reuse_idx=False):
     parser.load()
     return parser
 
-cdef int get_length(Sentence* s):
-    return s.length
 
 cdef class BaseParser:
     cdef FeatureSet features
@@ -90,8 +88,7 @@ cdef class BaseParser:
                   reuse_idx=False, beam_width=1,
                   ngrams=None, add_clusters=False):
         self.model_dir = self.setup_model_dir(model_dir, clean)
-        self.features = FeatureSet(mask_value=index.hashes.get_mask_value(),
-                                   feat_set=feat_set, ngrams=ngrams,
+        self.features = FeatureSet(feat_set=feat_set, ngrams=ngrams,
                                    add_clusters=add_clusters)
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
@@ -129,8 +126,8 @@ cdef class BaseParser:
             self.guide.use_cache = True
         indices = list(range(sents.length))
         if not DEBUG:
-            # Potentially cute idea: sort by sentence length for first iteration
-            indices.sort(key=lambda i: get_length(sents.s[i]))
+            # Extra trick: sort by sentence length for first iteration
+            indices.sort(key=lambda i: sents.s[i].length)
         for n in range(n_iter):
             for i in indices:
                 if DEBUG:
@@ -143,10 +140,10 @@ cdef class BaseParser:
                             self.guide.cache.n_miss)
             self.guide.n_corr = 0
             self.guide.total = 0
-            if n < 3:
-                self.guide.reindex()
             if n % 2 == 1 and self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
+            if n < 3:
+                self.guide.reindex()
             random.shuffle(indices)
         self.guide.finalize()
 

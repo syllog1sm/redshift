@@ -27,28 +27,32 @@ virtual_env = os.environ.get('VIRTUAL_ENV', '')
 
 includes = [numpy.get_include(),
             os.path.join(virtual_env, 'include'),
-            os.path.join(pwd, 'redshift'),
-            os.path.join(pwd, 'index')]
+            os.path.join(pwd, 'include'),
+            os.path.join(pwd, 'ext'),
+            os.path.join(pwd, 'ext/include')]
+libs = [os.path.join(pwd, 'ext')]
+
 exts = [
+    Extension('ext.murmurhash', ["ext/murmurhash.pyx", "ext/MurmurHash2.cpp",
+              "ext/MurmurHash3.cpp"], language="c++", include_dirs=includes),
+    Extension('ext.sparsehash', ["ext/sparsehash.pyx"], language="c++",
+              include_dirs=includes),
     Extension('redshift.parser', ["redshift/parser.pyx"], language="c++",
               include_dirs=includes),
     Extension('redshift.beam', ["redshift/beam.pyx"], language="c++",
               include_dirs=includes),
-    Extension('redshift._state', ["redshift/_state.pyx", "index/MurmurHash2.cpp"], language="c++", include_dirs=includes),
+    Extension('redshift._state', ["redshift/_state.pyx"], language="c++", include_dirs=includes),
     Extension('redshift.io_parse', ["redshift/io_parse.pyx"], language="c++",
                include_dirs=includes),
-    Extension('redshift.features', ["redshift/features.pyx", "index/MurmurHash2.cpp"],
+    Extension('redshift.features', ["redshift/features.pyx"],
         language="c++", include_dirs=includes),
     Extension('redshift.transitions', ["redshift/transitions.pyx"],
         language="c++", include_dirs=includes),
     Extension('learn.perceptron', ['learn/perceptron.pyx'], language="c++",
               include_dirs=includes),
-    Extension(
-        "index.hashes",
-        ["index/hashes.pyx", "index/MurmurHash2.cpp", "index/MurmurHash3.cpp"],
-        language="c++",
-        include_dirs=includes
-    )
+    Extension("index.hashes", ["index/hashes.pyx", "ext/MurmurHash2.cpp",
+                               "ext/MurmurHash3.cpp"], language="c++",
+              include_dirs=includes)
 ]
 
 if sys.argv[1] == 'clean':
@@ -56,13 +60,13 @@ if sys.argv[1] == 'clean':
     map(clean, exts)
 
 distutils.core.setup(
-    name='Redshift',
+    name='Redshift shift-reduce dependency parser',
     packages=['redshift'],
     author='Matthew Honnibal',
     author_email='honnibal@gmail.com',
     version='1.0',
     cmdclass={'build_ext': Cython.Distutils.build_ext},
-    ext_modules=exts
+    ext_modules=exts,
 )
 
 

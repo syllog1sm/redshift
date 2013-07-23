@@ -1,10 +1,7 @@
 from libc.string cimport const_void
 from libc.stdint cimport uint64_t, int64_t
 
-
-cdef extern from "MurmurHash2.h":
-    uint64_t MurmurHash64A(void * key, uint64_t len, int64_t seed)
-    uint64_t MurmurHash64B(void * key, uint64_t len, int64_t seed)
+from ext.murmurhash cimport *
 
 
 cdef struct Subtree:

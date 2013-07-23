@@ -3,7 +3,6 @@
 DEF VOCAB_SIZE = 1e6
 DEF TAG_SET_SIZE = 100
 DEF LABEL_SIZE = 200
-DEF MASK_VALUE = 1
 
 from libc.stdint cimport uint64_t
 from libc.stdlib cimport calloc, malloc, free
@@ -55,7 +54,6 @@ cdef class Index:
 
 cdef class StrIndex(Index):
     def __cinit__(self, expected_size, uint64_t i=2):
-        assert i > MASK_VALUE
         self.table.set_empty_key(0)
         self.table.resize(expected_size)
         self.i = i
@@ -333,9 +331,6 @@ def is_root_label(label):
     else:
         return label == encode_label('ROOT')
 
-
-def get_mask_value():
-    return MASK_VALUE
 
 cpdef int get_freq(object word) except -1:
     global _word_idx
