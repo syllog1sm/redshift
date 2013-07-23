@@ -154,23 +154,6 @@ def main(test_loc, gold_loc, eval_punct=False):
         yield fmt_acc('Other', n_other, l_other, u_other, n_l_err) 
     yield 'U: %.3f' % pc(u_nc, N)
     yield 'L: %.3f' % pc(l_nc, N)
-    if ed_n != 0:
-        ed_p = pc(ed_tp, ed_tp + ed_fp)
-        ed_r = pc(ed_tp, ed_n)
-        ed_f = 2 * ((ed_p * ed_r) / (ed_p + ed_r + 1e-100))
-        yield 'DIS P: %.2f' % ed_p
-        yield 'DIS R: %.2f' % ed_r
-        yield 'DIS F: %.2f' % ed_f
-        rep_p = pc(rep_tp, rep_tp + rep_fp)
-        rep_r = pc(rep_tp, rep_n)
-        rep_f = 2 * ((rep_p * rep_r) / (rep_p + rep_r + 1e-100))
-        yield 'REP P: %.2f' % rep_p
-        yield 'REP R: %.2f' % rep_r
-        yield 'REP F: %.2f' % rep_f
-    yield 'POS Acc: %.2f' % (pc(tags_corr, tags_tot))
-    yield rep_n
-    yield ed_n
-
 
 if __name__ == '__main__':
     for line in plac.call(main):
