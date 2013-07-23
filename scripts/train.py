@@ -1,13 +1,15 @@
 #!/usr/bin/env python
-#PBS -l walltime=10:00:00,mem=10gb,nodes=1:ppn=6
 
 import random
 import os
 import sys
 import plac
 import time
-import pstats
-import cProfile
+try:
+    import pstats
+    import cProfile
+except ImportError:
+    pass
 from itertools import combinations
 
 import redshift.parser
