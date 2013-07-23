@@ -77,7 +77,7 @@ You might wish to handle the tasks covered by ./make_virtualenv.sh and ./install
 how you want your environment set up. The parser currently has cython as a requirement, instead of distributing
 the "compiled" .cpp files as part of the release (against Cython's recommendation). This will probably change in future.
 
-## LICENSE (GPL 3) ##
+## LICENSE (LGPL 3) ##
 
     Copyright (C) 2013 Matthew Honnibal
 
