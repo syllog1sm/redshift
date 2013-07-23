@@ -21,7 +21,7 @@ Key techniques:
 model of Goldberg and Nivre (2012)
 * redshift.features includes the standard Zhang and Nivre (2011) feature set, and also some work pending publication.
 
-# Example usage #
+## Example usage ##
 
     >>> import redshift.parser
     >>> parser = redshift.parser.load_parser('/tmp/stanford_beam8')
@@ -54,7 +54,7 @@ scripts/train.py, scripts/parse.py, and scripts/evaluate.py . All print usage in
 Published results always refer to multiple runs (usually with 20 random seeds). These experiments are automated via fabric,
 which I also usually use for compilation (e.g. "fab make").
 
-INSTALLATION
+## INSTALLATION ##
 
 The following commands will set up a virtualenv with Python 2.7.5, the parser, and its core dependencies from scratch:
 
@@ -66,6 +66,8 @@ The following commands will set up a virtualenv with Python 2.7.5, the parser, a
     pip install cython
     python setup.py build_ext --inplace
     export PYTHONPATH=`pwd`:$PYTHONPATH
+    pip install plac # For command-line interfaces
+    pip install fabric # For additional gadgetry
 
 virtualenv is not a requirement, although it's useful.  If a virtualenv is not active (i.e. if the $VIRTUALENV
 environment variable is not set), install_sparsehash.sh will install the Google sparsehash library under redshift/ext/,
@@ -76,12 +78,7 @@ You might wish to handle the tasks covered by ./make_virtualenv.sh and ./install
 how you want your environment set up. The parser currently has cython as a requirement, instead of distributing
 the "compiled" .cpp files as part of the release (against Cython's recommendation). This will probably change in future.
 
-To use the command line scripts and all auxiliary gadgets, you'll also need:
-
-    pip install plac
-    pip install fabric
-
-# LICENSE (GPL 3) #
+## LICENSE (GPL 3) ##
 
     Copyright (C) 2013 Matthew Honnibal
 
