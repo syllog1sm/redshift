@@ -11,7 +11,7 @@ Main features:
 * Super fast "greedy" mode: over 1,000 sentences per second at 91.5% accuracy
 * Native Python interface (the parser is written in Cython)
 
-Tech notes:
+Key techniques:
 * Arc-eager transition-based dependency parser
 * Averaged perceptron for learning
 * redshift.parser.BeamParser is basically the model of Zhang and Nivre (2011)
