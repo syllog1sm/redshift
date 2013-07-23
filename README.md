@@ -1,4 +1,6 @@
-redshift is a natural-language syntactic dependency parser.  The current release features fast and accurate parsing,
+# Redshift #
+
+Redshift is a natural-language syntactic dependency parser.  The current release features fast and accurate parsing,
 but requires the text to be pre-processed.  Future releases will integrate tokenisation and part-of-speech tagging,
 and have special features for parsing informal text.
 
@@ -19,7 +21,7 @@ Key techniques:
 model of Goldberg and Nivre (2012)
 * redshift.features includes the standard Zhang and Nivre (2011) feature set, and also some work pending publication.
 
-Example usage:
+# Example usage #
 
     >>> import redshift.parser
     >>> parser = redshift.parser.load_parser('/tmp/stanford_beam8')
@@ -52,7 +54,7 @@ scripts/train.py, scripts/parse.py, and scripts/evaluate.py . All print usage in
 Published results always refer to multiple runs (usually with 20 random seeds). These experiments are automated via fabric,
 which I also usually use for compilation (e.g. "fab make").
 
-INSTALLATION 
+# INSTALLATION # 
 
 The following commands will set up a virtualenv with Python 2.7.5, the parser, and its core dependencies from scratch:
 
@@ -79,3 +81,19 @@ To use the command line scripts and all auxiliary gadgets, you'll also need:
     pip install plac
     pip install fabric
 
+# LICENSE (GPL 3) #
+
+    Copyright (C) 2013 Matthew Honnibal
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with this program.  If not, see <http://www.gnu.org/licenses/>.
