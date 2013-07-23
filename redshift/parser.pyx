@@ -5,12 +5,12 @@ cimport cython
 import random
 import os.path
 from os.path import join as pjoin
+import shutil
 
 from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
 
 from _state cimport *
-import sh
 from io_parse cimport Sentence, Sentences
 from transitions cimport TransitionSystem, transition_to_str 
 from beam cimport Beam, Violation
@@ -103,14 +103,12 @@ cdef class BaseParser:
         self.say_config()
 
     def setup_model_dir(self, loc, clean):
-        # TODO: Replace this with normal shell
         if clean and os.path.exists(loc):
-            sh.rm('-rf', loc)
+            shutil.rmtreeloc)
         if os.path.exists(loc):
             assert os.path.isdir(loc)
         else:
-            sh.mkdir(loc)
-        #sh.git.log(n=1, _out=loc.join('version').open('wb'), _bg=True) 
+            os.mkdir(loc)
         return loc
 
     def train(self, Sentences sents, n_iter=15):
