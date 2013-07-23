@@ -56,26 +56,26 @@ which I also usually use for compilation (e.g. "fab make").
 
 INSTALLATION 
 
-I recommend installing the parser under a virtualenv, as it has several dependencies:
+The following commands will set up a virtualenv with Python 2.7.5, the parser, and its core dependencies from scratch:
 
-- Python 2.7 (it'll probably be easy to make it work with Python 3)
-- Google sparsehash (a C++ library)
-- Cython 0.17+
-
-Additionally, the command line scripts require:
-- plac
-- fabric (not strictly required, but quite useful)
-
-So:
-virtualenv rs
-source rs/bin/activate
-wget https://sparsehash.googlecode.com/files/sparsehash-2.0.2.tar.gz
-tar -xzf sparsehash-2.0.2.tar.gz
-cd sparsehash-2.0.2
-./configure --prefix=`pwd`/../rs; make; make install
-pip install cython
 git clone https://github.com/syllog1sm/redshift.git
 cd redshift
-./setup.py build_ext --inplace
-export PYTHONPATH=`pwd`
-./scripts/train.py
+./make_virtualenv.sh
+source $HOME/rsve/bin/activate
+./install_sparsehash.sh
+pip install cython
+python setup.py build_ext --inplace
+export PYTHONPATH=`pwd`:$PYTHONPATH
+
+virtualenv is not a requirement, although it's useful.  If a virtualenv is not activate (i.e. if the $VIRTUALENV
+environment variable is not set), install_sparsehash.sh will install the Google sparsehash library under redshift/ext/,
+to avoid assuming root privileges for the installation.
+
+You might wish to handle the tasks covered by ./make_virtualenv.sh and ./install_sparsehash.sh yourself, depending on
+how you want your environment set up. The parser currently has cython as a requirement, instead of distributing
+the "compiled" .cpp files as part of the release (against Cython's recommendation). This will probably change in future.
+
+To use the command line scripts and all auxiliary gadgets, you'll also need:
+pip install plac
+pip install fabric
+
