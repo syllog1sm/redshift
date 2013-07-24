@@ -81,6 +81,8 @@ cdef class Perceptron:
         self.W = dense_hash_map[uint64_t, size_t]()
         self.W.set_empty_key(0)
         self.div = <size_t>math.sqrt(max_classes)
+        if (self.div * self.div) < max_classes:
+            self.div += 1
         self.now = 0
         self.nr_raws = 10000
         self.raws = <DenseFeature**>malloc(self.nr_raws * sizeof(DenseFeature*))
@@ -330,7 +332,9 @@ cdef class Perceptron:
         in_ = gzip.open(in_, 'rb')
         header = in_.readline()
         self.nr_class = int(header.split()[1])
-        self.div = <int>math.sqrt(self.nr_class) + 1
+        self.div = <int>math.sqrt(self.nr_class)
+        if (self.div * self.div) < self.nr_class:
+            self.div += 1
         free(self.scores)
         self.scores = <double *>malloc(self.nr_class * sizeof(double))
         cdef uint64_t f
