@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-#PBS -l walltime=1:00:00,mem=4gb,nodes=1:ppn=2
 import os
 import os.path
 import sys
@@ -51,8 +50,6 @@ def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False, debug=Fal
         parser.add_parses(sentences)
         t2 = time.time()
         print '%d sents took %0.3f ms' % (sentences.length, (t2-t1)*1000.0)
-
-    #sentences.write_moves(out_dir.join('moves').open('w'))
     sentences.write_parses(open(os.path.join(out_dir, 'parses'), 'w'))
 
 
