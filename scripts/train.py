@@ -4,88 +4,49 @@ import random
 import os
 import sys
 import plac
-import time
-try:
-    import pstats
-    import cProfile
-except ImportError:
-    pass
-from itertools import combinations
 
 import redshift.parser
 from redshift.parser import GreedyParser, BeamParser
 import redshift.io_parse
-import redshift.features
 
-USE_HELD_OUT = False
+
+def get_train_str(train_loc, n_sents):
+    train_sent_strs = open(train_loc).read().strip().split('\n\n')
+    if n_sents != 0:
+        random.shuffle(train_sent_strs)
+        train_sent_strs = train_sent_strs[:n_sents]
+    return '\n\n'.join(train_sent_strs)
+ 
 
 @plac.annotations(
     train_loc=("Training location", "positional"),
-    train_alg=("Learning algorithm [static, dyn]", "option", "a", str),
-    n_iter=("Number of Perceptron iterations", "option", "i", int),
-    vocab_thresh=("Vocab pruning threshold", "option", "t", int),
-    feat_thresh=("Feature pruning threshold", "option", "f", int),
-    allow_reattach=("Allow left-clobber", "flag", "r", bool),
-    allow_reduce=("Allow reduce when no head is set", "flag", "d", bool),
-    use_edit=("Use edit transition", "flag", "e", bool),
-    profile=("Run profiler (slow)", "flag", None, bool),
-    debug=("Set debug flag to True.", "flag", None, bool),
-    seed=("Set random seed", "option", "s", int),
     beam_width=("Beam width", "option", "k", int),
-    feat_set=("Name of feat set [zhang, iso, full]", "option", "x", str),
-    ngrams=("How many ngrams to include", "option", "g", str),
-    add_clusters=("Add brown cluster features", "flag", "c", bool),
-    n_sents=("Number of sentences to train from", "option", "n", int)
+    train_oracle=("Training oracle [static, dyn]", "option", "a", str),
+    n_iter=("Number of Perceptron iterations", "option", "i", int),
+    feat_thresh=("Feature pruning threshold", "option", "f", int),
+    allow_reattach=("Allow Left-Arc to override heads", "flag", "r", bool),
+    allow_reduce=("Allow reduce when no head is set", "flag", "d", bool),
+    seed=("Set random seed", "option", "s", int),
+    n_sents=("Number of sentences to train from", "option", "n", int),
+    unlabelled=("Learn unlabelled arcs", "flag", "u", bool)
 )
-def main(train_loc, model_loc, train_alg="static", n_iter=15,
-         feat_set="zhang", vocab_thresh=0, feat_thresh=10,
-         allow_reattach=False, allow_reduce=False, use_edit=False,
-         ngrams='0', add_clusters=False, n_sents=0,
-         profile=False, debug=False, seed=0, beam_width=1):
-    kernels = redshift.features.get_kernel_tokens()
-    all_bigrams = list(combinations(kernels, 2))
-    all_trigrams = list(combinations(kernels, 3))
-    if ngrams == 'best':
-        ngrams = redshift.features.get_best_features()
-    elif '_' not in ngrams:
-        n_ngrams = int(ngrams)
-        ngrams = []
-        n_bigrams = (n_ngrams / 3) * 2
-        n_trigrams = n_ngrams - min((n_bigrams, len(all_bigrams)))
-        ngrams = redshift.features.get_best_bigrams(all_bigrams, n=n_bigrams)
-        ngrams.extend(redshift.features.get_best_trigrams(all_trigrams, n=n_trigrams))
-    else:
-        ngrams = [tuple(int(t) for t in ngram.split('_')) for ngram in ngrams.split(',')]
+def main(train_loc, model_loc, train_oracle="static", n_iter=15, beam_width=1,
+         feat_thresh=10, allow_reattach=False, allow_reduce=False, unlabelled=False,
+         n_sents=0, seed=0):
     random.seed(seed)
-    if debug:
-        redshift.parser.set_debug(True)
     if beam_width >= 2:
-        parser = BeamParser(model_loc, clean=True, use_edit=use_edit,
-                            train_alg=train_alg, feat_set=feat_set,
+        parser = BeamParser(model_loc, clean=True,
+                            train_alg=train_oracle,
                             feat_thresh=feat_thresh, allow_reduce=allow_reduce,
-                            allow_reattach=allow_reattach, beam_width=beam_width,
-                            ngrams=ngrams, add_clusters=add_clusters)
+                            allow_reattach=allow_reattach, beam_width=beam_width)
     else:
-        parser = GreedyParser(model_loc, clean=True, train_alg=train_alg,
-                              feat_set=feat_set, feat_thresh=feat_thresh,
+        parser = GreedyParser(model_loc, clean=True, train_alg=train_oracle,
+                              feat_thresh=feat_thresh,
                               allow_reduce=allow_reduce,
-                              allow_reattach=allow_reattach, use_edit=use_edit,
-                              ngrams=ngrams, add_clusters=add_clusters)
-    train_sent_strs = open(train_loc).read().strip().split('\n\n')
-    if n_sents != 0:
-        print "Using %d sents for training" % n_sents
-        random.shuffle(train_sent_strs)
-        train_sent_strs = train_sent_strs[:n_sents]
-    train_str = '\n\n'.join(train_sent_strs)
-    train = redshift.io_parse.read_conll(train_str, vocab_thresh=vocab_thresh)
-    if profile:
-        print 'profiling'
-        cProfile.runctx("parser.train(train, n_iter=n_iter)", globals(),
-                        locals(), "Profile.prof")
-        s = pstats.Stats("Profile.prof")
-        s.strip_dirs().sort_stats("time").print_stats()
-    else:
-        parser.train(train, n_iter=n_iter)
+                              allow_reattach=allow_reattach)
+    train_str = get_train_str(train_loc, n_sents)
+    train_data = redshift.io_parse.read_conll(train_str, unlabelled=unlabelled)
+    parser.train(train_data, n_iter=n_iter)
     parser.save()
 
 
