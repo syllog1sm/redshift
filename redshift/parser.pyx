@@ -99,8 +99,8 @@ cdef class BaseParser:
             self.load_idx(self.model_dir, self.features.n)
         self.moves = TransitionSystem(allow_reattach=allow_reattach,
                                       allow_reduce=allow_reduce, use_edit=use_edit)
-        self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model'))
         self.say_config()
+        self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model.gz'))
 
     def setup_model_dir(self, loc, clean):
         if clean and os.path.exists(loc):
@@ -163,10 +163,10 @@ cdef class BaseParser:
         raise NotImplementedError
 
     def save(self):
-        self.guide.save(pjoin(self.model_dir, 'model'))
+        self.guide.save(pjoin(self.model_dir, 'model.gz'))
 
     def load(self):
-        self.guide.load(pjoin(self.model_dir, 'model'), thresh=self.feat_thresh)
+        self.guide.load(pjoin(self.model_dir, 'model.gz'), thresh=self.feat_thresh)
 
     def new_idx(self, model_dir, size_t n_predicates):
         index.hashes.init_word_idx(pjoin(model_dir, 'words'))
