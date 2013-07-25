@@ -51,8 +51,8 @@ cdef class TransitionSystem:
         self._costs = <int*>calloc(max_classes, sizeof(int))
         self.labels = <size_t*>calloc(max_classes, sizeof(size_t))
         self.moves = <size_t*>calloc(max_classes, sizeof(size_t))
-        self.l_classes = <size_t*>calloc(self.n_labels, sizeof(size_t))
-        self.r_classes = <size_t*>calloc(self.n_labels, sizeof(size_t))
+        self.l_classes = <size_t*>calloc(MAX_LABELS, sizeof(size_t))
+        self.r_classes = <size_t*>calloc(MAX_LABELS, sizeof(size_t))
         self.p_classes = <size_t*>calloc(self.n_tags, sizeof(size_t))
         self.s_id = 0
         self.d_id = self.s_id + 1
@@ -68,7 +68,6 @@ cdef class TransitionSystem:
         # TODO: Clean this up, or rename them or something
         self.left_labels = []
         self.right_labels = []
-
 
     def set_labels(self, tags, left_labels, right_labels):
         self.n_tags = <size_t>max(tags)
