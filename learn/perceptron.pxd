@@ -37,6 +37,7 @@ cdef struct DenseFeature:
     size_t s
     size_t e
 
+
 cdef class Perceptron:
     cdef int nr_class
     cdef double *scores
