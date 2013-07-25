@@ -62,9 +62,9 @@ def load_parser(model_dir, reuse_idx=False):
         parser = GreedyParser(model_dir, **params)
     pos_tags = set([int(line.split()[-1]) for line in
                         open(pjoin(model_dir, 'pos'))])
-    # TODO: Fix this
     _, nr_label = parser.moves.set_labels(pos_tags, _parse_labels_str(l_labels),
                             _parse_labels_str(r_labels))
+    
     parser.features.set_nr_label(nr_label)
 
     parser.load()
@@ -99,8 +99,7 @@ cdef class BaseParser:
             self.load_idx(self.model_dir, self.features.n)
         self.moves = TransitionSystem(allow_reattach=allow_reattach,
                                       allow_reduce=allow_reduce, use_edit=use_edit)
-        self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model'))
-        self.say_config()
+        self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model.gz'))
 
     def setup_model_dir(self, loc, clean):
         if clean and os.path.exists(loc):
@@ -116,6 +115,7 @@ cdef class BaseParser:
         cdef Sentence* sent
         cdef Sentences held_out_gold
         cdef Sentences held_out_parse
+        self.say_config()
         move_classes, nr_label = self.moves.set_labels(*sents.get_labels())
         self.features.set_nr_label(nr_label)
         self.guide.set_classes(range(move_classes))
@@ -163,10 +163,10 @@ cdef class BaseParser:
         raise NotImplementedError
 
     def save(self):
-        self.guide.save(pjoin(self.model_dir, 'model'))
+        self.guide.save(pjoin(self.model_dir, 'model.gz'))
 
     def load(self):
-        self.guide.load(pjoin(self.model_dir, 'model'), thresh=self.feat_thresh)
+        self.guide.load(pjoin(self.model_dir, 'model.gz'), thresh=self.feat_thresh)
 
     def new_idx(self, model_dir, size_t n_predicates):
         index.hashes.init_word_idx(pjoin(model_dir, 'words'))
@@ -315,7 +315,6 @@ cdef class BeamParser(BaseParser):
     def say_config(self):
         beam_settings = (self.beam_width, self.train_alg)
         print 'Beam settings: k=%d; upd_strat=%s' % beam_settings
-        print 'Edits=%s' % self.moves.use_edit
 
     cdef double* _predict(self, Sentence* sent, Kernel* kernel) except NULL:
         cdef bint cache_hit = False

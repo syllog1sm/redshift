@@ -766,7 +766,6 @@ cdef class FeatureSet:
             (prev_edit, pcopy),
             (prev_prev_edit, pcopy)
         )
-        print "Use Zhang feats"
         feats = from_single + from_word_pairs + from_three_words + distance
         feats += valency + zhang_unigrams + third_order
         feats += labels
@@ -781,7 +780,6 @@ cdef class FeatureSet:
                 match_feats.append((w1, w2))
                 # POS match
                 match_feats.append((w1 + 1, w2 + 1))
-        print "Use %d ngram feats" % (len(ngrams))
         if ngrams:
             feats += tuple(unigrams)
             for ngram_feat in ngrams:
