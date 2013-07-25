@@ -129,7 +129,7 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
                 word, pos, head, label = pieces
                 head = int(head)
                 is_edit = False
-            if unlabelled:
+            if unlabelled and label not in ['ROOT', 'P', 'conj', 'cc']:
                 label = 'ERR'
             # For SWBD
             if pos.startswith('^'):
@@ -225,8 +225,7 @@ cdef class Sentences:
                     left_labels.add(sent.parse.labels[j])
                 else:
                     right_labels.add(sent.parse.labels[j])
-        return tags, left_labels, right_labels
-
+        return tags, list(sorted(left_labels)), list(sorted(right_labels))
 
     def write_parses(self, out_file):
         cdef Sentence* s
@@ -239,7 +238,7 @@ cdef class Sentences:
             py_words, py_pos = self.strings[i]
             w_id = 0
             for j in range(1, s.length - 1):
-                if index.hashes.is_root_label(s.parse.labels[j]):
+                if s.parse.heads[j] == s.length - 1:
                     head = -1
                 else:
                     head = <int>(s.parse.heads[j]) - (j - w_id)
