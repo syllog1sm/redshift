@@ -35,18 +35,21 @@ USE_HELD_OUT = False
     feat_set=("Name of feat set [zhang, iso, full]", "option", "x", str),
     ngrams=("How many ngrams to include", "option", "g", str),
     add_clusters=("Add brown cluster features", "flag", "c", bool),
-    n_sents=("Number of sentences to train from", "option", "n", int)
+    n_sents=("Number of sentences to train from", "option", "n", int),
+    unlabelled=("Use most of the dependency labels", "flag", "u", bool)
 )
 def main(train_loc, model_loc, train_alg="static", n_iter=15,
          feat_set="zhang", vocab_thresh=0, feat_thresh=10,
          allow_reattach=False, allow_reduce=False, use_edit=False,
          ngrams='0', add_clusters=False, n_sents=0,
-         profile=False, debug=False, seed=0, beam_width=1):
+         profile=False, debug=False, seed=0, beam_width=1, unlabelled=False):
     kernels = redshift.features.get_kernel_tokens()
     all_bigrams = list(combinations(kernels, 2))
     all_trigrams = list(combinations(kernels, 3))
     if ngrams == 'best':
         ngrams = redshift.features.get_best_features()
+    elif ngrams == 'bigrams':
+        ngrams = all_bigrams
     elif '_' not in ngrams:
         n_ngrams = int(ngrams)
         ngrams = []
@@ -77,7 +80,8 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
         random.shuffle(train_sent_strs)
         train_sent_strs = train_sent_strs[:n_sents]
     train_str = '\n\n'.join(train_sent_strs)
-    train = redshift.io_parse.read_conll(train_str, vocab_thresh=vocab_thresh)
+    train = redshift.io_parse.read_conll(train_str, vocab_thresh=vocab_thresh,
+                                         unlabelled=unlabelled)
     if profile:
         print 'profiling'
         cProfile.runctx("parser.train(train, n_iter=n_iter)", globals(),
