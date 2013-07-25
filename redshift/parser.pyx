@@ -62,9 +62,9 @@ def load_parser(model_dir, reuse_idx=False):
         parser = GreedyParser(model_dir, **params)
     pos_tags = set([int(line.split()[-1]) for line in
                         open(pjoin(model_dir, 'pos'))])
-    # TODO: Fix this
     _, nr_label = parser.moves.set_labels(pos_tags, _parse_labels_str(l_labels),
                             _parse_labels_str(r_labels))
+    
     parser.features.set_nr_label(nr_label)
 
     parser.load()
@@ -315,7 +315,6 @@ cdef class BeamParser(BaseParser):
     def say_config(self):
         beam_settings = (self.beam_width, self.train_alg)
         print 'Beam settings: k=%d; upd_strat=%s' % beam_settings
-        print 'Edits=%s' % self.moves.use_edit
 
     cdef double* _predict(self, Sentence* sent, Kernel* kernel) except NULL:
         cdef bint cache_hit = False
