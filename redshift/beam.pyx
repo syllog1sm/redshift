@@ -51,29 +51,38 @@ cdef class Beam:
         self.beam = parents 
         self.psize = self.bsize
         self.bsize = 0
-        cdef size_t parent_idx, clas, move_id
-        cdef double parent_score, score
+        cdef size_t parent_idx, clas, move_id, best_right
+        cdef double score
         cdef double* scores
+        cdef State* parent
+        cdef double right_score
         cdef priority_queue[pair[double, size_t]] next_moves = priority_queue[pair[double, size_t]]()
         # Get best parent/clas pairs by score
         for parent_idx in range(self.psize):
-            parent_score = self.parents[parent_idx].score
+            parent = self.parents[parent_idx]
             # Account for variable-length transition histories
-            if self.parents[parent_idx].is_finished:
+            if parent.is_finished:
                 move_id = (parent_idx * self.trans.nr_class) + 0
-                mean_score = parent_score / self.parents[parent_idx].t
-                next_moves.push(pair[double, size_t](parent_score + mean_score, move_id))
+                mean_score = parent.score / parent.t
+                next_moves.push(pair[double, size_t](parent.score + mean_score, move_id))
                 continue
             scores = ext_scores[parent_idx]
+            right_score = scores[self.trans.r_start]
+            best_right = self.trans.r_start
             for clas in range(self.trans.nr_class):
                 if self.valid[parent_idx][clas] != -1:
-                    score = parent_score + scores[clas]
+                    score = parent.score + scores[clas]
                     move_id = (parent_idx * self.trans.nr_class) + clas
                     next_moves.push(pair[double, size_t](score, move_id))
+
+                    if self.trans.r_end > clas >= self.trans.r_start \
+                      and score > right_score:
+                          right_score = score
+                          best_right = clas
+            parent.guess_labels[parent.i] = self.trans.labels[best_right]
         cdef pair[double, size_t] data
         # Apply extensions for best continuations
         cdef State* s
-        cdef State* parent
         cdef uint64_t key
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
