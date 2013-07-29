@@ -91,12 +91,19 @@ The parser currently has Cython as a requirement, instead of distributing
 the "compiled" .cpp files as part of the release (against Cython's recommendation). This could change in future,
 but currently it feels strange to have a "source" release that users wouldn't be able to modify. 
 
-## LICENSE (LGPL 3) ##
+## LICENSE (GPL 3) ##
 
+    I'm still working out how to specify the license, but my intention at the moment is:
+    * FOSS for non-commercial use
+    * Modifications should be distributed
+    * Commercial use licenses available on request. These will be granted pretty much automatically to any
+      company that isn't yet profitable, or really anyone who isn't big.
+    * RESTful parser APIs to make it easier to start using the parser.
+    
     Copyright (C) 2013 Matthew Honnibal
 
     This program is free software: you can redistribute it and/or modify
-    it under the terms of the GNU Lesser General Public License as published by
+    it under the terms of the GNU General Public License as published by
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
@@ -105,5 +112,5 @@ but currently it feels strange to have a "source" release that users wouldn't be
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
-    You should have received a copy of the GNU Lesser General Public License
+    You should have received a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
