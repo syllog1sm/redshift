@@ -49,6 +49,10 @@ class Sentence(object):
         return '\n'.join(token.to_str() for token in self.tokens)
 
     def label_edits(self):
+        """
+        Assign the label "erased" to edit tokens headed by non-edit words. Probably
+        this should be handled inside the parser instead.
+        """
         for i, token in enumerate(self.tokens):
             if token.pos == 'UH':
                 continue
@@ -130,9 +134,10 @@ class Sentence(object):
     merge_mwe=("Merge multi-word expressions", "flag", "m", bool),
     excise_edits=("Clean edits entirely", "flag", "e", bool),
     label_edits=("Label edits", "flag", "l", bool),
+    label_interregna=("Label interregna", "flag", "i", bool),
 )
 def main(in_loc, ignore_unfinished=False, excise_edits=False, label_edits=False,
-        merge_mwe=False):
+        merge_mwe=False, label_interregna=False):
     sentences = [Sentence(sent_str) for sent_str in
                  open(in_loc).read().strip().split('\n\n')]
     punct = set([',', ':', '.', ';', 'RRB', 'LRB', '``', "''"])
@@ -156,7 +161,8 @@ def main(in_loc, ignore_unfinished=False, excise_edits=False, label_edits=False,
             sent.rm_tokens(lambda token: token.pos in punct)
             sent.rm_tokens(lambda token: token.pos == '-DFL-')
             sent.rm_tokens(lambda token: token.word == 'MUMBLEx')
-            sent.label_interregna()
+            if label_interregna:
+                sent.label_interregna()
             sent.lower_case()
         except:
             print >> sys.stderr, orig_str
