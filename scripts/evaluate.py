@@ -161,12 +161,6 @@ def main(test_loc, gold_loc, eval_punct=False):
         yield 'DIS P: %.2f' % ed_p
         yield 'DIS R: %.2f' % ed_r
         yield 'DIS F: %.2f' % ed_f
-        rep_p = pc(rep_tp, rep_tp + rep_fp)
-        rep_r = pc(rep_tp, rep_n)
-        rep_f = 2 * ((rep_p * rep_r) / (rep_p + rep_r + 1e-100))
-        yield 'REP P: %.2f' % rep_p
-        yield 'REP R: %.2f' % rep_r
-        yield 'REP F: %.2f' % rep_f
     yield 'POS Acc: %.2f' % (pc(tags_corr, tags_tot))
     yield rep_n
     yield ed_n
