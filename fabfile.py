@@ -68,11 +68,12 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
         eval_parse = 'devr.txt'
     elif tb == 'swbd':
         data = str(REMOTE_SWBD)
-        train_name = 'sw.mwe.train'
-        eval_pos = 'sw.mwe.devi'
-        eval_parse = 'sw.mwe.devr'
-        if train_alg != 'static':
+        train_name = 'new/train.txt'
+        eval_pos = 'new/devi.txt'
+        eval_parse = 'new/devr.txt'
+        if train_alg == 'dynedit':
             use_edit = True
+            train_alg = 'dyn'
 
     exp_dir = str(REMOTE_PARSERS)
     train_n(n, name, exp_dir,
