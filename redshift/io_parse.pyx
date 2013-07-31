@@ -73,6 +73,8 @@ cdef int add_parse(Sentence* sent, list heads, list labels, edits) except -1:
         sent.parse.labels[i] = index.hashes.encode_label(labels[i])
         if edits:
             sent.parse.edits[i] = <size_t>edits[i]
+            if sent.parse.edits[i] and not edits[sent.parse.heads[i]]:
+                sent.parse.labels[i] = index.hashes.encode_label('erased')
 
 
 cdef free_sent(Sentence* s):
@@ -129,7 +131,8 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
                 word, pos, head, label = pieces
                 head = int(head)
                 is_edit = False
-            if unlabelled and label not in ['ROOT', 'P', 'conj', 'cc']:
+            if unlabelled and label not in ['ROOT', 'P', 'conj', 'cc', 'erased',
+                                            'interregnum', 'discourse']:
                 label = 'ERR'
             # For SWBD
             if pos.startswith('^'):
