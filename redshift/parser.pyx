@@ -14,7 +14,10 @@ from _state cimport *
 from io_parse cimport Sentence, Sentences
 from transitions cimport TransitionSystem, transition_to_str 
 from beam cimport Beam, Violation
-from features cimport FeatureSet
+
+from features.extractor cimport Extractor
+import _parse_features
+from _parse_features cimport *
 
 import index.hashes
 cimport index.hashes
@@ -46,7 +49,7 @@ def load_parser(model_dir, reuse_idx=False):
     beam_width = int(params['beam_width'])
     feat_set = params['feat_set']
     ngrams = []
-    for ngram_str in params['ngrams'].split(','):
+    for ngram_str in params.get('ngrams', '-1').split(','):
         if ngram_str == '-1': continue
         ngrams.append(tuple([int(i) for i in ngram_str.split('_')]))
     add_clusters = params['add_clusters'] == 'True'
@@ -65,21 +68,24 @@ def load_parser(model_dir, reuse_idx=False):
     _, nr_label = parser.moves.set_labels(pos_tags, _parse_labels_str(l_labels),
                             _parse_labels_str(r_labels))
     
-    parser.features.set_nr_label(nr_label)
-
     parser.load()
     return parser
 
 
 cdef class BaseParser:
-    cdef FeatureSet features
+    cdef Extractor extractor
     cdef Perceptron guide
+    cdef TransitionSystem moves
     cdef object model_dir
     cdef size_t beam_width
-    cdef TransitionSystem moves
     cdef object add_extra
     cdef object train_alg
     cdef int feat_thresh
+    cdef object feat_set
+    cdef object add_clusters
+    cdef object ngrams
+    cdef uint64_t* _features
+    cdef size_t* _context
 
     def __cinit__(self, model_dir, clean=False, train_alg='static',
                   feat_set="zhang",
@@ -88,15 +94,27 @@ cdef class BaseParser:
                   reuse_idx=False, beam_width=1,
                   ngrams=None, add_clusters=False):
         self.model_dir = self.setup_model_dir(model_dir, clean)
-        self.features = FeatureSet(feat_set=feat_set, ngrams=ngrams,
-                                   add_clusters=add_clusters)
+        self.feat_set = feat_set
+        self.add_clusters = add_clusters
+        self.ngrams = ngrams if ngrams is not None else []
+        templates = _parse_features.baseline_templates()
+        templates += _parse_features.ngram_feats(self.ngrams, add_clusters=add_clusters)
+        if 'match' in self.feat_set:
+            match_feats = _parse_features.match_templates()
+            print "Using %d match feats" % len(match_feats)
+        else:
+            match_feats = []
+        self._features = <uint64_t*>calloc(len(templates) + len(match_feats) + 2000,
+                                           sizeof(uint64_t))
+        self._context = <size_t*>calloc(_parse_features.context_size(), sizeof(size_t))
+        self.extractor = Extractor(templates, match_feats)
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
         self.beam_width = beam_width
         if clean == True:
-            self.new_idx(self.model_dir, self.features.n)
+            self.new_idx(self.model_dir)
         else:
-            self.load_idx(self.model_dir, self.features.n)
+            self.load_idx(self.model_dir)
         self.moves = TransitionSystem(allow_reattach=allow_reattach,
                                       allow_reduce=allow_reduce, use_edit=use_edit)
         self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model.gz'))
@@ -117,7 +135,7 @@ cdef class BaseParser:
         cdef Sentences held_out_parse
         self.say_config()
         move_classes, nr_label = self.moves.set_labels(*sents.get_labels())
-        self.features.set_nr_label(nr_label)
+        #self.features.set_nr_label(nr_label)
         self.guide.set_classes(range(move_classes))
         self.write_cfg(pjoin(self.model_dir, 'parser.cfg'))
         if self.beam_width >= 2:
@@ -168,12 +186,12 @@ cdef class BaseParser:
     def load(self):
         self.guide.load(pjoin(self.model_dir, 'model.gz'), thresh=self.feat_thresh)
 
-    def new_idx(self, model_dir, size_t n_predicates):
+    def new_idx(self, model_dir):
         index.hashes.init_word_idx(pjoin(model_dir, 'words'))
         index.hashes.init_pos_idx(pjoin(model_dir, 'pos'))
         index.hashes.init_label_idx(pjoin(model_dir, 'labels'))
 
-    def load_idx(self, model_dir, size_t n_predicates):
+    def load_idx(self, model_dir):
         index.hashes.load_word_idx(pjoin(model_dir, 'words'))
         index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
         index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
@@ -189,14 +207,14 @@ cdef class BaseParser:
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
             cfg.write(u'beam_width\t%d\n' % self.beam_width)
-            if not self.features.ngrams:
-                cfg.write(u'ngrams\t-1\n')
-            else:
-                ngram_strs = ['_'.join([str(i) for i in ngram])
-                              for ngram in self.features.ngrams]
-                cfg.write(u'ngrams\t%s\n' % u','.join(ngram_strs))
-            cfg.write(u'feat_set\t%s\n' % self.features.name)
-            cfg.write(u'add_clusters\t%s\n' % self.features.add_clusters)
+            #if not self.features.ngrams:
+            #    cfg.write(u'ngrams\t-1\n')
+            #else:
+            #    ngram_strs = ['_'.join([str(i) for i in ngram])
+            #                  for ngram in self.features.ngrams]
+            #    cfg.write(u'ngrams\t%s\n' % u','.join(ngram_strs))
+            cfg.write(u'feat_set\t%s\n' % self.feat_set)
+            cfg.write(u'add_clusters\t%s\n' % self.add_clusters)
 
     def __dealloc__(self):
         pass
@@ -320,8 +338,12 @@ cdef class BeamParser(BaseParser):
         cdef bint cache_hit = False
         scores = self.guide.cache.lookup(sizeof(Kernel), kernel, &cache_hit)
         if not cache_hit:
-            feats = self.features.extract(sent, kernel)
-            self.guide.fill_scores(feats, scores)
+            fill_context(self._context, self.moves.n_labels, sent.words,
+                         sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
+                         sent.orths, sent.parens, sent.quotes, kernel,
+                         &kernel.s0l, &kernel.s0r, &kernel.n0l)
+            self.extractor.extract(self._features, self._context)
+            self.guide.fill_scores(self._features, scores)
         return scores
 
     cdef dict _count_feats(self, Sentence* sent, size_t pt, size_t gt,
@@ -361,12 +383,17 @@ cdef class BeamParser(BaseParser):
         return counts
 
     cdef int _inc_feats(self, dict counts, Sentence* sent, Kernel* k, double inc) except -1:
-        cdef uint64_t* feats = self.features.extract(sent, k)
+        fill_context(self._context, self.moves.n_labels, sent.words,
+                     sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
+                     sent.orths, sent.parens, sent.quotes, k,
+                     &k.s0l, &k.s0r, &k.n0l)
+        self.extractor.extract(self._features, self._context)
+ 
         cdef size_t f = 0
-        while feats[f] != 0:
-            if feats[f] not in counts:
-                counts[feats[f]] = 0
-            counts[feats[f]] += inc
+        while self._features[f] != 0:
+            if self._features[f] not in counts:
+                counts[self._features[f]] = 0
+            counts[self._features[f]] += inc
             f += 1
 
 cdef double FOLLOW_ERR_PC = 0.90
@@ -379,7 +406,7 @@ cdef class GreedyParser(BaseParser):
         sent.parse.n_moves = 0
         while not s.is_finished:
             fill_kernel(s, sent.pos)
-            feats = self.features.extract(sent, &s.kernel)
+            feats = self._extract(sent, &s.kernel)
             self.moves.fill_valid(s, self.moves._costs)
             clas = self._predict(feats, self.moves._costs,
                                 &s.guess_labels[s.i])
@@ -401,7 +428,7 @@ cdef class GreedyParser(BaseParser):
         while not s.is_finished:
             fill_kernel(s, sent.pos)
             self.moves.fill_valid(s, valid)
-            feats = self.features.extract(sent, &s.kernel)
+            feats = self._extract(sent, &s.kernel)
             pred = self._predict(feats, valid, &s.guess_labels[s.i])
             costs = self.moves.get_costs(s, sent.pos, sent.parse.heads,
                                          sent.parse.labels, sent.parse.edits)
@@ -424,7 +451,7 @@ cdef class GreedyParser(BaseParser):
         cdef size_t _ = 0
         while not s.is_finished:
             fill_kernel(s, sent.pos)
-            feats = self.features.extract(sent, &s.kernel)
+            feats = self._extract(sent, &s.kernel)
             self.moves.fill_valid(s, valid)
             pred = self._predict(feats, valid, &s.guess_labels[s.i])
             gold = self.moves.break_tie(s, sent.pos, sent.parse.heads,
@@ -443,6 +470,14 @@ cdef class GreedyParser(BaseParser):
             print 'NM L'
         elif self.moves.allow_reduce:
             print 'NM D'
+
+    cdef uint64_t* _extract(self, Sentence* sent, Kernel* kernel):
+        fill_context(self._context, self.moves.n_labels, sent.words,
+                     sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
+                     sent.orths, sent.parens, sent.quotes, kernel,
+                     &kernel.s0l, &kernel.s0r, &kernel.n0l)
+        self.extractor.extract(self._features, self._context)
+        return self._features
    
     cdef int _predict(self, uint64_t* feats, int* valid, size_t* rlabel) except -1:
         cdef:
@@ -455,7 +490,7 @@ cdef class GreedyParser(BaseParser):
         cdef double valid_score = -10000
         cdef double right_score = -10000
         scores = self.guide.scores
-        self.guide.fill_scores(feats, scores)
+        self.guide.fill_scores(self._features, scores)
         seen_valid = False
         for clas in range(self.guide.nr_class):
             score = scores[clas]

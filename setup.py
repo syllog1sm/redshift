@@ -45,17 +45,19 @@ exts = [
                                   language="c++", include_dirs=includes),
     Extension('redshift.io_parse', ["redshift/io_parse.pyx"], language="c++",
                include_dirs=includes),
-    Extension('redshift.features', ["redshift/features.pyx", "ext/MurmurHash2.cpp",
-                                    "ext/MurmurHash3.cpp"],
-        language="c++", include_dirs=includes),
+    Extension('redshift._parse_features', ["redshift/_parse_features.pyx"],
+              language="c++", include_dirs=includes),
     Extension('redshift.transitions', ["redshift/transitions.pyx"],
         language="c++", include_dirs=includes),
     Extension('learn.perceptron', ['learn/perceptron.pyx'], language="c++",
               include_dirs=includes),
     Extension("index.hashes", ["index/hashes.pyx", "ext/MurmurHash2.cpp",
                                "ext/MurmurHash3.cpp"], language="c++",
-              include_dirs=includes)
+              include_dirs=includes),
+    Extension("features.extractor", ["features/extractor.pyx", "ext/MurmurHash2.cpp",
+              "ext/MurmurHash3.cpp"], language="c++", include_dirs=includes)
 ]
+
 
 if sys.argv[1] == 'clean':
     print >> sys.stderr, "cleaning .c, .c++ and .so files matching sources"
