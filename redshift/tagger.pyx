@@ -45,11 +45,15 @@ cdef class BeamTagger:
         if not clean:
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
         #self.features = Extractor(unigrams + bigrams + trigrams, [])
-        self.features = Extractor(basic + clusters, [])
+        self.features = Extractor(basic + clusters, [], bag_of_words=[P1w, P2w,
+                                                                      P3w, P4w,
+                                                                      P5w, P6w,
+                                                                      P7w])
         self.nr_tag = 0
         self.beam_width = beam_width
         self._context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
-        self._features = <uint64_t*>calloc(self.features.nr_template + 10, sizeof(uint64_t))
+        max_feats = self.features.nr_template + self.features.nr_bow + 2
+        self._features = <uint64_t*>calloc(max_feats, sizeof(uint64_t))
 
     def add_tags(self, Sentences sents):
         cdef size_t i
@@ -273,6 +277,12 @@ cdef enum:
     P2suff
     P2pre
     P2p
+
+    P3w # For BOW
+    P4w
+    P5w
+    P6w
+    P7w
     CONTEXT_SIZE
 
 
@@ -347,3 +357,11 @@ cdef int fill_context(size_t* context, Sentence* sent, TagKernel* k):
     context[P2suff] = sent.orths[k.i-2]
     context[P2pre] = sent.parens[k.i-2]
     context[P2p] = k.pptag
+
+    # Fill bag-of-words slots
+    i = k.i - 2
+    cdef size_t slot = P3w
+    while i > 0 and slot < CONTEXT_SIZE:
+        i -= 1
+        context[slot] = sent.words[i]
+        slot += 1
