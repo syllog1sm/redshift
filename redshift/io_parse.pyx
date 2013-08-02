@@ -61,8 +61,9 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
             paren_cnt += 1
         elif py_words[i] == ")" or py_words[i] == "]" or py_words[i] == "}":
             paren_cnt -= 1
-        s.orths[i] = ord(py_words[i][0])
-        s.parens[i] = paren_cnt
+        s.orths[i] = index.hashes.encode_word(py_words[i][-3:])
+        #s.parens[i] = paren_cnt
+        s.parens[i] = index.hashes.encode_word(py_words[i][:3])
         s.quotes[i] = quote_cnt
     return s
 
@@ -251,3 +252,14 @@ cdef class Sentences:
       
     property length:
         def __get__(self): return self.length
+
+def eval_tags(Sentences test, Sentences gold):
+    c = 0
+    n = 0
+    assert test.length == gold.length
+    for i in range(test.length):
+        assert test.s[i].length == gold.s[i].length
+        for w in range(1, test.s[i].length - 1):
+            c += test.s[i].pos[w] == gold.s[i].pos[w]
+            n += 1
+    return (float(c)/n) * 100, c, n
