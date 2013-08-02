@@ -13,7 +13,7 @@ from libc.string cimport memcpy, memset
 from _state cimport *
 from io_parse cimport Sentence, Sentences
 from transitions cimport TransitionSystem, transition_to_str 
-from beam cimport Beam, Violation
+from beam cimport ParseBeam
 
 from features.extractor cimport Extractor
 import _parse_features
@@ -104,7 +104,7 @@ cdef class BaseParser:
             print "Using %d match feats" % len(match_feats)
         else:
             match_feats = []
-        self._features = <uint64_t*>calloc(len(templates) + len(match_feats) + 2000,
+        self._features = <uint64_t*>calloc(len(templates) + len(match_feats) + 5,
                                            sizeof(uint64_t))
         self._context = <size_t*>calloc(_parse_features.context_size(), sizeof(size_t))
         self.extractor = Extractor(templates, match_feats)
@@ -173,8 +173,6 @@ cdef class BaseParser:
         self.guide.nr_class = self.moves.nr_class
         cdef size_t i
         for i in range(sents.length):
-            if DEBUG:
-                print ' '.join(sents.strings[i][0])
             self.parse(sents.s[i])
 
     cdef int parse(self, Sentence* sent) except -1:
@@ -221,15 +219,18 @@ cdef class BaseParser:
 
 cdef class BeamParser(BaseParser):
     cdef int parse(self, Sentence* sent) except -1:
-        cdef Beam beam = Beam(self.moves, self.beam_width, sent.length)
+        cdef State* s
+        cdef ParseBeam beam = ParseBeam(self.moves, self.beam_width, sent.length)
         cdef size_t p_idx
         cdef Kernel* kernel
         cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
         self.guide.cache.flush()
         while not beam.is_finished:
             for p_idx in range(beam.bsize):
-                kernel = beam.next_state(p_idx, sent.pos)
-                beam_scores[p_idx] = self._predict(sent, kernel)
+                pred = <State*>beam.beam[p_idx]
+                self.moves.fill_valid(pred, beam.valid[p_idx])
+                fill_kernel(pred, sent.pos) 
+                beam_scores[p_idx] = self._predict(sent, &pred.kernel)
             beam.extend_states(beam_scores)
         sent.parse.n_moves = beam.t
         beam.fill_parse(sent.parse.moves, sent.pos, sent.parse.heads, sent.parse.labels,
@@ -240,8 +241,9 @@ cdef class BeamParser(BaseParser):
         cdef size_t  i
         cdef Kernel* kernel
         cdef double* scores
-        cdef Beam beam = Beam(self.moves, self.beam_width, sent.length)
+        cdef ParseBeam beam = ParseBeam(self.moves, self.beam_width, sent.length)
         cdef State* gold = init_state(sent.length)
+        cdef State* pred
         cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
         cdef size_t* ghist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
         cdef size_t* phist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
@@ -250,8 +252,10 @@ cdef class BeamParser(BaseParser):
         while not beam.is_finished:
             self.guide.cache.flush()
             for i in range(beam.bsize):
-                kernel = beam.next_state(i, sent.pos)
-                beam_scores[i] = self._predict(sent, kernel)
+                pred = <State*>beam.beam[i]
+                self.moves.fill_valid(pred, beam.valid[i])
+                fill_kernel(pred, sent.pos)
+                beam_scores[i] = self._predict(sent, &pred.kernel)
             beam.extend_states(beam_scores)
             oracle = self.moves.break_tie(gold, sent.pos, sent.parse.heads,
                                           sent.parse.labels, sent.parse.edits)
@@ -259,11 +263,12 @@ cdef class BeamParser(BaseParser):
             scores = self._predict(sent, &gold.kernel)
             gold.score += scores[oracle]
             self.moves.transition(oracle, gold)
-            if (beam.beam[0].score - gold.score) >= max_violn:
-                max_violn = beam.beam[0].score - gold.score
+            pred = <State*>beam.beam[0]
+            if (pred.score - gold.score) >= max_violn:
+                max_violn = pred.score - gold.score
                 t = gold.t
                 memcpy(ghist, gold.history, t * sizeof(size_t))
-                memcpy(phist, beam.beam[0].history, t * sizeof(size_t))
+                memcpy(phist, pred.history, t * sizeof(size_t))
         if t == 0:
             self.guide.n_corr += beam.t
             self.guide.total += beam.t
@@ -279,14 +284,16 @@ cdef class BeamParser(BaseParser):
         cdef size_t i
         cdef Kernel* kernel
         cdef int* costs
+        cdef State* p
+        cdef State* g
         
         ghist = <size_t*>malloc(sent.length * 3 * sizeof(size_t))
         phist = <size_t*>malloc(sent.length * 3 * sizeof(size_t))
         for i in range(sent.length * 3):
             ghist[i] = self.moves.nr_class
             phist[i] = self.moves.nr_class
-        pred = Beam(self.moves, self.beam_width, sent.length)
-        gold = Beam(self.moves, self.beam_width, sent.length)
+        pred = ParseBeam(self.moves, self.beam_width, sent.length)
+        gold = ParseBeam(self.moves, self.beam_width, sent.length)
         pred_scores = <double**>malloc(self.beam_width * sizeof(double*))
         gold_scores = <double**>malloc(self.beam_width * sizeof(double*))
         cdef double delta = 0
@@ -296,32 +303,36 @@ cdef class BeamParser(BaseParser):
         self.guide.cache.flush()
         while not pred.is_finished and not gold.is_finished:
             for i in range(pred.bsize):
-                kernel = pred.next_state(i, sent.pos)
+                p = <State*>pred.beam[i]
+                self.moves.fill_valid(p, pred.valid[i])
+                fill_kernel(p, sent.pos)
                 pred_scores[i] = self._predict(sent, kernel)
-                costs = self.moves.get_costs(pred.beam[i], sent.pos, sent.parse.heads,
+                costs = self.moves.get_costs(<State*>pred.beam[i], sent.pos, sent.parse.heads,
                                              sent.parse.labels, sent.parse.edits)
                 memcpy(pred.costs[i], costs, sizeof(int) * self.moves.nr_class)
             pred.extend_states(pred_scores)
             for i in range(gold.bsize):
-                kernel = gold.next_state(i, sent.pos)
+                g = <State*>gold.beam[i]
+                self.moves.fill_valid(g, gold.valid[i])
+                fill_kernel(g, sent.pos)
                 gold_scores[i] = self._predict(sent, kernel)
-                costs = self.moves.get_costs(gold.beam[i], sent.pos,
+                costs = self.moves.get_costs(<State*>gold.beam[i], sent.pos,
                                              sent.parse.heads, sent.parse.labels,
                                              sent.parse.edits)
                 for clas in range(self.moves.nr_class):
                     if costs[clas] != 0:
                         gold.valid[i][clas] = -1
             gold.extend_states(gold_scores)
-            delta = pred.beam[0].score - gold.beam[0].score
-            if delta >= max_violn and pred.beam[0].cost >= 1:
+            g = <State*>gold.beam[0]
+            p = <State*>pred.beam[0]
+            delta = p.score - g.score
+            if delta >= max_violn and p.cost >= 1:
                 max_violn = delta
-                pt = pred.beam[0].t
-                gt = gold.beam[0].t
-                memcpy(phist, pred.beam[0].history, pt * sizeof(size_t))
-                memcpy(ghist, gold.beam[0].history, gt * sizeof(size_t))
+                memcpy(phist, p.history, p.t * sizeof(size_t))
+                memcpy(ghist, g.history, g.t * sizeof(size_t))
         if max_violn < 0:
-            self.guide.n_corr += pred.beam[0].t
-            self.guide.total += pred.beam[0].t
+            self.guide.n_corr += pred.t
+            self.guide.total += pred.t
         else:
             counted = self._count_feats(sent, pt, gt, phist, ghist)
             self.guide.batch_update(counted)
