@@ -16,7 +16,7 @@ cdef int free_predicate(Template* pred) except -1:
  
 
 cdef class Extractor:
-    def __cinit__(self, templates, match_templates):
+    def __cinit__(self, templates, match_templates, bag_of_words=None):
         # Value that indicates the value has been "masked", e.g. it was pruned
         # as a rare word. If a feature contains any masked values, it is dropped.
         self.mask_value = index.hashes.encode_word('<MASKED>')
@@ -34,7 +34,16 @@ cdef class Extractor:
             for i, element in enumerate(sorted(args)):
                 pred.args[i] = element
             self.templates[id_] = pred
-
+        # A bag-of-words feature is collection of indices into the context vector,
+        # and the features don't get distinguished by where they fall in the bag.
+        # e.g. in a feature template we care whether it's N2w=the or N1w=the.
+        # In a bag-of-words, all of them look the same.
+        bag_of_words = bag_of_words if bag_of_words is not None else []
+        bag_of_words = list(sorted(set(bag_of_words)))
+        self.nr_bow = len(bag_of_words)
+        self.for_bow = <size_t*>calloc(self.nr_bow, sizeof(size_t))
+        for i, idx in enumerate(bag_of_words):
+            self.for_bow[i] = idx
         self.nr_match = len(match_templates)
         self.match_preds = <MatchPred**>malloc(self.nr_match * sizeof(MatchPred*))
         cdef MatchPred* match_pred
@@ -53,6 +62,7 @@ cdef class Extractor:
         for i in range(self.nr_match):
             free(self.match_preds[i])
         free(self.match_preds)
+        free(self.for_bow)
 
     cdef int extract(self, uint64_t* features, size_t* context) except -1:
         cdef:
@@ -84,6 +94,12 @@ cdef class Extractor:
                 size = (pred.n + 1) * sizeof(uint64_t)
                 features[f] = MurmurHash64A(pred.raws, size, i)
                 f += 1
+        for i in range(self.nr_bow):
+            # The other features all come out of MurmurHash, but for now 'salt'
+            # with the nr_bow constant, just because the raw values seem like they
+            # might clash with stuff if I make a mistake later.
+            features[f] = context[self.for_bow[i]] * self.nr_bow
+            f += 1
         cdef MatchPred* match_pred
         cdef size_t match_id
         for match_id in range(self.nr_match):

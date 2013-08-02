@@ -21,5 +21,7 @@ cdef class Extractor:
     cdef size_t nr_template
     cdef Template** templates
     cdef size_t nr_match
+    cdef size_t nr_bow
+    cdef size_t* for_bow
     cdef MatchPred** match_preds
     cdef int extract(self, uint64_t* features, size_t* context) except -1
