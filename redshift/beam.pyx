@@ -60,8 +60,9 @@ cdef class Beam:
             # equivalence class; we simply don't build the other members of the class
             if hashed == 0 or not seen_equivs[hashed]:
                 self.bsize += 1
-                seen_equivs[hashed] = 1
+                seen_equivs[hashed] = self.bsize
             next_moves.pop()
+        self._add_runners_up(ext_scores)
         self.is_full = self.bsize >= self.k
         self.t += 1
         for i in range(self.bsize):
@@ -71,6 +72,9 @@ cdef class Beam:
         else:
             self.is_finished = True
 
+    cdef int _add_runners_up(self, double** scores):
+        raise NotImplementedError
+    
     cdef bint _is_finished(self, int p_or_b, size_t idx):
         raise NotImplementedError
 
@@ -207,16 +211,14 @@ cdef class TaggerBeam(Beam):
             parent.score = 0
             parent.hist[0] = 0
             parent.hist[1] = 0
-            parent.alt[0] = 0
-            parent.alt[1] = 0
+            parent.alt = 0
             self.parents[i] = <void*>parent
         for i in range(k):
             beam = <TagState*>malloc(sizeof(TagState))
             beam.score = 0
             beam.hist[0] = 0
             beam.hist[1] = 0
-            beam.alt[0] = 0
-            beam.alt[1] = 0
+            beam.alt = 0
             beam.prev = NULL
             self.beam[i] = <void*>beam
 
@@ -233,6 +235,7 @@ cdef class TaggerBeam(Beam):
             copy.hist[0] = orig.hist[0]
             copy.hist[1] = orig.hist[1]
             copy.prev = orig.prev
+            copy.alt = orig.alt
             self.beam[i] = <void*>copy
         self.psize = self.bsize
         self.bsize = 0 
@@ -275,6 +278,21 @@ cdef class TaggerBeam(Beam):
         s.hist[1] = parent.hist[0]
         s.hist[0] = clas
         return (s.hist[0] * self.nr_class) * s.hist[1]
+
+    cdef int _add_runners_up(self, double** scores):
+        cdef size_t i, clas
+        cdef double score, alt_score
+        cdef TagState* s
+        for i in range(self.bsize):
+            s = <TagState*>self.beam[i]
+            alt_score = 0
+            for clas in range(self.nr_class):
+                if clas == s.hist[0]:
+                    continue
+                score = scores[i][clas]
+                if score > alt_score:
+                    s.alt = clas
+                    alt_score = score
 
     cdef double get_score(self, size_t parent_idx):
         cdef TagState* s = <TagState*>self.parents[parent_idx]

@@ -31,6 +31,7 @@ cdef class Beam:
     cdef int extend_states(self, double** scores) except -1
     cdef uint64_t extend_state(self, size_t parent_idx, size_t b_idx,
                           size_t clas, double score)
+    cdef int _add_runners_up(self, double** scores) 
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
                         size_t* labels, bint* sbd, bint* edits) except -1
 
@@ -56,6 +57,7 @@ cdef class TaggerBeam(Beam):
                           size_t clas, double score)
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
                         size_t* labels, bint* sbd, bint* edits) except -1
+    cdef int _add_runners_up(self, double** scores) 
     #cdef int eval_beam(self, size_t* gold) 
 
 
@@ -66,3 +68,4 @@ cdef struct TagState:
     double score
     TagState* prev
     size_t[2] hist
+    size_t alt
