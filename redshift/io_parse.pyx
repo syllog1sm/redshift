@@ -63,7 +63,7 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
             paren_cnt -= 1
         s.orths[i] = index.hashes.encode_word(py_words[i][-3:])
         #s.parens[i] = paren_cnt
-        s.parens[i] = index.hashes.encode_word(py_words[i][:3])
+        s.parens[i] = index.hashes.encode_word(py_words[i][:1])
         s.quotes[i] = quote_cnt
     return s
 

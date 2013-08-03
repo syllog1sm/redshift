@@ -56,18 +56,13 @@ cdef class TaggerBeam(Beam):
                           size_t clas, double score)
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
                         size_t* labels, bint* sbd, bint* edits) except -1
-    cdef int eval_beam(self, size_t* gold) 
+    #cdef int eval_beam(self, size_t* gold) 
 
-cdef struct TagKernel:
-    size_t ptag
-    size_t pptag
-    size_t ppptag
-    size_t i
 
+
+cdef int fill_hist(size_t* hist, TagState* s, int t) except -1
 
 cdef struct TagState:
-    size_t* tags
-    TagKernel kernel
     double score
-    size_t cost
-
+    TagState* prev
+    size_t[2] hist

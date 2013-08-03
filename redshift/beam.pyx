@@ -56,6 +56,8 @@ cdef class Beam:
             assert parent_idx < self.psize
             clas = data.second % self.nr_class
             hashed = self.extend_state(parent_idx, self.bsize, clas, data.first)
+            # Ignore dominated extensions --- this is an alternative to having an
+            # equivalence class; we simply don't build the other members of the class
             if hashed == 0 or not seen_equivs[hashed]:
                 self.bsize += 1
                 seen_equivs[hashed] = 1
@@ -195,57 +197,84 @@ cdef class TaggerBeam(Beam):
         self.init_beams(k, self.length)
 
     cdef int init_beams(self, size_t k, size_t length) except -1:
-        cdef TagState* tags
+        cdef TagState* parent
+        cdef TagState* beam
         self.parents = <void**>malloc(k * sizeof(void*))
         self.beam = <void**>malloc(k * sizeof(void*))
         for i in range(k):
-            tags = <TagState*>malloc(sizeof(TagState))
-            tags.score = 0
-            tags.cost = 0
-            tags.tags = <size_t*>calloc(length, sizeof(size_t))
-            self.parents[i] = <void*>tags
+            parent = <TagState*>malloc(sizeof(TagState))
+            parent.prev = NULL
+            parent.score = 0
+            parent.hist[0] = 0
+            parent.hist[1] = 0
+            parent.alt[0] = 0
+            parent.alt[1] = 0
+            self.parents[i] = <void*>parent
         for i in range(k):
-            tags = <TagState*>malloc(sizeof(TagState))
-            tags.score = 0
-            tags.cost = 0
-            tags.tags = <size_t*>calloc(length, sizeof(size_t))
-            self.beam[i] = <void*>tags
+            beam = <TagState*>malloc(sizeof(TagState))
+            beam.score = 0
+            beam.hist[0] = 0
+            beam.hist[1] = 0
+            beam.alt[0] = 0
+            beam.alt[1] = 0
+            beam.prev = NULL
+            self.beam[i] = <void*>beam
+
+    cdef int swap_beam(self):
+        # TODO: Find a better scheme for this
+        cdef void** parents = self.parents
+        self.parents = self.beam
+        self.beam = parents 
+        cdef TagState* beam
+        for i in range(self.k):
+            copy = <TagState*>malloc(sizeof(TagState))
+            orig = <TagState*>self.beam[i]
+            copy.score = orig.score
+            copy.hist[0] = orig.hist[0]
+            copy.hist[1] = orig.hist[1]
+            copy.prev = orig.prev
+            self.beam[i] = <void*>copy
+        self.psize = self.bsize
+        self.bsize = 0 
 
     def __dealloc__(self):
-        cdef TagState* beam
-        cdef TagState* parent
+        cdef TagState* s
+        cdef TagState* prev
+        cdef size_t addr
+        to_free = set()
         for i in range(self.k):
-            parent = <TagState*>self.parents[i]
-            free(parent.tags)
-            free(parent)
-            beam = <TagState*>self.beam[i]
-            free(beam.tags)
-            free(beam)
+            s = <TagState*>self.parents[i]
+            addr = <size_t>self.parents[i]
+            while addr not in to_free and s.prev != NULL:
+                to_free.add(addr)
+                s = s.prev
+            s = <TagState*>self.beam[i]
+            addr = <size_t>self.beam[i]
+            while addr not in to_free and s.prev != NULL:
+                to_free.add(<size_t>s)
+                s = s.prev
             free(self.valid[i])
             free(self.costs[i])
+        for addr in to_free:
+            if addr != 0:
+                s = <TagState*>addr
+                free(s)
         free(self.parents)
         free(self.beam)
+        free(self.valid)
+        free(self.costs)
 
     cdef uint64_t extend_state(self, size_t parent_idx, size_t b_idx,
-                          size_t clas, double score):
+                               size_t clas, double score):
         parent = <TagState*>self.parents[parent_idx]
         # We've got two arrays of states, and we swap beam-for-parents.
         # So, s here will get manipulated, then copied into parents later.
         cdef TagState* s = <TagState*>self.beam[self.bsize]
         s.score = score
-        s.cost = parent.cost
-        memcpy(s.tags, parent.tags, self.t * sizeof(size_t))
-        s.cost += self.costs[parent_idx][clas]
-        s.tags[self.t] = clas
-        s.kernel.i = self.t
-        s.kernel.ptag = clas
-        s.kernel.pptag = 0
-        s.kernel.ppptag = 0
-        if self.t >= 1:
-            s.kernel.pptag = s.tags[self.t - 1]
-            if self.t >= 2:
-                s.kernel.ppptag = s.tags[self.t - 2]
-        return MurmurHash64A(&s.kernel, sizeof(TagKernel), 0)
+        s.prev = parent
+        s.hist[1] = parent.hist[0]
+        s.hist[0] = clas
+        return (s.hist[0] * self.nr_class) * s.hist[1]
 
     cdef double get_score(self, size_t parent_idx):
         cdef TagState* s = <TagState*>self.parents[parent_idx]
@@ -255,21 +284,33 @@ cdef class TaggerBeam(Beam):
                         size_t* labels, bint* sbd, bint* edits) except -1:
         # No need to copy heads for root and start symbols
         s = <TagState*>self.beam[0]
-        for i in range(1, self.length - 1):
-            tags[i] = s.tags[i]
+        # TODO: Check this
+        i = self.t
+        while i != 0 and s.prev != NULL:
+            i -= 1
+            tags[i] = s.hist[0]
+            s = s.prev
 
     cdef bint _is_finished(self, int p_or_b, size_t idx):
         return False
 
-    cdef int eval_beam(self, size_t* gold):
-        cdef size_t i, w
-        cdef TagState* s
-        c = 0
-        for w in range(1, self.t):
-            for i in range(self.k):
-                s = <TagState*>self.beam[i]
-                if s.tags[w] == gold[w]:
-                    c += 1
-                    break
-        return c
+    #cdef int eval_beam(self, size_t* gold):
+    #    cdef size_t i, w
+    #    cdef TagState* s
+    #    c = 0
+    #    for w in range(1, self.t):
+    #        for i in range(self.k):
+    #            s = <TagState*>self.beam[i]
+    #            if s.tags[w] == gold[w]:
+    #                c += 1
+    #                break
+    #    return c
+
+cdef int fill_hist(size_t* hist, TagState* s, int t) except -1:
+    while t >= 0 and s.prev != NULL:
+        hist[t] = s.hist[0]
+        s = s.prev
+        t -= 1
+
+
 

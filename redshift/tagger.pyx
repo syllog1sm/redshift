@@ -1,5 +1,6 @@
 from redshift._state cimport *
-from redshift.beam cimport TaggerBeam, TagState, TagKernel
+from redshift.beam cimport TaggerBeam, TagState, fill_hist
+#, TagKernel
 from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
 import index.hashes
@@ -29,8 +30,9 @@ cdef class BeamTagger:
 
     cdef size_t* _context
     cdef uint64_t* _features
+    cdef double** beam_scores
 
-    def __cinit__(self, model_dir, feat_set="basic", feat_thresh=5, beam_width=4,
+    def __cinit__(self, model_dir, feat_set="basic", feat_thresh=5, beam_width=8,
                   clean=False):
         self.model_dir = model_dir
         if clean and os.path.exists(model_dir):
@@ -49,38 +51,35 @@ cdef class BeamTagger:
                                                                       P3w, P4w,
                                                                       P5w, P6w,
                                                                       P7w])
-        self.nr_tag = 0
+        self.nr_tag = 100
         self.beam_width = beam_width
         self._context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
-        max_feats = self.features.nr_template + self.features.nr_bow + 2
+        max_feats = self.features.nr_template + self.features.nr_bow + 100
         self._features = <uint64_t*>calloc(max_feats, sizeof(uint64_t))
+        self.beam_scores = <double**>malloc(sizeof(double*) * self.beam_width)
+        for i in range(self.beam_width):
+            self.beam_scores[i] = <double*>calloc(self.nr_tag, sizeof(double))
 
     def add_tags(self, Sentences sents):
         cdef size_t i
         n = 0
-        self._oracle_beam = 0
         for i in range(sents.length):
             self.tag(sents.s[i])
             n += (sents.s[i].length - 2)
-        print '%.4f' % (float(self._oracle_beam) / n), self._oracle_beam, n
 
     cdef int tag(self, Sentence* sent) except -1:
         cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
         cdef size_t p_idx
-        cdef size_t kernel
-        cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
-        self.guide.cache.flush()
+        cdef TagState* s
         for i in range(sent.length - 1):
             for p_idx in range(beam.bsize):
-                pred = <TagState*>beam.beam[p_idx]
-                fill_tag_kernel(pred, i)
-                beam_scores[p_idx] = self._predict(sent, &pred.kernel)
-            beam.extend_states(beam_scores)
-        self._oracle_beam += beam.eval_beam(sent.pos)
-        beam.fill_parse(sent.parse.moves, sent.pos, sent.parse.heads,
-                        sent.parse.labels, sent.parse.sbd, sent.parse.edits)
-        # TODO: dealloc tag beam
-        free(beam_scores)
+                s = <TagState*>beam.beam[p_idx]
+                fill_context(self._context, sent, s.hist[0], s.hist[1], i)
+                self.features.extract(self._features, self._context)
+                self.guide.fill_scores(self._features, self.beam_scores[p_idx])
+            beam.extend_states(self.beam_scores)
+        s = <TagState*>beam.beam[0]
+        fill_hist(sent.pos, s, sent.length - 2)
 
     def train(self, Sentences sents, nr_iter=10):
         indices = list(range(sents.length))
@@ -113,83 +112,74 @@ cdef class BeamTagger:
         self.guide.finalize()
 
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:
-        cdef size_t  i
-        cdef double* scores
+        cdef size_t  i, word_i
+        cdef TagState* s
+        cdef double* gscores = <double*>calloc(self.nr_tag, sizeof(double))
         cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
-        cdef TagState* gold = <TagState*>malloc(sizeof(TagState))
-        gold.tags = <size_t*>calloc(sent.length, sizeof(size_t))
-        gold.score = 0
-        cdef TagState* pred
-        cdef TagState* violn = <TagState*>malloc(sizeof(TagState))
-        violn.tags = <size_t*>calloc(sent.length, sizeof(size_t))
-        violn.kernel.i = 0
-        violn.score = 0
-        cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
-        self.guide.cache.flush()
+        cdef TagState* violn = <TagState*>calloc(1, sizeof(TagState))
+        cdef double gscore = 0
+        cdef size_t t = 0
         for word_i in range(sent.length - 1):
             for i in range(beam.bsize):
-                pred = <TagState*>beam.beam[i]
-                fill_tag_kernel(pred, word_i)
-                beam_scores[i] = self._predict(sent, &pred.kernel)
-            beam.extend_states(beam_scores)
-            fill_tag_kernel(gold, word_i)
-            scores = self._predict(sent, &gold.kernel)
-            gold.score += scores[sent.pos[word_i]]
-            gold.tags[word_i] = sent.pos[word_i]
-            pred = <TagState*>beam.beam[0]
-            if (pred.score - gold.score) >= violn.score:
-                violn.score = pred.score - gold.score
-                violn.kernel.i = word_i + 1
-                memcpy(violn.tags, pred.tags, (word_i + 1) * sizeof(size_t))
-        if violn.kernel.i == 0:
-            self.guide.n_corr += beam.t
-            self.guide.total += beam.t
-        else:
-            fill_tag_kernel(violn, violn.kernel.i)
-            counts = self._count_feats(sent, violn.kernel.i, violn, gold)
-            self.guide.batch_update(counts)
-        free(violn.tags)
-        free(gold.tags)
-        free(violn)
-        free(gold)
-        free(beam_scores)
-
-    cdef double* _predict(self, Sentence* sent, TagKernel* kernel) except NULL:
-        cdef bint cache_hit = False
-        cdef double* scores
-        scores = self.guide.cache.lookup(sizeof(TagKernel), kernel, &cache_hit)
-        if not cache_hit:
-            #print sent.length, kernel.i, kernel.ptag, kernel.pptag, kernel.ppptag
-            fill_context(self._context, sent, kernel)
+                s = <TagState*>beam.beam[i]
+                # Here s.hist[0] is the prev tag, and s.hist[1] the prev prev tag
+                fill_context(self._context, sent, s.hist[0], s.hist[1], word_i)
+                self.features.extract(self._features, self._context)
+                self.guide.fill_scores(self._features, self.beam_scores[i])
+            # After extend_states, beam has the tag for word_i at hist[0] and
+            # the tag for the prev word at hist[1]
+            beam.extend_states(self.beam_scores)
+            fill_context(self._context, sent, sent.pos[word_i-1] if word_i >= 1 else 0,
+                         sent.pos[word_i-2] if word_i >= 2 else 0, word_i)
             self.features.extract(self._features, self._context)
-            self.guide.fill_scores(self._features, scores)
-        return scores
+            self.guide.fill_scores(self._features, gscores)
+            gscore += gscores[sent.pos[word_i]]
+            s = <TagState*>beam.beam[0]
+            if (s.score - gscore) >= violn.score:
+                violn.score = s.score - gscore
+                violn.prev = s.prev
+                # The tag for word_i
+                violn.hist[0] = s.hist[0]
+                # The tag for word_i-1
+                violn.hist[1] = s.hist[1]
+                t = word_i
+            self.guide.n_corr += (sent.pos[word_i] == s.hist[0])
+            self.guide.total += 1
+        cdef size_t* phist
+        if t != 0:
+            phist = <size_t*>calloc(t + 1, sizeof(size_t))
+            fill_hist(phist, violn, t)
+            counts = self._count_feats(sent, t, phist, sent.pos)
+            self.guide.batch_update(counts)
+        free(violn)
+        free(gscores)
+        if t != 0:
+            free(phist)
 
-    cdef dict _count_feats(self, Sentence* sent, size_t t,
-                           TagState* pred, TagState* gold):
+    cdef dict _count_feats(self, Sentence* sent, size_t t, size_t* phist,
+                           size_t* ghist):
         cdef size_t d, i, f
         cdef uint64_t* feats
         # Find where the states diverge
         cdef dict counts = {}
         for clas in range(self.nr_tag):
             counts[clas] = {}
-        cdef bint seen_diff = False
-        for i in range(1, t):
-            self.guide.total += 1
-            if not seen_diff and gold.tags[i] == pred.tags[i]:
-                self.guide.n_corr += 1
-                continue
-            if gold.tags[i] == pred.tags[i]:
-                self.guide.n_corr += 1
-            seen_diff = True
-            fill_tag_kernel(gold, i)
-            fill_context(self._context, sent, &gold.kernel)
+        for i in range(1, t+1):
+            gclas = ghist[i]
+            pclas = phist[i]
+            gprev = ghist[i-1]
+            pprev = phist[i-1]
+            gpprev = ghist[i-2] if i >= 2 else 0
+            ppprev = phist[i-2] if i >= 2 else 0
+            if gclas == pclas:
+                if gpprev == pprev and gpprev == ppprev:
+                    continue
+            fill_context(self._context, sent, gprev, gpprev, i)
             self.features.extract(self._features, self._context)
-            self._inc_feats(counts[gold.tags[i]], self._features, 1.0)
-            fill_tag_kernel(pred, i)
-            fill_context(self._context, sent, &pred.kernel)
+            self._inc_feats(counts[gclas], self._features, 1.0)
+            fill_context(self._context, sent, pprev, ppprev, i)
             self.features.extract(self._features, self._context)
-            self._inc_feats(counts[pred.tags[i]], self._features, -1.0)
+            self._inc_feats(counts[pclas], self._features, -1.0)
         return counts
 
     cdef int _inc_feats(self, dict counts, uint64_t* feats,
@@ -218,25 +208,6 @@ cdef class BeamTagger:
         index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
  
 
-cdef inline int fill_tag_kernel(TagState* s, size_t i):
-    s.kernel.i = i
-    if i >= 1:
-        s.kernel.ptag = s.tags[i - 1]
-        if i >= 2:
-            s.kernel.pptag = s.tags[i - 2]
-            if i >= 3:
-                s.kernel.ppptag = s.tags[i - 3]
-            else:
-                s.kernel.ppptag = 0
-        else:
-            s.kernel.pptag = 0
-            s.kernel.ppptag = 0
-    else:
-        s.kernel.ptag = 0
-        s.kernel.pptag = 0
-        s.kernel.ppptag = 0
-
-
 def print_train_msg(n, n_corr, n_move, n_hit, n_miss):
     pc = lambda a, b: '%.1f' % ((float(a) / (b + 1e-100)) * 100)
     move_acc = pc(n_corr, n_move)
@@ -254,6 +225,8 @@ cdef enum:
     N0c4
     N0suff
     N0pre
+
+    N0quo
 
     N1w
     N1c
@@ -299,6 +272,9 @@ basic = (
     (N1pre,),
     (P1suff,),
     (P1pre,),
+    (N0quo,),
+    (N0w, N0quo),
+    (P1p, N0quo),
 )
 
 clusters = (
@@ -320,47 +296,44 @@ clusters = (
     (P2c4, P1c4, N0w)
 )
 
-cdef int fill_context(size_t* context, Sentence* sent, TagKernel* k):
-    cdef size_t i
-    for i in range(CONTEXT_SIZE):
-        context[i] = 0
-    #memset(context, 0, sizeof(size_t) * CONTEXT_SIZE)
-    context[N0w] = sent.words[k.i]
-    context[N0c] = sent.clusters[k.i]
-    context[N0c6] = sent.cprefix6s[k.i]
-    context[N0c4] = sent.cprefix4s[k.i]
-    context[N0suff] = sent.orths[k.i]
-    context[N0pre] = sent.parens[k.i]
+cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag, size_t i):
+    context[N0w] = sent.words[i]
+    context[N0c] = sent.clusters[i]
+    context[N0c6] = sent.cprefix6s[i]
+    context[N0c4] = sent.cprefix4s[i]
+    context[N0suff] = sent.orths[i]
+    context[N0pre] = sent.parens[i]
     
-    context[N1w] = sent.words[k.i+1]
-    context[N1c] = sent.clusters[k.i+1]
-    context[N1c6] = sent.cprefix6s[k.i+1]
-    context[N1c4] = sent.cprefix4s[k.i+1]
-    context[N1suff] = sent.orths[k.i + 1]
-    context[N1pre] = sent.parens[k.i + 1]
-    if k.i == 1:
+    context[N1w] = sent.words[i + 1]
+    context[N1c] = sent.clusters[i + 1]
+    context[N1c6] = sent.cprefix6s[i + 1]
+    context[N1c4] = sent.cprefix4s[i + 1]
+    context[N1suff] = sent.orths[i + 1]
+    context[N1pre] = sent.parens[i + 1]
+
+    context[N0quo] = sent.quotes[i] == 0
+    if i == 1:
         return 0
-    context[P1w] = sent.words[k.i-1]
-    context[P1c] = sent.clusters[k.i-1]
-    context[P1c6] = sent.cprefix6s[k.i-1]
-    context[P1c4] = sent.cprefix4s[k.i-1]
-    context[P1suff] = sent.orths[k.i-1]
-    context[P1pre] = sent.parens[k.i-1]
-    context[P1p] = k.ptag
-    
-    if k.i == 2:
+    context[P1w] = sent.words[i-1]
+    context[P1c] = sent.clusters[i-1]
+    context[P1c6] = sent.cprefix6s[i-1]
+    context[P1c4] = sent.cprefix4s[i-1]
+    context[P1suff] = sent.orths[i-1]
+    context[P1pre] = sent.parens[i-1]
+    context[P1p] = ptag
+    if i == 2:
         return 0
-    context[P2w] = sent.words[k.i-2]
-    context[P2c] = sent.clusters[k.i-2]
-    context[P2c6] = sent.cprefix6s[k.i-2]
-    context[P2c4] = sent.cprefix4s[k.i-2]
-    context[P2suff] = sent.orths[k.i-2]
-    context[P2pre] = sent.parens[k.i-2]
-    context[P2p] = k.pptag
+    context[P2w] = sent.words[i-2]
+    context[P2c] = sent.clusters[i-2]
+    context[P2c6] = sent.cprefix6s[i-2]
+    context[P2c4] = sent.cprefix4s[i-2]
+    context[P2suff] = sent.orths[i-2]
+    context[P2pre] = sent.parens[i-2]
+    context[P2p] = pptag
 
     # Fill bag-of-words slots
-    i = k.i - 2
     cdef size_t slot = P3w
+    i -= 2
     while i > 0 and slot < CONTEXT_SIZE:
         i -= 1
         context[slot] = sent.words[i]
