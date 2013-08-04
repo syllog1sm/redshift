@@ -1,5 +1,5 @@
 from redshift._state cimport *
-from redshift.beam cimport TaggerBeam, TagState, fill_hist
+from redshift.beam cimport TaggerBeam, TagState, fill_hist, get_p, get_pp
 #, TagKernel
 from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
@@ -9,6 +9,7 @@ from redshift.io_parse cimport Sentences, Sentence
 from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport memcpy, memset
 from libc.stdint cimport uint64_t, int64_t
+from libcpp.vector cimport vector 
 
 from os.path import join as pjoin
 import os
@@ -33,7 +34,7 @@ cdef class BeamTagger:
     cdef uint64_t* _features
     cdef double** beam_scores
 
-    def __cinit__(self, model_dir, feat_set="basic", feat_thresh=5, beam_width=8,
+    def __cinit__(self, model_dir, feat_set="basic", feat_thresh=5, beam_width=4,
                   clean=False):
         self.model_dir = model_dir
         if clean and os.path.exists(model_dir):
@@ -47,9 +48,9 @@ cdef class BeamTagger:
         self.guide = Perceptron(100, pjoin(model_dir, 'tagger.gz'))
         if not clean:
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
-        #self.features = Extractor(unigrams + bigrams + trigrams, [])
-        self.features = Extractor(basic + clusters, [], bag_of_words=[P1p, P1alt])
-                                  #bag_of_words=[P1w, P2w, P3w, P4w, P5w, P6w, P7w])
+        #self.features = Extractor(basic, [])
+        self.features = Extractor(basic + clusters, [],
+                                  bag_of_words=[P1w, P2w, P3w, P4w, P5w, P6w, P7w])
         self.nr_tag = 100
         self.beam_width = beam_width
         self._context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
@@ -73,22 +74,24 @@ cdef class BeamTagger:
         cdef size_t p_idx
         cdef TagState* s
         for i in range(sent.length - 1):
-            for p_idx in range(beam.bsize):
-                s = <TagState*>beam.beam[p_idx]
-                fill_context(self._context, sent, s.hist[0], s.hist[1], s.alt, i)
-                self.features.extract(self._features, self._context)
-                self.guide.fill_scores(self._features, self.beam_scores[p_idx])
+            self.fill_beam_scores(beam, sent, i)
             beam.extend_states(self.beam_scores)
         s = <TagState*>beam.beam[0]
-        t = sent.length - 2
-        while t > 0 and s.prev != NULL:
-            self._acc += (sent.pos[t] == s.hist[0] or sent.pos[t] == s.alt)
-            s = s.prev
-            t -= 1
-        fill_hist(sent.pos, s, sent.length - 2)
+        fill_hist(sent.pos, s, sent.length - 1)
 
-
-
+    cdef int fill_beam_scores(self, TaggerBeam beam, Sentence* sent,
+                              size_t word_i) except -1:
+        for i in range(beam.bsize):
+            s = <TagState*>beam.beam[i]
+            if i != 0:
+                assert s.length == s.prev.length  + 1
+            # At this point, beam.clas is the _last_ prediction, not the prediction
+            # for this instance
+            fill_context(self._context, sent, beam.beam[i].clas, get_p(beam.beam[i]),
+                         s.alt, word_i)
+            self.features.extract(self._features, self._context)
+            self.guide.fill_scores(self._features, self.beam_scores[i])
+ 
     def train(self, Sentences sents, nr_iter=10):
         indices = list(range(sents.length))
         self.nr_tag = 0
@@ -100,13 +103,13 @@ cdef class BeamTagger:
                     tags.add(sents.s[i].pos[j])
         self.nr_tag += 1
         self.guide.set_classes(range(self.nr_tag))
-        if not DEBUG:
-            # Extra trick: sort by sentence length for first iteration
-            indices.sort(key=lambda i: sents.s[i].length)
+        #if not DEBUG:
+        #    # Extra trick: sort by sentence length for first iteration
+        #    indices.sort(key=lambda i: sents.s[i].length)
         for n in range(nr_iter):
             for i in indices:
-                if DEBUG:
-                    print ' '.join(sents.strings[i][0])
+                #if DEBUG:
+                #print ' '.join(sents.strings[i][0])
                 self.static_train(n, sents.s[i])
             print_train_msg(n, self.guide.n_corr, self.guide.total, self.guide.cache.n_hit,
                             self.guide.cache.n_miss)
@@ -120,70 +123,66 @@ cdef class BeamTagger:
         self.guide.finalize()
 
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:
-        cdef size_t  i, word_i, clas
-        cdef TagState* s
+        cdef size_t  i
         cdef double* gscores = <double*>calloc(self.nr_tag, sizeof(double))
         cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
         cdef double gscore = 0
         cdef size_t t = 0
-        cdef TagState* violn_p
-        cdef double violn_score = 0
+        cdef double violn_score = -1
+        cdef TagState* violn
         cdef uint64_t** gold_feats = <uint64_t**>malloc(sent.length * sizeof(uint64_t*))
-        cdef uint64_t** pred_feats = <uint64_t**>malloc(sent.length * sizeof(uint64_t*))
-        for word_i in range(sent.length - 1):
-            for i in range(beam.bsize):
-                s = <TagState*>beam.beam[i]
-                # Here s.hist[0] is the prev tag, and s.hist[1] the prev prev tag
-                fill_context(self._context, sent, s.hist[0], s.hist[1], s.alt, word_i)
-                self.features.extract(self._features, self._context)
-                self.guide.fill_scores(self._features, self.beam_scores[i])
-            # After extend_states, beam has the tag for word_i at hist[0] and
-            # the tag for the prev word at hist[1]
+        assert sent.length < 500
+        #cdef size_t* gstates = <size_t*>malloc(sent.length * sizeof(size_t))
+        for i in range(sent.length - 1):
+            self.fill_beam_scores(beam, sent, i)
             beam.extend_states(self.beam_scores)
-            gold_feats[word_i] = <uint64_t*>calloc(self.max_feats, sizeof(uint64_t))
-            fill_context(self._context, sent, sent.pos[word_i-1] if word_i >= 1 else 0,
-                         sent.pos[word_i-2] if word_i >= 2 else 0, 0, word_i)
-            self.features.extract(gold_feats[word_i], self._context)
-            self.guide.fill_scores(gold_feats[word_i], gscores)
-            gscore += gscores[sent.pos[word_i]]
-            s = <TagState*>beam.beam[0]
-            if (s.score - gscore) >= violn_score:
-                violn_score = s.score - gscore
-                t = word_i
-            self.guide.n_corr += (sent.pos[word_i] == s.hist[0])
+            gprev = sent.pos[i - 1] if i >= 1 else 0
+            gprevprev = sent.pos[i - 2] if i >= 2 else 0
+            gold_feats[i] = <uint64_t*>calloc(self.max_feats, sizeof(uint64_t))
+            fill_context(self._context, sent, gprev, gprevprev, 0, i)
+            self.features.extract(gold_feats[i], self._context)
+            self.guide.fill_scores(gold_feats[i], gscores)
+            gscore += gscores[sent.pos[i]]
+            if (beam.beam[0].score - gscore) > violn_score:
+                violn_score = beam.beam[0].score - gscore
+                violn = beam.beam[0]
+                t = i + 1
+                # TODO:  Get the right beam state for the violation!!
+            self.guide.n_corr += (sent.pos[i] == beam.beam[0].clas)
             self.guide.total += 1
-        s = <TagState*>beam.beam[0]
-        cdef size_t* phist = <size_t*>calloc(sent.length, sizeof(size_t))
-        while word_i >= 0 and s.prev != NULL:
-            pred_feats[word_i] = <uint64_t*>calloc(self.max_feats, sizeof(uint64_t))
-            phist[word_i] = s.hist[0]
-            fill_context(self._context, sent, s.prev.hist[0], s.prev.hist[1],
-                         s.alt, word_i)
-            self.features.extract(pred_feats[word_i], self._context)
-            s = s.prev
-            word_i -= 1
-        if t != 0:
-            counts = self._count_feats(t, sent.pos, gold_feats, phist, pred_feats)
+        cdef size_t* pstates
+        if violn != NULL:
+            pstates = <size_t*>malloc(violn.length * sizeof(size_t))
+            fill_hist(pstates, violn, violn.length)
+            counts = self._count_feats(t, sent.pos,
+                                       pstates, sent, gold_feats)
             self.guide.batch_update(counts)
-        free(gscores)
         for i in range(sent.length - 1):
             free(gold_feats[i])
-            free(pred_feats[i])
         free(gold_feats)
-        free(pred_feats)
-        free(phist)
+        free(gscores)
+        free(pstates)
 
-    cdef dict _count_feats(self, size_t t, size_t* gclass, uint64_t** gold,
-                           size_t* pclass, uint64_t** pred):
-        cdef size_t d, i, f
-        cdef uint64_t* feats
-        # Find where the states diverge
+    cdef dict _count_feats(self, size_t t, size_t* gstates, size_t* pstates,
+                           Sentence* sent, uint64_t** gold_feats):
         cdef dict counts = {}
         for clas in range(self.nr_tag):
             counts[clas] = {}
-        for i in range(1, t + 1):
-            self._inc_feats(counts[gclass[i]], gold[i], 1.0)
-            self._inc_feats(counts[pclass[i]], pred[i], -1.0)
+        cdef size_t gclas, gprev, gprevprev, pclas, pprev, pprevprev
+        for i in range(t):
+            gclas = gstates[i]
+            gprevprev = 0
+            gprev = gstates[i - 1] if i >= 1 else 0
+            gprevprev = gstates[i - 2] if i >= 2 else 0
+            pclas = pstates[i]
+            pprev = pstates[i - 1] if i >= 1 else 0
+            pprevprev = pstates[i - 2] if i >= 2 else 0
+            #if gclas == pclas:
+            #    continue
+            self._inc_feats(counts[gclas], gold_feats[i], 1.0)
+            fill_context(self._context, sent, pprev, pprevprev, 0, i)
+            self.features.extract(self._features, self._context)
+            self._inc_feats(counts[pclas], self._features, -1.0)
         return counts
 
     cdef int _inc_feats(self, dict counts, uint64_t* feats,
@@ -246,7 +245,6 @@ cdef enum:
     P1suff
     P1pre
     P1p
-    P1alt
 
     P2w
     P2c
@@ -263,6 +261,7 @@ cdef enum:
     P7w
     CONTEXT_SIZE
 
+#basic = ((N0w,), (P1p,),)
 
 basic = (
     (N0w,),
@@ -327,7 +326,6 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[P1suff] = sent.orths[i-1]
     context[P1pre] = sent.parens[i-1]
     context[P1p] = ptag
-    context[P1alt] = p_alt
     if i == 2:
         return 0
     context[P2w] = sent.words[i-2]
@@ -339,9 +337,9 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[P2p] = pptag
 
     # Fill bag-of-words slots
-    cdef size_t slot = P3w
-    i -= 2
-    while i > 0 and slot < CONTEXT_SIZE:
-        i -= 1
-        context[slot] = sent.words[i]
-        slot += 1
+    #cdef size_t slot = P3w
+    #i -= 2
+    #while i > 0 and slot < CONTEXT_SIZE:
+    #    i -= 1
+    #    context[slot] = sent.words[i]
+    #    slot += 1

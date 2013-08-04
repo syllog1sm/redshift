@@ -159,7 +159,7 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
     return sentences
 
     
-def read_pos(file_str, vocab_thresh=0):
+def read_pos(file_str, vocab_thresh=0, sep='/'):
     cdef:
         size_t i
         object token_str, word, pos, words, tags
@@ -174,7 +174,7 @@ def read_pos(file_str, vocab_thresh=0):
         ids = [0]
         for token_str in sent_str.split():
             try:
-                word, pos = token_str.rsplit('/', 1)
+                word, pos = token_str.rsplit(sep, 1)
             except:
                 print sent_str
                 print token_str
