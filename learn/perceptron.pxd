@@ -63,5 +63,6 @@ cdef class Perceptron:
     cdef int fill_scores(self, uint64_t* features, double* scores) except -1
     cdef uint64_t predict_best_class(self, uint64_t* features)
     cdef int64_t finalize(self) except -1
+    cdef int unfinalize(self) except -1
 
 
