@@ -83,8 +83,6 @@ cdef class BeamTagger:
                               size_t word_i) except -1:
         for i in range(beam.bsize):
             s = <TagState*>beam.beam[i]
-            if i != 0:
-                assert s.length == s.prev.length  + 1
             # At this point, beam.clas is the _last_ prediction, not the prediction
             # for this instance
             fill_context(self._context, sent, beam.beam[i].clas, get_p(beam.beam[i]),
@@ -93,7 +91,6 @@ cdef class BeamTagger:
             self.guide.fill_scores(self._features, self.beam_scores[i])
  
     def train(self, Sentences sents, nr_iter=10):
-        indices = list(range(sents.length))
         self.nr_tag = 0
         tags = set()
         for i in range(sents.length):
@@ -103,13 +100,15 @@ cdef class BeamTagger:
                     tags.add(sents.s[i].pos[j])
         self.nr_tag += 1
         self.guide.set_classes(range(self.nr_tag))
-        #if not DEBUG:
-        #    # Extra trick: sort by sentence length for first iteration
-        #    indices.sort(key=lambda i: sents.s[i].length)
+        indices = list(range(sents.length))
+        split = len(indices) / 20
+        train = indices[split:]
+        #train = indices
+        heldout = indices[:split]
+        best_epoch = 0
+        best_acc = 0
         for n in range(nr_iter):
-            for i in indices:
-                #if DEBUG:
-                #print ' '.join(sents.strings[i][0])
+            for i in train:
                 self.static_train(n, sents.s[i])
             print_train_msg(n, self.guide.n_corr, self.guide.total, self.guide.cache.n_hit,
                             self.guide.cache.n_miss)
