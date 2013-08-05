@@ -95,6 +95,8 @@ cdef class Extractor:
                 features[f] = MurmurHash64A(pred.raws, size, i)
                 f += 1
         for i in range(self.nr_bow):
+            if context[self.for_bow[i]] == 0:
+                continue
             # The other features all come out of MurmurHash, but for now 'salt'
             # with the nr_bow constant, just because the raw values seem like they
             # might clash with stuff if I make a mistake later.
