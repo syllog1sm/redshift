@@ -153,8 +153,7 @@ cdef class BeamTagger:
         if violn != NULL:
             pstates = <size_t*>malloc(violn.length * sizeof(size_t))
             fill_hist(pstates, violn, violn.length)
-            counts = self._count_feats(t, sent.pos,
-                                       pstates, sent, gold_feats)
+            counts = self._count_feats(t, sent.pos, violn, sent, gold_feats)
             self.guide.batch_update(counts)
         for i in range(sent.length - 1):
             free(gold_feats[i])
@@ -162,20 +161,29 @@ cdef class BeamTagger:
         free(gscores)
         free(pstates)
 
-    cdef dict _count_feats(self, size_t t, size_t* gstates, size_t* pstates,
+    cdef dict _count_feats(self, size_t t, size_t* gstates, TagState* pred,
                            Sentence* sent, uint64_t** gold_feats):
         cdef dict counts = {}
         for clas in range(self.nr_tag):
             counts[clas] = {}
+        i = t
+        cdef TagState** pstates = <TagState**>malloc(pred.length * sizeof(TagState*))
+        while i >= 0 and pred.prev != NULL:
+            i -= 1
+            pstates[i] = pred
+            pred = pred.prev
+ 
         cdef size_t gclas, gprev, gprevprev, pclas, pprev, pprevprev
         for i in range(t):
             gclas = gstates[i]
             gprevprev = 0
             gprev = gstates[i - 1] if i >= 1 else 0
             gprevprev = gstates[i - 2] if i >= 2 else 0
-            pclas = pstates[i]
-            pprev = pstates[i - 1] if i >= 1 else 0
-            pprevprev = pstates[i - 2] if i >= 2 else 0
+            pclas = pstates[i].clas
+            pprev = get_p(pstates[i])
+            pprevprev = get_pp(pstates[i])
+            #pprev = pstates[i - 1].clas if i >= 1 else 0
+            #pprevprev = pstates[i - 2].clas if i >= 2 else 0
             #if gclas == pclas:
             #    continue
             self._inc_feats(counts[gclas], gold_feats[i], 1.0)
