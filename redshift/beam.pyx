@@ -13,6 +13,8 @@ from libcpp.utility cimport pair
 from cython.operator cimport preincrement as inc
 from cython.operator cimport dereference as deref
 
+cimport index.hashes
+import index.hashes
 from ext.murmurhash cimport MurmurHash64A
 from ext.sparsehash cimport *
 
@@ -191,12 +193,13 @@ cdef class TaggerBeam:
         self.beam = <TagState**>malloc(k * sizeof(TagState*))
         self.tmp_beam = <TagState**>malloc(k * sizeof(TagState*))
         cdef size_t i
+        cdef size_t clas
         cdef TagState* s
         for i in range(k):
             s = <TagState*>malloc(sizeof(TagState))
             s.prev = NULL
-            s.score = 0
             s.clas = 0
+            s.score = 0
             s.alt = 0
             s.length = 0
             self.beam[i] = <TagState*>s

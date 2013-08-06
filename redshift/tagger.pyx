@@ -48,9 +48,9 @@ cdef class BeamTagger:
         self.guide = Perceptron(100, pjoin(model_dir, 'tagger.gz'))
         if not clean:
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
-        #self.features = Extractor(basic, [])
-        self.features = Extractor(basic + clusters, [],
-                                  bag_of_words=[P1w, P2w, P3w, P4w, P5w, P6w, P7w])
+        self.features = Extractor([(N0w,)], [])
+        #self.features = Extractor(basic + clusters, [],
+        #                          bag_of_words=[P1w, P2w, P3w, P4w, P5w, P6w, P7w])
         self.nr_tag = 100
         self.beam_width = beam_width
         self._context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
@@ -109,6 +109,8 @@ cdef class BeamTagger:
         best_acc = 0
         for n in range(nr_iter):
             for i in train:
+                if DEBUG:
+                    print ' '.join(sents.strings[i][0])
                 self.static_train(n, sents.s[i])
             print_train_msg(n, self.guide.n_corr, self.guide.total, self.guide.cache.n_hit,
                             self.guide.cache.n_miss)
@@ -119,87 +121,60 @@ cdef class BeamTagger:
             if n < 3:
                 self.guide.reindex()
             random.shuffle(indices)
+            #self.guide.finalize()
+            n = 0
+            c = 0
+            for i in heldout:
+                gold = <size_t*>calloc(sents.s[i].length, sizeof(size_t))
+                memcpy(gold, sents.s[i].pos, sents.s[i].length * sizeof(size_t))
+                self.tag(sents.s[i])
+                for j in range(1, sents.s[i].length - 1):
+                    n += 1
+                    c += sents.s[i].pos[j] == gold[j]
+                free(sents.s[i].pos)
+                sents.s[i].pos = gold
+            #self.guide.unfinalize()
+            acc = float(c) / n
+            print acc
+            if acc > best_acc:
+                best_epoch = n
+                best_acc = acc
         self.guide.finalize()
 
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:
         cdef size_t  i
-        cdef double* gscores = <double*>calloc(self.nr_tag, sizeof(double))
         cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
-        cdef double gscore = 0
-        cdef size_t t = 0
-        cdef double violn_score = -1
-        cdef TagState* violn
-        cdef uint64_t** gold_feats = <uint64_t**>malloc(sent.length * sizeof(uint64_t*))
-        assert sent.length < 500
-        #cdef size_t* gstates = <size_t*>malloc(sent.length * sizeof(size_t))
+        cdef TagState* gold_state = <TagState*>calloc(1, sizeof(TagState))
+        cdef MaxViolnUpd updater = MaxViolnUpd(self.nr_tag)
         for i in range(sent.length - 1):
             self.fill_beam_scores(beam, sent, i)
             beam.extend_states(self.beam_scores)
-            gprev = sent.pos[i - 1] if i >= 1 else 0
-            gprevprev = sent.pos[i - 2] if i >= 2 else 0
-            gold_feats[i] = <uint64_t*>calloc(self.max_feats, sizeof(uint64_t))
-            fill_context(self._context, sent, gprev, gprevprev, 0, i)
-            self.features.extract(gold_feats[i], self._context)
-            self.guide.fill_scores(gold_feats[i], gscores)
-            gscore += gscores[sent.pos[i]]
-            if (beam.beam[0].score - gscore) > violn_score:
-                violn_score = beam.beam[0].score - gscore
-                violn = beam.beam[0]
-                t = i + 1
-                # TODO:  Get the right beam state for the violation!!
+            gold_state = self.extend_gold(gold_state, sent, i)
+            updater.compare(beam.beam[0], gold_state, i)
             self.guide.n_corr += (sent.pos[i] == beam.beam[0].clas)
             self.guide.total += 1
-        cdef size_t* pstates
-        if violn != NULL:
-            pstates = <size_t*>malloc(violn.length * sizeof(size_t))
-            fill_hist(pstates, violn, violn.length)
-            counts = self._count_feats(t, sent.pos, violn, sent, gold_feats)
+        counts = updater.count_feats(self._features, self._context, sent, self.features)
+        if updater.delta != -1:
             self.guide.batch_update(counts)
-        for i in range(sent.length - 1):
-            free(gold_feats[i])
-        free(gold_feats)
-        free(gscores)
-        free(pstates)
 
-    cdef dict _count_feats(self, size_t t, size_t* gstates, TagState* pred,
-                           Sentence* sent, uint64_t** gold_feats):
-        cdef dict counts = {}
+    cdef TagState* extend_gold(self, TagState* s, Sentence* sent, size_t i):
+        fill_context(self._context, sent, s.clas, get_p(s), s.alt, i)
+        self.features.extract(self._features, self._context)
+        self.guide.fill_scores(self._features, self.guide.scores)
+        ext = <TagState*>calloc(1, sizeof(TagState))
+        ext.score = self.guide.scores[sent.pos[i]] + s.score
+        ext.clas = sent.pos[i]
+        ext.length = s.length + 1
+        ext.prev = s
+        cdef double best = 0
+        cdef size_t clas 
         for clas in range(self.nr_tag):
-            counts[clas] = {}
-        i = t
-        cdef TagState** pstates = <TagState**>malloc(pred.length * sizeof(TagState*))
-        while i >= 0 and pred.prev != NULL:
-            i -= 1
-            pstates[i] = pred
-            pred = pred.prev
- 
-        cdef size_t gclas, gprev, gprevprev, pclas, pprev, pprevprev
-        for i in range(t):
-            gclas = gstates[i]
-            gprevprev = 0
-            gprev = gstates[i - 1] if i >= 1 else 0
-            gprevprev = gstates[i - 2] if i >= 2 else 0
-            pclas = pstates[i].clas
-            pprev = get_p(pstates[i])
-            pprevprev = get_pp(pstates[i])
-            #pprev = pstates[i - 1].clas if i >= 1 else 0
-            #pprevprev = pstates[i - 2].clas if i >= 2 else 0
-            #if gclas == pclas:
-            #    continue
-            self._inc_feats(counts[gclas], gold_feats[i], 1.0)
-            fill_context(self._context, sent, pprev, pprevprev, 0, i)
-            self.features.extract(self._features, self._context)
-            self._inc_feats(counts[pclas], self._features, -1.0)
-        return counts
-
-    cdef int _inc_feats(self, dict counts, uint64_t* feats,
-                        double inc) except -1:
-        cdef size_t f = 0
-        while feats[f] != 0:
-            if feats[f] not in counts:
-                counts[feats[f]] = 0
-            counts[feats[f]] += inc
-            f += 1
+            if clas == sent.pos[i]:
+                continue
+            if self.guide.scores[clas] > best:
+                ext.alt = clas
+                best = self.guide.scores[clas]
+        return ext
 
     def save(self):
         self.guide.save(pjoin(self.model_dir, 'tagger.tgz'))
@@ -216,7 +191,70 @@ cdef class BeamTagger:
         index.hashes.load_word_idx(pjoin(model_dir, 'words'))
         index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
         index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
- 
+
+
+cdef class MaxViolnUpd:
+    cdef TagState* pred
+    cdef TagState* gold
+    cdef Sentence* sent
+    cdef double delta
+    cdef int length
+    cdef size_t nr_class
+    cdef size_t tmp
+    def __cinit__(self, size_t nr_class):
+        self.delta = -1
+        self.length = -1
+        self.nr_class = nr_class
+
+    cdef int compare(self, TagState* pred, TagState* gold, size_t i):
+        delta = pred.score - gold.score
+        #print "delta at %d: %d" % (i, delta)
+        if delta > self.delta:
+            self.delta = delta
+            self.pred = pred
+            self.gold = gold
+            self.length = i
+
+    cdef dict count_feats(self, uint64_t* feats, size_t* context, Sentence* sent,
+                          Extractor extractor):
+        if self.length == -1:
+            return {}
+        cdef TagState* g = self.gold
+        cdef TagState* p = self.pred
+        cdef int i = self.length
+        cdef dict counts = {}
+        for clas in range(self.nr_class):
+            counts[clas] = {} 
+        if DEBUG:
+            pos_idx = index.hashes.reverse_pos_index()
+            word_idx = index.hashes.reverse_word_index()
+        # g.clas == sent.pos[i]
+        while g != NULL and p != NULL and i >= 0:
+            fill_context(context, sent, get_p(g), get_pp(g), g.alt, i)
+            extractor.extract(feats, context)
+            self._inc_feats(counts[g.clas], feats, 1.0)
+            fill_context(context, sent, get_p(p), get_pp(p), p.alt, i)
+            extractor.extract(feats, context)
+            self._inc_feats(counts[p.clas], feats, -1.0)
+            assert g.clas == sent.pos[i]
+            assert sent.words[i] == context[N0w]
+            if DEBUG:
+                delta = p.score - g.score
+            g = g.prev
+            p = p.prev
+            i -= 1
+        #assert i == -1
+        return counts
+
+    cdef int _inc_feats(self, dict counts, uint64_t* feats,
+                        double inc) except -1:
+        cdef size_t f = 0
+        while feats[f] != 0:
+            if feats[f] not in counts:
+                counts[feats[f]] = 0
+            counts[feats[f]] += inc
+            f += 1
+
 
 def print_train_msg(n, n_corr, n_move, n_hit, n_miss):
     pc = lambda a, b: '%.1f' % ((float(a) / (b + 1e-100)) * 100)
