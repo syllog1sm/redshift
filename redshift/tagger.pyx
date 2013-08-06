@@ -48,9 +48,9 @@ cdef class BeamTagger:
         self.guide = Perceptron(100, pjoin(model_dir, 'tagger.gz'))
         if not clean:
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
-        self.features = Extractor([(N0w,)], [])
-        #self.features = Extractor(basic + clusters, [],
-        #                          bag_of_words=[P1w, P2w, P3w, P4w, P5w, P6w, P7w])
+        #self.features = Extractor([(N0w,)], [])
+        self.features = Extractor(basic + clusters, [],
+                                  bag_of_words=[P1w, P2w, P3w, P4w, P5w, P6w, P7w])
         self.nr_tag = 100
         self.beam_width = beam_width
         self._context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
@@ -103,7 +103,7 @@ cdef class BeamTagger:
         indices = list(range(sents.length))
         split = len(indices) / 20
         train = indices[split:]
-        #train = indices
+        train = indices
         heldout = indices[:split]
         best_epoch = 0
         best_acc = 0
