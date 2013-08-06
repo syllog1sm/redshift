@@ -213,7 +213,7 @@ cdef class MaxViolnUpd:
             self.delta = delta
             self.pred = pred
             self.gold = gold
-            self.length = i
+            self.length = i 
 
     cdef dict count_feats(self, uint64_t* feats, size_t* context, Sentence* sent,
                           Extractor extractor):
@@ -240,6 +240,7 @@ cdef class MaxViolnUpd:
             assert sent.words[i] == context[N0w]
             if DEBUG:
                 delta = p.score - g.score
+                print delta, i, pos_idx[g.clas], pos_idx[p.clas], word_idx[sent.words[i]]
             g = g.prev
             p = p.prev
             i -= 1

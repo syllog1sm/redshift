@@ -255,6 +255,12 @@ def reverse_pos_index():
     cdef StrIndex idx = _pos_idx
     return idx.get_reverse_index()
 
+def reverse_word_index():
+    global _word_idx
+    cdef StrIndex idx = _word_idx
+    return idx.get_reverse_index()
+
+
 
 def reverse_label_index():
     global _label_idx
