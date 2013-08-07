@@ -61,12 +61,9 @@ cdef class BeamTagger:
 
     def add_tags(self, Sentences sents):
         cdef size_t i
-        n = 0
-        self._acc = 0
         for i in range(sents.length):
             self.tag(sents.s[i])
             n += (sents.s[i].length - 2)
-        print '%.3f' % (float(self._acc) / n)
 
     cdef int tag(self, Sentence* sent) except -1:
         cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
@@ -100,14 +97,8 @@ cdef class BeamTagger:
         self.nr_tag += 1
         self.guide.set_classes(range(self.nr_tag))
         indices = list(range(sents.length))
-        split = len(indices) / 20
-        train = indices[split:]
-        train = indices
-        heldout = indices[:split]
-        best_epoch = 0
-        best_acc = 0
         for n in range(nr_iter):
-            for i in train:
+            for i in indices:
                 if DEBUG:
                     print ' '.join(sents.strings[i][0])
                 self.static_train(n, sents.s[i])
@@ -119,31 +110,13 @@ cdef class BeamTagger:
                 self.guide.prune(self.feat_thresh)
             if n < 3:
                 self.guide.reindex()
-            random.shuffle(train)
-            self.guide.finalize()
-            n = 0
-            c = 0
-            for i in heldout:
-                gold = <size_t*>calloc(sents.s[i].length, sizeof(size_t))
-                memcpy(gold, sents.s[i].pos, sents.s[i].length * sizeof(size_t))
-                self.tag(sents.s[i])
-                for j in range(1, sents.s[i].length - 1):
-                    n += 1
-                    c += sents.s[i].pos[j] == gold[j]
-                free(sents.s[i].pos)
-                sents.s[i].pos = gold
-            self.guide.unfinalize()
-            acc = float(c) / n
-            print acc
-            if acc > best_acc:
-                best_epoch = n
-                best_acc = acc
+            random.shuffle(indices)
         self.guide.finalize()
 
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:
         cdef size_t  i
         cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
-        cdef TagState* gold_state = extend_state(NULL, 0, NULL)
+        cdef TagState* gold_state = extend_state(NULL, 0, NULL, 0)
         cdef MaxViolnUpd updater = MaxViolnUpd(self.nr_tag)
         for i in range(sent.length - 1):
             self.fill_beam_scores(beam, sent, i)
@@ -160,7 +133,7 @@ cdef class BeamTagger:
         fill_context(self._context, sent, s.clas, get_p(s), s.alt, i)
         self.features.extract(self._features, self._context)
         self.guide.fill_scores(self._features, self.guide.scores)
-        ext = extend_state(s, sent.pos[i], self.guide.scores)
+        ext = extend_state(s, sent.pos[i], self.guide.scores, self.guide.nr_class)
         cdef double best = 0
         cdef size_t clas 
         for clas in range(self.nr_tag):
@@ -219,9 +192,6 @@ cdef class MaxViolnUpd:
         cdef dict counts = {}
         for clas in range(self.nr_class):
             counts[clas] = {} 
-        if DEBUG:
-            pos_idx = index.hashes.reverse_pos_index()
-            word_idx = index.hashes.reverse_word_index()
         while g != NULL and p != NULL and i >= 0:
             assert g.clas == sent.pos[i]
             fill_context(context, sent, get_p(g), get_pp(g), g.alt, i)
@@ -232,9 +202,6 @@ cdef class MaxViolnUpd:
             self._inc_feats(counts[p.clas], feats, -1.0)
             assert g.clas == sent.pos[i]
             assert sent.words[i] == context[N0w]
-            if DEBUG:
-                delta = p.score - g.score
-                print delta, i, pos_idx[g.clas], pos_idx[p.clas], word_idx[sent.words[i]]
             g = g.prev
             p = p.prev
             i -= 1

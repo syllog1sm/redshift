@@ -57,10 +57,9 @@ cdef class TaggerBeam:
     cdef TagState** beam
     cdef TagState** tmp_beam
     cdef int extend_states(self, double** scores) except -1
-    cdef int _add_runners_up(self, double** scores) 
-    #cdef int eval_beam(self, size_t* gold) 
 
 
+cdef TagState* extend_state(TagState* s, size_t clas, double* scores, size_t n)
 
 cdef int fill_hist(size_t* hist, TagState* s, int t) except -1
 
