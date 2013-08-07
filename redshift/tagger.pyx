@@ -120,7 +120,7 @@ cdef class BeamTagger:
                 self.guide.prune(self.feat_thresh)
             if n < 3:
                 self.guide.reindex()
-            random.shuffle(indices)
+            random.shuffle(train)
             #self.guide.finalize()
             n = 0
             c = 0
