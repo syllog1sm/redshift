@@ -143,7 +143,7 @@ cdef class BeamTagger:
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:
         cdef size_t  i
         cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
-        cdef TagState* gold_state = extend_state(NULL, 0, 0)
+        cdef TagState* gold_state = extend_state(NULL, 0, NULL)
         cdef MaxViolnUpd updater = MaxViolnUpd(self.nr_tag)
         for i in range(sent.length - 1):
             self.fill_beam_scores(beam, sent, i)
@@ -160,7 +160,7 @@ cdef class BeamTagger:
         fill_context(self._context, sent, s.clas, get_p(s), s.alt, i)
         self.features.extract(self._features, self._context)
         self.guide.fill_scores(self._features, self.guide.scores)
-        ext = extend_state(s, sent.pos[i], self.guide.scores[sent.pos[i]])
+        ext = extend_state(s, sent.pos[i], self.guide.scores)
         cdef double best = 0
         cdef size_t clas 
         for clas in range(self.nr_tag):
