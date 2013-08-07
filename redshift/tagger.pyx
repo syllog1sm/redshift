@@ -1,5 +1,5 @@
 from redshift._state cimport *
-from redshift.beam cimport TaggerBeam, TagState, fill_hist, get_p, get_pp
+from redshift.beam cimport TaggerBeam, TagState, fill_hist, get_p, get_pp, extend_state
 #, TagKernel
 from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
@@ -48,7 +48,6 @@ cdef class BeamTagger:
         self.guide = Perceptron(100, pjoin(model_dir, 'tagger.gz'))
         if not clean:
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
-        #self.features = Extractor([(N0w,)], [])
         self.features = Extractor(basic + clusters, [],
                                   bag_of_words=[P1w, P2w, P3w, P4w, P5w, P6w, P7w])
         self.nr_tag = 100
@@ -121,7 +120,7 @@ cdef class BeamTagger:
             if n < 3:
                 self.guide.reindex()
             random.shuffle(train)
-            #self.guide.finalize()
+            self.guide.finalize()
             n = 0
             c = 0
             for i in heldout:
@@ -133,7 +132,7 @@ cdef class BeamTagger:
                     c += sents.s[i].pos[j] == gold[j]
                 free(sents.s[i].pos)
                 sents.s[i].pos = gold
-            #self.guide.unfinalize()
+            self.guide.unfinalize()
             acc = float(c) / n
             print acc
             if acc > best_acc:
@@ -144,7 +143,7 @@ cdef class BeamTagger:
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:
         cdef size_t  i
         cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
-        cdef TagState* gold_state = <TagState*>calloc(1, sizeof(TagState))
+        cdef TagState* gold_state = extend_state(NULL, 0, 0)
         cdef MaxViolnUpd updater = MaxViolnUpd(self.nr_tag)
         for i in range(sent.length - 1):
             self.fill_beam_scores(beam, sent, i)
@@ -161,11 +160,7 @@ cdef class BeamTagger:
         fill_context(self._context, sent, s.clas, get_p(s), s.alt, i)
         self.features.extract(self._features, self._context)
         self.guide.fill_scores(self._features, self.guide.scores)
-        ext = <TagState*>calloc(1, sizeof(TagState))
-        ext.score = self.guide.scores[sent.pos[i]] + s.score
-        ext.clas = sent.pos[i]
-        ext.length = s.length + 1
-        ext.prev = s
+        ext = extend_state(s, sent.pos[i], self.guide.scores[sent.pos[i]])
         cdef double best = 0
         cdef size_t clas 
         for clas in range(self.nr_tag):
@@ -208,7 +203,6 @@ cdef class MaxViolnUpd:
 
     cdef int compare(self, TagState* pred, TagState* gold, size_t i):
         delta = pred.score - gold.score
-        #print "delta at %d: %d" % (i, delta)
         if delta > self.delta:
             self.delta = delta
             self.pred = pred
@@ -228,8 +222,8 @@ cdef class MaxViolnUpd:
         if DEBUG:
             pos_idx = index.hashes.reverse_pos_index()
             word_idx = index.hashes.reverse_word_index()
-        # g.clas == sent.pos[i]
         while g != NULL and p != NULL and i >= 0:
+            assert g.clas == sent.pos[i]
             fill_context(context, sent, get_p(g), get_pp(g), g.alt, i)
             extractor.extract(feats, context)
             self._inc_feats(counts[g.clas], feats, 1.0)
@@ -244,7 +238,6 @@ cdef class MaxViolnUpd:
             g = g.prev
             p = p.prev
             i -= 1
-        #assert i == -1
         return counts
 
     cdef int _inc_feats(self, dict counts, uint64_t* feats,
