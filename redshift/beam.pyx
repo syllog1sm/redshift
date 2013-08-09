@@ -192,8 +192,6 @@ cdef class TaggerBeam:
         self.beam = <TagState**>malloc(k * sizeof(TagState*))
         self.tmp_beam = <TagState**>malloc(k * sizeof(TagState*))
         cdef size_t i
-        cdef size_t clas
-        cdef TagState* s
         for i in range(k):
             self.beam[i] = extend_state(NULL, 0, NULL, 0)
 
@@ -213,20 +211,18 @@ cdef class TaggerBeam:
                 next_moves.push(pair[double, size_t](score, move_id))
         cdef pair[double, size_t] data
         # Apply extensions for best continuations
-        cdef size_t hashed = 0
         cdef TagState* s
         cdef TagState* prev
         cdef dense_hash_map[uint64_t, bint] seen_equivs = dense_hash_map[uint64_t, bint]()
         seen_equivs.set_empty_key(0)
         self.bsize = 0
-        cdef double local_score
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
             i = data.second / self.nr_class
             clas = data.second % self.nr_class
             prev = self.beam[i]
             next_moves.pop()
-            hashed = (prev.clas * self.nr_class) + clas + 1
+            hashed = (clas * self.nr_class) + prev.clas
             if seen_equivs[hashed]:
                 continue
             seen_equivs[hashed] = 1
@@ -265,27 +261,27 @@ cdef TagState* extend_state(TagState* s, size_t clas, double* scores,
     ext = <TagState*>calloc(1, sizeof(TagState))
     ext.prev = s
     ext.clas = clas
+    ext.alt = 0
     if s == NULL:
         ext.score = 0
         ext.length = 0
-        ext.alt = 0
     else:
         ext.score = s.score + scores[clas]
         ext.length = s.length + 1
-        alt_score = 0
+        alt_score = 1
         for alt in range(nr_class):
-            if alt == clas:
+            if alt == clas or alt == 0:
                 continue
             score = scores[alt]
-            if score > alt_score:
-                ext.alt = clas
+            if score > alt_score and alt != 0:
+                ext.alt = alt
                 alt_score = score
     return ext
 
 
 cdef int fill_hist(size_t* hist, TagState* s, int t) except -1:
     # TODO: This can't be right!!
-    while t >= 0 and s.prev != NULL:
+    while t >= 1 and s.prev != NULL:
         t -= 1
         hist[t] = s.clas
         s = s.prev
@@ -304,11 +300,4 @@ cdef size_t get_pp(TagState* s):
         return 0
     else:
         return s.prev.prev.clas
-
-@cython.cdivision(True)
-cdef inline size_t div(size_t a, size_t b):
-    if b == 0:
-        return 0
-    else:
-        return a / b
 

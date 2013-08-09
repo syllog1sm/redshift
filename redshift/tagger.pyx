@@ -35,20 +35,22 @@ cdef class BeamTagger:
     cdef double** beam_scores
 
     def __cinit__(self, model_dir, feat_set="basic", feat_thresh=5, beam_width=4,
-                  clean=False):
+                  clean=False, trained=False):
+        assert not (clean and trained)
         self.model_dir = model_dir
         if clean and os.path.exists(model_dir):
             shutil.rmtree(model_dir)
             os.mkdir(model_dir)
             self.new_idx(model_dir)
-        else:
+        elif trained:
             self.load_idx(model_dir)
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
         self.feat_thresh = feat_thresh
         self.guide = Perceptron(100, pjoin(model_dir, 'tagger.gz'))
-        if not clean:
+        if trained:
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
         self.features = Extractor(basic + clusters, [],
+                                  #bag_of_words=[P1alt, P1p])
                                   bag_of_words=[P1w, P2w, P3w, P4w, P5w, P6w, P7w])
         self.nr_tag = 100
         self.beam_width = beam_width
@@ -63,7 +65,6 @@ cdef class BeamTagger:
         cdef size_t i
         for i in range(sents.length):
             self.tag(sents.s[i])
-            n += (sents.s[i].length - 2)
 
     cdef int tag(self, Sentence* sent) except -1:
         cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
@@ -78,11 +79,10 @@ cdef class BeamTagger:
     cdef int fill_beam_scores(self, TaggerBeam beam, Sentence* sent,
                               size_t word_i) except -1:
         for i in range(beam.bsize):
-            s = <TagState*>beam.beam[i]
             # At this point, beam.clas is the _last_ prediction, not the prediction
             # for this instance
             fill_context(self._context, sent, beam.beam[i].clas, get_p(beam.beam[i]),
-                         s.alt, word_i)
+                         beam.beam[i].alt, word_i)
             self.features.extract(self._features, self._context)
             self.guide.fill_scores(self._features, self.beam_scores[i])
  
@@ -106,15 +106,15 @@ cdef class BeamTagger:
                             self.guide.cache.n_miss)
             self.guide.n_corr = 0
             self.guide.total = 0
-            if n % 2 == 1 and self.feat_thresh > 1:
-                self.guide.prune(self.feat_thresh)
+            #if n % 2 == 1 and self.feat_thresh > 1:
+            #    self.guide.prune(self.feat_thresh)
             if n < 3:
                 self.guide.reindex()
             random.shuffle(indices)
         self.guide.finalize()
 
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:
-        cdef size_t  i
+        cdef size_t  i, tmp
         cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
         cdef TagState* gold_state = extend_state(NULL, 0, NULL, 0)
         cdef MaxViolnUpd updater = MaxViolnUpd(self.nr_tag)
@@ -122,8 +122,12 @@ cdef class BeamTagger:
             self.fill_beam_scores(beam, sent, i)
             beam.extend_states(self.beam_scores)
             gold_state = self.extend_gold(gold_state, sent, i)
+            #if beam.beam[0].alt == gold_state.clas and beam.beam[0].alt != 0:
+            #    tmp = gold_state.clas
+            #    gold_state.alt = gold_state.clas
+            #    gold_state.clas = tmp
             updater.compare(beam.beam[0], gold_state, i)
-            self.guide.n_corr += (sent.pos[i] == beam.beam[0].clas)
+            self.guide.n_corr += (gold_state.clas == beam.beam[0].clas)
             self.guide.total += 1
         counts = updater.count_feats(self._features, self._context, sent, self.features)
         if updater.delta != -1:
@@ -134,14 +138,6 @@ cdef class BeamTagger:
         self.features.extract(self._features, self._context)
         self.guide.fill_scores(self._features, self.guide.scores)
         ext = extend_state(s, sent.pos[i], self.guide.scores, self.guide.nr_class)
-        cdef double best = 0
-        cdef size_t clas 
-        for clas in range(self.nr_tag):
-            if clas == sent.pos[i]:
-                continue
-            if self.guide.scores[clas] > best:
-                ext.alt = clas
-                best = self.guide.scores[clas]
         return ext
 
     def save(self):
@@ -192,15 +188,30 @@ cdef class MaxViolnUpd:
         cdef dict counts = {}
         for clas in range(self.nr_class):
             counts[clas] = {} 
+        cdef size_t gclas, gprev, gprevprev
+        cdef size_t pclas, pprev, prevprev
         while g != NULL and p != NULL and i >= 0:
-            assert g.clas == sent.pos[i]
-            fill_context(context, sent, get_p(g), get_pp(g), g.alt, i)
+            gclas = g.clas
+            gprev = get_p(g)
+            gprevprev = get_pp(g)
+            galt = g.alt
+            pclas = p.clas
+            pprev = get_p(p)
+            pprevprev = get_pp(p)
+            palt = p.alt
+            if gclas == pclas and pprev == gprev and gprevprev == pprevprev:
+                g = g.prev
+                p = p.prev
+                i -= 1
+                continue
+            fill_context(context, sent, gprev, gprevprev,
+                         g.prev.alt if g.prev != NULL else 0, i)
             extractor.extract(feats, context)
-            self._inc_feats(counts[g.clas], feats, 1.0)
-            fill_context(context, sent, get_p(p), get_pp(p), p.alt, i)
+            self._inc_feats(counts[gclas], feats, 1.0)
+            fill_context(context, sent, pprev, pprevprev,
+                         p.prev.alt if p.prev != NULL else 0, i)
             extractor.extract(feats, context)
             self._inc_feats(counts[p.clas], feats, -1.0)
-            assert g.clas == sent.pos[i]
             assert sent.words[i] == context[N0w]
             g = g.prev
             p = p.prev
@@ -251,6 +262,7 @@ cdef enum:
     P1suff
     P1pre
     P1p
+    P1alt
 
     P2w
     P2c
@@ -285,6 +297,7 @@ basic = (
     (N0quo,),
     (N0w, N0quo),
     (P1p, N0quo),
+    (P1alt,),
 )
 
 clusters = (
@@ -332,6 +345,7 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[P1suff] = sent.orths[i-1]
     context[P1pre] = sent.parens[i-1]
     context[P1p] = ptag
+    context[P1alt] = p_alt
     if i == 2:
         return 0
     context[P2w] = sent.words[i-2]
