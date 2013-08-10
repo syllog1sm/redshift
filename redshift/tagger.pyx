@@ -49,9 +49,7 @@ cdef class BeamTagger:
         self.guide = Perceptron(100, pjoin(model_dir, 'tagger.gz'))
         if trained:
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
-        self.features = Extractor(basic + clusters, [],
-                                  #bag_of_words=[P1alt, P1p])
-                                  bag_of_words=[P1w, P2w, P3w, P4w, P5w, P6w, P7w])
+        self.features = Extractor(basic + clusters, [])
         self.nr_tag = 100
         self.beam_width = beam_width
         self._context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
@@ -81,8 +79,9 @@ cdef class BeamTagger:
         for i in range(beam.bsize):
             # At this point, beam.clas is the _last_ prediction, not the prediction
             # for this instance
-            fill_context(self._context, sent, beam.beam[i].clas, get_p(beam.beam[i]),
-                         beam.beam[i].alt, word_i)
+            fill_context(self._context, sent, beam.parents[i].clas,
+                         get_p(beam.parents[i]),
+                         beam.parents[i].alt, word_i)
             self.features.extract(self._features, self._context)
             self.guide.fill_scores(self._features, self.beam_scores[i])
  
@@ -119,9 +118,9 @@ cdef class BeamTagger:
         cdef TagState* gold_state = extend_state(NULL, 0, NULL, 0)
         cdef MaxViolnUpd updater = MaxViolnUpd(self.nr_tag)
         for i in range(sent.length - 1):
+            gold_state = self.extend_gold(gold_state, sent, i)
             self.fill_beam_scores(beam, sent, i)
             beam.extend_states(self.beam_scores)
-            gold_state = self.extend_gold(gold_state, sent, i)
             #if beam.beam[0].alt == gold_state.clas and beam.beam[0].alt != 0:
             #    tmp = gold_state.clas
             #    gold_state.alt = gold_state.clas
@@ -132,8 +131,14 @@ cdef class BeamTagger:
         counts = updater.count_feats(self._features, self._context, sent, self.features)
         if updater.delta != -1:
             self.guide.batch_update(counts)
+        else:
+            self.guide.now += 1
 
-    cdef TagState* extend_gold(self, TagState* s, Sentence* sent, size_t i):
+    cdef TagState* extend_gold(self, TagState* s, Sentence* sent, size_t i) except NULL:
+        if i >= 1:
+            assert s.clas == sent.pos[i - 1]
+        else:
+            assert s.clas == 0
         fill_context(self._context, sent, s.clas, get_p(s), s.alt, i)
         self.features.extract(self._features, self._context)
         self.guide.fill_scores(self._features, self.guide.scores)

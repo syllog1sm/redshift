@@ -190,10 +190,10 @@ cdef class TaggerBeam:
         self.bsize = 1
         self.is_full = self.bsize >= self.k
         self.beam = <TagState**>malloc(k * sizeof(TagState*))
-        self.tmp_beam = <TagState**>malloc(k * sizeof(TagState*))
+        self.parents = <TagState**>malloc(k * sizeof(TagState*))
         cdef size_t i
         for i in range(k):
-            self.beam[i] = extend_state(NULL, 0, NULL, 0)
+            self.parents[i] = extend_state(NULL, 0, NULL, 0)
 
     #@cython.cdivision(True)
     cdef int extend_states(self, double** ext_scores) except -1:
@@ -206,7 +206,8 @@ cdef class TaggerBeam:
         for i in range(self.bsize):
             scores = ext_scores[i]
             for clas in range(self.nr_class):
-                score = self.beam[i].score + scores[clas]
+                score = self.parents[i].score + scores[clas]
+                #print i, clas, self.parents[i].clas, get_p(self.parents[i]), self.parents[i].score, scores[clas]
                 move_id = (i * self.nr_class) + clas
                 next_moves.push(pair[double, size_t](score, move_id))
         cdef pair[double, size_t] data
@@ -220,18 +221,18 @@ cdef class TaggerBeam:
             data = next_moves.top()
             i = data.second / self.nr_class
             clas = data.second % self.nr_class
-            prev = self.beam[i]
-            next_moves.pop()
+            prev = self.parents[i]
             hashed = (clas * self.nr_class) + prev.clas
             if seen_equivs[hashed]:
+                next_moves.pop()
                 continue
             seen_equivs[hashed] = 1
-            self.tmp_beam[self.bsize] = extend_state(prev, clas, ext_scores[i],
-                                                     self.nr_class)
+            self.beam[self.bsize] = extend_state(prev, clas, ext_scores[i],
+                                                 self.nr_class)
+            next_moves.pop()
             self.bsize += 1
-        cdef TagState** tmp = self.beam
-        self.beam = self.tmp_beam
-        self.tmp_beam = tmp
+        for i in range(self.bsize):
+            self.parents[i] = self.beam[i]
         self.is_full = self.bsize >= self.k
         self.t += 1
 
@@ -250,7 +251,7 @@ cdef class TaggerBeam:
         for addr in to_free:
             s = <TagState*>addr
             free(s)
-        free(self.tmp_beam)
+        free(self.parents)
         free(self.beam)
 
 
@@ -280,7 +281,6 @@ cdef TagState* extend_state(TagState* s, size_t clas, double* scores,
 
 
 cdef int fill_hist(size_t* hist, TagState* s, int t) except -1:
-    # TODO: This can't be right!!
     while t >= 1 and s.prev != NULL:
         t -= 1
         hist[t] = s.clas

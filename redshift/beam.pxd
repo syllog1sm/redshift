@@ -55,7 +55,7 @@ cdef class TaggerBeam:
     cdef size_t bsize
     cdef bint is_full
     cdef TagState** beam
-    cdef TagState** tmp_beam
+    cdef TagState** parents
     cdef int extend_states(self, double** scores) except -1
 
 
