@@ -106,8 +106,8 @@ cdef class BeamTagger:
                             self.guide.cache.n_miss)
             self.guide.n_corr = 0
             self.guide.total = 0
-            #if n % 2 == 1 and self.feat_thresh > 1:
-            #    self.guide.prune(self.feat_thresh)
+            if n % 2 == 1 and self.feat_thresh > 1:
+                self.guide.prune(self.feat_thresh)
             if n < 3:
                 self.guide.reindex()
             random.shuffle(indices)
