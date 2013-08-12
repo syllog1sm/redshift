@@ -260,6 +260,13 @@ cdef enum:
     N1suff
     N1pre
 
+    N2w
+    N2c
+    N2c6
+    N2c4
+    N2suff
+    N2pre
+
     P1w
     P1c
     P1c6
@@ -299,10 +306,12 @@ basic = (
     (N1pre,),
     (P1suff,),
     (P1pre,),
-    (N0quo,),
+    #(N0quo,),
     (N0w, N0quo),
     (P1p, N0quo),
-    (P1alt,),
+    (N2w,),
+    (N2c,),
+    #(P1alt,),
 )
 
 clusters = (
@@ -323,6 +332,7 @@ clusters = (
     (N0w, N1c4),
     (P2c4, P1c4, N0w)
 )
+
 
 cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag,
                       size_t p_alt, size_t i):
