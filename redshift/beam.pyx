@@ -121,6 +121,8 @@ cdef class Beam:
             heads[i] = self.beam[0].heads[i]
             labels[i] = self.beam[0].labels[i]
             # TODO: Do sentence boundary detection here
+        for i in range(self.beam[0].t):
+            hist[i] = self.beam[0].history[i]
         fill_edits(self.beam[0], edits)
  
     def __dealloc__(self):
