@@ -72,7 +72,7 @@ cdef int add_parse(Sentence* sent, list heads, list labels, edits) except -1:
         sent.parse.heads[i] = <size_t>heads[i]
         sent.parse.labels[i] = index.hashes.encode_label(labels[i])
         if edits:
-            sent.parse.edits[i] = <size_t>edits[i]
+            sent.parse.edits[i] = <bint>edits[i]
             if sent.parse.edits[i] and not edits[sent.parse.heads[i]]:
                 sent.parse.labels[i] = index.hashes.encode_label('erased')
 
