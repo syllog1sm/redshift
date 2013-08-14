@@ -14,6 +14,7 @@ from _state cimport *
 from io_parse cimport Sentence, Sentences
 from transitions cimport TransitionSystem, transition_to_str 
 from beam cimport ParseBeam
+from tagger cimport GreedyTagger
 
 from features.extractor cimport Extractor
 import _parse_features
@@ -76,6 +77,7 @@ cdef class BaseParser:
     cdef Extractor extractor
     cdef Perceptron guide
     cdef TransitionSystem moves
+    cdef GreedyTagger tagger
     cdef object model_dir
     cdef size_t beam_width
     cdef object add_extra
@@ -119,6 +121,8 @@ cdef class BaseParser:
                                       allow_reduce=allow_reduce, use_edit=use_edit)
         self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model.gz'))
 
+        self.tagger = GreedyTagger(model_dir, clean=False, reuse_idx=True)
+
     def setup_model_dir(self, loc, clean):
         if clean and os.path.exists(loc):
             shutil.rmtree(loc)
@@ -134,6 +138,7 @@ cdef class BaseParser:
         cdef Sentences held_out_gold
         cdef Sentences held_out_parse
         self.say_config()
+        self.tagger.setup_classes(sents)
         move_classes, nr_label = self.moves.set_labels(*sents.get_labels())
         #self.features.set_nr_label(nr_label)
         self.guide.set_classes(range(move_classes))
@@ -148,10 +153,14 @@ cdef class BaseParser:
             for i in indices:
                 if DEBUG:
                     print ' '.join(sents.strings[i][0])
+                self.tagger.train_sent(sents.s[i])
                 if self.train_alg == 'static':
                     self.static_train(n, sents.s[i])
                 else:
                     self.dyn_train(n, sents.s[i])
+            print "Tagger",
+            print_train_msg(n, self.tagger.guide.n_corr, self.tagger.guide.total,
+                            0, 0)
             print_train_msg(n, self.guide.n_corr, self.guide.total, self.guide.cache.n_hit,
                             self.guide.cache.n_miss)
             self.guide.n_corr = 0
@@ -173,6 +182,7 @@ cdef class BaseParser:
         self.guide.nr_class = self.moves.nr_class
         cdef size_t i
         for i in range(sents.length):
+            print ' '.join(sents.strings[i][0])
             self.parse(sents.s[i])
 
     cdef int parse(self, Sentence* sent) except -1:
@@ -180,9 +190,11 @@ cdef class BaseParser:
 
     def save(self):
         self.guide.save(pjoin(self.model_dir, 'model.gz'))
+        self.tagger.save()
 
     def load(self):
         self.guide.load(pjoin(self.model_dir, 'model.gz'), thresh=self.feat_thresh)
+        self.tagger.guide.load(pjoin(self.model_dir, 'tagger.gz'), thresh=self.feat_thresh)
 
     def new_idx(self, model_dir):
         index.hashes.init_word_idx(pjoin(model_dir, 'words'))
@@ -249,6 +261,10 @@ cdef class BeamParser(BaseParser):
         cdef size_t* phist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
         cdef double max_violn = 0
         cdef size_t t = 0
+        # Backup pos tags
+        cdef size_t* bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
+        memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
+        self.tagger.tag(sent)
         while not beam.is_finished:
             self.guide.cache.flush()
             for i in range(beam.bsize):
@@ -275,6 +291,8 @@ cdef class BeamParser(BaseParser):
         else:
             counted = self._count_feats(sent, t, t, phist, ghist)
             self.guide.batch_update(counted)
+        memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
+        free(bu_tags)
         free(ghist)
         free(phist)
         free(beam_scores)
@@ -415,12 +433,13 @@ cdef class GreedyParser(BaseParser):
         cdef uint64_t* feats
         s = init_state(sent.length)
         sent.parse.n_moves = 0
+        self.tagger.tag(sent)
         while not s.is_finished:
             fill_kernel(s, sent.pos)
             feats = self._extract(sent, &s.kernel)
             self.moves.fill_valid(s, self.moves._costs)
             clas = self._predict(feats, self.moves._costs,
-                                &s.guess_labels[s.i])
+                                 &s.guess_labels[s.i])
             self.moves.transition(clas, s)
         # No need to copy heads for root and start symbols
         cdef size_t i
@@ -436,6 +455,10 @@ cdef class GreedyParser(BaseParser):
         cdef size_t pred
         cdef uint64_t* feats
         cdef size_t _ = 0
+
+        cdef size_t* bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
+        memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
+        self.tagger.tag(sent)
         while not s.is_finished:
             fill_kernel(s, sent.pos)
             self.moves.fill_valid(s, valid)
@@ -451,8 +474,11 @@ cdef class GreedyParser(BaseParser):
                 self.moves.transition(gold, s)
             self.guide.n_corr += (gold == pred)
             self.guide.total += 1
+
+        memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
         free_state(s)
         free(valid)
+        free(bu_tags)
 
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:
         cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))

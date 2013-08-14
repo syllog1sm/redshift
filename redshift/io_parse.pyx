@@ -29,6 +29,7 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.words = <size_t*>calloc(size, sizeof(size_t))
     s.owords = <size_t*>calloc(size, sizeof(size_t))
     s.pos = <size_t*>calloc(size, sizeof(size_t))       
+    s.alt_pos = <size_t*>calloc(size, sizeof(size_t))
     s.ids = <size_t*>calloc(size, sizeof(size_t))
     s.clusters = <size_t*>calloc(size, sizeof(size_t))
     s.cprefix4s = <size_t*>calloc(size, sizeof(size_t))
@@ -80,6 +81,7 @@ cdef free_sent(Sentence* s):
     free(s.words)
     free(s.owords)
     free(s.pos)
+    free(s.alt_pos)
     free(s.ids)
     free(s.clusters)
     free(s.cprefix4s)
@@ -255,11 +257,15 @@ cdef class Sentences:
 
 def eval_tags(Sentences test, Sentences gold):
     c = 0
+    ac = 0
     n = 0
     assert test.length == gold.length
     for i in range(test.length):
         assert test.s[i].length == gold.s[i].length
         for w in range(1, test.s[i].length - 1):
             c += test.s[i].pos[w] == gold.s[i].pos[w]
+            ac += (test.s[i].pos[w] == gold.s[i].pos[w] or test.s[i].alt_pos[w] == gold.s[i].pos[w])
             n += 1
+
+    print (float(ac)/n) * 100, ac, n
     return (float(c)/n) * 100, c, n

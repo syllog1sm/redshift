@@ -13,6 +13,7 @@ cdef struct Sentence:
     size_t* words
     size_t* owords
     size_t* pos
+    size_t* alt_pos
     size_t* clusters
     size_t* cprefix4s
     size_t* cprefix6s
