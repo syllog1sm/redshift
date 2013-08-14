@@ -245,7 +245,7 @@ cdef class Perceptron:
             feat_addr = self.W[f]
             if feat_addr == 0:
                 self.add_feature(f)
-            elif feat_addr < self.nr_raws:
+            if feat_addr < self.nr_raws:
                 update_dense(self.now, 1.0, gold_i, self.raws[feat_addr])
                 update_dense(self.now, -1.0, pred_i, self.raws[feat_addr])
             else:
