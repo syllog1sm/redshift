@@ -484,6 +484,11 @@ extra = (
    (N0quote, S0w),
    (S0rw, N0orth),
    (S0rw, N0orth, N1orth),
+   (S0hw, N0w),
+   (S0hp, N0p),
+   (S0hw, N1w),
+   (S0hp, N1w),
+   (S0hp, S0p, N0p)
 )
 
 disfl = (
