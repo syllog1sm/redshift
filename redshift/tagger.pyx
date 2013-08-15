@@ -1,15 +1,20 @@
 from redshift._state cimport *
-from redshift.beam cimport TaggerBeam, TagState, fill_hist, get_p, get_pp, extend_state
-#, TagKernel
 from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
 import index.hashes
 cimport index.hashes
+from ext.murmurhash cimport MurmurHash64A
+from ext.sparsehash cimport *
+
+
 from redshift.io_parse cimport Sentences, Sentence
 from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport memcpy, memset
 from libc.stdint cimport uint64_t, int64_t
 from libcpp.vector cimport vector 
+from libcpp.queue cimport priority_queue
+from libcpp.utility cimport pair
+
 
 from os.path import join as pjoin
 import os
@@ -169,7 +174,7 @@ cdef class GreedyTagger(BaseTagger):
 
 cdef class BeamTagger(BaseTagger):
     cdef int tag(self, Sentence* sent) except -1:
-        cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
+        cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.length, self.nr_tag)
         cdef size_t p_idx
         cdef TagState* s
         for i in range(sent.length - 1):
@@ -436,3 +441,120 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[P2suff] = sent.suffix[i-2]
     context[P2pre] = sent.prefix[i-2]
     context[P2p] = pptag
+
+
+
+cdef class TaggerBeam:
+    def __cinit__(self, size_t k, size_t length, nr_tag=None):
+        self.nr_class = nr_tag
+        self.k = k
+        self.t = 0
+        self.bsize = 1
+        self.is_full = self.bsize >= self.k
+        self.seen_states = set()
+        self.beam = <TagState**>malloc(k * sizeof(TagState*))
+        self.parents = <TagState**>malloc(k * sizeof(TagState*))
+        cdef size_t i
+        for i in range(k):
+            self.parents[i] = extend_state(NULL, 0, NULL, 0)
+            self.seen_states.add(<size_t>self.parents[i])
+
+    #@cython.cdivision(True)
+    cdef int extend_states(self, double** ext_scores) except -1:
+        # Former states are now parents, beam will hold the extensions
+        cdef size_t i, clas, move_id
+        cdef double parent_score, score
+        cdef double* scores
+        cdef priority_queue[pair[double, size_t]] next_moves
+        next_moves = priority_queue[pair[double, size_t]]()
+        for i in range(self.bsize):
+            scores = ext_scores[i]
+            for clas in range(self.nr_class):
+                score = self.parents[i].score + scores[clas]
+                move_id = (i * self.nr_class) + clas
+                next_moves.push(pair[double, size_t](score, move_id))
+        cdef pair[double, size_t] data
+        # Apply extensions for best continuations
+        cdef TagState* s
+        cdef TagState* prev
+        cdef size_t addr
+        cdef dense_hash_map[uint64_t, bint] seen_equivs = dense_hash_map[uint64_t, bint]()
+        seen_equivs.set_empty_key(0)
+        self.bsize = 0
+        while self.bsize < self.k and not next_moves.empty():
+            data = next_moves.top()
+            i = data.second / self.nr_class
+            clas = data.second % self.nr_class
+            prev = self.parents[i]
+            hashed = (clas * self.nr_class) + prev.clas
+            if seen_equivs[hashed]:
+                next_moves.pop()
+                continue
+            seen_equivs[hashed] = 1
+            self.beam[self.bsize] = extend_state(prev, clas, ext_scores[i],
+                                                 self.nr_class)
+            addr = <size_t>self.beam[self.bsize]
+            self.seen_states.add(addr)
+            next_moves.pop()
+            self.bsize += 1
+        for i in range(self.bsize):
+            self.parents[i] = self.beam[i]
+        self.is_full = self.bsize >= self.k
+        self.t += 1
+
+    def __dealloc__(self):
+        cdef TagState* s
+        cdef size_t addr
+        for addr in self.seen_states:
+            s = <TagState*>addr
+            free(s)
+        free(self.parents)
+        free(self.beam)
+
+
+cdef TagState* extend_state(TagState* s, size_t clas, double* scores,
+                            size_t nr_class):
+    cdef double score, alt_score
+    cdef size_t alt
+    ext = <TagState*>calloc(1, sizeof(TagState))
+    ext.prev = s
+    ext.clas = clas
+    ext.alt = 0
+    if s == NULL:
+        ext.score = 0
+        ext.length = 0
+    else:
+        ext.score = s.score + scores[clas]
+        ext.length = s.length + 1
+        alt_score = 1
+        for alt in range(nr_class):
+            if alt == clas or alt == 0:
+                continue
+            score = scores[alt]
+            if score > alt_score and alt != 0:
+                ext.alt = alt
+                alt_score = score
+    return ext
+
+
+cdef int fill_hist(size_t* hist, TagState* s, int t) except -1:
+    while t >= 1 and s.prev != NULL:
+        t -= 1
+        hist[t] = s.clas
+        s = s.prev
+
+cdef size_t get_p(TagState* s):
+    if s.prev == NULL:
+        return 0
+    else:
+        return s.prev.clas
+
+
+cdef size_t get_pp(TagState* s):
+    if s.prev == NULL:
+        return 0
+    elif s.prev.prev == NULL:
+        return 0
+    else:
+        return s.prev.prev.clas
+
