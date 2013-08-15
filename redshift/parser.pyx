@@ -14,7 +14,7 @@ from _state cimport *
 from io_parse cimport Sentence, Sentences
 from transitions cimport TransitionSystem, transition_to_str 
 from beam cimport ParseBeam
-from tagger cimport GreedyTagger
+from tagger cimport GreedyTagger, BeamTagger
 
 from features.extractor cimport Extractor
 import _parse_features
@@ -77,7 +77,7 @@ cdef class BaseParser:
     cdef Extractor extractor
     cdef Perceptron guide
     cdef TransitionSystem moves
-    cdef GreedyTagger tagger
+    cdef BeamTagger tagger
     cdef object model_dir
     cdef size_t beam_width
     cdef object add_extra
@@ -121,7 +121,7 @@ cdef class BaseParser:
                                       allow_reduce=allow_reduce, use_edit=use_edit)
         self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model.gz'))
 
-        self.tagger = GreedyTagger(model_dir, clean=False, reuse_idx=True)
+        self.tagger = BeamTagger(model_dir, clean=False, reuse_idx=True)
 
     def setup_model_dir(self, loc, clean):
         if clean and os.path.exists(loc):
@@ -373,7 +373,7 @@ cdef class BeamParser(BaseParser):
         if not cache_hit:
             fill_context(self._context, self.moves.n_labels, sent.words,
                          sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
-                         sent.orths, sent.parens, sent.quotes, kernel,
+                         sent.prefix, sent.parens, sent.quotes, kernel,
                          &kernel.s0l, &kernel.s0r, &kernel.n0l)
             self.extractor.extract(self._features, self._context)
             self.guide.fill_scores(self._features, scores)
@@ -418,7 +418,7 @@ cdef class BeamParser(BaseParser):
     cdef int _inc_feats(self, dict counts, Sentence* sent, Kernel* k, double inc) except -1:
         fill_context(self._context, self.moves.n_labels, sent.words,
                      sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
-                     sent.orths, sent.parens, sent.quotes, k,
+                     sent.prefix, sent.parens, sent.quotes, k,
                      &k.s0l, &k.s0r, &k.n0l)
         self.extractor.extract(self._features, self._context)
  
@@ -515,7 +515,7 @@ cdef class GreedyParser(BaseParser):
     cdef uint64_t* _extract(self, Sentence* sent, Kernel* kernel):
         fill_context(self._context, self.moves.n_labels, sent.words,
                      sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
-                     sent.orths, sent.parens, sent.quotes, kernel,
+                     sent.prefix, sent.parens, sent.quotes, kernel,
                      &kernel.s0l, &kernel.s0r, &kernel.n0l)
         self.extractor.extract(self._features, self._context)
         return self._features
