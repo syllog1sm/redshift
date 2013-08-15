@@ -40,9 +40,11 @@ USE_HELD_OUT = False
 def main(train_loc, model_loc, train_alg="static", n_iter=15,
          feat_set="zhang", vocab_thresh=0, feat_thresh=10,
          allow_reattach=False, allow_reduce=False, use_edit=False,
-         ngrams='0', add_clusters=False, n_sents=0,
+         ngrams='', add_clusters=False, n_sents=0,
          profile=False, debug=False, seed=0, beam_width=1, unlabelled=False):
     # TODO: ngrams stuff
+    if not ngrams:
+        ngrams = []
     random.seed(seed)
     if debug:
         redshift.parser.set_debug(True)

@@ -13,7 +13,7 @@ from libc.string cimport memcpy, memset
 from _state cimport *
 from io_parse cimport Sentence, Sentences
 from transitions cimport TransitionSystem, transition_to_str 
-from beam cimport ParseBeam
+from beam cimport Beam
 from tagger cimport GreedyTagger, BeamTagger
 
 from features.extractor cimport Extractor
@@ -236,7 +236,7 @@ cdef class BaseParser:
 cdef class BeamParser(BaseParser):
     cdef int parse(self, Sentence* sent) except -1:
         cdef State* s
-        cdef ParseBeam beam = ParseBeam(self.moves, self.beam_width, sent.length)
+        cdef Beam beam = Beam(self.moves, self.beam_width, sent.length)
         cdef size_t p_idx
         cdef Kernel* kernel
         cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
@@ -249,7 +249,8 @@ cdef class BeamParser(BaseParser):
                 fill_kernel(pred, sent.pos) 
                 beam_scores[p_idx] = self._predict(sent, &pred.kernel)
             beam.extend_states(beam_scores)
-        sent.parse.n_moves = beam.beam[0].t
+        s = <State*>beam.beam[0]
+        sent.parse.n_moves = s.t
         beam.fill_parse(sent.parse.moves, sent.pos, sent.parse.heads, sent.parse.labels,
                         sent.parse.sbd, sent.parse.edits)
         free(beam_scores)
@@ -258,7 +259,7 @@ cdef class BeamParser(BaseParser):
         cdef size_t  i
         cdef Kernel* kernel
         cdef double* scores
-        cdef ParseBeam beam = ParseBeam(self.moves, self.beam_width, sent.length)
+        cdef Beam beam = Beam(self.moves, self.beam_width, sent.length)
         cdef State* gold = init_state(sent.length)
         cdef State* pred
         cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
@@ -318,8 +319,8 @@ cdef class BeamParser(BaseParser):
         for i in range(sent.length * 3):
             ghist[i] = self.moves.nr_class
             phist[i] = self.moves.nr_class
-        pred = ParseBeam(self.moves, self.beam_width, sent.length)
-        gold = ParseBeam(self.moves, self.beam_width, sent.length)
+        pred = Beam(self.moves, self.beam_width, sent.length)
+        gold = Beam(self.moves, self.beam_width, sent.length)
         pred_scores = <double**>malloc(self.beam_width * sizeof(double*))
         gold_scores = <double**>malloc(self.beam_width * sizeof(double*))
         cdef double delta = 0
