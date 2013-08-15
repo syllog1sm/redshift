@@ -55,7 +55,7 @@ class Token(object):
         self.sbd = False
         # CoNLL format
         is_edit = False
-        if len(attrs) == 4:
+        if len(attrs) == 5:
             attrs.append('False')
         elif len(attrs) == 10:
             new_attrs = [str(int(attrs[0]) - 1)]
@@ -164,12 +164,7 @@ def main(test_loc, gold_loc, eval_punct=False):
         rep_p = pc(rep_tp, rep_tp + rep_fp)
         rep_r = pc(rep_tp, rep_n)
         rep_f = 2 * ((rep_p * rep_r) / (rep_p + rep_r + 1e-100))
-        yield 'REP P: %.2f' % rep_p
-        yield 'REP R: %.2f' % rep_r
-        yield 'REP F: %.2f' % rep_f
     yield 'POS Acc: %.2f' % (pc(tags_corr, tags_tot))
-    yield rep_n
-    yield ed_n
 
 
 if __name__ == '__main__':
