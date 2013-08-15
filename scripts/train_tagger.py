@@ -9,7 +9,7 @@ import redshift.io_parse
     n_sents=("Number of training sentences", "option", "n", int),
 )
 def main(model_loc, train_loc, test_loc, iters=5, n_sents=0):
-    tagger = redshift.tagger.BeamTagger(model_loc, clean=True)
+    tagger = redshift.tagger.GreedyTagger(model_loc, clean=True)
     train_strs = open(train_loc).read().strip().split('\n')
     # Apply limit
     train_strs = train_strs[-n_sents:]
