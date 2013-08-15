@@ -240,6 +240,7 @@ cdef class BeamParser(BaseParser):
         cdef size_t p_idx
         cdef Kernel* kernel
         cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
+        self.tagger.tag(sent)
         self.guide.cache.flush()
         while not beam.is_finished:
             for p_idx in range(beam.bsize):
@@ -309,7 +310,9 @@ cdef class BeamParser(BaseParser):
         cdef int* costs
         cdef State* p
         cdef State* g
-        
+        cdef size_t* bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
+        memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
+        self.tagger.tag(sent)
         ghist = <size_t*>malloc(sent.length * 3 * sizeof(size_t))
         phist = <size_t*>malloc(sent.length * 3 * sizeof(size_t))
         for i in range(sent.length * 3):
@@ -359,6 +362,8 @@ cdef class BeamParser(BaseParser):
         else:
             counted = self._count_feats(sent, pt, gt, phist, ghist)
             self.guide.batch_update(counted)
+        memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
+        free(bu_tags)
         free(ghist)
         free(phist)
         free(pred_scores)
