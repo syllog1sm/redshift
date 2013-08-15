@@ -153,23 +153,28 @@ cdef class BaseParser:
             for i in indices:
                 if DEBUG:
                     print ' '.join(sents.strings[i][0])
-                self.tagger.train_sent(sents.s[i])
+                if n < 5:
+                    self.tagger.train_sent(sents.s[i])
                 if self.train_alg == 'static':
                     self.static_train(n, sents.s[i])
                 else:
                     self.dyn_train(n, sents.s[i])
-            print "Tagger",
-            print_train_msg(n, self.tagger.guide.n_corr, self.tagger.guide.total,
-                            0, 0)
+            if n < 5:
+                print_train_msg(n, self.tagger.guide.n_corr, self.tagger.guide.total,
+                                0, 0)
             print_train_msg(n, self.guide.n_corr, self.guide.total, self.guide.cache.n_hit,
                             self.guide.cache.n_miss)
             self.guide.n_corr = 0
             self.guide.total = 0
             if n % 2 == 1 and self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
+                if n < 5:
+                    self.tagger.guide.prune(self.feat_thresh / 2)
             if n < 3:
                 self.guide.reindex()
+                self.tagger.guide.reindex()
             random.shuffle(indices)
+        self.tagger.guide.finalize()
         self.guide.finalize()
 
     cdef int dyn_train(self, int iter_num, Sentence* sent) except -1:
@@ -182,7 +187,6 @@ cdef class BaseParser:
         self.guide.nr_class = self.moves.nr_class
         cdef size_t i
         for i in range(sents.length):
-            print ' '.join(sents.strings[i][0])
             self.parse(sents.s[i])
 
     cdef int parse(self, Sentence* sent) except -1:
