@@ -34,7 +34,8 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.clusters = <size_t*>calloc(size, sizeof(size_t))
     s.cprefix4s = <size_t*>calloc(size, sizeof(size_t))
     s.cprefix6s = <size_t*>calloc(size, sizeof(size_t))
-    s.orths = <size_t*>calloc(size, sizeof(size_t))
+    s.suffix = <size_t*>calloc(size, sizeof(size_t))
+    s.prefix = <size_t*>calloc(size, sizeof(size_t))
     s.parens = <size_t*>calloc(size, sizeof(size_t))
     s.quotes = <size_t*>calloc(size, sizeof(size_t))
 
@@ -62,9 +63,9 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
             paren_cnt += 1
         elif py_words[i] == ")" or py_words[i] == "]" or py_words[i] == "}":
             paren_cnt -= 1
-        s.orths[i] = index.hashes.encode_word(py_words[i][-3:])
-        #s.parens[i] = paren_cnt
-        s.parens[i] = index.hashes.encode_word(py_words[i][:1])
+        s.suffix[i] = index.hashes.encode_word(py_words[i][-3:])
+        s.prefix[i] = index.hashes.encode_word(py_words[i][0])
+        s.parens[i] = paren_cnt
         s.quotes[i] = quote_cnt
     return s
 
@@ -86,7 +87,8 @@ cdef free_sent(Sentence* s):
     free(s.clusters)
     free(s.cprefix4s)
     free(s.cprefix6s)
-    free(s.orths)
+    free(s.suffix)
+    free(s.prefix)
     free(s.parens)
     free(s.quotes)
 
