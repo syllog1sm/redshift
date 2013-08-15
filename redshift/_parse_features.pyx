@@ -161,6 +161,13 @@ cdef enum:
     prev_edit_pos
     prev_prev_edit
 
+    next_edit
+    next_edit_wmatch
+    next_edit_pmatch
+    next_edit_word
+    next_edit_pos
+    next_next_edit
+
     wcopy 
     pcopy
 
@@ -353,6 +360,22 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[prev_prev_edit] = 0
         context[prev_edit_word] = 0
         context[prev_edit_pos] = 0
+
+    if k.next_edit and k.s0 != 0:
+        context[next_edit] = 1
+        context[next_edit_wmatch] = 1 if words[k.s0 + 1] == words[k.s0] else 0
+        context[next_edit_pmatch] = 1 if tags[k.s0 + 1] == tags[k.s0] else 0
+        context[next_next_edit] = 1 if k.next_next_edit else 0
+        context[next_edit_word] = words[k.i - 1]
+        context[next_edit_pos] = k.next_tag
+    else:
+        context[next_edit] = 0
+        context[next_edit_wmatch] = 0
+        context[next_edit_pmatch] = 0
+        context[next_next_edit] = 0
+        context[next_edit_word] = 0
+        context[next_edit_pos] = 0
+ 
     # These features find how much of S0's span matches N0's span, starting from
     # the left. A 3-match span will fire features for 1-match, 2-match and 3-match.
     context[wcopy] = 0
@@ -511,7 +534,20 @@ disfl = (
     (prev_edit, pcopy),
     (prev_prev_edit, pcopy)
 )
-
+# After emailing Mark after ACL
+new_disfl = (
+    (next_edit,),
+    (next_next_edit,),
+    (next_edit_wmatch,),
+    (next_edit_pmatch,),
+    (next_edit_word,),
+    (next_edit_pos,),
+    (next_edit, wcopy),
+    (next_next_edit, wcopy),
+    (next_edit, pcopy),
+    (next_next_edit, pcopy),
+)
+ 
 def get_best_bigrams(all_bigrams, n=0):
     return []
 
