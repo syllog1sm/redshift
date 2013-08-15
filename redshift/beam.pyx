@@ -189,11 +189,13 @@ cdef class TaggerBeam:
         self.t = 0
         self.bsize = 1
         self.is_full = self.bsize >= self.k
+        self.seen_states = set()
         self.beam = <TagState**>malloc(k * sizeof(TagState*))
         self.parents = <TagState**>malloc(k * sizeof(TagState*))
         cdef size_t i
         for i in range(k):
             self.parents[i] = extend_state(NULL, 0, NULL, 0)
+            self.seen_states.add(<size_t>self.parents[i])
 
     #@cython.cdivision(True)
     cdef int extend_states(self, double** ext_scores) except -1:
@@ -207,13 +209,13 @@ cdef class TaggerBeam:
             scores = ext_scores[i]
             for clas in range(self.nr_class):
                 score = self.parents[i].score + scores[clas]
-                #print i, clas, self.parents[i].clas, get_p(self.parents[i]), self.parents[i].score, scores[clas]
                 move_id = (i * self.nr_class) + clas
                 next_moves.push(pair[double, size_t](score, move_id))
         cdef pair[double, size_t] data
         # Apply extensions for best continuations
         cdef TagState* s
         cdef TagState* prev
+        cdef size_t addr
         cdef dense_hash_map[uint64_t, bint] seen_equivs = dense_hash_map[uint64_t, bint]()
         seen_equivs.set_empty_key(0)
         self.bsize = 0
@@ -229,6 +231,8 @@ cdef class TaggerBeam:
             seen_equivs[hashed] = 1
             self.beam[self.bsize] = extend_state(prev, clas, ext_scores[i],
                                                  self.nr_class)
+            addr = <size_t>self.beam[self.bsize]
+            self.seen_states.add(addr)
             next_moves.pop()
             self.bsize += 1
         for i in range(self.bsize):
@@ -238,17 +242,8 @@ cdef class TaggerBeam:
 
     def __dealloc__(self):
         cdef TagState* s
-        cdef TagState* prev
         cdef size_t addr
-        to_free = set()
-        for i in range(self.k):
-            s = <TagState*>self.beam[i]
-            addr = <size_t>s
-            while addr not in to_free and addr != 0:
-                to_free.add(addr)
-                s = <TagState*>addr
-                addr = <size_t>s.prev
-        for addr in to_free:
+        for addr in self.seen_states:
             s = <TagState*>addr
             free(s)
         free(self.parents)
