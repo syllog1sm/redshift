@@ -139,7 +139,14 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
         s.kernel.prev_edit = False
         s.kernel.prev_prev_edit = False
         s.kernel.prev_tag = False
-
+    cdef size_t next_
+    cdef size_t next_next
+    if s.top != 0:
+        next_ = s.top + 1
+        s.kernel.next_edit = True if s.heads[next_] == next_ else False
+        s.kernel.next_tag = tags[next_]
+        next_next = s.top + 2
+        s.kernel.next_next_edit = True if s.heads[next_next] == next_next else False
     fill_subtree(s.l_valencies[s.top], s.l_children[s.top],
                  s.labels, tags, &s.kernel.s0l)
     fill_subtree(s.r_valencies[s.top], s.r_children[s.top],
