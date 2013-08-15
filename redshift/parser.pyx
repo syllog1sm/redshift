@@ -333,8 +333,8 @@ cdef class BeamParser(BaseParser):
                 p = <State*>pred.beam[i]
                 self.moves.fill_valid(p, pred.valid[i])
                 fill_kernel(p, sent.pos)
-                pred_scores[i] = self._predict(sent, kernel)
-                costs = self.moves.get_costs(<State*>pred.beam[i], sent.pos, sent.parse.heads,
+                pred_scores[i] = self._predict(sent, &p.kernel)
+                costs = self.moves.get_costs(p, sent.pos, sent.parse.heads,
                                              sent.parse.labels, sent.parse.edits)
                 memcpy(pred.costs[i], costs, sizeof(int) * self.moves.nr_class)
             pred.extend_states(pred_scores)
@@ -342,7 +342,7 @@ cdef class BeamParser(BaseParser):
                 g = <State*>gold.beam[i]
                 self.moves.fill_valid(g, gold.valid[i])
                 fill_kernel(g, sent.pos)
-                gold_scores[i] = self._predict(sent, kernel)
+                gold_scores[i] = self._predict(sent, &g.kernel)
                 costs = self.moves.get_costs(<State*>gold.beam[i], sent.pos,
                                              sent.parse.heads, sent.parse.labels,
                                              sent.parse.edits)
@@ -355,12 +355,13 @@ cdef class BeamParser(BaseParser):
             delta = p.score - g.score
             if delta >= max_violn and p.cost >= 1:
                 max_violn = delta
+                pt = p.t
+                gt = g.t
                 memcpy(phist, p.history, p.t * sizeof(size_t))
                 memcpy(ghist, g.history, g.t * sizeof(size_t))
-        if max_violn < 0:
-            self.guide.n_corr += pred.t
-            self.guide.total += pred.t
-        else:
+            self.guide.n_corr += p.history[p.t-1] == g.history[g.t-1]
+            self.guide.total += 1
+        if max_violn >= 0:
             counted = self._count_feats(sent, pt, gt, phist, ghist)
             self.guide.batch_update(counted)
         memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
