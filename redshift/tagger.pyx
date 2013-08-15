@@ -29,11 +29,11 @@ cdef class BaseTagger:
             shutil.rmtree(model_dir)
         if not os.path.exists(model_dir):
             os.mkdir(model_dir)
+        self.feat_thresh = feat_thresh
         if trained and not reuse_idx:
             self.load_idx(model_dir)
         elif not reuse_idx:
             self.new_idx(model_dir)
-        self.feat_thresh = feat_thresh
         self.guide = Perceptron(100, pjoin(model_dir, 'tagger.gz'))
         if trained:
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
@@ -63,8 +63,8 @@ cdef class BaseTagger:
             print_train_msg(n, self.guide.n_corr, self.guide.total)
             self.guide.n_corr = 0
             self.guide.total = 0
-            #if n % 2 == 1 and self.feat_thresh > 1:
-            #    self.guide.prune(self.feat_thresh)
+            if n % 2 == 1 and self.feat_thresh > 1:
+                self.guide.prune(self.feat_thresh)
             if n < 3:
                 self.guide.reindex()
             random.shuffle(indices)
