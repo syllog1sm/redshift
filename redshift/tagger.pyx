@@ -204,6 +204,11 @@ cdef class BeamTagger(BaseTagger):
         if updater.delta != -1:
             counts = updater.count_feats(self._features, self._context, sent, self.features)
             self.guide.batch_update(counts)
+        cdef TagState* prev
+        while gold_state != NULL:
+            prev = gold_state.prev
+            free(gold_state)
+            gold_state = prev
 
     cdef TagState* extend_gold(self, TagState* s, Sentence* sent, size_t i) except NULL:
         if i >= 1:
@@ -392,23 +397,23 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[N0c] = sent.clusters[i]
     context[N0c6] = sent.cprefix6s[i]
     context[N0c4] = sent.cprefix4s[i]
-    context[N0suff] = sent.orths[i]
-    context[N0pre] = sent.parens[i]
+    context[N0suff] = sent.suffix[i]
+    context[N0pre] = sent.prefix[i]
     
     context[N1w] = sent.words[i + 1]
     context[N1c] = sent.clusters[i + 1]
     context[N1c6] = sent.cprefix6s[i + 1]
     context[N1c4] = sent.cprefix4s[i + 1]
-    context[N1suff] = sent.orths[i + 1]
-    context[N1pre] = sent.parens[i + 1]
+    context[N1suff] = sent.suffix[i + 1]
+    context[N1pre] = sent.prefix[i + 1]
 
     if (i + 2) < sent.length:
         context[N2w] = sent.words[i + 2]
         context[N2c] = sent.clusters[i + 2]
         context[N2c6] = sent.cprefix6s[i + 2]
         context[N2c4] = sent.cprefix4s[i + 2]
-        context[N2suff] = sent.orths[i + 2]
-        context[N2pre] = sent.parens[i + 2]
+        context[N2suff] = sent.suffix[i + 2]
+        context[N2pre] = sent.prefix[i + 2]
         if (i + 3) < sent.length:
             context[N3w] = sent.words[i + 3]
     context[N0quo] = sent.quotes[i] == 0
@@ -418,8 +423,8 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[P1c] = sent.clusters[i-1]
     context[P1c6] = sent.cprefix6s[i-1]
     context[P1c4] = sent.cprefix4s[i-1]
-    context[P1suff] = sent.orths[i-1]
-    context[P1pre] = sent.parens[i-1]
+    context[P1suff] = sent.suffix[i-1]
+    context[P1pre] = sent.prefix[i-1]
     context[P1p] = ptag
     context[P1alt] = p_alt
     if i == 2:
@@ -428,6 +433,6 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[P2c] = sent.clusters[i-2]
     context[P2c6] = sent.cprefix6s[i-2]
     context[P2c4] = sent.cprefix4s[i-2]
-    context[P2suff] = sent.orths[i-2]
-    context[P2pre] = sent.parens[i-2]
+    context[P2suff] = sent.suffix[i-2]
+    context[P2pre] = sent.prefix[i-2]
     context[P2p] = pptag
