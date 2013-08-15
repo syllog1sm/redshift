@@ -41,13 +41,15 @@ cdef enum:
     N0l2c6
     N0l2c4
 
+    N0l2l
+    
     N0l0w
     N0l0p
     N0l0c
     N0l0c6
     N0l0c4
     
-    N0l2l
+    N0l0l
     
     N1w
     N1p
@@ -121,6 +123,8 @@ cdef enum:
     S0l0c6
     S0l0c4
 
+    S0l0l
+
     S0r0w
     S0r0p
     S0r0c
@@ -175,6 +179,13 @@ cdef enum:
     prev_edit_word
     prev_edit_pos
     prev_prev_edit
+
+    next_edit
+    next_edit_wmatch
+    next_edit_pmatch
+    next_edit_word
+    next_edit_pos
+    next_next_edit
 
     wcopy 
     pcopy
@@ -406,10 +417,12 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
 
     context[S0ll] = s0l.lab[0]
     context[S0l2l] = s0l.lab[1]
+    context[S0l0l] = s0l.lab[2]
     context[S0rl] = s0r.lab[0]
     context[S0r2l] = s0r.lab[1]
     context[N0ll] = n0l.lab[0]
     context[N0l2l] = n0l.lab[1]
+    context[N0l0l] = n0l.lab[2]
 
     context[S0llabs] = 0
     context[S0rlabs] = 0
@@ -472,8 +485,23 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[prev_prev_edit] = 0
         context[prev_edit_word] = 0
         context[prev_edit_pos] = 0
+    if k.next_edit and k.s0 != 0:
+        context[next_edit] = 1
+        context[next_edit_wmatch] = 1 if words[k.s0 + 1] == words[k.s0] else 0
+        context[next_edit_pmatch] = 1 if tags[k.s0 + 1] == tags[k.s0] else 0
+        context[next_next_edit] = 1 if k.next_next_edit else 0
+        context[next_edit_word] = words[k.i - 1]
+        context[next_edit_pos] = k.next_tag
+    else:
+        context[next_edit] = 0
+        context[next_edit_wmatch] = 0
+        context[next_edit_pmatch] = 0
+        context[next_next_edit] = 0
+        context[next_edit_word] = 0
+        context[next_edit_pos] = 0
+ 
     # These features find how much of S0's span matches N0's span, starting from
-    # the left. A 3-match span will fire features for 1-match, 2-match and 3-match.
+    # the left.
     context[wcopy] = 0
     context[wexact] = 1
     for i in range(5):
@@ -494,7 +522,7 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         else:
             context[pexact] = 0
             break
-        
+
 
 cdef int free_predicate(Predicate* pred) except -1:
     free(pred.raws)
@@ -766,6 +794,19 @@ cdef class FeatureSet:
             (prev_edit, pcopy),
             (prev_prev_edit, pcopy)
         )
+        # After emailing Mark after ACL
+        new_disfl = (
+            (next_edit,),
+            (next_next_edit,),
+            (next_edit_wmatch,),
+            (next_edit_pmatch,),
+            (next_edit_word,),
+            (next_edit_pos,),
+            (next_edit, wcopy),
+            (next_next_edit, wcopy),
+            (next_edit, pcopy),
+            (next_next_edit, pcopy),
+        )
         print "Use Zhang feats"
         feats = from_single + from_word_pairs + from_three_words + distance
         feats += valency + zhang_unigrams + third_order
@@ -775,6 +816,7 @@ cdef class FeatureSet:
         if feat_level == 'extra':
             print "Using disfl+match feats"
             feats += disfl
+            feats += new_disfl
             kernel_tokens = get_kernel_tokens()
             for w1, w2 in combinations(kernel_tokens, 2):
                 # Words match

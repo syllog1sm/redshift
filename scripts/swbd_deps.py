@@ -20,8 +20,10 @@ class Token(object):
 
 
 class Sentence(object):
-    def __init__(self, sent_str):
+    def __init__(self, sent_str, use_dps):
         self.tokens = [Token(line) for line in sent_str.split('\n')]
+
+    def mark_dps_edits(self):
         edit_depth = 0
         saw_ip = False
         for i, token in enumerate(self.tokens):
@@ -39,11 +41,6 @@ class Sentence(object):
                 # This should only effect 3 cases
                 self.tokens[i - 1].is_edit = False
                 edit_depth -= 1
-        n_erased = 0
-        self.n_dfl = 0
-        for token in self.tokens:
-            if token.word == r'\[':
-                self.n_dfl += 1
 
     def to_str(self):
         return '\n'.join(token.to_str() for token in self.tokens)
@@ -131,14 +128,15 @@ class Sentence(object):
 
 @plac.annotations(
     ignore_unfinished=("Ignore unfinished sentences", "flag", "u", bool),
+    use_dps=("Use dps in addition to EDITED nodes", "flag", "d", bool),
     merge_mwe=("Merge multi-word expressions", "flag", "m", bool),
     excise_edits=("Clean edits entirely", "flag", "e", bool),
     label_edits=("Label edits", "flag", "l", bool),
     label_interregna=("Label interregna", "flag", "i", bool),
 )
-def main(in_loc, ignore_unfinished=False, excise_edits=False, label_edits=False,
-        merge_mwe=False, label_interregna=False):
-    sentences = [Sentence(sent_str) for sent_str in
+def main(in_loc, ignore_unfinished=False, use_dps=False, excise_edits=False,
+         label_edits=False, merge_mwe=False, label_interregna=False):
+    sentences = [Sentence(sent_str, use_dps) for sent_str in
                  open(in_loc).read().strip().split('\n\n')]
     punct = set([',', ':', '.', ';', 'RRB', 'LRB', '``', "''"])
  
@@ -147,11 +145,12 @@ def main(in_loc, ignore_unfinished=False, excise_edits=False, label_edits=False,
             continue
         orig_str = sent.to_str()
         try:
+            if use_dps:
+                sent.mark_dps_edits()
             if merge_mwe:
                 sent.merge_mwe('you_know')
                 sent.merge_mwe('i_mean')
                 sent.merge_mwe('of_course', new_label='discourse')
-
             if excise_edits:
                 sent.rm_tokens(lambda token: token.is_edit)
                 sent.rm_tokens(lambda token: token.label == 'discourse')
