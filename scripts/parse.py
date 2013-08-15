@@ -27,11 +27,10 @@ def get_pos(conll_str):
 
 
 @plac.annotations(
-    use_gold=("Gold-formatted test data", "flag", "g", bool),
     profile=("Do profiling", "flag", "p", bool),
     debug=("Set debug", "flag", "d", bool)
 )
-def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False, debug=False):
+def main(parser_dir, text_loc, out_dir, profile=False, debug=False):
     if debug:
         redshift.parser.set_debug(debug)
     if not os.path.exists(out_dir):
@@ -41,7 +40,7 @@ def main(parser_dir, text_loc, out_dir, use_gold=False, profile=False, debug=Fal
     sentences = redshift.io_parse.read_pos(open(text_loc).read())
     #sentences.connect_sentences(1700)
     if profile:
-        cProfile.runctx("parser.add_parses(sentences,gold=gold_sents)",
+        cProfile.runctx("parser.add_parses(sentences)",
                         globals(), locals(), "Profile.prof")
         s = pstats.Stats("Profile.prof")
         s.strip_dirs().sort_stats("time").print_stats()

@@ -13,8 +13,12 @@ from libc.string cimport memcpy, memset
 from _state cimport *
 from io_parse cimport Sentence, Sentences
 from transitions cimport TransitionSystem, transition_to_str 
-from beam cimport Beam, Violation
-from features cimport FeatureSet
+from beam cimport ParseBeam
+from tagger cimport GreedyTagger, BeamTagger
+
+from features.extractor cimport Extractor
+import _parse_features
+from _parse_features cimport *
 
 import index.hashes
 cimport index.hashes
@@ -46,7 +50,7 @@ def load_parser(model_dir, reuse_idx=False):
     beam_width = int(params['beam_width'])
     feat_set = params['feat_set']
     ngrams = []
-    for ngram_str in params['ngrams'].split(','):
+    for ngram_str in params.get('ngrams', '-1').split(','):
         if ngram_str == '-1': continue
         ngrams.append(tuple([int(i) for i in ngram_str.split('_')]))
     add_clusters = params['add_clusters'] == 'True'
@@ -65,21 +69,25 @@ def load_parser(model_dir, reuse_idx=False):
     _, nr_label = parser.moves.set_labels(pos_tags, _parse_labels_str(l_labels),
                             _parse_labels_str(r_labels))
     
-    parser.features.set_nr_label(nr_label)
-
     parser.load()
     return parser
 
 
 cdef class BaseParser:
-    cdef FeatureSet features
+    cdef Extractor extractor
     cdef Perceptron guide
+    cdef TransitionSystem moves
+    cdef BeamTagger tagger
     cdef object model_dir
     cdef size_t beam_width
-    cdef TransitionSystem moves
     cdef object add_extra
     cdef object train_alg
     cdef int feat_thresh
+    cdef object feat_set
+    cdef object add_clusters
+    cdef object ngrams
+    cdef uint64_t* _features
+    cdef size_t* _context
 
     def __cinit__(self, model_dir, clean=False, train_alg='static',
                   feat_set="zhang",
@@ -88,18 +96,32 @@ cdef class BaseParser:
                   reuse_idx=False, beam_width=1,
                   ngrams=None, add_clusters=False):
         self.model_dir = self.setup_model_dir(model_dir, clean)
-        self.features = FeatureSet(feat_set=feat_set, ngrams=ngrams,
-                                   add_clusters=add_clusters)
+        self.feat_set = feat_set
+        self.add_clusters = add_clusters
+        self.ngrams = ngrams if ngrams is not None else []
+        templates = _parse_features.baseline_templates()
+        templates += _parse_features.ngram_feats(self.ngrams, add_clusters=add_clusters)
+        if 'match' in self.feat_set:
+            match_feats = _parse_features.match_templates()
+            print "Using %d match feats" % len(match_feats)
+        else:
+            match_feats = []
+        self._features = <uint64_t*>calloc(len(templates) + len(match_feats) + 5,
+                                           sizeof(uint64_t))
+        self._context = <size_t*>calloc(_parse_features.context_size(), sizeof(size_t))
+        self.extractor = Extractor(templates, match_feats)
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
         self.beam_width = beam_width
         if clean == True:
-            self.new_idx(self.model_dir, self.features.n)
+            self.new_idx(self.model_dir)
         else:
-            self.load_idx(self.model_dir, self.features.n)
+            self.load_idx(self.model_dir)
         self.moves = TransitionSystem(allow_reattach=allow_reattach,
                                       allow_reduce=allow_reduce, use_edit=use_edit)
         self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model.gz'))
+
+        self.tagger = BeamTagger(model_dir, clean=False, reuse_idx=True)
 
     def setup_model_dir(self, loc, clean):
         if clean and os.path.exists(loc):
@@ -116,8 +138,9 @@ cdef class BaseParser:
         cdef Sentences held_out_gold
         cdef Sentences held_out_parse
         self.say_config()
+        self.tagger.setup_classes(sents)
         move_classes, nr_label = self.moves.set_labels(*sents.get_labels())
-        self.features.set_nr_label(nr_label)
+        #self.features.set_nr_label(nr_label)
         self.guide.set_classes(range(move_classes))
         self.write_cfg(pjoin(self.model_dir, 'parser.cfg'))
         if self.beam_width >= 2:
@@ -130,19 +153,28 @@ cdef class BaseParser:
             for i in indices:
                 if DEBUG:
                     print ' '.join(sents.strings[i][0])
+                if n < 5:
+                    self.tagger.train_sent(sents.s[i])
                 if self.train_alg == 'static':
                     self.static_train(n, sents.s[i])
                 else:
                     self.dyn_train(n, sents.s[i])
+            if n < 5:
+                print_train_msg(n, self.tagger.guide.n_corr, self.tagger.guide.total,
+                                0, 0)
             print_train_msg(n, self.guide.n_corr, self.guide.total, self.guide.cache.n_hit,
                             self.guide.cache.n_miss)
             self.guide.n_corr = 0
             self.guide.total = 0
             if n % 2 == 1 and self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
+                if n < 5:
+                    self.tagger.guide.prune(self.feat_thresh / 2)
             if n < 3:
                 self.guide.reindex()
+                self.tagger.guide.reindex()
             random.shuffle(indices)
+        self.tagger.guide.finalize()
         self.guide.finalize()
 
     cdef int dyn_train(self, int iter_num, Sentence* sent) except -1:
@@ -155,8 +187,6 @@ cdef class BaseParser:
         self.guide.nr_class = self.moves.nr_class
         cdef size_t i
         for i in range(sents.length):
-            if DEBUG:
-                print ' '.join(sents.strings[i][0])
             self.parse(sents.s[i])
 
     cdef int parse(self, Sentence* sent) except -1:
@@ -164,16 +194,18 @@ cdef class BaseParser:
 
     def save(self):
         self.guide.save(pjoin(self.model_dir, 'model.gz'))
+        self.tagger.save()
 
     def load(self):
         self.guide.load(pjoin(self.model_dir, 'model.gz'), thresh=self.feat_thresh)
+        self.tagger.guide.load(pjoin(self.model_dir, 'tagger.gz'), thresh=self.feat_thresh)
 
-    def new_idx(self, model_dir, size_t n_predicates):
+    def new_idx(self, model_dir):
         index.hashes.init_word_idx(pjoin(model_dir, 'words'))
         index.hashes.init_pos_idx(pjoin(model_dir, 'pos'))
         index.hashes.init_label_idx(pjoin(model_dir, 'labels'))
 
-    def load_idx(self, model_dir, size_t n_predicates):
+    def load_idx(self, model_dir):
         index.hashes.load_word_idx(pjoin(model_dir, 'words'))
         index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
         index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
@@ -189,29 +221,32 @@ cdef class BaseParser:
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
             cfg.write(u'beam_width\t%d\n' % self.beam_width)
-            if not self.features.ngrams:
-                cfg.write(u'ngrams\t-1\n')
-            else:
-                ngram_strs = ['_'.join([str(i) for i in ngram])
-                              for ngram in self.features.ngrams]
-                cfg.write(u'ngrams\t%s\n' % u','.join(ngram_strs))
-            cfg.write(u'feat_set\t%s\n' % self.features.name)
-            cfg.write(u'add_clusters\t%s\n' % self.features.add_clusters)
+            #if not self.features.ngrams:
+            #    cfg.write(u'ngrams\t-1\n')
+            #else:
+            #    ngram_strs = ['_'.join([str(i) for i in ngram])
+            #                  for ngram in self.features.ngrams]
+            #    cfg.write(u'ngrams\t%s\n' % u','.join(ngram_strs))
+            cfg.write(u'feat_set\t%s\n' % self.feat_set)
+            cfg.write(u'add_clusters\t%s\n' % self.add_clusters)
 
     def __dealloc__(self):
         pass
 
 cdef class BeamParser(BaseParser):
     cdef int parse(self, Sentence* sent) except -1:
-        cdef Beam beam = Beam(self.moves, self.beam_width, sent.length)
+        cdef State* s
+        cdef ParseBeam beam = ParseBeam(self.moves, self.beam_width, sent.length)
         cdef size_t p_idx
         cdef Kernel* kernel
         cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
         self.guide.cache.flush()
         while not beam.is_finished:
             for p_idx in range(beam.bsize):
-                kernel = beam.next_state(p_idx, sent.pos)
-                beam_scores[p_idx] = self._predict(sent, kernel)
+                pred = <State*>beam.beam[p_idx]
+                self.moves.fill_valid(pred, beam.valid[p_idx])
+                fill_kernel(pred, sent.pos) 
+                beam_scores[p_idx] = self._predict(sent, &pred.kernel)
             beam.extend_states(beam_scores)
         sent.parse.n_moves = beam.t
         beam.fill_parse(sent.parse.moves, sent.pos, sent.parse.heads, sent.parse.labels,
@@ -222,18 +257,25 @@ cdef class BeamParser(BaseParser):
         cdef size_t  i
         cdef Kernel* kernel
         cdef double* scores
-        cdef Beam beam = Beam(self.moves, self.beam_width, sent.length)
+        cdef ParseBeam beam = ParseBeam(self.moves, self.beam_width, sent.length)
         cdef State* gold = init_state(sent.length)
+        cdef State* pred
         cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
         cdef size_t* ghist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
         cdef size_t* phist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
         cdef double max_violn = 0
         cdef size_t t = 0
+        # Backup pos tags
+        cdef size_t* bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
+        memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
+        self.tagger.tag(sent)
         while not beam.is_finished:
             self.guide.cache.flush()
             for i in range(beam.bsize):
-                kernel = beam.next_state(i, sent.pos)
-                beam_scores[i] = self._predict(sent, kernel)
+                pred = <State*>beam.beam[i]
+                self.moves.fill_valid(pred, beam.valid[i])
+                fill_kernel(pred, sent.pos)
+                beam_scores[i] = self._predict(sent, &pred.kernel)
             beam.extend_states(beam_scores)
             oracle = self.moves.break_tie(gold, sent.pos, sent.parse.heads,
                                           sent.parse.labels, sent.parse.edits)
@@ -241,17 +283,20 @@ cdef class BeamParser(BaseParser):
             scores = self._predict(sent, &gold.kernel)
             gold.score += scores[oracle]
             self.moves.transition(oracle, gold)
-            if (beam.beam[0].score - gold.score) >= max_violn:
-                max_violn = beam.beam[0].score - gold.score
+            pred = <State*>beam.beam[0]
+            if (pred.score - gold.score) >= max_violn:
+                max_violn = pred.score - gold.score
                 t = gold.t
                 memcpy(ghist, gold.history, t * sizeof(size_t))
-                memcpy(phist, beam.beam[0].history, t * sizeof(size_t))
+                memcpy(phist, pred.history, t * sizeof(size_t))
         if t == 0:
             self.guide.n_corr += beam.t
             self.guide.total += beam.t
         else:
             counted = self._count_feats(sent, t, t, phist, ghist)
             self.guide.batch_update(counted)
+        memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
+        free(bu_tags)
         free(ghist)
         free(phist)
         free(beam_scores)
@@ -261,14 +306,16 @@ cdef class BeamParser(BaseParser):
         cdef size_t i
         cdef Kernel* kernel
         cdef int* costs
+        cdef State* p
+        cdef State* g
         
         ghist = <size_t*>malloc(sent.length * 3 * sizeof(size_t))
         phist = <size_t*>malloc(sent.length * 3 * sizeof(size_t))
         for i in range(sent.length * 3):
             ghist[i] = self.moves.nr_class
             phist[i] = self.moves.nr_class
-        pred = Beam(self.moves, self.beam_width, sent.length)
-        gold = Beam(self.moves, self.beam_width, sent.length)
+        pred = ParseBeam(self.moves, self.beam_width, sent.length)
+        gold = ParseBeam(self.moves, self.beam_width, sent.length)
         pred_scores = <double**>malloc(self.beam_width * sizeof(double*))
         gold_scores = <double**>malloc(self.beam_width * sizeof(double*))
         cdef double delta = 0
@@ -278,32 +325,36 @@ cdef class BeamParser(BaseParser):
         self.guide.cache.flush()
         while not pred.is_finished and not gold.is_finished:
             for i in range(pred.bsize):
-                kernel = pred.next_state(i, sent.pos)
+                p = <State*>pred.beam[i]
+                self.moves.fill_valid(p, pred.valid[i])
+                fill_kernel(p, sent.pos)
                 pred_scores[i] = self._predict(sent, kernel)
-                costs = self.moves.get_costs(pred.beam[i], sent.pos, sent.parse.heads,
+                costs = self.moves.get_costs(<State*>pred.beam[i], sent.pos, sent.parse.heads,
                                              sent.parse.labels, sent.parse.edits)
                 memcpy(pred.costs[i], costs, sizeof(int) * self.moves.nr_class)
             pred.extend_states(pred_scores)
             for i in range(gold.bsize):
-                kernel = gold.next_state(i, sent.pos)
+                g = <State*>gold.beam[i]
+                self.moves.fill_valid(g, gold.valid[i])
+                fill_kernel(g, sent.pos)
                 gold_scores[i] = self._predict(sent, kernel)
-                costs = self.moves.get_costs(gold.beam[i], sent.pos,
+                costs = self.moves.get_costs(<State*>gold.beam[i], sent.pos,
                                              sent.parse.heads, sent.parse.labels,
                                              sent.parse.edits)
                 for clas in range(self.moves.nr_class):
                     if costs[clas] != 0:
                         gold.valid[i][clas] = -1
             gold.extend_states(gold_scores)
-            delta = pred.beam[0].score - gold.beam[0].score
-            if delta >= max_violn and pred.beam[0].cost >= 1:
+            g = <State*>gold.beam[0]
+            p = <State*>pred.beam[0]
+            delta = p.score - g.score
+            if delta >= max_violn and p.cost >= 1:
                 max_violn = delta
-                pt = pred.beam[0].t
-                gt = gold.beam[0].t
-                memcpy(phist, pred.beam[0].history, pt * sizeof(size_t))
-                memcpy(ghist, gold.beam[0].history, gt * sizeof(size_t))
+                memcpy(phist, p.history, p.t * sizeof(size_t))
+                memcpy(ghist, g.history, g.t * sizeof(size_t))
         if max_violn < 0:
-            self.guide.n_corr += pred.beam[0].t
-            self.guide.total += pred.beam[0].t
+            self.guide.n_corr += pred.t
+            self.guide.total += pred.t
         else:
             counted = self._count_feats(sent, pt, gt, phist, ghist)
             self.guide.batch_update(counted)
@@ -320,8 +371,12 @@ cdef class BeamParser(BaseParser):
         cdef bint cache_hit = False
         scores = self.guide.cache.lookup(sizeof(Kernel), kernel, &cache_hit)
         if not cache_hit:
-            feats = self.features.extract(sent, kernel)
-            self.guide.fill_scores(feats, scores)
+            fill_context(self._context, self.moves.n_labels, sent.words,
+                         sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
+                         sent.prefix, sent.parens, sent.quotes, kernel,
+                         &kernel.s0l, &kernel.s0r, &kernel.n0l)
+            self.extractor.extract(self._features, self._context)
+            self.guide.fill_scores(self._features, scores)
         return scores
 
     cdef dict _count_feats(self, Sentence* sent, size_t pt, size_t gt,
@@ -361,12 +416,17 @@ cdef class BeamParser(BaseParser):
         return counts
 
     cdef int _inc_feats(self, dict counts, Sentence* sent, Kernel* k, double inc) except -1:
-        cdef uint64_t* feats = self.features.extract(sent, k)
+        fill_context(self._context, self.moves.n_labels, sent.words,
+                     sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
+                     sent.prefix, sent.parens, sent.quotes, k,
+                     &k.s0l, &k.s0r, &k.n0l)
+        self.extractor.extract(self._features, self._context)
+ 
         cdef size_t f = 0
-        while feats[f] != 0:
-            if feats[f] not in counts:
-                counts[feats[f]] = 0
-            counts[feats[f]] += inc
+        while self._features[f] != 0:
+            if self._features[f] not in counts:
+                counts[self._features[f]] = 0
+            counts[self._features[f]] += inc
             f += 1
 
 cdef double FOLLOW_ERR_PC = 0.90
@@ -377,12 +437,13 @@ cdef class GreedyParser(BaseParser):
         cdef uint64_t* feats
         s = init_state(sent.length)
         sent.parse.n_moves = 0
+        self.tagger.tag(sent)
         while not s.is_finished:
             fill_kernel(s, sent.pos)
-            feats = self.features.extract(sent, &s.kernel)
+            feats = self._extract(sent, &s.kernel)
             self.moves.fill_valid(s, self.moves._costs)
             clas = self._predict(feats, self.moves._costs,
-                                &s.guess_labels[s.i])
+                                 &s.guess_labels[s.i])
             self.moves.transition(clas, s)
         # No need to copy heads for root and start symbols
         cdef size_t i
@@ -398,10 +459,14 @@ cdef class GreedyParser(BaseParser):
         cdef size_t pred
         cdef uint64_t* feats
         cdef size_t _ = 0
+
+        cdef size_t* bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
+        memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
+        self.tagger.tag(sent)
         while not s.is_finished:
             fill_kernel(s, sent.pos)
             self.moves.fill_valid(s, valid)
-            feats = self.features.extract(sent, &s.kernel)
+            feats = self._extract(sent, &s.kernel)
             pred = self._predict(feats, valid, &s.guess_labels[s.i])
             costs = self.moves.get_costs(s, sent.pos, sent.parse.heads,
                                          sent.parse.labels, sent.parse.edits)
@@ -413,8 +478,11 @@ cdef class GreedyParser(BaseParser):
                 self.moves.transition(gold, s)
             self.guide.n_corr += (gold == pred)
             self.guide.total += 1
+
+        memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
         free_state(s)
         free(valid)
+        free(bu_tags)
 
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:
         cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))
@@ -424,7 +492,7 @@ cdef class GreedyParser(BaseParser):
         cdef size_t _ = 0
         while not s.is_finished:
             fill_kernel(s, sent.pos)
-            feats = self.features.extract(sent, &s.kernel)
+            feats = self._extract(sent, &s.kernel)
             self.moves.fill_valid(s, valid)
             pred = self._predict(feats, valid, &s.guess_labels[s.i])
             gold = self.moves.break_tie(s, sent.pos, sent.parse.heads,
@@ -443,6 +511,14 @@ cdef class GreedyParser(BaseParser):
             print 'NM L'
         elif self.moves.allow_reduce:
             print 'NM D'
+
+    cdef uint64_t* _extract(self, Sentence* sent, Kernel* kernel):
+        fill_context(self._context, self.moves.n_labels, sent.words,
+                     sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
+                     sent.prefix, sent.parens, sent.quotes, kernel,
+                     &kernel.s0l, &kernel.s0r, &kernel.n0l)
+        self.extractor.extract(self._features, self._context)
+        return self._features
    
     cdef int _predict(self, uint64_t* feats, int* valid, size_t* rlabel) except -1:
         cdef:
@@ -455,7 +531,7 @@ cdef class GreedyParser(BaseParser):
         cdef double valid_score = -10000
         cdef double right_score = -10000
         scores = self.guide.scores
-        self.guide.fill_scores(feats, scores)
+        self.guide.fill_scores(self._features, scores)
         seen_valid = False
         for clas in range(self.guide.nr_class):
             score = scores[clas]

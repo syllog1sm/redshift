@@ -64,9 +64,13 @@ def main(test_loc, gold_loc, eval_punct=False):
     u_by_label = defaultdict(lambda: defaultdict(int))
     l_by_label = defaultdict(lambda: defaultdict(int))
     N = 0
+    N_p = 0
     u_nc = 0
     l_nc = 0
+    p_nc = 0
     for (sst, t), (ss, g) in zip(gen_toks(test_loc), gen_toks(gold_loc)):
+        p_nc += t.pos == g.pos
+        N_p += 1
         if g.label in ["P", 'punct'] and not eval_punct:
             continue
         prev_g = g
@@ -99,6 +103,7 @@ def main(test_loc, gold_loc, eval_punct=False):
         yield fmt_acc('Other', n_other, l_other, u_other, n_l_err) 
     yield 'U: %.3f' % pc(u_nc, N)
     yield 'L: %.3f' % pc(l_nc, N)
+    yield 'P: %.3f' % pc(p_nc, N_p)
 
 if __name__ == '__main__':
     for line in plac.call(main):

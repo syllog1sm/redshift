@@ -220,7 +220,8 @@ cdef class Perceptron:
                     feat_addr = self.W[f]
                     if feat_addr == 0:
                         self.add_feature(f)
-                    elif feat_addr < self.nr_raws:
+                        feat_addr = self.W[f]
+                    if feat_addr < self.nr_raws:
                         update_dense(self.now, d, clas, self.raws[feat_addr])
                     else:
                         update_square(self.nr_class, self.div,
@@ -244,7 +245,7 @@ cdef class Perceptron:
             feat_addr = self.W[f]
             if feat_addr == 0:
                 self.add_feature(f)
-            elif feat_addr < self.nr_raws:
+            if feat_addr < self.nr_raws:
                 update_dense(self.now, 1.0, gold_i, self.raws[feat_addr])
                 update_dense(self.now, -1.0, pred_i, self.raws[feat_addr])
             else:
@@ -289,6 +290,7 @@ cdef class Perceptron:
 
     cdef int64_t finalize(self) except -1:
         cdef uint64_t f
+        cdef double tmp
         cdef SquareFeature* feat
         cdef DenseParams* params
         cdef pair[uint64_t, size_t] data
@@ -303,15 +305,43 @@ cdef class Perceptron:
                     if feat.seen[i]:
                         params = &feat.parts[i]
                         for j in range(self.div):
+                            # Save the unaveraged value in accs
+                            tmp = params.w[j]
                             params.acc[j] += (self.now - params.last_upd[j]) * params.w[j]
                             params.w[j] = params.acc[j] / self.now
+                            params.acc[j] = tmp
         for i in range(1, self.nr_raws):
             weights = self.raws[i].w
             accs = self.raws[i].acc
             last_upd = self.raws[i].last_upd
             for c in range(self.nr_class):
+                # Save the unaveraged value in accs so that we can easily unaverage
+                tmp = weights[c]
                 accs[c] += (self.now - last_upd[c]) * weights[c]
                 weights[c] = accs[c] / self.now
+                accs[c] = tmp
+    
+    cdef int unfinalize(self) except -1:
+        cdef double tmp
+        cdef dense_hash_map[uint64_t, size_t].iterator it
+        it = self.W.begin()
+        while it != self.W.end():
+            data = deref(it)
+            inc(it)
+            if data.second >= self.nr_raws:
+                feat = <SquareFeature*>data.second
+                for i in range(self.div):
+                    if feat.seen[i]:
+                        params = &feat.parts[i]
+                        for j in range(self.div):
+                            tmp = params.w[j] * self.now
+                            params.w[j] = params.acc[j]
+                            params.acc[j] = tmp
+        for i in range(1, self.nr_raws):
+            for c in range(self.nr_class):
+                tmp = self.raws[i].w[c] * self.now
+                self.raws[i].w[c] = self.raws[i].acc[c]
+                self.raws[i].acc[c] = tmp
 
     def save(self, out_loc):
         cdef size_t i
@@ -393,6 +423,8 @@ cdef class Perceptron:
                 continue
             if nr_seen < thresh:
                 continue
+            for cls in range(self.nr_class):
+                weights[cls] = 0
             token = strtok(NULL, '=')
             while token != NULL and token[0] != '\n':
                 cls = atoi(token)

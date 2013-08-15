@@ -29,11 +29,13 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.words = <size_t*>calloc(size, sizeof(size_t))
     s.owords = <size_t*>calloc(size, sizeof(size_t))
     s.pos = <size_t*>calloc(size, sizeof(size_t))       
+    s.alt_pos = <size_t*>calloc(size, sizeof(size_t))
     s.ids = <size_t*>calloc(size, sizeof(size_t))
     s.clusters = <size_t*>calloc(size, sizeof(size_t))
     s.cprefix4s = <size_t*>calloc(size, sizeof(size_t))
     s.cprefix6s = <size_t*>calloc(size, sizeof(size_t))
-    s.orths = <size_t*>calloc(size, sizeof(size_t))
+    s.suffix = <size_t*>calloc(size, sizeof(size_t))
+    s.prefix = <size_t*>calloc(size, sizeof(size_t))
     s.parens = <size_t*>calloc(size, sizeof(size_t))
     s.quotes = <size_t*>calloc(size, sizeof(size_t))
 
@@ -61,7 +63,8 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
             paren_cnt += 1
         elif py_words[i] == ")" or py_words[i] == "]" or py_words[i] == "}":
             paren_cnt -= 1
-        s.orths[i] = ord(py_words[i][0])
+        s.suffix[i] = index.hashes.encode_word(py_words[i][-3:])
+        s.prefix[i] = index.hashes.encode_word(py_words[i][0])
         s.parens[i] = paren_cnt
         s.quotes[i] = quote_cnt
     return s
@@ -79,11 +82,13 @@ cdef free_sent(Sentence* s):
     free(s.words)
     free(s.owords)
     free(s.pos)
+    free(s.alt_pos)
     free(s.ids)
     free(s.clusters)
     free(s.cprefix4s)
     free(s.cprefix6s)
-    free(s.orths)
+    free(s.suffix)
+    free(s.prefix)
     free(s.parens)
     free(s.quotes)
 
@@ -158,7 +163,7 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
     return sentences
 
     
-def read_pos(file_str, vocab_thresh=0):
+def read_pos(file_str, vocab_thresh=0, sep='/'):
     cdef:
         size_t i
         object token_str, word, pos, words, tags
@@ -173,7 +178,7 @@ def read_pos(file_str, vocab_thresh=0):
         ids = [0]
         for token_str in sent_str.split():
             try:
-                word, pos = token_str.rsplit('/', 1)
+                word, pos = token_str.rsplit(sep, 1)
             except:
                 print sent_str
                 print token_str
@@ -251,3 +256,18 @@ cdef class Sentences:
       
     property length:
         def __get__(self): return self.length
+
+def eval_tags(Sentences test, Sentences gold):
+    c = 0
+    ac = 0
+    n = 0
+    assert test.length == gold.length
+    for i in range(test.length):
+        assert test.s[i].length == gold.s[i].length
+        for w in range(1, test.s[i].length - 1):
+            c += test.s[i].pos[w] == gold.s[i].pos[w]
+            ac += (test.s[i].pos[w] == gold.s[i].pos[w] or test.s[i].alt_pos[w] == gold.s[i].pos[w])
+            n += 1
+
+    print (float(ac)/n) * 100, ac, n
+    return (float(c)/n) * 100, c, n
