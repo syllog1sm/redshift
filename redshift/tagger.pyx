@@ -196,7 +196,7 @@ cdef class BeamTagger(BaseTagger):
 
     cdef int train_sent(self, Sentence* sent) except -1:
         cdef size_t  i, tmp
-        cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
+        cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.length, self.nr_tag)
         cdef TagState* gold_state = extend_state(NULL, 0, NULL, 0)
         cdef MaxViolnUpd updater = MaxViolnUpd(self.nr_tag)
         for i in range(sent.length - 1):
