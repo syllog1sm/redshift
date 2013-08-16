@@ -55,7 +55,7 @@ class Token(object):
         self.sbd = False
         # CoNLL format
         is_edit = False
-        if len(attrs) == 5:
+        if len(attrs) == 5 or len(attrs) == 4:
             attrs.append('False')
         elif len(attrs) == 10:
             new_attrs = [str(int(attrs[0]) - 1)]
