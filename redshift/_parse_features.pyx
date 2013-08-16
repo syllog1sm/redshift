@@ -187,7 +187,7 @@ def get_kernel_tokens():
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
                        size_t* tags,
                        size_t* clusters, size_t* cprefix6s, size_t* cprefix4s,
-                       size_t* orths, size_t* parens, size_t* quotes,
+                       size_t* orths, int* parens, int* quotes,
                        Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
     context[N0w] = words[k.i]
     context[N0p] = k.n0p
@@ -360,7 +360,6 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[prev_prev_edit] = 0
         context[prev_edit_word] = 0
         context[prev_edit_pos] = 0
-
     if k.next_edit and k.s0 != 0:
         context[next_edit] = 1
         context[next_edit_wmatch] = 1 if words[k.s0 + 1] == words[k.s0] else 0

@@ -54,12 +54,14 @@ def load_parser(model_dir, reuse_idx=False):
         if ngram_str == '-1': continue
         ngrams.append(tuple([int(i) for i in ngram_str.split('_')]))
     add_clusters = params['add_clusters'] == 'True'
+    auto_pos = params['auto_pos'] == 'True'
     params = {'clean': False, 'train_alg': train_alg,
               'feat_set': feat_set, 'feat_thresh': feat_thresh,
               'vocab_thresh': 1, 'allow_reattach': allow_reattach,
               'use_edit': use_edit, 'allow_reduce': allow_reduce,
               'reuse_idx': reuse_idx, 'beam_width': beam_width,
-              'ngrams': ngrams, 'add_clusters': add_clusters}
+              'ngrams': ngrams, 'add_clusters': add_clusters,
+              'auto_pos': auto_pos}
     if beam_width >= 2:
         parser = BeamParser(model_dir, **params)
     else:
@@ -79,6 +81,7 @@ cdef class BaseParser:
     cdef TransitionSystem moves
     cdef BeamTagger tagger
     cdef object model_dir
+    cdef bint auto_pos
     cdef size_t beam_width
     cdef object add_extra
     cdef object train_alg
@@ -94,7 +97,7 @@ cdef class BaseParser:
                   feat_thresh=0, vocab_thresh=5,
                   allow_reattach=False, allow_reduce=False, use_edit=False,
                   reuse_idx=False, beam_width=1,
-                  ngrams=None, add_clusters=False):
+                  ngrams=None, add_clusters=False, auto_pos=False):
         self.model_dir = self.setup_model_dir(model_dir, clean)
         self.feat_set = feat_set
         self.add_clusters = add_clusters
@@ -119,6 +122,7 @@ cdef class BaseParser:
             self.load_idx(self.model_dir)
         self.moves = TransitionSystem(allow_reattach=allow_reattach,
                                       allow_reduce=allow_reduce, use_edit=use_edit)
+        self.auto_pos = auto_pos
         self.say_config()
         self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model.gz'))
         self.tagger = BeamTagger(model_dir, clean=False, reuse_idx=True)
@@ -153,23 +157,21 @@ cdef class BaseParser:
             for i in indices:
                 if DEBUG:
                     print ' '.join(sents.strings[i][0])
-                if n < 5:
-                    self.tagger.train_sent(sents.s[i])
+                #if n < 5:
+                self.tagger.train_sent(sents.s[i])
                 if self.train_alg == 'static':
                     self.static_train(n, sents.s[i])
                 else:
                     self.dyn_train(n, sents.s[i])
-            if n < 5:
-                print_train_msg(n, self.tagger.guide.n_corr, self.tagger.guide.total,
-                                0, 0)
+            print_train_msg(n, self.tagger.guide.n_corr, self.tagger.guide.total,
+                            0, 0)
             print_train_msg(n, self.guide.n_corr, self.guide.total, self.guide.cache.n_hit,
                             self.guide.cache.n_miss)
             self.guide.n_corr = 0
             self.guide.total = 0
             if n % 2 == 1 and self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
-                if n < 5:
-                    self.tagger.guide.prune(self.feat_thresh / 2)
+                self.tagger.guide.prune(self.feat_thresh / 2)
             if n < 3:
                 self.guide.reindex()
                 self.tagger.guide.reindex()
@@ -221,6 +223,7 @@ cdef class BaseParser:
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
             cfg.write(u'beam_width\t%d\n' % self.beam_width)
+            cfg.write(u'auto_pos\t%s\n' % self.auto_pos)
             #if not self.features.ngrams:
             #    cfg.write(u'ngrams\t-1\n')
             #else:
@@ -240,7 +243,8 @@ cdef class BeamParser(BaseParser):
         cdef size_t p_idx
         cdef Kernel* kernel
         cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
-        self.tagger.tag(sent)
+        if self.auto_pos:
+            self.tagger.tag(sent)
         self.guide.cache.flush()
         while not beam.is_finished:
             for p_idx in range(beam.bsize):
@@ -268,9 +272,11 @@ cdef class BeamParser(BaseParser):
         cdef double max_violn = 0
         cdef size_t t = 0
         # Backup pos tags
-        cdef size_t* bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
-        memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
-        self.tagger.tag(sent)
+        cdef size_t* bu_tags
+        if self.auto_pos:
+            bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
+            memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
+            self.tagger.tag(sent)
         while not beam.is_finished:
             self.guide.cache.flush()
             for i in range(beam.bsize):
@@ -298,8 +304,9 @@ cdef class BeamParser(BaseParser):
         else:
             counted = self._count_feats(sent, t, t, phist, ghist)
             self.guide.batch_update(counted)
-        memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
-        free(bu_tags)
+        if self.auto_pos:
+            memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
+            free(bu_tags)
         free(ghist)
         free(phist)
         free(beam_scores)
@@ -311,9 +318,11 @@ cdef class BeamParser(BaseParser):
         cdef int* costs
         cdef State* p
         cdef State* g
-        cdef size_t* bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
-        memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
-        self.tagger.tag(sent)
+        cdef size_t* bu_tags
+        if self.auto_pos:
+            bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
+            memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
+            self.tagger.tag(sent)
         ghist = <size_t*>malloc(sent.length * 3 * sizeof(size_t))
         phist = <size_t*>malloc(sent.length * 3 * sizeof(size_t))
         for i in range(sent.length * 3):
@@ -364,8 +373,9 @@ cdef class BeamParser(BaseParser):
         if max_violn >= 0:
             counted = self._count_feats(sent, pt, gt, phist, ghist)
             self.guide.batch_update(counted)
-        memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
-        free(bu_tags)
+        if self.auto_pos:
+            memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
+            free(bu_tags)
         free(ghist)
         free(phist)
         free(pred_scores)
@@ -445,7 +455,8 @@ cdef class GreedyParser(BaseParser):
         cdef uint64_t* feats
         s = init_state(sent.length)
         sent.parse.n_moves = 0
-        self.tagger.tag(sent)
+        if self.auto_pos:
+            self.tagger.tag(sent)
         while not s.is_finished:
             fill_kernel(s, sent.pos)
             feats = self._extract(sent, &s.kernel)
@@ -471,9 +482,11 @@ cdef class GreedyParser(BaseParser):
         cdef uint64_t* feats
         cdef size_t _ = 0
 
-        cdef size_t* bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
-        memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
-        self.tagger.tag(sent)
+        cdef size_t* bu_tags 
+        if self.auto_pos:
+            bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
+            memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
+            self.tagger.tag(sent)
         while not s.is_finished:
             fill_kernel(s, sent.pos)
             self.moves.fill_valid(s, valid)
@@ -489,11 +502,11 @@ cdef class GreedyParser(BaseParser):
                 self.moves.transition(gold, s)
             self.guide.n_corr += (gold == pred)
             self.guide.total += 1
-
-        memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
+        if self.auto_pos:
+            memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
+            free(bu_tags)
         free_state(s)
         free(valid)
-        free(bu_tags)
 
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:
         cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))
@@ -501,6 +514,12 @@ cdef class GreedyParser(BaseParser):
         cdef size_t pred
         cdef uint64_t* feats
         cdef size_t _ = 0
+        cdef size_t* bu_tags 
+        if self.auto_pos:
+            bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
+            memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
+            self.tagger.tag(sent)
+ 
         while not s.is_finished:
             fill_kernel(s, sent.pos)
             feats = self._extract(sent, &s.kernel)
@@ -512,6 +531,9 @@ cdef class GreedyParser(BaseParser):
             self.moves.transition(gold, s)
             self.guide.n_corr += (gold == pred)
             self.guide.total += 1
+        if self.auto_pos:
+            memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
+            free(bu_tags) 
         free_state(s)
         free(valid)
 

@@ -8,6 +8,7 @@ from libc.stdint cimport uint64_t, int64_t
 
 from libcpp.queue cimport priority_queue
 from libcpp.utility cimport pair
+cimport cython
 
 from cython.operator cimport preincrement as inc
 from cython.operator cimport dereference as deref
@@ -43,8 +44,8 @@ cdef class Beam:
         fill_kernel(self.beam[idx], tags)
         return &self.beam[idx].kernel
 
+    @cython.cdivision(True)
     cdef int extend_states(self, double** ext_scores) except -1:
-        global merged
         # Former states are now parents, beam will hold the extensions
         cdef State** parents = self.parents
         self.parents = self.beam
@@ -78,7 +79,6 @@ cdef class Beam:
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
             parent_idx = data.second / self.trans.nr_class
-            assert parent_idx < self.psize
             clas = data.second % self.trans.nr_class
             parent = self.parents[parent_idx]
             # We've got two arrays of states, and we swap beam-for-parents.
@@ -87,7 +87,6 @@ cdef class Beam:
             copy_state(s, parent)
             s.score = data.first
             if not s.is_finished:
-                assert self.costs[parent_idx][clas] != -1
                 s.cost += self.costs[parent_idx][clas]
                 self.trans.transition(clas, s)
             self.bsize += 1

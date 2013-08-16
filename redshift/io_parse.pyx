@@ -36,17 +36,31 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.cprefix6s = <size_t*>calloc(size, sizeof(size_t))
     s.suffix = <size_t*>calloc(size, sizeof(size_t))
     s.prefix = <size_t*>calloc(size, sizeof(size_t))
-    s.parens = <size_t*>calloc(size, sizeof(size_t))
-    s.quotes = <size_t*>calloc(size, sizeof(size_t))
+    s.parens = <int*>calloc(size, sizeof(int))
+    s.quotes = <int*>calloc(size, sizeof(int))
+    s.non_alpha = <bint*>calloc(size, sizeof(bint))
+    s.oft_upper = <bint*>calloc(size, sizeof(bint))
+    s.oft_title = <bint*>calloc(size, sizeof(bint))
 
     cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
+    cdef dict case_dict = index.hashes.get_case_stats()
     mask_value = index.hashes.encode_word('<MASKED>')
-    cdef size_t paren_cnt = 0
-    cdef size_t quote_cnt = 0
+    cdef int paren_cnt = 0
+    cdef int quote_cnt = 0
     for i in range(length):
         s.words[i] = index.hashes.encode_word(py_words[i])
         s.owords[i] = s.words[i]
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
+        case_stats = case_dict.get(py_words[i])
+        if case_stats is None:
+            if not py_words[i].isalpha():
+                s.non_alpha[i] = True
+        else:
+            upper_pc, title_pc = case_stats
+            if upper_pc >= 0.5:
+                s.oft_upper[i] = True
+            if title_pc >= 0.5:
+                s.oft_title[i] = True
         if s.words[i] < brown_idx.n:
             s.clusters[i] = brown_idx.table[s.words[i]].full
             s.cprefix4s[i] = brown_idx.table[s.words[i]].prefix4
@@ -93,6 +107,9 @@ cdef free_sent(Sentence* s):
     free(s.prefix)
     free(s.parens)
     free(s.quotes)
+    free(s.oft_upper)
+    free(s.oft_title)
+    free(s.non_alpha)
 
     free(s.parse.heads)
     free(s.parse.labels)

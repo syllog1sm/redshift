@@ -15,7 +15,7 @@ from libcpp.vector cimport vector
 from libcpp.queue cimport priority_queue
 from libcpp.utility cimport pair
 
-
+cimport cython
 from os.path import join as pjoin
 import os
 import os.path
@@ -42,7 +42,8 @@ cdef class BaseTagger:
         self.guide = Perceptron(100, pjoin(model_dir, 'tagger.gz'))
         if trained:
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
-        self.features = Extractor(basic + clusters, [], bag_of_words=[P1p, P1alt])
+        self.features = Extractor(basic + clusters + case + orth, [],
+                                  bag_of_words=[P1p, P1alt])
         self.nr_tag = 100
         self.beam_width = beam_width
         self._context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
@@ -314,6 +315,17 @@ cdef enum:
     N0pre
 
     N0quo
+    N0title
+    N0upper
+    N0alpha
+
+    N1title
+    N1upper
+    N1alpha
+
+    P1title
+    P1upper
+    P1alpha
 
     N1w
     N1c
@@ -348,6 +360,13 @@ cdef enum:
 
     N3w
     N4w
+
+    N0_label
+    N0_head_w
+    N0_head_p
+    P1_label
+    P1_head_w
+
     CONTEXT_SIZE
 
 
@@ -361,17 +380,52 @@ basic = (
     (P1p, P2p),
     (P1p, N0w),
     (N0suff,),
-    (N0pre,),
     (N1suff,),
-    (N1pre,),
     (P1suff,),
+    (N2w,),
+    #(P1alt,),
+)
+
+case = (
+    (N0title,),
+    (N0upper,),
+    (N0alpha,),
+    (N0title, N0suff),
+    (N0title, N0upper, N0alpha),
+    (P1title,),
+    (P1upper,),
+    (P1alpha,),
+    (N1title,),
+    (N1upper,),
+    (N1alpha,),
+    (P1title, N0title, N1title),
+    (P1p, N0title,),
+    (P1p, N0upper,),
+    (P1p, N0alpha,),
+    (P1title, N0w),
+    (P1upper, N0w),
+    (P1title, N0w, N1title),
+    (N0title, N0upper, N0c),
+)
+
+parse = (
+    (N0_label,),
+    (N0_head_w,),
+    (N0_head_p,),
+    (P1_head_w,),
+    (P1_label,),
+    (N0_label, P1_label),
+    #(N0_left_w,),
+    #(N0_left_p,),
+)
+
+orth = (
+    (N0pre,),
+    (N1pre,),
     (P1pre,),
     (N0quo,),
     (N0w, N0quo),
     (P1p, N0quo),
-    (N2w,),
-    (N2c,),
-    #(P1alt,),
 )
 
 clusters = (
@@ -384,6 +438,7 @@ clusters = (
     (N1c,),
     (N1c4,),
     (N1c6,),
+    (N2c,),
     (P1c, N0w),
     (P1p, P1c6, N0w),
     (P1c6, N0w),
@@ -412,6 +467,18 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[N1suff] = sent.suffix[i + 1]
     context[N1pre] = sent.prefix[i + 1]
 
+    context[N0quo] = sent.quotes[i] != 0
+    context[N0alpha] = sent.non_alpha[i]
+    context[N0upper] = sent.oft_upper[i]
+    context[N0title] = sent.oft_title[i]
+
+    context[N1alpha] = sent.non_alpha[i+1]
+    context[N1upper] = sent.oft_upper[i+1]
+    context[N1title] = sent.oft_title[i+1]
+
+    context[N0_label] = sent.parse.labels[i]
+    context[N0_head_w] = sent.words[sent.parse.heads[i]]
+    context[N0_head_p] = sent.pos[sent.parse.heads[i]]
     if (i + 2) < sent.length:
         context[N2w] = sent.words[i + 2]
         context[N2c] = sent.clusters[i + 2]
@@ -421,8 +488,7 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
         context[N2pre] = sent.prefix[i + 2]
         if (i + 3) < sent.length:
             context[N3w] = sent.words[i + 3]
-    context[N0quo] = sent.quotes[i] == 0
-    if i == 1:
+    if i == 0:
         return 0
     context[P1w] = sent.words[i-1]
     context[P1c] = sent.clusters[i-1]
@@ -432,7 +498,14 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[P1pre] = sent.prefix[i-1]
     context[P1p] = ptag
     context[P1alt] = p_alt
-    if i == 2:
+
+    context[P1upper] = sent.oft_upper[i-1]
+    context[P1alpha] = sent.non_alpha[i-1]
+    context[P1title] = sent.oft_title[i-1]
+
+    context[P1_label] = sent.parse.labels[i-1]
+    context[P1_head_w] = sent.words[sent.parse.heads[i-1]]
+    if i == 1:
         return 0
     context[P2w] = sent.words[i-2]
     context[P2c] = sent.clusters[i-2]
@@ -441,7 +514,6 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[P2suff] = sent.suffix[i-2]
     context[P2pre] = sent.prefix[i-2]
     context[P2p] = pptag
-
 
 
 cdef class TaggerBeam:
@@ -459,7 +531,7 @@ cdef class TaggerBeam:
             self.parents[i] = extend_state(NULL, 0, NULL, 0)
             self.seen_states.add(<size_t>self.parents[i])
 
-    #@cython.cdivision(True)
+    @cython.cdivision(True)
     cdef int extend_states(self, double** ext_scores) except -1:
         # Former states are now parents, beam will hold the extensions
         cdef size_t i, clas, move_id
