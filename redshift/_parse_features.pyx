@@ -119,6 +119,18 @@ cdef enum:
     S0h2c4
     
     S0h2l
+
+    S1w
+    S1p
+    S1c
+    S1c6
+    S1c4
+
+    S2w
+    S2p
+    S2c
+    S2c6
+    S2c4
     
     S0lv
     S0rv
@@ -174,6 +186,12 @@ cdef enum:
     wexact
     pexact
 
+    m1
+    m2
+    m3
+    m4
+    m5
+
     CONTEXT_SIZE
 
 
@@ -220,25 +238,47 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S0c6] = cprefix6s[k.s0]
     context[S0c4] = cprefix4s[k.s0]
     context[S0l] = k.Ls0
-
-    context[S0hw] = words[k.hs0]
-    context[S0hp] = k.hs0p
-    context[S0hc] = clusters[k.hs0]
-    context[S0hc6] = cprefix6s[k.hs0]
-    context[S0hc4] = cprefix4s[k.hs0]
-    context[S0hl] = k.Lhs0
-
-    context[S0h2w] = words[k.h2s0]
-    context[S0h2p] = k.h2s0p
-    context[S0h2c] = clusters[k.h2s0]
-    context[S0h2c6] = cprefix6s[k.h2s0]
-    context[S0h2c4] = cprefix4s[k.h2s0]
-    context[S0h2l] = k.Lh2s0
- 
+    # If there's a label set for s0, then S1 is the head of S0
+    if k.Ls0:
+        context[S0hw] = words[k.s1]
+        context[S0hp] = k.s1p
+        context[S0hc] = clusters[k.s1]
+        context[S0hc6] = cprefix6s[k.s1]
+        context[S0hc4] = cprefix4s[k.s1]
+        context[S0hl] = k.Ls1
+    else:
+        context[S0hw] = 0
+        context[S0hp] = 0
+        context[S0hc6] = 0
+        context[S0hc4] = 0
+        context[S0hl] = 0
+    # Likewise, if both S0 and S1 have labels, then S2 must be S0's grandparent
+    if k.Ls0 and k.Ls1:
+        context[S0h2w] = words[k.s2]
+        context[S0h2p] = k.s2p
+        context[S0h2c] = clusters[k.s2]
+        context[S0h2c6] = cprefix6s[k.s2]
+        context[S0h2c4] = cprefix4s[k.s2]
+        context[S0h2l] = k.Ls2
+    else:
+        context[S0h2w] = 0
+        context[S0h2p] = 0
+        context[S0h2c] = 0
+        context[S0h2c6] = 0
+        context[S0h2c4] = 0
+    context[S1w] = words[k.s1]
+    context[S1p] = k.s1p
+    context[S1c] = clusters[k.s1]
+    context[S1c6] = cprefix6s[k.s1]
+    context[S1c4] = cprefix4s[k.s1]
+    context[S2w] = words[k.s2]
+    context[S2p] = k.s2p
+    context[S2c] = clusters[k.s2]
+    context[S2c6] = cprefix6s[k.s2]
+    context[S2c4] = cprefix4s[k.s2]
     context[S0lv] = s0l.val
     context[S0rv] = s0r.val
     context[N0lv] = n0l.val
-
     context[S0lw] = words[s0l.idx[0]]
     context[S0lp] = s0l.tags[0]
     context[S0lc] = clusters[s0l.idx[0]]
@@ -398,6 +438,12 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         else:
             context[pexact] = 0
             break
+
+    context[m1] = k.hist[0]
+    context[m2] = k.hist[1]
+    context[m3] = k.hist[2]
+    context[m4] = k.hist[3]
+    context[m5] = k.hist[4]
       
 from_single = (
     (S0w, S0p),
@@ -497,22 +543,34 @@ label_sets = (
    (N0p, N0llabs),
 )
 
-extra = (
-   (N0orth,),
-   (N1orth,),
-   (N0paren, N0w),
-   (N0paren, S0w),
-   (N0quote,),
-   (N0quote, N0w),
-   (N0quote, S0w),
-   (S0rw, N0orth),
-   (S0rw, N0orth, N1orth),
-   (S0hw, N0w),
-   (S0hp, N0p),
-   (S0hw, N1w),
-   (S0hp, N1w),
-   (S0hp, S0p, N0p)
+stack_second = (
+    (S1w,),
+    (S1p,),
+    (S1w, S1p),
+    (S1w, N0w),
+    (S1w, N0p),
+    (S1p, N0w),
+    (S1p, N0p),
+    (S1w, N1w),
+    (S1w, N1p),
+    (S1p, N1p),
+    (S1p, N1w),
+    (S1p, S0p, N0p),
+    (S1w, S0w, N0w),
+    (S1w, S0p, N0p),
+    (S2w, N0w),
+    (S2w, N1w),
+    (S2p, N0p, N1w),
+    (S2p, N0w, N1w),
+    (S2w, N0p, N1p),
+    (m1,),
+    (m1, m2),
+    (m1, m2, m3),
+    (m1, m2, m3, m4),
+    (m1, m2, m3, m4, m5)
 )
+
+
 
 disfl = (
     (prev_edit,),
