@@ -21,6 +21,7 @@ cdef class Index:
 
 cdef class StrIndex(Index):
     cdef object vocab
+    cdef object case_stats
     cdef dense_hash_map[uint64_t, uint64_t] table
     cdef uint64_t encode(self, char* feature) except 0
     cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value)

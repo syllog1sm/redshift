@@ -58,6 +58,7 @@ cdef class StrIndex(Index):
         self.i = i
         self.save_entries = False
         self.vocab = {}
+        self.case_stats = {}
 
     def load_vocab(self, vocab_loc):
         for line in open(vocab_loc):
@@ -66,6 +67,20 @@ cdef class StrIndex(Index):
             freq, word = line.strip().split()
             self.vocab[word] = int(freq)
     
+    def load_case_stats(self, loc):
+        for line in open(loc):
+            if not line.strip():
+                continue
+            word, caps_freq, title_freq, lower_freq = line.split()
+            if word == 'i':
+                continue
+            caps_freq = int(caps_freq)
+            title_freq = int(title_freq)
+            lower_freq = int(lower_freq)
+            total = float(caps_freq + title_freq + lower_freq)
+            self.case_stats[word] = (caps_freq / total, title_freq / total)
+ 
+
     cdef uint64_t encode(self, char* feature) except 0:
         cdef uint64_t value
         cdef uint64_t hashed = MurmurHash64A(<char*>feature, len(feature), 0)
@@ -89,6 +104,10 @@ cdef class StrIndex(Index):
     property vocab:
         def __get__(self):
             return self.vocab
+
+    property case_stats:
+        def __get__(self):
+            return self.case_stats
 
 
 cdef class ScoresCache:
@@ -185,6 +204,7 @@ def init_word_idx(path):
     global _word_idx, _cluster_idx
     _word_idx.set_path(path)
     _word_idx.load_vocab(os.path.join(os.path.dirname(__file__), 'vocab.txt'))
+    _word_idx.load_case_stats(os.path.join(os.path.dirname(__file__), 'case_stats.txt'))
     _cluster_idx.load(os.path.join(os.path.dirname(__file__), 'browns.txt'))
 
 
@@ -280,6 +300,10 @@ cpdef int get_freq(object word) except -1:
     global _word_idx
     return _word_idx.vocab.get(str(word), 0)
 
+
+def get_case_stats():
+    global _word_idx
+    return _word_idx.case_stats
 
 def get_clusters():
     global _cluster_idx
