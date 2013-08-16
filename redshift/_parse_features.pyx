@@ -181,7 +181,8 @@ def context_size():
     return CONTEXT_SIZE
 
 def get_kernel_tokens():
-    return [S0w, N0w]
+    return [S0hw, S0h2w, S0w, S0lw, S0l2w, S0l0w, S0le_w, S0rw, S0r2w, S0r0w, S0re_w,
+            N0w, N0lw, N0l2w, N0l0w, N0le_w, N1w, N2w]
 
 
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
