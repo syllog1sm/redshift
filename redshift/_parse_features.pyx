@@ -444,7 +444,8 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[m3] = k.hist[2]
     context[m4] = k.hist[3]
     context[m5] = k.hist[4]
-      
+
+
 from_single = (
     (S0w, S0p),
     (S0w,),
@@ -460,6 +461,7 @@ from_single = (
     (N2p,)
 )
 
+
 from_word_pairs = (
    (S0w, S0p, N0w, N0p),
    (S0w, S0p, N0w),
@@ -471,6 +473,7 @@ from_word_pairs = (
    (N0p, N1p)
 )
 
+
 from_three_words = (
    (N0p, N1p, N2p),
    (S0p, N0p, N1p),
@@ -479,6 +482,7 @@ from_three_words = (
    (S0p, S0rp, N0p),
    (S0p, N0p, N0lp)
 )
+
 
 distance = (
    (dist, S0w),
@@ -489,6 +493,7 @@ distance = (
    (dist, S0p, N0p),
 )
 
+
 valency = (
    (S0w, S0rv),
    (S0p, S0rv),
@@ -497,6 +502,7 @@ valency = (
    (N0w, N0lv),
    (N0p, N0lv),
 )
+
 
 zhang_unigrams = (
    (S0hw,),
@@ -508,6 +514,7 @@ zhang_unigrams = (
    (N0lw,),
    (N0lp,),
 )
+
 
 third_order = (
    (S0h2w,),
@@ -524,6 +531,7 @@ third_order = (
    (N0p, N0lp, N0l2p)
 )
 
+
 labels = (
    (S0l,),
    (S0ll,),
@@ -534,6 +542,8 @@ labels = (
    (S0r2l,),
    (N0l2l,),
 )
+
+
 label_sets = (
    (S0w, S0rlabs),
    (S0p, S0rlabs),
@@ -542,6 +552,7 @@ label_sets = (
    (N0w, N0llabs),
    (N0p, N0llabs),
 )
+
 
 stack_second = (
     (S1w,),
@@ -567,9 +578,11 @@ stack_second = (
     (m1, m2),
     (m1, m2, m3),
     (m1, m2, m3, m4),
-    (m1, m2, m3, m4, m5)
+    (m1, m2, m3, m4, m5),
+    (N0w, m1, m2, m3, m4, m5),
+    (N0p, m1, m2, m3, m4, m5),
+    (N0w, N1p, m1, m2, m3, m4, m5),
 )
-
 
 
 disfl = (
@@ -592,6 +605,8 @@ disfl = (
     (prev_edit, pcopy),
     (prev_prev_edit, pcopy)
 )
+
+
 # After emailing Mark after ACL
 new_disfl = (
     (next_edit,),
@@ -605,7 +620,28 @@ new_disfl = (
     (next_edit, pcopy),
     (next_next_edit, pcopy),
 )
- 
+
+
+def cluster_bigrams():
+    kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]
+    clusters = []
+    for t1, t2 in combinations(kernels, 2):
+        feat = (t1 + 2, t1 + 1, t2 + 2, t2 + 1)
+        clusters.append(feat)
+    print "Adding %d cluster bigrams" % len(clusters)
+    return tuple(clusters)
+
+
+def pos_bigrams():
+    kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]
+    bitags = []
+    for t1, t2 in combinations(kernels, 2):
+        feat = (t1 + 1, t2 + 1)
+        bitags.append(feat)
+    print "Adding %d bitags" % len(bitags)
+    return tuple(bitags)
+
+
 def get_best_bigrams(all_bigrams, n=0):
     return []
 

@@ -104,6 +104,12 @@ cdef class BaseParser:
         self.ngrams = ngrams if ngrams is not None else []
         templates = _parse_features.baseline_templates()
         templates += _parse_features.ngram_feats(self.ngrams, add_clusters=add_clusters)
+        if 'stack' in self.feat_set:
+            templates += _parse_features.stack_second
+        if 'clusters' in self.feat_set:
+            templates += _parse_features.cluster_bigrams()
+        if 'bitags' in self.feat_set:
+            templates += _parse_features.pos_bigrams()
         if 'match' in self.feat_set:
             match_feats = _parse_features.match_templates()
             print "Using %d match feats" % len(match_feats)
