@@ -110,14 +110,16 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
     s.kernel.n2p = tags[s.i + 2]
     s.kernel.n3p = tags[s.i + 3]
     s.kernel.s0 = s.top
+    if s.heads[s.top] != 0 and s.heads[s.top] == s.second:
+        assert s.labels[s.top] != 0
     s.kernel.s0p = tags[s.top]
-    s.kernel.hs0 = s.heads[s.top]
-    s.kernel.hs0p = tags[s.heads[s.top]]
-    s.kernel.h2s0 = s.heads[s.heads[s.top]]
-    s.kernel.h2s0p = tags[s.heads[s.heads[s.top]]]
+    s.kernel.s1 = s.second
+    s.kernel.s1p = tags[s.kernel.s1]
+    s.kernel.s2 = s.stack[s.stack_len - 2] if s.stack_len >= 2 else 0
+    s.kernel.s2p = tags[s.kernel.s2]
     s.kernel.Ls0 = s.labels[s.top]
-    s.kernel.Lhs0 = s.labels[s.heads[s.top]]
-    s.kernel.Lh2s0 = s.labels[s.heads[s.heads[s.top]]]
+    s.kernel.Ls1 = s.labels[s.kernel.s1]
+    s.kernel.Ls2 = s.labels[s.kernel.s2]
     s.kernel.s0ledge = s.ledges[s.top]
     s.kernel.s0ledgep = tags[s.ledges[s.top]]
     s.kernel.n0ledge = s.ledges[s.i]
@@ -153,6 +155,15 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
                  s.labels, tags, &s.kernel.s0r)
     fill_subtree(s.l_valencies[s.i], s.l_children[s.i],
                  s.labels, tags, &s.kernel.n0l)
+    cdef size_t t = s.t
+    cdef size_t m = 0
+    while m < 5 and t >= 1:
+        t -= 1
+        s.kernel.hist[m] = s.history[t]
+        m += 1
+    for i in range(m, 5):
+        s.kernel.hist[i] = 0
+
 
 
 #cdef Kernel* kernel_from_s(Kernel* parent) except NULL:

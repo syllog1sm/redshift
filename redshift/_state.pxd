@@ -20,12 +20,12 @@ cdef struct Kernel:
     size_t s0
     size_t s0p
     size_t Ls0
-    size_t hs0
-    size_t hs0p
-    size_t h2s0
-    size_t h2s0p
-    size_t Lhs0
-    size_t Lh2s0
+    size_t s1
+    size_t s1p
+    size_t s2
+    size_t s2p
+    size_t Ls1
+    size_t Ls2
     size_t s0ledge
     size_t s0ledgep
     size_t s0redgep
@@ -40,6 +40,7 @@ cdef struct Kernel:
     Subtree s0l
     Subtree s0r
     Subtree n0l
+    size_t[5] hist
 
 
 cdef struct FastState:
