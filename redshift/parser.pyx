@@ -166,14 +166,15 @@ cdef class BaseParser:
             for i in indices:
                 if DEBUG:
                     print ' '.join(sents.strings[i][0])
-                #if n < 5:
-                self.tagger.train_sent(sents.s[i])
+                if self.auto_pos:
+                    self.tagger.train_sent(sents.s[i])
                 if self.train_alg == 'static':
                     self.static_train(n, sents.s[i])
                 else:
                     self.dyn_train(n, sents.s[i])
-            print_train_msg(n, self.tagger.guide.n_corr, self.tagger.guide.total,
-                            0, 0)
+            if self.auto_pos:
+                print_train_msg(n, self.tagger.guide.n_corr, self.tagger.guide.total,
+                                0, 0)
             print_train_msg(n, self.guide.n_corr, self.guide.total, self.guide.cache.n_hit,
                             self.guide.cache.n_miss)
             self.guide.n_corr = 0
