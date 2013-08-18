@@ -104,6 +104,9 @@ cdef class BaseParser:
         self.ngrams = ngrams if ngrams is not None else []
         templates = _parse_features.baseline_templates()
         templates += _parse_features.ngram_feats(self.ngrams, add_clusters=add_clusters)
+        if 'disfl' in self.feat_set:
+            template += _parse_features.disfl
+            template += _parse_features.new_disfl
         if 'stack' in self.feat_set:
             templates += _parse_features.stack_second
         if 'clusters' in self.feat_set:
