@@ -164,6 +164,7 @@ cdef class Perceptron:
         self.div = <size_t>math.sqrt(max_classes)
         if (self.div * self.div) < max_classes:
             self.div += 1
+        self.accept_new_feats = True
         self.now = 0
         self.nr_raws = 10000
         self.raws = <DenseFeature**>malloc(self.nr_raws * sizeof(DenseFeature*))
@@ -219,6 +220,8 @@ cdef class Perceptron:
                 if d != 0:
                     feat_addr = self.W[f]
                     if feat_addr == 0:
+                        if not self.accept_new_feats:
+                            continue
                         self.add_feature(f)
                         feat_addr = self.W[f]
                     if feat_addr < self.nr_raws:
@@ -244,6 +247,8 @@ cdef class Perceptron:
                 break
             feat_addr = self.W[f]
             if feat_addr == 0:
+                if not self.accept_new_feats:
+                    continue
                 self.add_feature(f)
                 feat_addr = self.W[f]
             if feat_addr < self.nr_raws:

@@ -374,7 +374,7 @@ def vocab_table(name):
 def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
             train_alg="online", n_sents=0, static=False, use_edit=False,
             unlabelled=False,
-            ngrams=0, t=0, f=0, train_name='train.txt', dev_names=('devi.txt', 'devr.txt')):
+            ngrams='', t=0, f=0, train_name='train.txt', dev_names=('devi.txt', 'devr.txt')):
     exp_dir = str(exp_dir)
     repo = str(REMOTE_REPO)
     for seed in range(n):
@@ -383,7 +383,7 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
         run("mkdir -p %s" % model, quiet=True)
         train_str = _train(pjoin(data, train_name), model, k=k, i=15,
                            feat_str=feat_str, train_alg=train_alg, seed=seed,
-                           n_sents=n_sents, ngrams=ngrams, use_edit=use_edit,
+                           n_sents=n_sents, use_edit=use_edit,
                            unlabelled=unlabelled,
                            vocab_thresh=t, feat_thresh=f)
         parse_str = _parse(model, pjoin(data, dev_names[0]), pjoin(model, 'dev'))
@@ -423,7 +423,7 @@ def _train(data, model, debug=False, k=1, feat_str='zhang', i=15,
            use_edit=False, unlabelled=False):
     use_edit = '-e' if use_edit else ''
     unlabelled = '-u' if unlabelled else ''
-    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -n {n_sents} -g {ngrams} -t {vocab_thresh} -f {feat_thresh} {use_edit} {unlabelled} {args}'
+    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -n {n_sents} -t {vocab_thresh} -f {feat_thresh} {use_edit} {unlabelled} {args}'
     if debug:
         template += ' -debug'
     return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i,

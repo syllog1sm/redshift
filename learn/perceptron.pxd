@@ -45,6 +45,7 @@ cdef class Perceptron:
     cdef bint is_trained
     cdef float n_corr
     cdef float total
+    cdef bint accept_new_feats
 
     cdef size_t nr_raws
     cdef DenseFeature** raws
