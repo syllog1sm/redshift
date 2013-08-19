@@ -186,7 +186,8 @@ cdef class BaseParser:
                 self.guide.reindex()
                 self.tagger.guide.reindex()
             random.shuffle(indices)
-        self.tagger.guide.finalize()
+        if self.auto_pos:
+            self.tagger.guide.finalize()
         self.guide.finalize()
 
     cdef int dyn_train(self, int iter_num, Sentence* sent) except -1:
