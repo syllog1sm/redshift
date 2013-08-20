@@ -22,6 +22,7 @@ import os.path
 from os.path import join as pjoin
 import random
 import shutil
+from collections import defaultdict
 
 DEBUG = False
 
@@ -44,6 +45,8 @@ cdef class BaseTagger:
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
         self.features = Extractor(basic + clusters + case + orth, [],
                                   bag_of_words=[P1p, P1alt])
+        self.tagdict = dense_hash_map[size_t, size_t]()
+        self.tagdict.set_empty_key(0)
         self.nr_tag = 100
         self.beam_width = beam_width
         self._context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
@@ -79,13 +82,34 @@ cdef class BaseTagger:
     def setup_classes(self, Sentences sents):
         self.nr_tag = 0
         tags = set()
+        tag_freqs = defaultdict(lambda: defaultdict(int))
         for i in range(sents.length):
             for j in range(sents.s[i].length):
+                tag_freqs[sents.s[i].words[j]][sents.s[i].pos[j]] += 1
                 if sents.s[i].pos[j] >= self.nr_tag:
                     self.nr_tag = sents.s[i].pos[j]
                     tags.add(sents.s[i].pos[j])
         self.nr_tag += 1
         self.guide.set_classes(range(self.nr_tag))
+        types = 0
+        tokens = 0
+        n = 0
+        err = 0
+        print "Making tagdict"
+        for word, freqs in tag_freqs.items():
+            total = sum(freqs.values())
+            n += total
+            if total >= 100:
+                mode, tag = max([(freq, tag) for tag, freq in freqs.items()])
+                if float(mode) / total >= 0.99:
+                    assert tag != 0
+                    self.tagdict[word] = tag
+                    types += 1
+                    tokens += total
+                    err += (total - mode)
+        print "%d types" % types
+        print "%d/%d=%.4f true" % (err, tokens, (1 - (float(err) / tokens)) * 100)
+        print "%d/%d=%.4f cov" % (tokens, n, (float(tokens) / n) * 100)
  
     cdef int tag(self, Sentence* s) except -1:
         raise NotImplementedError
@@ -118,12 +142,20 @@ cdef class GreedyTagger(BaseTagger):
             self.tag(sents.s[i])
 
     cdef int tag(self, Sentence* sent) except -1:
-        cdef size_t i, clas
+        cdef size_t i, clas, lookup
         cdef double incumbent, runner_up, score
         cdef size_t prev = sent.pos[0]
         cdef size_t alt = sent.pos[0]
         cdef size_t prevprev = 0
         for i in range(1, sent.length - 1):
+            lookup = self.tagdict[sent.words[i]]
+            if lookup != 0:
+                sent.pos[i] = lookup
+                sent.alt_pos[i] = 0
+                alt = 0
+                prevprev = prev
+                prev = lookup
+                continue 
             sent.pos[i] = 0
             sent.alt_pos[i] = 0
             fill_context(self._context, sent, prev, prevprev, alt, i)
@@ -143,12 +175,18 @@ cdef class GreedyTagger(BaseTagger):
             alt = sent.alt_pos[i]
 
     cdef int train_sent(self, Sentence* sent) except -1:
-        cdef size_t w, clas, second, pred, prev, prevprev
+        cdef size_t w, clas, second, pred, prev, prevprev, lookup
         cdef double score, incumbent, runner_up
         cdef double second_score
         prev = sent.pos[0]
         alt = sent.pos[0]
         for w in range(1, sent.length - 1):
+            lookup = self.tagdict[sent.words[w]]
+            if lookup != 0:
+                alt = 0
+                prevprev = prev
+                prev = lookup
+                continue 
             fill_context(self._context, sent, prev, prevprev, alt, w)
             self.features.extract(self._features, self._context)
             self.guide.fill_scores(self._features, self.guide.scores)
@@ -315,6 +353,7 @@ cdef enum:
     N0pre
 
     N0quo
+    N0paren
     N0title
     N0upper
     N0alpha
@@ -383,7 +422,8 @@ basic = (
     (N1suff,),
     (P1suff,),
     (N2w,),
-    #(P1alt,),
+    (N3w,),
+    (P1p, P1alt),
 )
 
 case = (
@@ -426,6 +466,8 @@ orth = (
     (N0quo,),
     (N0w, N0quo),
     (P1p, N0quo),
+    (N0w, N0paren),
+    (P1p, N0paren)
 )
 
 clusters = (
@@ -468,6 +510,7 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[N1pre] = sent.prefix[i + 1]
 
     context[N0quo] = sent.quotes[i] != 0
+    context[N0paren] = sent.parens[i] != 0
     context[N0alpha] = sent.non_alpha[i]
     context[N0upper] = sent.oft_upper[i]
     context[N0title] = sent.oft_title[i]
