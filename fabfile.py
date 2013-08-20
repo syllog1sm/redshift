@@ -68,9 +68,9 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
         eval_parse = 'devr.txt'
     elif tb == 'swbd':
         data = str(REMOTE_SWBD)
-        train_name = 'new/train.txt'
-        eval_pos = 'new/devi.txt'
-        eval_parse = 'new/devr.txt'
+        train_name = 'nodps/train.txt'
+        eval_pos = 'nodps/devi.txt'
+        eval_parse = 'nodps/devr.txt'
         if train_alg == 'dynedit':
             use_edit = True
             train_alg = 'dyn'
@@ -445,7 +445,7 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs, size=5):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=2gb,nodes=1:ppn={n_procs}
+#PBS -l walltime=20:00:00,mem=6gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
