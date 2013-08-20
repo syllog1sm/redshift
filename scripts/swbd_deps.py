@@ -133,9 +133,10 @@ class Sentence(object):
     excise_edits=("Clean edits entirely", "flag", "e", bool),
     label_edits=("Label edits", "flag", "l", bool),
     label_interregna=("Label interregna", "flag", "i", bool),
+    rm_fillers=("Discard filled pauses", "flag", "f", bool)
 )
 def main(in_loc, ignore_unfinished=False, use_dps=False, excise_edits=False,
-         label_edits=False, merge_mwe=False, label_interregna=False):
+         label_edits=False, merge_mwe=False, label_interregna=False, rm_fillers=False):
     sentences = [Sentence(sent_str, use_dps) for sent_str in
                  open(in_loc).read().strip().split('\n\n')]
     punct = set([',', ':', '.', ';', 'RRB', 'LRB', '``', "''"])
@@ -150,12 +151,18 @@ def main(in_loc, ignore_unfinished=False, use_dps=False, excise_edits=False,
             if merge_mwe:
                 sent.merge_mwe('you_know')
                 sent.merge_mwe('i_mean')
+                sent.merge_mwe('right_now')
+                sent.merge_mwe('a_while')
+                sent.merge_mwe('in_fact')
+                sent.merge_mwe('pretty_much')
                 sent.merge_mwe('of_course', new_label='discourse')
             if excise_edits:
                 sent.rm_tokens(lambda token: token.is_edit)
                 sent.rm_tokens(lambda token: token.label == 'discourse')
             if label_edits:
                 sent.label_edits()
+            if rm_fillers:
+                sent.rm_tokens(lambda token: token.pos == 'UH')
             sent.rm_tokens(lambda token: token.word.endswith('-'))
             sent.rm_tokens(lambda token: token.pos in punct)
             sent.rm_tokens(lambda token: token.pos == '-DFL-')
