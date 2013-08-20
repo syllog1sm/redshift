@@ -47,9 +47,18 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     mask_value = index.hashes.encode_word('<MASKED>')
     cdef int paren_cnt = 0
     cdef int quote_cnt = 0
+    types = set()
     for i in range(length):
-        s.words[i] = index.hashes.encode_word(py_words[i])
-        s.owords[i] = s.words[i]
+        s.owords[i] = index.hashes.encode_word(py_words[i])
+        if '-' in py_words[i] and py_words[i][0] != '-':
+            word = '!HYPHEN'
+        elif py_words[i].isdigit() and len(py_words[i]) == 4:
+            word = '!YEAR'
+        elif py_words[i][0].isdigit():
+            word = '!DIGITS'
+        else:
+            word = py_words[i].lower()
+        s.words[i] = index.hashes.encode_word(word)
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
         case_stats = case_dict.get(py_words[i])
         if case_stats is None:
@@ -57,14 +66,15 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
                 s.non_alpha[i] = True
         else:
             upper_pc, title_pc = case_stats
-            if upper_pc >= 0.5:
+            # Cut points determined by maximum information gain
+            if upper_pc >= 0.05:
                 s.oft_upper[i] = True
-            if title_pc >= 0.5:
+            if title_pc >= 0.3:
                 s.oft_title[i] = True
-        if s.words[i] < brown_idx.n:
-            s.clusters[i] = brown_idx.table[s.words[i]].full
-            s.cprefix4s[i] = brown_idx.table[s.words[i]].prefix4
-            s.cprefix6s[i] = brown_idx.table[s.words[i]].prefix6
+        if s.owords[i] < brown_idx.n:
+            s.clusters[i] = brown_idx.table[s.owords[i]].full
+            s.cprefix4s[i] = brown_idx.table[s.owords[i]].prefix4
+            s.cprefix6s[i] = brown_idx.table[s.owords[i]].prefix6
         if thresh != 0 and index.hashes.get_freq(py_words[i]) <= thresh:
             s.words[i] = mask_value
         s.ids[i] = py_ids[i]
