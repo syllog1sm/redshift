@@ -57,20 +57,26 @@ cdef class Beam:
         cdef double* scores
         cdef priority_queue[pair[double, size_t]] next_moves = priority_queue[pair[double, size_t]]()
         # Get best parent/clas pairs by score
+        cdef State* parent
         for parent_idx in range(self.psize):
-            parent_score = self.parents[parent_idx].score
+            parent = self.parents[parent_idx]
             # Account for variable-length transition histories
-            if self.parents[parent_idx].is_finished:
+            if parent.is_finished:
                 move_id = (parent_idx * self.trans.nr_class) + 0
-                mean_score = parent_score / self.parents[parent_idx].t
+                mean_score = parent.score / parent.t
                 next_moves.push(pair[double, size_t](parent_score + mean_score, move_id))
                 continue
             scores = ext_scores[parent_idx]
+            r_score = scores[self.trans.r_start]
+            parent.guess_labeels[parent.i] = self.trans.labels[self.trans.r_start]
             for clas in range(self.trans.nr_class):
                 if self.valid[parent_idx][clas] != -1:
-                    score = parent_score + scores[clas]
+                    score = parent.score + scores[clas]
                     move_id = (parent_idx * self.trans.nr_class) + clas
                     next_moves.push(pair[double, size_t](score, move_id))
+                if scores[clas] >= r_score and self.trans.r_start < clas < self.trans.r_end:
+                    r_score = scores[clas]
+                    parent.guess_labels[parent.i] = self.trans.labels[clas]
         cdef pair[double, size_t] data
         # Apply extensions for best continuations
         cdef State* s

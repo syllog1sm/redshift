@@ -1,6 +1,7 @@
 from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
 from redshift.io_parse cimport Sentence, Sentences
+from ext.sparsehash cimport dense_hash_map
 
 from libc.stdint cimport uint64_t, int64_t
 
@@ -14,6 +15,7 @@ cdef class BaseTagger:
     cdef size_t max_feats
     cdef size_t nr_tag
     cdef size_t _acc
+    cdef dense_hash_map[size_t, size_t] tagdict
 
     cdef size_t* _context
     cdef uint64_t* _features

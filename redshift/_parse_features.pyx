@@ -579,9 +579,44 @@ stack_second = (
     (m1, m2, m3),
     (m1, m2, m3, m4),
     (m1, m2, m3, m4, m5),
-    (N0w, m1, m2, m3, m4, m5),
-    (N0p, m1, m2, m3, m4, m5),
-    (N0w, N1p, m1, m2, m3, m4, m5),
+)
+
+# Koo et al (2008) dependency features, using Brown clusters.
+clusters = (
+    # Koo et al have (head, child) --- we have S0, N0 for both.
+    (S0c4, N0c4),
+    (S0c6, N0c6),
+    (S0c, N0c),
+    (S0p, N0c4),
+    (S0p, N0c6),
+    (S0p, N0c),
+    (S0c4, N0p),
+    (S0c6, N0p),
+    (S0c, N0p),
+    # Siblings --- right arc
+    (S0c4, S0rc4, N0c4),
+    (S0c6, S0rc6, N0c6),
+    (S0p, S0rc4, N0c4),
+    (S0c4, S0rp, N0c4),
+    (S0c4, S0rc4, N0p),
+    # Siblings --- left arc
+    (S0c4, N0lc4, N0c4),
+    (S0c6, N0c6, N0c6),
+    (S0c4, N0lc4, N0p),
+    (S0c4, N0lp, N0c4),
+    (S0p, N0lc4, N0c4),
+    # Grand-child, right-arc
+    (S0hc4, S0c4, N0c4),
+    (S0hc6, S0c6, N0c6),
+    (S0hp, S0c4, N0c4),
+    (S0hc4, S0p, N0c4),
+    (S0hc4, S0c4, N0p),
+    # Grand-child, left-arc
+    (S0lc4, S0c4, N0c4),
+    (S0lc6, S0c6, N0c6),
+    (S0lp, S0c4, N0c4),
+    (S0lc4, S0p, N0c4),
+    (S0lc4, S0c4, N0p)
 )
 
 

@@ -155,15 +155,17 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
                  s.labels, tags, &s.kernel.s0r)
     fill_subtree(s.l_valencies[s.i], s.l_children[s.i],
                  s.labels, tags, &s.kernel.n0l)
-    cdef size_t t = s.t
-    cdef size_t m = 0
-    while m < 5 and t >= 1:
-        t -= 1
-        s.kernel.hist[m] = s.history[t]
-        m += 1
-    for i in range(m, 5):
-        s.kernel.hist[i] = 0
-
+    if s.t >= 5:
+        s.kernel.hist[0] = s.history[s.t - 1]
+        s.kernel.hist[1] = s.history[s.t - 2]
+        s.kernel.hist[2] = s.history[s.t - 3]
+        s.kernel.hist[3] = s.history[s.t - 4]
+        s.kernel.hist[4] = s.history[s.t - 5]
+    else:
+        for i in range(s.t):
+            s.kernel.hist[i] = s.history[s.t - (i + 1)]
+        for i in range(s.t, 5):
+            s.kernel.hist[i] = 0
 
 
 #cdef Kernel* kernel_from_s(Kernel* parent) except NULL:
@@ -311,7 +313,7 @@ DEF PADDING = 5
 
 cdef State* init_state(size_t n):
     cdef size_t i, j
-    cdef State* s = <State*>malloc(sizeof(State))
+    cdef State* s = <State*>calloc(1, sizeof(State))
     s.n = n
     s.t = 0
     s.i = 1
