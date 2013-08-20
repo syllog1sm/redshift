@@ -110,7 +110,7 @@ cdef class BaseParser:
         if 'stack' in self.feat_set:
             templates += _parse_features.stack_second
         if 'clusters' in self.feat_set:
-            templates += _parse_features.cluster_bigrams()
+            templates += _parse_features.clusters
         if 'bitags' in self.feat_set:
             templates += _parse_features.pos_bigrams()
         if 'match' in self.feat_set:
@@ -605,11 +605,6 @@ def print_train_msg(n, n_corr, n_move, n_hit, n_miss):
 
 def _parse_labels_str(labels_str):
     return [index.hashes.encode_label(l) for l in labels_str.split(',')]
-
-
-
-
-
 
 
 
