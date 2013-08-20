@@ -68,7 +68,7 @@ cdef class Beam:
                 continue
             scores = ext_scores[parent_idx]
             r_score = scores[self.trans.r_start]
-            parent.guess_labeels[parent.i] = self.trans.labels[self.trans.r_start]
+            parent.guess_labels[parent.i] = self.trans.labels[self.trans.r_start]
             for clas in range(self.trans.nr_class):
                 if self.valid[parent_idx][clas] != -1:
                     score = parent.score + scores[clas]
@@ -80,7 +80,6 @@ cdef class Beam:
         cdef pair[double, size_t] data
         # Apply extensions for best continuations
         cdef State* s
-        cdef State* parent
         cdef uint64_t key
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
