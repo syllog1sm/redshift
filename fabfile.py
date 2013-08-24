@@ -55,11 +55,12 @@ def test1k(model="baseline", dbg=False):
 
         
 def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
-         unlabelled=False):
+         unlabelled=False, auto_pos=False):
     size = int(size)
     k = int(k)
     n = int(n)
     unlabelled = unlabelled == 'True'
+    auto_pos = auto_pos == 'True'
     use_edit = False
     if tb == 'wsj':
         data = str(REMOTE_STANFORD)
@@ -77,9 +78,9 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
 
     exp_dir = str(REMOTE_PARSERS)
     train_n(n, name, exp_dir,
-            data, k=k, i=15, feat_str=feats, 
+            data, k=k, i=15, f=10, feat_str=feats, 
             n_sents=size, train_name=train_name, train_alg=train_alg,
-            unlabelled=unlabelled,
+            unlabelled=unlabelled, auto_pos=auto_pos,
             use_edit=use_edit, dev_names=(eval_pos, eval_parse))
  
 
@@ -373,8 +374,8 @@ def vocab_table(name):
 # 119_s0_s0r2_s0l2
 def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
             train_alg="online", n_sents=0, static=False, use_edit=False,
-            unlabelled=False,
-            ngrams='', t=0, f=0, train_name='train.txt', dev_names=('devi.txt', 'devr.txt')):
+            unlabelled=False, ngrams='', t=0, f=0, train_name='train.txt',
+            dev_names=('devi.txt', 'devr.txt'), auto_pos=False):
     exp_dir = str(exp_dir)
     repo = str(REMOTE_REPO)
     for seed in range(n):
@@ -385,7 +386,7 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
                            feat_str=feat_str, train_alg=train_alg, seed=seed,
                            n_sents=n_sents, use_edit=use_edit,
                            unlabelled=unlabelled,
-                           vocab_thresh=t, feat_thresh=f)
+                           vocab_thresh=t, feat_thresh=f, auto_pos=auto_pos)
         parse_str = _parse(model, pjoin(data, dev_names[0]), pjoin(model, 'dev'))
         eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, dev_names[1]))
         grep_str = "grep 'U:' %s >> %s" % (pjoin(model, 'dev', 'acc'),
@@ -420,16 +421,18 @@ def get_accs(exp_dir, eval_name='dev'):
 def _train(data, model, debug=False, k=1, feat_str='zhang', i=15,
            train_alg="static", seed=0, args='',
            n_sents=0, ngrams=0, vocab_thresh=0, feat_thresh=10,
-           use_edit=False, unlabelled=False):
+           use_edit=False, unlabelled=False, auto_pos=False):
     use_edit = '-e' if use_edit else ''
     unlabelled = '-u' if unlabelled else ''
-    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -n {n_sents} -t {vocab_thresh} -f {feat_thresh} {use_edit} {unlabelled} {args}'
+    auto_pos = '-p' if auto_pos else ''
+    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -n {n_sents} -t {vocab_thresh} -f {feat_thresh} {use_edit} {unlabelled} {auto_pos} {args}'
     if debug:
         template += ' -debug'
     return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i,
                            vocab_thresh=vocab_thresh, feat_thresh=feat_thresh,
                            alg=train_alg, use_edit=use_edit, seed=seed,
-                          args=args, n_sents=n_sents, ngrams=ngrams, unlabelled=unlabelled)
+                          args=args, n_sents=n_sents, ngrams=ngrams,
+                          unlabelled=unlabelled, auto_pos=auto_pos)
 
 
 def _parse(model, data, out, gold=False):
@@ -445,7 +448,7 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs, size=5):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=6gb,nodes=1:ppn={n_procs}
+#PBS -l walltime=20:00:00,mem=10gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
