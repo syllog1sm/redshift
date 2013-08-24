@@ -53,7 +53,7 @@ cdef class Beam:
         self.psize = self.bsize
         self.bsize = 0
         cdef size_t parent_idx, clas, move_id
-        cdef double parent_score, score
+        cdef double mean_score, score
         cdef double* scores
         cdef priority_queue[pair[double, size_t]] next_moves = priority_queue[pair[double, size_t]]()
         # Get best parent/clas pairs by score
@@ -64,7 +64,7 @@ cdef class Beam:
             if parent.is_finished:
                 move_id = (parent_idx * self.trans.nr_class) + 0
                 mean_score = parent.score / parent.t
-                next_moves.push(pair[double, size_t](parent_score + mean_score, move_id))
+                next_moves.push(pair[double, size_t](parent.score + mean_score, move_id))
                 continue
             scores = ext_scores[parent_idx]
             r_score = scores[self.trans.r_start]
