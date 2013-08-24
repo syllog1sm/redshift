@@ -8,7 +8,10 @@ class Token(object):
         props = line.split()
         self.id = int(props[0])
         self.word = props[1]
-        self.pos = props[3].split('^')[-1]
+        self.pos = props[3]
+        if self.pos.startswith('^'):
+            self.pos = self.pos[1:]
+        self.pos = self.pos.split('^')[0]
         self.label = props[7]
         self.head = int(props[6])
         self.is_edit = props[-1] == 'True'
