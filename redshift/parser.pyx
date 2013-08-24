@@ -109,10 +109,14 @@ cdef class BaseParser:
             templates += _parse_features.new_disfl
         if 'stack' in self.feat_set:
             templates += _parse_features.stack_second
+        if 'hist' in self.feat_set:
+            templates += _parse_features.history
         if 'clusters' in self.feat_set:
             templates += _parse_features.clusters
         if 'bitags' in self.feat_set:
             templates += _parse_features.pos_bigrams()
+        if 'edges' in self.feat_set:
+            templates += _parse_features.edges
         if 'match' in self.feat_set:
             match_feats = _parse_features.match_templates()
             print "Using %d match feats" % len(match_feats)

@@ -554,6 +554,21 @@ label_sets = (
 )
 
 
+edges = (
+    (S0re_w,),
+    (S0re_p,),
+    (S0re_w, S0re_p),
+    (S0le_w,),
+    (S0le_p,),
+    (S0le_w, S0le_p),
+    (N0le_w,),
+    (N0le_p,),
+    (N0le_w, N0le_p),
+    (S0re_p, N0p,),
+    (S0p, N0le_p)
+)
+
+
 stack_second = (
     (S1w,),
     (S1p,),
@@ -574,6 +589,8 @@ stack_second = (
     (S2p, N0p, N1w),
     (S2p, N0w, N1w),
     (S2w, N0p, N1p),
+)
+history = (
     (m1,),
     (m1, m2),
     (m1, m2, m3),
