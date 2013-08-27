@@ -250,7 +250,7 @@ cpdef encode_word(object word):
     return idx.encode(raw_word)
 
 
-def encode_pos(object pos):
+cpdef encode_pos(object pos):
     global _pos_idx
     cdef StrIndex idx = _pos_idx
     py_pos = pos.encode('ascii')
