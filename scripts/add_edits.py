@@ -27,11 +27,11 @@ def add_toks(test, gold):
 
 def main(test, gold):
     test_sents = open(test).read().split('\n\n')
-    gold_sents = open(gold).read().split('\n\n')
+    gold_sents = open(gold).read().split('\n')
     assert len(test_sents) == len(gold_sents)
     for test_sent, gold_sent in zip(test_sents, gold_sents):
         test_toks = test_sent.split('\n')
-        gold_toks = gold_sent.split('\n')
+        gold_toks = [w.rsplit('/', 1) for w in gold_sent.split()]
         if len(test_toks) == len(gold_toks):
             print test_sent
         else:
