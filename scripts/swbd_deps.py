@@ -158,7 +158,6 @@ def main(in_loc, ignore_unfinished=False, use_dps=False, excise_edits=False,
                 sent.merge_mwe('i_mean')
             if excise_edits:
                 sent.rm_tokens(lambda token: token.is_edit)
-                sent.rm_tokens(lambda token: token.label == 'discourse')
             if label_edits:
                 sent.label_edits()
             sent.rm_tokens(lambda token: token.word.endswith('-'))
