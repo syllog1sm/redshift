@@ -283,6 +283,19 @@ cdef class Sentences:
                 if s.parse.sbd[j] or j == (s.length - 2):
                     out_file.write(u'\n')
                     w_id = 0
+
+    def write_tags(self, out_file):
+        cdef Sentence* s
+        cdef size_t i, j
+        pos_idx = index.hashes.reverse_pos_index()
+        for i in range(self.length):
+            s = self.s[i]
+            py_words, py_pos = self.strings[i]
+            w_id = 0
+            for j in range(1, s.length - 1):
+                fields = (py_words[j], pos_idx[s.pos[j]])
+                out_file.write(u'%s/%s ' % fields)
+            out_file.write(u'\n')
       
     property length:
         def __get__(self): return self.length
