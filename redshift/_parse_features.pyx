@@ -417,7 +417,8 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[next_edit_pos] = 0
  
     # These features find how much of S0's span matches N0's span, starting from
-    # the left. A 3-match span will fire features for 1-match, 2-match and 3-match.
+    # the left.
+    # 
     context[wcopy] = 0
     context[wexact] = 1
     for i in range(5):
