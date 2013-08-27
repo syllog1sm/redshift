@@ -69,9 +69,9 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
         eval_parse = 'devr.txt'
     elif tb == 'swbd':
         data = str(REMOTE_SWBD)
-        train_name = 'nodps/train.txt'
-        eval_pos = 'nodps/devi.txt'
-        eval_parse = 'nodps/devr.txt'
+        train_name = 'mwe_uh/train.txt'
+        eval_pos = 'mwe_uh/devi.txt'
+        eval_parse = 'mwe_uh/devr.txt'
         if train_alg == 'dynedit':
             use_edit = True
             train_alg = 'dyn'
