@@ -63,8 +63,9 @@ class Token(object):
             new_attrs.append(attrs[3])
             new_attrs.append(str(int(attrs[6]) - 1))
             new_attrs.append(attrs[7])
-            new_attrs.append(attrs[9])
+            dfl_feats = attrs[5].split('|')
             attrs = new_attrs
+            attrs.append(str(dfl_feats[2] == '1'))
         self.is_edit = attrs.pop() == 'True'
         self.label = attrs.pop()
         if self.label.lower() == 'root':
