@@ -153,11 +153,18 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
             if len(pieces) == 10:
                 word = pieces[1]
                 pos = pieces[3]
+                pos2 = pieces[4]
+                feats = pieces[5].split('|')
                 head = pieces[6]
                 label = pieces[7]
                 head = int(head) - 1
-                is_edit = pieces[9] == 'True'
-            else:
+                if feats and feats[2] == '1':
+                    is_edit = True
+                else:
+                    is_edit = False
+                if feats and feats[1] == 'D':
+                    label = 'discourse'
+            else:   
                 if len(pieces) == 5:
                     pieces.pop(0)
                 word, pos, head, label = pieces
