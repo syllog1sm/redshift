@@ -84,9 +84,10 @@ class Sentence(object):
                 child = prev
                 head = token
             else:
-                print prev.word, token.word, prev.head, token.head, i
+                raise StandardError, '\t'.join((prev.word, token.word, prev.head, token.head, i))
                 continue
             if parent_label is not None and head.label != parent_label:
+                raise StandardError, '\t'.join((prev.word, token.word, prev.head, token.head, i))
                 continue
             head.word = mwe
             head.pos = 'MWE'
@@ -153,17 +154,18 @@ def main(in_loc, ignore_unfinished=False, use_dps=False, excise_edits=False,
         try:
             if use_dps:
                 sent.mark_dps_edits()
-            if merge_mwe:
-                sent.merge_mwe('you_know')
-                sent.merge_mwe('i_mean')
             if excise_edits:
                 sent.rm_tokens(lambda token: token.is_edit)
             if label_edits:
                 sent.label_edits()
+            sent.rm_tokens(lambda token: token.pos == '-DFL-')
+            if merge_mwe:
+                sent.merge_mwe('you_know')
+                sent.merge_mwe('i_mean')
+ 
+            sent.rm_tokens(lambda token: token.word == 'MUMBLEx')
             sent.rm_tokens(lambda token: token.word.endswith('-'))
             sent.rm_tokens(lambda token: token.pos in punct)
-            sent.rm_tokens(lambda token: token.pos == '-DFL-')
-            sent.rm_tokens(lambda token: token.word == 'MUMBLEx')
             if rm_fillers:
                 sent.rm_tokens(lambda token: token.pos == 'UH' and
                                token.word.lower() in uhs)
@@ -174,7 +176,8 @@ def main(in_loc, ignore_unfinished=False, use_dps=False, excise_edits=False,
         except:
             print >> sys.stderr, orig_str
             raise
-        if len(sent.tokens) >= 3:
+        #if len(sent.tokens) >= 3:
+        if len(sent.tokens) >= 1:
             print sent.to_str()
             print
 
