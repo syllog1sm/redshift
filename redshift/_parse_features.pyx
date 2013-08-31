@@ -406,7 +406,7 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[next_edit_wmatch] = 1 if words[k.s0 + 1] == words[k.s0] else 0
         context[next_edit_pmatch] = 1 if tags[k.s0 + 1] == tags[k.s0] else 0
         context[next_next_edit] = 1 if k.next_next_edit else 0
-        context[next_edit_word] = words[k.i - 1]
+        context[next_edit_word] = words[k.s0 + 1]
         context[next_edit_pos] = k.next_tag
     else:
         context[next_edit] = 0
