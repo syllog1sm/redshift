@@ -63,7 +63,7 @@ cdef class Beam:
             # Account for variable-length transition histories
             if parent.is_finished:
                 move_id = (parent_idx * self.trans.nr_class) + 0
-                mean_score = parent.score / parent.t
+                mean_score = parent.score / self.t
                 next_moves.push(pair[double, size_t](parent.score + mean_score, move_id))
                 continue
             scores = ext_scores[parent_idx]
