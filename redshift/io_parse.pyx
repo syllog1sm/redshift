@@ -162,12 +162,14 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
                     is_edit = True
                 else:
                     is_edit = False
-                if feats and feats[1] == 'D':
-                    label = 'discourse'
             else:   
                 if len(pieces) == 5:
                     pieces.pop(0)
-                word, pos, head, label = pieces
+                try:
+                    word, pos, head, label = pieces
+                except:
+                    print repr(token_str)
+                    raise
                 head = int(head)
                 is_edit = False
             if unlabelled and label not in ['ROOT', 'P', 'conj', 'cc', 'erased',
