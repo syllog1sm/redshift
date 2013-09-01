@@ -26,13 +26,15 @@ cdef enum:
     N0l2c6
     N0l2c4
 
+    N0l2l
+    
     N0l0w
     N0l0p
     N0l0c
     N0l0c6
     N0l0c4
-    
-    N0l2l
+   
+    N0l0l
     
     N1w
     N1p
@@ -106,11 +108,15 @@ cdef enum:
     S0l0c6
     S0l0c4
 
+    S0l0l
+
     S0r0w
     S0r0p
     S0r0c
     S0r0c6
     S0r0c4
+
+    S0r0l
 
     S0h2w
     S0h2p
@@ -323,6 +329,7 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S0r0c6] = cprefix6s[s0r.idx[2]]
     context[S0r0c4] = cprefix6s[s0r.idx[2]]
 
+
     context[N0lw] = words[n0l.idx[0]]
     context[N0lp] = n0l.tags[0]
     context[N0lc] = clusters[n0l.idx[0]]
@@ -343,10 +350,13 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
 
     context[S0ll] = s0l.lab[0]
     context[S0l2l] = s0l.lab[1]
+    context[S0l0l] = s0l.lab[2]
     context[S0rl] = s0r.lab[0]
     context[S0r2l] = s0r.lab[1]
+    context[S0r0l] = s0r.lab[2]
     context[N0ll] = n0l.lab[0]
     context[N0l2l] = n0l.lab[1]
+    context[N0l0l] = n0l.lab[2]
 
     context[S0llabs] = 0
     context[S0rlabs] = 0
@@ -573,6 +583,17 @@ label_sets = (
    (N0p, N0llabs),
 )
 
+extra_labels = (
+    (S0p, S0ll, S0lp),
+    (S0p, S0ll, S0l2l),
+    (S0p, S0rl, S0rp),
+    (S0p, S0rl, S0r2l),
+    (S0p, S0ll, S0rl),
+    (S0p, S0ll, S0l2l, S0l0l),
+    (S0p, S0rl, S0r2l, S0r0l),
+    (S0hp, S0l, S0rl),
+    (S0hp, S0l, S0ll),
+)
 
 edges = (
     (S0re_w,),
@@ -693,6 +714,17 @@ new_disfl = (
     (next_next_edit, pcopy),
 )
 
+suffix_disfl = (
+    (wscopy,),
+    (pscopy,),
+    (wsexact,),
+    (psexact,),
+    (wscopy, pscopy),
+    (wsexact, psexact),
+    (wsexact, pscopy),
+    (wscopy, psexact),
+)
+ 
 
 def cluster_bigrams():
     kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]

@@ -104,6 +104,9 @@ cdef class BaseParser:
         if 'disfl' in self.feat_set:
             templates += _parse_features.disfl
             templates += _parse_features.new_disfl
+            templates += _parse_features.suffix_disfl
+        if 'xlabels' in self.feat_set:
+            templates += _parse_features.extra_labels
         if 'stack' in self.feat_set:
             templates += _parse_features.stack_second
         if 'hist' in self.feat_set:
