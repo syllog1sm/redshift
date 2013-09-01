@@ -53,14 +53,13 @@ def load_parser(model_dir, reuse_idx=False):
     for ngram_str in params.get('ngrams', '-1').split(','):
         if ngram_str == '-1': continue
         ngrams.append(tuple([int(i) for i in ngram_str.split('_')]))
-    add_clusters = params['add_clusters'] == 'True'
     auto_pos = params['auto_pos'] == 'True'
     params = {'clean': False, 'train_alg': train_alg,
               'feat_set': feat_set, 'feat_thresh': feat_thresh,
               'vocab_thresh': 1, 'allow_reattach': allow_reattach,
               'use_edit': use_edit, 'allow_reduce': allow_reduce,
               'reuse_idx': reuse_idx, 'beam_width': beam_width,
-              'ngrams': ngrams, 'add_clusters': add_clusters,
+              'ngrams': ngrams,
               'auto_pos': auto_pos}
     if beam_width >= 2:
         parser = BeamParser(model_dir, **params)
@@ -87,7 +86,6 @@ cdef class BaseParser:
     cdef object train_alg
     cdef int feat_thresh
     cdef object feat_set
-    cdef object add_clusters
     cdef object ngrams
     cdef uint64_t* _features
     cdef size_t* _context
@@ -97,13 +95,12 @@ cdef class BaseParser:
                   feat_thresh=0, vocab_thresh=5,
                   allow_reattach=False, allow_reduce=False, use_edit=False,
                   reuse_idx=False, beam_width=1,
-                  ngrams=None, add_clusters=False, auto_pos=False):
+                  ngrams=None, auto_pos=False):
         self.model_dir = self.setup_model_dir(model_dir, clean)
         self.feat_set = feat_set
-        self.add_clusters = add_clusters
         self.ngrams = ngrams if ngrams is not None else []
         templates = _parse_features.baseline_templates()
-        templates += _parse_features.ngram_feats(self.ngrams, add_clusters=add_clusters)
+        #templates += _parse_features.ngram_feats(self.ngrams)
         if 'disfl' in self.feat_set:
             templates += _parse_features.disfl
             templates += _parse_features.new_disfl
@@ -122,10 +119,9 @@ cdef class BaseParser:
             print "Using %d match feats" % len(match_feats)
         else:
             match_feats = []
-        self._features = <uint64_t*>calloc(len(templates) + len(match_feats) + 5,
-                                           sizeof(uint64_t))
-        self._context = <size_t*>calloc(_parse_features.context_size(), sizeof(size_t))
         self.extractor = Extractor(templates, match_feats)
+        self._features = <uint64_t*>calloc(self.extractor.nr_feat, sizeof(uint64_t))
+        self._context = <size_t*>calloc(_parse_features.context_size(), sizeof(size_t))
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
         self.beam_width = beam_width
@@ -246,7 +242,6 @@ cdef class BaseParser:
             #                  for ngram in self.features.ngrams]
             #    cfg.write(u'ngrams\t%s\n' % u','.join(ngram_strs))
             cfg.write(u'feat_set\t%s\n' % self.feat_set)
-            cfg.write(u'add_clusters\t%s\n' % self.add_clusters)
 
     def __dealloc__(self):
         pass
