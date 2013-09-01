@@ -53,14 +53,30 @@ def test1k(model="baseline", dbg=False):
         local(_parse('~/work_data/parsers/tmp', '~/work_data/stanford/dev_auto_pos.parse',
                      '/tmp/parse', gold=True))
 
+
+def tacl_dfl_exp(dir_name, n=5, k=16, size=0):
+    n = int(n)
+    k = int(k)
+    size = int(size)
+    beam(dir_name + '_base', train_alg="static", feats="zhang", tb="swbd",
+         auto_pos=True, k=k, size=size, n=n)
+    beam(dir_name + '_base_clust', train_alg="static", feats="clusters", tb="swbd",
+         auto_pos=True, k=k, size=size, n=n)
+    beam(dir_name + '_feats', train_alg="static", feats="match+disfl+clusters",
+               tb="swbd", auto_pos=True, k=k, size=size, n=n)
+    beam(dir_name + '_edit', train_alg="dynedit", feats="match+disfl+clusters",
+         tb="swbd", auto_pos=True, k=k, size=size, n=n)
+    beam(dir_name + '_clean', train_alg="static", feats="clusters",
+         tb="clean_swbd", auto_pos=True, k=k, size=size, n=n)
+
         
 def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
          unlabelled=False, auto_pos=False):
     size = int(size)
     k = int(k)
     n = int(n)
-    unlabelled = unlabelled == 'True'
-    auto_pos = auto_pos == 'True'
+    unlabelled = unlabelled and unlabelled != 'False'
+    auto_pos = auto_pos and auto_pos != 'False'
     use_edit = False
     if tb == 'wsj':
         data = str(REMOTE_STANFORD)
@@ -69,17 +85,17 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
         eval_parse = 'devr.txt'
     elif tb == 'swbd':
         data = str(REMOTE_SWBD)
-        train_name = 'mwe_uh/train.txt'
-        eval_pos = 'mwe_uh/devi.txt'
-        eval_parse = 'mwe_uh/devr.txt'
+        train_name = 'dps_converted/train.conll'
+        eval_pos = 'dps_converted/dev.pos'
+        eval_parse = 'dps_converted/dev.conll'
         if train_alg == 'dynedit':
             use_edit = True
             train_alg = 'dyn'
     elif tb == 'clean_swbd':
         data = str(REMOTE_SWBD)
-        train_name = 'clean/train.txt'
-        eval_pos = 'clean/devi.txt'
-        eval_parse = 'clean/devr.txt'
+        train_name = 'dps_converted/train.clean.conll'
+        eval_pos = 'dps_converted/dev.clean.pos'
+        eval_parse = 'dps_converted/dev.clean.conll'
     exp_dir = str(REMOTE_PARSERS)
     train_n(n, name, exp_dir,
             data, k=k, i=15, f=10, feat_str=feats, 
@@ -396,7 +412,8 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
         grep_str = "grep 'U:' %s >> %s" % (pjoin(model, 'dev', 'acc'),
                                            pjoin(model, 'dev', 'uas')) 
         # Save disk space by removing models
-        del_str = "rm %s %s" % (pjoin(model, "model"), pjoin(model, "words"))
+        #del_str = "rm %s %s" % (pjoin(model, "model"), pjoin(model, "words"))
+        del_str = ''
         script = _pbsify(repo, (train_str, parse_str, eval_str, grep_str, del_str))
         script_loc = pjoin(repo, 'pbs', exp_name)
         with cd(repo):
@@ -452,7 +469,7 @@ def _evaluate(test, gold):
 
 def _pbsify(repo, command_strs, size=5):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=10gb,nodes=1:ppn={n_procs}
+#PBS -l walltime=20:00:00,mem=6gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
