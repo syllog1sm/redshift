@@ -33,7 +33,6 @@ USE_HELD_OUT = False
     beam_width=("Beam width", "option", "k", int),
     feat_set=("Name of feat set [zhang, iso, full]", "option", "x", str),
     ngrams=("How many ngrams to include", "option", "g", str),
-    add_clusters=("Add brown cluster features", "flag", "c", bool),
     n_sents=("Number of sentences to train from", "option", "n", int),
     unlabelled=("Use most of the dependency labels", "flag", "u", bool),
     auto_pos=("Train tagger alongside parser", "flag", "p", bool)
@@ -41,7 +40,7 @@ USE_HELD_OUT = False
 def main(train_loc, model_loc, train_alg="static", n_iter=15,
          feat_set="zhang", vocab_thresh=0, feat_thresh=10,
          allow_reattach=False, allow_reduce=False, use_edit=False,
-         ngrams='', add_clusters=False, n_sents=0,
+         ngrams='', n_sents=0,
          profile=False, debug=False, seed=0, beam_width=1, unlabelled=False,
          auto_pos=False):
     # TODO: ngrams stuff
@@ -55,7 +54,7 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
                             train_alg=train_alg, feat_set=feat_set,
                             feat_thresh=feat_thresh, allow_reduce=allow_reduce,
                             allow_reattach=allow_reattach, beam_width=beam_width,
-                            ngrams=ngrams, add_clusters=add_clusters, auto_pos=auto_pos)
+                            ngrams=ngrams, auto_pos=auto_pos)
     else:
         parser = GreedyParser(model_loc, clean=True, train_alg=train_alg,
                               feat_set=feat_set, feat_thresh=feat_thresh,
