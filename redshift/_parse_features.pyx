@@ -198,9 +198,10 @@ cdef enum:
 def context_size():
     return CONTEXT_SIZE
 
+
 def get_kernel_tokens():
-    return [S0hw, S0h2w, S0w, S0lw, S0l2w, S0l0w, S0le_w, S0rw, S0r2w, S0r0w, S0re_w,
-            N0w, N0lw, N0l2w, N0l0w, N0le_w, N1w, N2w]
+    return [S0hw, S0h2w, S0w, S0lw, S0l2w, S0l0w, S0le_w, S0rw, S0r2w, S0r0w,
+            S0re_w, N0w, N0lw, N0l2w, N0l0w, N0le_w, N1w, N2w]
 
 
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
@@ -249,6 +250,7 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     else:
         context[S0hw] = 0
         context[S0hp] = 0
+        context[S0hc] = 0
         context[S0hc6] = 0
         context[S0hc4] = 0
         context[S0hl] = 0
