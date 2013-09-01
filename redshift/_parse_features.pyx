@@ -186,6 +186,12 @@ cdef enum:
     wexact
     pexact
 
+    wscopy
+    pscopy
+
+    wsexact
+    psexact
+
     m1
     m2
     m3
@@ -423,24 +429,35 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     # 
     context[wcopy] = 0
     context[wexact] = 1
-    for i in range(5):
-        if ((k.n0ledge + i) > k.i) or ((k.s0ledge + i) >= k.n0ledge):
-            break
-        if words[k.n0ledge + i] == words[k.s0ledge + i]:
-            context[wcopy] += 1
-        else:
-            context[wexact] = 0
-            break
     context[pcopy] = 0
     context[pexact] = 1
+    context[wscopy] = 0
+    context[wsexact] = 1
+    context[pscopy] = 0
+    context[psexact] = 1
     for i in range(5):
-        if ((k.n0ledge + i) > k.i) or ((k.s0ledge + i) >= k.n0ledge):
+        if ((k.n0ledge + i) > k.i) or ((k.s0ledge + i) > k.s0):
             break
-        if tags[k.n0ledge + i] == tags[k.s0ledge + i]:
-            context[pcopy] += 1
-        else:
-            context[pexact] = 0
-            break
+        if context[wexact]:
+            if words[k.n0ledge + i] == words[k.s0ledge + i]:
+                context[wcopy] += 1
+            else:
+                context[wexact] = 0
+        if context[pexact]:
+            if tags[k.n0ledge + i] == tags[k.s0ledge + i]:
+                context[pcopy] += 1
+            else:
+                context[pexact] = 0
+        if context[wsexact]:
+            if words[k.s0 - i] == words[k.i - i]:
+                context[wscopy] += 1
+            else:
+                context[wsexact] = 0
+        if context[psexact]:
+            if tags[k.s0 - i] == tags[k.i - i]:
+                context[pscopy] += 1
+            else:
+                context[psexact] = 0
 
     context[m1] = k.hist[0]
     context[m2] = k.hist[1]
