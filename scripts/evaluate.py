@@ -57,13 +57,15 @@ class Token(object):
         is_edit = False
         if len(attrs) == 5 or len(attrs) == 4:
             attrs.append('False')
+            self.dfl_tag = '-'
         elif len(attrs) == 10:
             new_attrs = [str(int(attrs[0]) - 1)]
             new_attrs.append(attrs[1])
             new_attrs.append(attrs[3])
             new_attrs.append(str(int(attrs[6]) - 1))
-            new_attrs.append(attrs[7])
             dfl_feats = attrs[5].split('|')
+            self.dfl_tag = dfl_feats[1]
+            new_attrs.append(attrs[7])
             attrs = new_attrs
             attrs.append(str(dfl_feats[2] == '1'))
         self.is_edit = attrs.pop() == 'True'
@@ -112,21 +114,15 @@ def main(test_loc, gold_loc, eval_punct=False):
         tags_tot += 1
         if g.label in ["P", 'punct'] and not eval_punct:
             continue
-        elif g.label == 'discourse' or g.label == 'interregnum':
-            continue
         ed_tp += t.is_edit and g.is_edit
         ed_fp += t.is_edit and not g.is_edit
         ed_fn += g.is_edit and not t.is_edit
-        if prev_g is not None and prev_g.word == g.word:
-            rep_tp += t.is_edit and g.is_edit
-            rep_fp += t.is_edit and not g.is_edit
-            rep_fn += g.is_edit and not t.is_edit
-            rep_n += g.is_edit
         prev_g = g
         prev_t = t
         if g.is_edit:
             ed_n += 1
             continue
+        if g.dfl_tag != '-': continue
         u_c = g.head == t.head
         l_c = u_c and g.label == t.label
         N += 1
