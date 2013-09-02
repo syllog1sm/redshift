@@ -162,6 +162,8 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
                     is_edit = True
                 else:
                     is_edit = False
+                if feats and feats[1] == 'D':
+                    label = 'discourse'
             else:   
                 if len(pieces) == 5:
                     pieces.pop(0)
