@@ -1,22 +1,28 @@
 from redshift._state cimport *
-from redshift.beam cimport TaggerBeam, TagState, fill_hist, get_p, get_pp, extend_state
-#, TagKernel
 from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
 import index.hashes
 cimport index.hashes
+from ext.murmurhash cimport MurmurHash64A
+from ext.sparsehash cimport *
+
+
 from redshift.io_parse cimport Sentences, Sentence
 from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport memcpy, memset
 from libc.stdint cimport uint64_t, int64_t
 from libcpp.vector cimport vector 
+from libcpp.queue cimport priority_queue
+from libcpp.utility cimport pair
 
+cimport cython
 from os.path import join as pjoin
 import os
 import os.path
 from os.path import join as pjoin
 import random
 import shutil
+from collections import defaultdict
 
 DEBUG = False
 
@@ -37,7 +43,10 @@ cdef class BaseTagger:
         self.guide = Perceptron(100, pjoin(model_dir, 'tagger.gz'))
         if trained:
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
-        self.features = Extractor(basic + clusters, [], bag_of_words=[P1p, P1alt])
+        self.features = Extractor(basic + clusters + case + orth, [],
+                                  bag_of_words=[P1p, P1alt])
+        self.tagdict = dense_hash_map[size_t, size_t]()
+        self.tagdict.set_empty_key(0)
         self.nr_tag = 100
         self.beam_width = beam_width
         self._context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
@@ -73,13 +82,34 @@ cdef class BaseTagger:
     def setup_classes(self, Sentences sents):
         self.nr_tag = 0
         tags = set()
+        tag_freqs = defaultdict(lambda: defaultdict(int))
         for i in range(sents.length):
             for j in range(sents.s[i].length):
+                tag_freqs[sents.s[i].words[j]][sents.s[i].pos[j]] += 1
                 if sents.s[i].pos[j] >= self.nr_tag:
                     self.nr_tag = sents.s[i].pos[j]
                     tags.add(sents.s[i].pos[j])
         self.nr_tag += 1
         self.guide.set_classes(range(self.nr_tag))
+        types = 0
+        tokens = 0
+        n = 0
+        err = 0
+        print "Making tagdict"
+        for word, freqs in tag_freqs.items():
+            total = sum(freqs.values())
+            n += total
+            if total >= 100:
+                mode, tag = max([(freq, tag) for tag, freq in freqs.items()])
+                if float(mode) / total >= 0.99:
+                    assert tag != 0
+                    self.tagdict[word] = tag
+                    types += 1
+                    tokens += total
+                    err += (total - mode)
+        print "%d types" % types
+        print "%d/%d=%.4f true" % (err, tokens, (1 - (float(err) / tokens)) * 100)
+        print "%d/%d=%.4f cov" % (tokens, n, (float(tokens) / n) * 100)
  
     cdef int tag(self, Sentence* s) except -1:
         raise NotImplementedError
@@ -112,12 +142,20 @@ cdef class GreedyTagger(BaseTagger):
             self.tag(sents.s[i])
 
     cdef int tag(self, Sentence* sent) except -1:
-        cdef size_t i, clas
+        cdef size_t i, clas, lookup
         cdef double incumbent, runner_up, score
         cdef size_t prev = sent.pos[0]
         cdef size_t alt = sent.pos[0]
         cdef size_t prevprev = 0
         for i in range(1, sent.length - 1):
+            lookup = self.tagdict[sent.words[i]]
+            if lookup != 0:
+                sent.pos[i] = lookup
+                sent.alt_pos[i] = 0
+                alt = 0
+                prevprev = prev
+                prev = lookup
+                continue 
             sent.pos[i] = 0
             sent.alt_pos[i] = 0
             fill_context(self._context, sent, prev, prevprev, alt, i)
@@ -137,12 +175,18 @@ cdef class GreedyTagger(BaseTagger):
             alt = sent.alt_pos[i]
 
     cdef int train_sent(self, Sentence* sent) except -1:
-        cdef size_t w, clas, second, pred, prev, prevprev
+        cdef size_t w, clas, second, pred, prev, prevprev, lookup
         cdef double score, incumbent, runner_up
         cdef double second_score
         prev = sent.pos[0]
         alt = sent.pos[0]
         for w in range(1, sent.length - 1):
+            lookup = self.tagdict[sent.words[w]]
+            if lookup != 0:
+                alt = 0
+                prevprev = prev
+                prev = lookup
+                continue 
             fill_context(self._context, sent, prev, prevprev, alt, w)
             self.features.extract(self._features, self._context)
             self.guide.fill_scores(self._features, self.guide.scores)
@@ -169,7 +213,7 @@ cdef class GreedyTagger(BaseTagger):
 
 cdef class BeamTagger(BaseTagger):
     cdef int tag(self, Sentence* sent) except -1:
-        cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
+        cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.length, self.nr_tag)
         cdef size_t p_idx
         cdef TagState* s
         for i in range(sent.length - 1):
@@ -191,7 +235,7 @@ cdef class BeamTagger(BaseTagger):
 
     cdef int train_sent(self, Sentence* sent) except -1:
         cdef size_t  i, tmp
-        cdef TaggerBeam beam = TaggerBeam(None, self.beam_width, sent.length, self.nr_tag)
+        cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.length, self.nr_tag)
         cdef TagState* gold_state = extend_state(NULL, 0, NULL, 0)
         cdef MaxViolnUpd updater = MaxViolnUpd(self.nr_tag)
         for i in range(sent.length - 1):
@@ -309,6 +353,18 @@ cdef enum:
     N0pre
 
     N0quo
+    N0paren
+    N0title
+    N0upper
+    N0alpha
+
+    N1title
+    N1upper
+    N1alpha
+
+    P1title
+    P1upper
+    P1alpha
 
     N1w
     N1c
@@ -343,6 +399,13 @@ cdef enum:
 
     N3w
     N4w
+
+    N0_label
+    N0_head_w
+    N0_head_p
+    P1_label
+    P1_head_w
+
     CONTEXT_SIZE
 
 
@@ -356,17 +419,55 @@ basic = (
     (P1p, P2p),
     (P1p, N0w),
     (N0suff,),
-    (N0pre,),
     (N1suff,),
-    (N1pre,),
     (P1suff,),
+    (N2w,),
+    (N3w,),
+    (P1p, P1alt),
+)
+
+case = (
+    (N0title,),
+    (N0upper,),
+    (N0alpha,),
+    (N0title, N0suff),
+    (N0title, N0upper, N0alpha),
+    (P1title,),
+    (P1upper,),
+    (P1alpha,),
+    (N1title,),
+    (N1upper,),
+    (N1alpha,),
+    (P1title, N0title, N1title),
+    (P1p, N0title,),
+    (P1p, N0upper,),
+    (P1p, N0alpha,),
+    (P1title, N0w),
+    (P1upper, N0w),
+    (P1title, N0w, N1title),
+    (N0title, N0upper, N0c),
+)
+
+parse = (
+    (N0_label,),
+    (N0_head_w,),
+    (N0_head_p,),
+    (P1_head_w,),
+    (P1_label,),
+    (N0_label, P1_label),
+    #(N0_left_w,),
+    #(N0_left_p,),
+)
+
+orth = (
+    (N0pre,),
+    (N1pre,),
     (P1pre,),
     (N0quo,),
     (N0w, N0quo),
     (P1p, N0quo),
-    (N2w,),
-    (N2c,),
-    #(P1alt,),
+    (N0w, N0paren),
+    (P1p, N0paren)
 )
 
 clusters = (
@@ -379,6 +480,7 @@ clusters = (
     (N1c,),
     (N1c4,),
     (N1c6,),
+    (N2c,),
     (P1c, N0w),
     (P1p, P1c6, N0w),
     (P1c6, N0w),
@@ -407,6 +509,19 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[N1suff] = sent.suffix[i + 1]
     context[N1pre] = sent.prefix[i + 1]
 
+    context[N0quo] = sent.quotes[i] != 0
+    context[N0paren] = sent.parens[i] != 0
+    context[N0alpha] = sent.non_alpha[i]
+    context[N0upper] = sent.oft_upper[i]
+    context[N0title] = sent.oft_title[i]
+
+    context[N1alpha] = sent.non_alpha[i+1]
+    context[N1upper] = sent.oft_upper[i+1]
+    context[N1title] = sent.oft_title[i+1]
+
+    context[N0_label] = sent.parse.labels[i]
+    context[N0_head_w] = sent.words[sent.parse.heads[i]]
+    context[N0_head_p] = sent.pos[sent.parse.heads[i]]
     if (i + 2) < sent.length:
         context[N2w] = sent.words[i + 2]
         context[N2c] = sent.clusters[i + 2]
@@ -416,8 +531,7 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
         context[N2pre] = sent.prefix[i + 2]
         if (i + 3) < sent.length:
             context[N3w] = sent.words[i + 3]
-    context[N0quo] = sent.quotes[i] == 0
-    if i == 1:
+    if i == 0:
         return 0
     context[P1w] = sent.words[i-1]
     context[P1c] = sent.clusters[i-1]
@@ -427,7 +541,14 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[P1pre] = sent.prefix[i-1]
     context[P1p] = ptag
     context[P1alt] = p_alt
-    if i == 2:
+
+    context[P1upper] = sent.oft_upper[i-1]
+    context[P1alpha] = sent.non_alpha[i-1]
+    context[P1title] = sent.oft_title[i-1]
+
+    context[P1_label] = sent.parse.labels[i-1]
+    context[P1_head_w] = sent.words[sent.parse.heads[i-1]]
+    if i == 1:
         return 0
     context[P2w] = sent.words[i-2]
     context[P2c] = sent.clusters[i-2]
@@ -436,3 +557,119 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[P2suff] = sent.suffix[i-2]
     context[P2pre] = sent.prefix[i-2]
     context[P2p] = pptag
+
+
+cdef class TaggerBeam:
+    def __cinit__(self, size_t k, size_t length, nr_tag=None):
+        self.nr_class = nr_tag
+        self.k = k
+        self.t = 0
+        self.bsize = 1
+        self.is_full = self.bsize >= self.k
+        self.seen_states = set()
+        self.beam = <TagState**>malloc(k * sizeof(TagState*))
+        self.parents = <TagState**>malloc(k * sizeof(TagState*))
+        cdef size_t i
+        for i in range(k):
+            self.parents[i] = extend_state(NULL, 0, NULL, 0)
+            self.seen_states.add(<size_t>self.parents[i])
+
+    @cython.cdivision(True)
+    cdef int extend_states(self, double** ext_scores) except -1:
+        # Former states are now parents, beam will hold the extensions
+        cdef size_t i, clas, move_id
+        cdef double parent_score, score
+        cdef double* scores
+        cdef priority_queue[pair[double, size_t]] next_moves
+        next_moves = priority_queue[pair[double, size_t]]()
+        for i in range(self.bsize):
+            scores = ext_scores[i]
+            for clas in range(self.nr_class):
+                score = self.parents[i].score + scores[clas]
+                move_id = (i * self.nr_class) + clas
+                next_moves.push(pair[double, size_t](score, move_id))
+        cdef pair[double, size_t] data
+        # Apply extensions for best continuations
+        cdef TagState* s
+        cdef TagState* prev
+        cdef size_t addr
+        cdef dense_hash_map[uint64_t, bint] seen_equivs = dense_hash_map[uint64_t, bint]()
+        seen_equivs.set_empty_key(0)
+        self.bsize = 0
+        while self.bsize < self.k and not next_moves.empty():
+            data = next_moves.top()
+            i = data.second / self.nr_class
+            clas = data.second % self.nr_class
+            prev = self.parents[i]
+            hashed = (clas * self.nr_class) + prev.clas
+            if seen_equivs[hashed]:
+                next_moves.pop()
+                continue
+            seen_equivs[hashed] = 1
+            self.beam[self.bsize] = extend_state(prev, clas, ext_scores[i],
+                                                 self.nr_class)
+            addr = <size_t>self.beam[self.bsize]
+            self.seen_states.add(addr)
+            next_moves.pop()
+            self.bsize += 1
+        for i in range(self.bsize):
+            self.parents[i] = self.beam[i]
+        self.is_full = self.bsize >= self.k
+        self.t += 1
+
+    def __dealloc__(self):
+        cdef TagState* s
+        cdef size_t addr
+        for addr in self.seen_states:
+            s = <TagState*>addr
+            free(s)
+        free(self.parents)
+        free(self.beam)
+
+
+cdef TagState* extend_state(TagState* s, size_t clas, double* scores,
+                            size_t nr_class):
+    cdef double score, alt_score
+    cdef size_t alt
+    ext = <TagState*>calloc(1, sizeof(TagState))
+    ext.prev = s
+    ext.clas = clas
+    ext.alt = 0
+    if s == NULL:
+        ext.score = 0
+        ext.length = 0
+    else:
+        ext.score = s.score + scores[clas]
+        ext.length = s.length + 1
+        alt_score = 1
+        for alt in range(nr_class):
+            if alt == clas or alt == 0:
+                continue
+            score = scores[alt]
+            if score > alt_score and alt != 0:
+                ext.alt = alt
+                alt_score = score
+    return ext
+
+
+cdef int fill_hist(size_t* hist, TagState* s, int t) except -1:
+    while t >= 1 and s.prev != NULL:
+        t -= 1
+        hist[t] = s.clas
+        s = s.prev
+
+cdef size_t get_p(TagState* s):
+    if s.prev == NULL:
+        return 0
+    else:
+        return s.prev.clas
+
+
+cdef size_t get_pp(TagState* s):
+    if s.prev == NULL:
+        return 0
+    elif s.prev.prev == NULL:
+        return 0
+    else:
+        return s.prev.prev.clas
+

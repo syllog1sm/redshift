@@ -110,14 +110,16 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
     s.kernel.n2p = tags[s.i + 2]
     s.kernel.n3p = tags[s.i + 3]
     s.kernel.s0 = s.top
+    if s.heads[s.top] != 0 and s.heads[s.top] == s.second:
+        assert s.labels[s.top] != 0
     s.kernel.s0p = tags[s.top]
-    s.kernel.hs0 = s.heads[s.top]
-    s.kernel.hs0p = tags[s.heads[s.top]]
-    s.kernel.h2s0 = s.heads[s.heads[s.top]]
-    s.kernel.h2s0p = tags[s.heads[s.heads[s.top]]]
+    s.kernel.s1 = s.second
+    s.kernel.s1p = tags[s.kernel.s1]
+    s.kernel.s2 = s.stack[s.stack_len - 2] if s.stack_len >= 2 else 0
+    s.kernel.s2p = tags[s.kernel.s2]
     s.kernel.Ls0 = s.labels[s.top]
-    s.kernel.Lhs0 = s.labels[s.heads[s.top]]
-    s.kernel.Lh2s0 = s.labels[s.heads[s.heads[s.top]]]
+    s.kernel.Ls1 = s.labels[s.kernel.s1]
+    s.kernel.Ls2 = s.labels[s.kernel.s2]
     s.kernel.s0ledge = s.ledges[s.top]
     s.kernel.s0ledgep = tags[s.ledges[s.top]]
     s.kernel.n0ledge = s.ledges[s.i]
@@ -139,13 +141,31 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
         s.kernel.prev_edit = False
         s.kernel.prev_prev_edit = False
         s.kernel.prev_tag = False
-
+    cdef size_t next_
+    cdef size_t next_next
+    if s.top != 0:
+        next_ = s.top + 1
+        s.kernel.next_edit = True if s.heads[next_] == next_ else False
+        s.kernel.next_tag = tags[next_]
+        next_next = s.top + 2
+        s.kernel.next_next_edit = True if s.heads[next_next] == next_next else False
     fill_subtree(s.l_valencies[s.top], s.l_children[s.top],
                  s.labels, tags, &s.kernel.s0l)
     fill_subtree(s.r_valencies[s.top], s.r_children[s.top],
                  s.labels, tags, &s.kernel.s0r)
     fill_subtree(s.l_valencies[s.i], s.l_children[s.i],
                  s.labels, tags, &s.kernel.n0l)
+    if s.t >= 5:
+        s.kernel.hist[0] = s.history[s.t - 1]
+        s.kernel.hist[1] = s.history[s.t - 2]
+        s.kernel.hist[2] = s.history[s.t - 3]
+        s.kernel.hist[3] = s.history[s.t - 4]
+        s.kernel.hist[4] = s.history[s.t - 5]
+    else:
+        for i in range(s.t):
+            s.kernel.hist[i] = s.history[s.t - (i + 1)]
+        for i in range(s.t, 5):
+            s.kernel.hist[i] = 0
 
 
 #cdef Kernel* kernel_from_s(Kernel* parent) except NULL:
@@ -293,7 +313,7 @@ DEF PADDING = 5
 
 cdef State* init_state(size_t n):
     cdef size_t i, j
-    cdef State* s = <State*>malloc(sizeof(State))
+    cdef State* s = <State*>calloc(1, sizeof(State))
     s.n = n
     s.t = 0
     s.i = 1

@@ -18,9 +18,11 @@ class Token(object):
             new_attrs.append(attrs[3])
             new_attrs.append(str(int(attrs[6]) - 1))
             new_attrs.append(attrs[7])
-            new_attrs.append(attrs[9])
+            #new_attrs.append(attrs[9])
+            fields = attrs[5].split('|')
+            new_attrs.append(fields[2] == '1')
             attrs = new_attrs
-        self.is_edit = attrs.pop() == 'True'
+        self.is_edit = str(attrs.pop()) == 'True'
         self.label = attrs.pop()
         if self.label == 'erased':
             self.is_edit = True

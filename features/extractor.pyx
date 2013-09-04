@@ -53,6 +53,7 @@ cdef class Extractor:
             match_pred.idx1 = idx1
             match_pred.idx2 = idx2
             self.match_preds[id_] = match_pred
+        self.nr_feat = self.nr_template + self.nr_bow + (self.nr_match * 2) + 2
 
     def __dealloc__(self):
         #free(self.context)

@@ -19,8 +19,11 @@ cdef struct Sentence:
     size_t* cprefix6s
     size_t* suffix
     size_t* prefix
-    size_t* parens
-    size_t* quotes
+    int* parens
+    int* quotes
+    bint* non_alpha
+    bint* oft_upper
+    bint* oft_title
     _Parse* parse
 
 

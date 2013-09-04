@@ -20,29 +20,59 @@ def gen_toks(loc):
     i = 0
     for sent_str in sent_strs:
         tokens = [Token(i, tok_str.split()) for i, tok_str in enumerate(sent_str.split('\n'))]
+        flatten_edits(tokens)
+        tokens[-1].sbd = True
         for token in tokens:
             yield sent_str, token
 
+def flatten_edits(tokens):
+    by_head = defaultdict(list)
+    edits = []
+    for token in tokens:
+        if token.head >= len(tokens):
+            token.head = -1
+    subtrees = defaultdict(set)
+    for token in tokens:
+        if token.head > 0 and token.head != token.id:
+            subtrees[token.head].add(token)
+    edits = [t for t in tokens if t.is_edit or t.label == 'erased']
+    visited = set()
+    for token in edits:
+        if token.id in visited:
+            continue
+        visited.add(token.id)
+        token.label = 'erased'
+        token.head = token.id
+        token.is_edit = True
+        for child in subtrees[token.id]:
+            edits.append(child)
+    
 
 class Token(object):
     def __init__(self, id_, attrs):
         self.id = id_
+        #self.sbd = attrs.pop()
+        self.sbd = False
         # CoNLL format
-        if len(attrs) == 10:
+        is_edit = False
+        if len(attrs) == 5 or len(attrs) == 4:
+            attrs.append('False')
+            self.dfl_tag = '-'
+        elif len(attrs) == 10:
             new_attrs = [str(int(attrs[0]) - 1)]
             new_attrs.append(attrs[1])
             new_attrs.append(attrs[3])
             new_attrs.append(str(int(attrs[6]) - 1))
+            dfl_feats = attrs[5].split('|')
+            self.dfl_tag = dfl_feats[1]
             new_attrs.append(attrs[7])
             attrs = new_attrs
+            attrs.append(str(dfl_feats[2] == '1'))
+        self.is_edit = attrs.pop() == 'True'
         self.label = attrs.pop()
         if self.label.lower() == 'root':
             self.label = 'ROOT'
-        try:
-            head = int(attrs.pop())
-        except:
-            print orig
-            raise
+        head = int(attrs.pop())
         self.head = head
         # Make head an offset from the token id, for sent variation
         #if head == -1 or self.label.upper() == 'ROOT':
@@ -64,17 +94,35 @@ def main(test_loc, gold_loc, eval_punct=False):
     u_by_label = defaultdict(lambda: defaultdict(int))
     l_by_label = defaultdict(lambda: defaultdict(int))
     N = 0
-    N_p = 0
     u_nc = 0
     l_nc = 0
-    p_nc = 0
+    ed_tp = 0
+    ed_fp = 0
+    ed_fn = 0
+    ed_n = 0
+    rep_tp = 0
+    rep_fp = 0
+    rep_fn = 0
+    rep_n = 0
+    tags_corr = 0
+    tags_tot = 0
+    open_ip = False
+    prev_g = None
+    prev_t = None
     for (sst, t), (ss, g) in zip(gen_toks(test_loc), gen_toks(gold_loc)):
-        p_nc += t.pos == g.pos
-        N_p += 1
+        tags_corr += t.pos == g.pos
+        tags_tot += 1
         if g.label in ["P", 'punct'] and not eval_punct:
             continue
+        ed_tp += t.is_edit and g.is_edit
+        ed_fp += t.is_edit and not g.is_edit
+        ed_fn += g.is_edit and not t.is_edit
         prev_g = g
         prev_t = t
+        if g.is_edit:
+            ed_n += 1
+            continue
+        if g.dfl_tag != '-': continue
         u_c = g.head == t.head
         l_c = u_c and g.label == t.label
         N += 1
@@ -103,7 +151,15 @@ def main(test_loc, gold_loc, eval_punct=False):
         yield fmt_acc('Other', n_other, l_other, u_other, n_l_err) 
     yield 'U: %.3f' % pc(u_nc, N)
     yield 'L: %.3f' % pc(l_nc, N)
-    yield 'P: %.3f' % pc(p_nc, N_p)
+    if ed_n != 0:
+        ed_p = pc(ed_tp, ed_tp + ed_fp)
+        ed_r = pc(ed_tp, ed_n)
+        ed_f = 2 * ((ed_p * ed_r) / (ed_p + ed_r + 1e-100))
+        yield 'DIS P: %.2f' % ed_p
+        yield 'DIS R: %.2f' % ed_r
+        yield 'DIS F: %.2f' % ed_f
+    yield 'POS Acc: %.2f' % (pc(tags_corr, tags_tot))
+
 
 if __name__ == '__main__':
     for line in plac.call(main):

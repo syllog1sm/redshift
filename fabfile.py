@@ -53,11 +53,31 @@ def test1k(model="baseline", dbg=False):
         local(_parse('~/work_data/parsers/tmp', '~/work_data/stanford/dev_auto_pos.parse',
                      '/tmp/parse', gold=True))
 
-        
-def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj'):
+
+def tacl_dfl_exp(dir_name, n=5, k=16, size=0):
+    n = int(n)
+    k = int(k)
+    size = int(size)
+    beam(dir_name + '_base', train_alg="static", feats="zhang", tb="swbd",
+         auto_pos=True, k=k, size=size, n=n)
+    beam(dir_name + '_base_clust', train_alg="static", feats="clusters+xlabels",
+         tb="swbd", auto_pos=True, k=k, size=size, n=n)
+    beam(dir_name + '_feats', train_alg="static", feats="match+disfl+clusters+xlabels",
+               tb="swbd", auto_pos=True, k=k, size=size, n=n)
+    beam(dir_name + '_edit', train_alg="dynedit", feats="match+disfl+clusters+xlabels",
+         tb="swbd", auto_pos=True, k=k, size=size, n=n)
+    beam(dir_name + '_clean', train_alg="static", feats="clusters+xlabels",
+         tb="clean_swbd", auto_pos=True, k=k, size=size, n=n)
+
+
+def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
+         unlabelled=False, auto_pos=False, iters=15):
     size = int(size)
     k = int(k)
     n = int(n)
+    iters = int(iters)
+    unlabelled = unlabelled and unlabelled != 'False'
+    auto_pos = auto_pos and auto_pos != 'False'
     use_edit = False
     if tb == 'wsj':
         data = str(REMOTE_STANFORD)
@@ -66,16 +86,22 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj'):
         eval_parse = 'devr.txt'
     elif tb == 'swbd':
         data = str(REMOTE_SWBD)
-        train_name = 'sw.mwe.train'
-        eval_pos = 'sw.mwe.devi'
-        eval_parse = 'sw.mwe.devr'
-        if train_alg != 'static':
+        train_name = 'dps_converted/train.conll'
+        eval_pos = 'dps_converted/dev.pos'
+        eval_parse = 'dps_converted/dev.conll'
+        if train_alg == 'dynedit':
             use_edit = True
-
+            train_alg = 'dyn'
+    elif tb == 'clean_swbd':
+        data = str(REMOTE_SWBD)
+        train_name = 'dps_converted/train.clean.conll'
+        eval_pos = 'dps_converted/dev.clean.pos'
+        eval_parse = 'dps_converted/dev.clean.conll'
     exp_dir = str(REMOTE_PARSERS)
     train_n(n, name, exp_dir,
-            data, k=k, i=15, feat_str=feats, 
+            data, k=k, i=iters, f=10, feat_str=feats, 
             n_sents=size, train_name=train_name, train_alg=train_alg,
+            unlabelled=unlabelled, auto_pos=auto_pos,
             use_edit=use_edit, dev_names=(eval_pos, eval_parse))
  
 
@@ -369,23 +395,26 @@ def vocab_table(name):
 # 119_s0_s0r2_s0l2
 def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
             train_alg="online", n_sents=0, static=False, use_edit=False,
-            ngrams=0, t=0, f=0, train_name='train.txt', dev_names=('devi.txt', 'devr.txt')):
+            unlabelled=False, ngrams='', t=0, f=0, train_name='train.txt',
+            dev_names=('devi.txt', 'devr.txt'), auto_pos=False):
     exp_dir = str(exp_dir)
     repo = str(REMOTE_REPO)
     for seed in range(n):
         exp_name = '%s_%d' % (name, seed)
         model = pjoin(exp_dir, name, str(seed))
         run("mkdir -p %s" % model, quiet=True)
-        train_str = _train(pjoin(data, train_name), model, k=k, i=15,
+        train_str = _train(pjoin(data, train_name), model, k=k, i=i,
                            feat_str=feat_str, train_alg=train_alg, seed=seed,
-                           n_sents=n_sents, ngrams=ngrams, use_edit=use_edit,
-                           vocab_thresh=t, feat_thresh=f)
+                           n_sents=n_sents, use_edit=use_edit,
+                           unlabelled=unlabelled,
+                           vocab_thresh=t, feat_thresh=f, auto_pos=auto_pos)
         parse_str = _parse(model, pjoin(data, dev_names[0]), pjoin(model, 'dev'))
         eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, dev_names[1]))
         grep_str = "grep 'U:' %s >> %s" % (pjoin(model, 'dev', 'acc'),
                                            pjoin(model, 'dev', 'uas')) 
         # Save disk space by removing models
-        del_str = "rm %s %s" % (pjoin(model, "model"), pjoin(model, "words"))
+        #del_str = "rm %s %s" % (pjoin(model, "model"), pjoin(model, "words"))
+        del_str = ''
         script = _pbsify(repo, (train_str, parse_str, eval_str, grep_str, del_str))
         script_loc = pjoin(repo, 'pbs', exp_name)
         with cd(repo):
@@ -394,6 +423,47 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
             out_loc = pjoin(model, 'stdout')
             run('qsub -N %s %s -e %s -o %s' % (exp_name, script_loc, err_loc, out_loc), quiet=True)
 
+def parse_n(name, devname):
+    data = str(REMOTE_SWBD.join('dps_converted'))
+    exp_dir = str(REMOTE_PARSERS)
+    repo = str(REMOTE_REPO)
+    pos = devname + '.pos'
+    gold = devname + '.conll'
+
+    n = len(run("ls %s" % pjoin(exp_dir, name), quiet=True).split())
+    script = []
+    for seed in range(n):
+        model = pjoin(exp_dir, name, str(seed))
+        script.append("mkdir %s" % pjoin(model, devname))
+        script.append(_parse(model, pjoin(data, pos), pjoin(model, devname)))
+        #script.append(_add_edits(pjoin(model, devname), pjoin(data, 'test.pos')))
+        script.append(_evaluate(pjoin(model, devname, 'parses'), pjoin(data, gold)))
+        script.append("grep 'U:' %s >> %s" % (pjoin(model, devname, 'acc'),
+                                           pjoin(model, devname, 'uas')))
+    script = _pbsify(repo, script)
+    script_loc = pjoin(repo, 'pbs', 'parse_' + name)
+    with cd(repo):
+        put(StringIO(script), script_loc)
+        run('qsub -N %s %s' % ('parse_' + name, script_loc), quiet=True)
+
+
+def tabulate(prefix, names, terms):
+    terms = terms.split('-')
+    names = names.split('-')
+    rows = [terms]
+    print prefix, '&\t',
+    print '\t&\t'.join(terms),
+    print r'\\'
+    for name in names:
+        exp_dir = str(REMOTE_PARSERS.join(prefix + '_' + name))
+        row = []
+        for term in terms:
+            results = get_accs(exp_dir, term=term)
+            row.append(sum(results) / len(results))
+        print name, '&\t',
+        print '\t&\t'.join('%.1f' % r for r in row),
+        print r'\\'
+    
 
 def count_finished(exp_dir):
     with cd(exp_dir):
@@ -402,11 +472,11 @@ def count_finished(exp_dir):
     return len(samples)
 
 
-def get_accs(exp_dir, eval_name='dev'):
+def get_accs(exp_dir, eval_name='dev', term='U'):
     results = []
     with cd(exp_dir):
-        results = [float(s.split()[1]) for s in
-                   run("grep 'U:' %s/*/dev/acc" % exp_dir, quiet=True).split('\n')
+        results = [float(s.split()[-1]) for s in
+                run("grep '%s:' %s/*/dev/acc" % (term, exp_dir), quiet=True).split('\n')
                    if s.strip()]
     return results
 
@@ -414,15 +484,18 @@ def get_accs(exp_dir, eval_name='dev'):
 def _train(data, model, debug=False, k=1, feat_str='zhang', i=15,
            train_alg="static", seed=0, args='',
            n_sents=0, ngrams=0, vocab_thresh=0, feat_thresh=10,
-           use_edit=False):
+           use_edit=False, unlabelled=False, auto_pos=False):
     use_edit = '-e' if use_edit else ''
-    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -n {n_sents} -g {ngrams} -t {vocab_thresh} -f {feat_thresh} {use_edit} {args}'
+    unlabelled = '-u' if unlabelled else ''
+    auto_pos = '-p' if auto_pos else ''
+    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -n {n_sents} -t {vocab_thresh} -f {feat_thresh} {use_edit} {unlabelled} {auto_pos} {args}'
     if debug:
         template += ' -debug'
     return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i,
                            vocab_thresh=vocab_thresh, feat_thresh=feat_thresh,
                            alg=train_alg, use_edit=use_edit, seed=seed,
-                          args=args, n_sents=n_sents, ngrams=ngrams)
+                          args=args, n_sents=n_sents, ngrams=ngrams,
+                          unlabelled=unlabelled, auto_pos=auto_pos)
 
 
 def _parse(model, data, out, gold=False):
@@ -435,10 +508,15 @@ def _parse(model, data, out, gold=False):
 def _evaluate(test, gold):
     return './scripts/evaluate.py %s %s > %s' % (test, gold, test.replace('parses', 'acc'))
 
+def _add_edits(test_dir, pos):
+    in_loc = pjoin(test_dir, 'parses')
+    out_loc = pjoin(test_dir, 'pipe.parses')
+    return 'python scripts/add_edits.py %s %s > %s' % (in_loc, pos, out_loc)
+
 
 def _pbsify(repo, command_strs, size=5):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=2gb,nodes=1:ppn={n_procs}
+#PBS -l walltime=20:00:00,mem=4gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/

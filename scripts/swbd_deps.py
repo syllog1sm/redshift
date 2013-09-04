@@ -8,7 +8,10 @@ class Token(object):
         props = line.split()
         self.id = int(props[0])
         self.word = props[1]
-        self.pos = props[3].split('^')[-1]
+        self.pos = props[3]
+        if self.pos.startswith('^'):
+            self.pos = self.pos[1:]
+        self.pos = self.pos.split('^')[0]
         self.label = props[7]
         self.head = int(props[6])
         self.is_edit = props[-1] == 'True'
@@ -20,8 +23,10 @@ class Token(object):
 
 
 class Sentence(object):
-    def __init__(self, sent_str):
+    def __init__(self, sent_str, use_dps):
         self.tokens = [Token(line) for line in sent_str.split('\n')]
+
+    def mark_dps_edits(self):
         edit_depth = 0
         saw_ip = False
         for i, token in enumerate(self.tokens):
@@ -39,16 +44,15 @@ class Sentence(object):
                 # This should only effect 3 cases
                 self.tokens[i - 1].is_edit = False
                 edit_depth -= 1
-        n_erased = 0
-        self.n_dfl = 0
-        for token in self.tokens:
-            if token.word == r'\[':
-                self.n_dfl += 1
 
     def to_str(self):
         return '\n'.join(token.to_str() for token in self.tokens)
 
     def label_edits(self):
+        """
+        Assign the label "erased" to edit tokens headed by non-edit words. Probably
+        this should be handled inside the parser instead.
+        """
         for i, token in enumerate(self.tokens):
             if token.pos == 'UH':
                 continue
@@ -80,9 +84,10 @@ class Sentence(object):
                 child = prev
                 head = token
             else:
-                print prev.word, token.word, prev.head, token.head, i
+                raise StandardError, '\t'.join((prev.word, token.word, prev.head, token.head, i))
                 continue
             if parent_label is not None and head.label != parent_label:
+                raise StandardError, '\t'.join((prev.word, token.word, prev.head, token.head, i))
                 continue
             head.word = mwe
             head.pos = 'MWE'
@@ -92,6 +97,7 @@ class Sentence(object):
         self.rm_tokens(lambda t: t.word == '<erased>')
 
     def rm_tokens(self, rejector):
+        global uhs
         # 0 is root in conll format
         id_map = {0: 0}
         rejected = set()
@@ -127,41 +133,51 @@ class Sentence(object):
 
 @plac.annotations(
     ignore_unfinished=("Ignore unfinished sentences", "flag", "u", bool),
+    use_dps=("Use dps in addition to EDITED nodes", "flag", "d", bool),
     merge_mwe=("Merge multi-word expressions", "flag", "m", bool),
     excise_edits=("Clean edits entirely", "flag", "e", bool),
     label_edits=("Label edits", "flag", "l", bool),
+    label_interregna=("Label interregna", "flag", "i", bool),
+    rm_fillers=("Discard filled pauses", "flag", "f", bool)
 )
-def main(in_loc, ignore_unfinished=False, excise_edits=False, label_edits=False,
-        merge_mwe=False):
-    sentences = [Sentence(sent_str) for sent_str in
+def main(in_loc, ignore_unfinished=False, use_dps=False, excise_edits=False,
+         label_edits=False, merge_mwe=False, label_interregna=False, rm_fillers=False):
+    global uhs
+    sentences = [Sentence(sent_str, use_dps) for sent_str in
                  open(in_loc).read().strip().split('\n\n')]
     punct = set([',', ':', '.', ';', 'RRB', 'LRB', '``', "''"])
- 
+    uhs = set(['uh', 'um'])
     for sent in sentences:
         if ignore_unfinished and sent.tokens[-1].word == 'N_S':
             continue
         orig_str = sent.to_str()
         try:
+            if use_dps:
+                sent.mark_dps_edits()
+            if excise_edits:
+                sent.rm_tokens(lambda token: token.is_edit)
+            if label_edits:
+                sent.label_edits()
+            sent.rm_tokens(lambda token: token.pos == '-DFL-')
             if merge_mwe:
                 sent.merge_mwe('you_know')
                 sent.merge_mwe('i_mean')
-                sent.merge_mwe('of_course', new_label='discourse')
-
-            if excise_edits:
-                sent.rm_tokens(lambda token: token.is_edit)
-                sent.rm_tokens(lambda token: token.label == 'discourse')
-            if label_edits:
-                sent.label_edits()
+ 
+            sent.rm_tokens(lambda token: token.word == 'MUMBLEx')
             sent.rm_tokens(lambda token: token.word.endswith('-'))
             sent.rm_tokens(lambda token: token.pos in punct)
-            sent.rm_tokens(lambda token: token.pos == '-DFL-')
-            sent.rm_tokens(lambda token: token.word == 'MUMBLEx')
-            sent.label_interregna()
+            if rm_fillers:
+                sent.rm_tokens(lambda token: token.pos == 'UH' and
+                               token.word.lower() in uhs)
+ 
+            if label_interregna:
+                sent.label_interregna()
             sent.lower_case()
         except:
             print >> sys.stderr, orig_str
             raise
-        if len(sent.tokens) >= 3:
+        #if len(sent.tokens) >= 3:
+        if len(sent.tokens) >= 1:
             print sent.to_str()
             print
 

@@ -36,21 +36,45 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.cprefix6s = <size_t*>calloc(size, sizeof(size_t))
     s.suffix = <size_t*>calloc(size, sizeof(size_t))
     s.prefix = <size_t*>calloc(size, sizeof(size_t))
-    s.parens = <size_t*>calloc(size, sizeof(size_t))
-    s.quotes = <size_t*>calloc(size, sizeof(size_t))
+    s.parens = <int*>calloc(size, sizeof(int))
+    s.quotes = <int*>calloc(size, sizeof(int))
+    s.non_alpha = <bint*>calloc(size, sizeof(bint))
+    s.oft_upper = <bint*>calloc(size, sizeof(bint))
+    s.oft_title = <bint*>calloc(size, sizeof(bint))
 
     cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
+    cdef dict case_dict = index.hashes.get_case_stats()
     mask_value = index.hashes.encode_word('<MASKED>')
-    cdef size_t paren_cnt = 0
-    cdef size_t quote_cnt = 0
+    cdef int paren_cnt = 0
+    cdef int quote_cnt = 0
+    types = set()
     for i in range(length):
-        s.words[i] = index.hashes.encode_word(py_words[i])
-        s.owords[i] = s.words[i]
+        s.owords[i] = index.hashes.encode_word(py_words[i])
+        if '-' in py_words[i] and py_words[i][0] != '-':
+            word = '!HYPHEN'
+        elif py_words[i].isdigit() and len(py_words[i]) == 4:
+            word = '!YEAR'
+        elif py_words[i][0].isdigit():
+            word = '!DIGITS'
+        else:
+            word = py_words[i].lower()
+        s.words[i] = index.hashes.encode_word(word)
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
-        if s.words[i] < brown_idx.n:
-            s.clusters[i] = brown_idx.table[s.words[i]].full
-            s.cprefix4s[i] = brown_idx.table[s.words[i]].prefix4
-            s.cprefix6s[i] = brown_idx.table[s.words[i]].prefix6
+        case_stats = case_dict.get(py_words[i])
+        if case_stats is None:
+            if not py_words[i].isalpha():
+                s.non_alpha[i] = True
+        else:
+            upper_pc, title_pc = case_stats
+            # Cut points determined by maximum information gain
+            if upper_pc >= 0.05:
+                s.oft_upper[i] = True
+            if title_pc >= 0.3:
+                s.oft_title[i] = True
+        if s.owords[i] < brown_idx.n:
+            s.clusters[i] = brown_idx.table[s.owords[i]].full
+            s.cprefix4s[i] = brown_idx.table[s.owords[i]].prefix4
+            s.cprefix6s[i] = brown_idx.table[s.owords[i]].prefix6
         if thresh != 0 and index.hashes.get_freq(py_words[i]) <= thresh:
             s.words[i] = mask_value
         s.ids[i] = py_ids[i]
@@ -75,7 +99,9 @@ cdef int add_parse(Sentence* sent, list heads, list labels, edits) except -1:
         sent.parse.heads[i] = <size_t>heads[i]
         sent.parse.labels[i] = index.hashes.encode_label(labels[i])
         if edits:
-            sent.parse.edits[i] = <size_t>edits[i]
+            sent.parse.edits[i] = <bint>edits[i]
+            if sent.parse.edits[i] and not edits[sent.parse.heads[i]]:
+                sent.parse.labels[i] = index.hashes.encode_label('erased')
 
 
 cdef free_sent(Sentence* s):
@@ -91,6 +117,9 @@ cdef free_sent(Sentence* s):
     free(s.prefix)
     free(s.parens)
     free(s.quotes)
+    free(s.oft_upper)
+    free(s.oft_title)
+    free(s.non_alpha)
 
     free(s.parse.heads)
     free(s.parse.labels)
@@ -124,17 +153,29 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
             if len(pieces) == 10:
                 word = pieces[1]
                 pos = pieces[3]
+                pos2 = pieces[4]
+                feats = pieces[5].split('|')
                 head = pieces[6]
                 label = pieces[7]
                 head = int(head) - 1
-                is_edit = pieces[9] == 'True'
-            else:
+                if feats and feats[2] == '1':
+                    is_edit = True
+                else:
+                    is_edit = False
+                if feats and feats[1] == 'D':
+                    label = 'discourse'
+            else:   
                 if len(pieces) == 5:
                     pieces.pop(0)
-                word, pos, head, label = pieces
+                try:
+                    word, pos, head, label = pieces
+                except:
+                    print repr(token_str)
+                    raise
                 head = int(head)
                 is_edit = False
-            if unlabelled and label not in ['ROOT', 'P', 'conj', 'cc']:
+            if unlabelled and label not in ['ROOT', 'P', 'conj', 'cc', 'erased',
+					    'discourse', 'interregnum']:
                 label = 'ERR'
             # For SWBD
             if pos.startswith('^'):
@@ -253,6 +294,19 @@ cdef class Sentences:
                 if s.parse.sbd[j] or j == (s.length - 2):
                     out_file.write(u'\n')
                     w_id = 0
+
+    def write_tags(self, out_file):
+        cdef Sentence* s
+        cdef size_t i, j
+        pos_idx = index.hashes.reverse_pos_index()
+        for i in range(self.length):
+            s = self.s[i]
+            py_words, py_pos = self.strings[i]
+            w_id = 0
+            for j in range(1, s.length - 1):
+                fields = (py_words[j], pos_idx[s.pos[j]])
+                out_file.write(u'%s/%s ' % fields)
+            out_file.write(u'\n')
       
     property length:
         def __get__(self): return self.length
