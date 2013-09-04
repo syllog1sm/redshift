@@ -122,7 +122,8 @@ def main(test_loc, gold_loc, eval_punct=False):
         if g.is_edit:
             ed_n += 1
             continue
-        if g.dfl_tag != '-': continue
+        if g.dfl_tag != '-':
+            continue
         u_c = g.head == t.head
         l_c = u_c and g.label == t.label
         N += 1
