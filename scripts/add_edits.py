@@ -3,6 +3,11 @@ import sys
 import plac
 
 def add_toks(test, gold):
+    new = []
+    if not test or not any(test):
+        for gold_idx, g in enumerate(gold):
+            new.append('%d\t%s\tNN\t%d\terased' % (gold_idx, g, gold_idx))
+        return '\n'.join(new)
     test.reverse()
     gold.reverse()
     test_idx = 0
@@ -18,7 +23,6 @@ def add_toks(test, gold):
         else:
             id_map[t[0]] = str(len(gold)- (gold_idx + 1))
             test_idx += 1
-    new = []
     for t in test:
         t = t.split()
         t[0] = id_map[t[0]]
@@ -31,9 +35,9 @@ def add_toks(test, gold):
     return '\n'.join(reversed(new))
 
 def main(test, gold):
-    test_sents = open(test).read().split('\n\n')
-    gold_sents = open(gold).read().split('\n')
-    assert len(test_sents) == len(gold_sents)
+    test_sents = open(test).read().strip().split('\n\n')
+    gold_sents = open(gold).read().strip().split('\n')
+    assert len(test_sents) == len(gold_sents), '%d vs %d' % (len(test_sents), len(gold_sents))
     for test_sent, gold_sent in zip(test_sents, gold_sents):
         if not test_sent.strip() and not gold_sent.strip(): continue
         test_toks = test_sent.split('\n')
