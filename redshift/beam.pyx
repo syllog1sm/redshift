@@ -130,30 +130,3 @@ cdef class Beam:
         free(self.costs)
 
 
-cdef class Violation:
-    """
-    A gold/prediction pair where the g.score < p.score
-    """
-
-    def __cinit__(self):
-        self.out_of_beam = False
-        self.t = 0
-        self.delta = 0.0
-        self.cost = 0
-
-    cdef int set(self, State* p, State* g, bint out_of_beam) except -1:
-        self.delta = p.score - g.score
-        self.cost = p.cost
-        assert g.t == p.t, '%d vs %d' % (g.t, p.t)
-        self.t = g.t
-        self.ghist = <size_t*>malloc(self.t * sizeof(size_t))
-        memcpy(self.ghist, g.history, self.t * sizeof(size_t))
-        self.phist = <size_t*>malloc(self.t * sizeof(size_t))
-        memcpy(self.phist, p.history, self.t * sizeof(size_t))
-        self.out_of_beam = out_of_beam
-
-    def __dealloc__(self):
-        free(self.ghist)
-        free(self.phist)
-
-
