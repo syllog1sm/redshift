@@ -26,9 +26,10 @@ from collections import defaultdict
 
 DEBUG = False
 
+
 cdef class BaseTagger:
     def __cinit__(self, model_dir, feat_set="basic", feat_thresh=5, beam_width=4,
-                  clean=False, trained=False, reuse_idx=False):
+                  clean=False, trained=False):
         assert not (clean and trained)
         self.model_dir = model_dir
         if clean and os.path.exists(model_dir):
@@ -36,10 +37,8 @@ cdef class BaseTagger:
         if not os.path.exists(model_dir):
             os.mkdir(model_dir)
         self.feat_thresh = feat_thresh
-        if trained and not reuse_idx:
-            self.load_idx(model_dir)
-        elif not reuse_idx:
-            self.new_idx(model_dir)
+        #if trained:
+        #    self.load_idx(model_dir)
         self.guide = Perceptron(100, pjoin(model_dir, 'tagger.gz'))
         if trained:
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
@@ -119,20 +118,16 @@ cdef class BaseTagger:
 
     def save(self):
         self.guide.save(pjoin(self.model_dir, 'tagger.gz'))
+        index.hashes.save_idx('word', pjoin(self.model_dir, 'words'))
+        index.hashes.save_idx('pos', pjoin(self.model_dir, 'pos'))
+        index.hashes.save_idx('label', pjoin(self.model_dir, 'labels'))
 
     def load(self):
         self.guide.load(pjoin(self.model_dir, 'tagger.gz'), thresh=self.feat_thresh)
         self.nr_tag = self.guide.nr_class
-
-    def new_idx(self, model_dir):
-        index.hashes.init_word_idx(pjoin(model_dir, 'words'))
-        index.hashes.init_pos_idx(pjoin(model_dir, 'pos'))
-        index.hashes.init_label_idx(pjoin(model_dir, 'labels'))
-
-    def load_idx(self, model_dir):
-        index.hashes.load_word_idx(pjoin(model_dir, 'words'))
-        index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
-        index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
+        index.hashes.load_idx(pjoin(self.model_dir, 'words'))
+        index.hashes.load_idx(pjoin(self.model_dir, 'pos'))
+        index.hashes.load_idx(pjoin(self.model_dir, 'labels'))
 
 
 cdef class GreedyTagger(BaseTagger):

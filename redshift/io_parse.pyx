@@ -4,8 +4,7 @@ import index.hashes
 cimport index.hashes
 
 
-cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tags,
-                             size_t thresh):
+cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tags):
     cdef:
         size_t i
         bytes py_word
@@ -44,7 +43,6 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
 
     cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
     cdef dict case_dict = index.hashes.get_case_stats()
-    mask_value = index.hashes.encode_word('<MASKED>')
     cdef int paren_cnt = 0
     cdef int quote_cnt = 0
     types = set()
@@ -75,8 +73,6 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
             s.clusters[i] = brown_idx.table[s.owords[i]].full
             s.cprefix4s[i] = brown_idx.table[s.owords[i]].prefix4
             s.cprefix6s[i] = brown_idx.table[s.owords[i]].prefix6
-        if thresh != 0 and index.hashes.get_freq(py_words[i]) <= thresh:
-            s.words[i] = mask_value
         s.ids[i] = py_ids[i]
         # Use POS tag to semi-smartly get ' disambiguation
         if py_tags[i] == "``":
@@ -130,13 +126,13 @@ cdef free_sent(Sentence* s):
     free(s)
 
 
-def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
+def read_conll(conll_str, moves=None, unlabelled=False):
     cdef:
         size_t i
         object words, tags, heads, labels, token_str, word, pos, head, label
         Sentences sentences
     sent_strs = conll_str.strip().split('\n\n')
-    sentences = Sentences(max_length=len(sent_strs), vocab_thresh=vocab_thresh)
+    sentences = Sentences(max_length=len(sent_strs))
     first_sent = sent_strs[0]
     cdef size_t word_idx = 0
     cdef size_t id_
@@ -196,7 +192,7 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
         heads.append(0)
         labels.append('ERR')
         edits.append(False)
-        sent = make_sentence(id_, len(ids), ids, words, tags, vocab_thresh)
+        sent = make_sentence(id_, len(ids), ids, words, tags)
         add_parse(sent, heads, labels, edits)
         sentences.add(sent, words, tags)
     if moves is not None and moves.strip():
@@ -204,14 +200,14 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
     return sentences
 
     
-def read_pos(file_str, vocab_thresh=0, sep='/'):
+def read_pos(file_str, sep='/'):
     cdef:
         size_t i
         object token_str, word, pos, words, tags
         Sentences sentences
 
     sent_strs = file_str.strip().split('\n')
-    sentences = Sentences(max_length=len(sent_strs), vocab_thresh=vocab_thresh)
+    sentences = Sentences(max_length=len(sent_strs))
     cdef size_t w_id = 0
     for i, sent_str in enumerate(sent_strs):
         words = ['<start>']
@@ -233,18 +229,17 @@ def read_pos(file_str, vocab_thresh=0, sep='/'):
         words.append('<root>')
         tags.append('ROOT')
         ids.append(0)
-        sent = make_sentence(i, len(ids), ids, words, tags, vocab_thresh)
+        sent = make_sentence(i, len(ids), ids, words, tags)
         sentences.add(sent, words, tags)
     return sentences
 
 
 cdef class Sentences:
-    def __cinit__(self, size_t max_length=100000, vocab_thresh=0):
+    def __cinit__(self, size_t max_length=100000):
         self.strings = []
         self.length = 0
         self.s = <Sentence**>malloc(sizeof(Sentence*) * max_length)
         self.max_length = max_length
-        self.vocab_thresh = vocab_thresh
 
     def __dealloc__(self):
         for i in range(self.length):

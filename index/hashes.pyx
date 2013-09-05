@@ -10,63 +10,16 @@ from libc.string cimport memcpy
 
 import os.path
 
-
-cdef class Index:
-    cpdef set_path(self, path):
-        self.path = path
-        self.out_file = open(path, 'w')
-        self.save_entries = True
-
-    cpdef save(self):
-        if self.save_entries:
-            self.out_file.close()
-        self.save_entries = False
-
-    cpdef save_entry(self, int i, object feat_str, object hashed, object value):
-        self.out_file.write(u'%d\t%s\t%d\t%d\n' % (i, feat_str, hashed, value))
-
-    cpdef load(self, path):
-        cdef object hashed
-        cdef uint64_t value
-        self.path = path
-        nlines = 0
-        for line in open(self.path):
-            nlines += 1
-            fields = line.strip().split()
-            i = int(fields[0])
-            key = fields[1]
-            hashed = int(fields[2])
-            value = int(fields[3])
-            self.load_entry(i, key, hashed, value)
-
-    def get_reverse_index(self):
-        if self.out_file is not None:
-            self.out_file.close()
-        index = {}
-        for line in open(self.path):
-            if not line.strip():
-                continue
-            i, feat_str, hashed, value = line.split()
-            index[int(value)] = feat_str
-        return index
-
-
-cdef class StrIndex(Index):
+import data
+    
+cdef class StrIndex:
     def __cinit__(self, expected_size, uint64_t i=2):
         self.table.set_empty_key(0)
         self.table.resize(expected_size)
         self.i = i
-        self.save_entries = False
-        self.vocab = {}
+        self.strings = {}
         self.case_stats = {}
 
-    def load_vocab(self, vocab_loc):
-        for line in open(vocab_loc):
-            if not line.strip():
-                continue
-            freq, word = line.strip().split()
-            self.vocab[word] = int(freq)
-    
     def load_case_stats(self, loc):
         for line in open(loc):
             if not line.strip():
@@ -79,7 +32,6 @@ cdef class StrIndex(Index):
             lower_freq = int(lower_freq)
             total = float(caps_freq + title_freq + lower_freq)
             self.case_stats[word] = (caps_freq / total, title_freq / total)
- 
 
     cdef uint64_t encode(self, char* feature) except 0:
         cdef uint64_t value
@@ -89,17 +41,35 @@ cdef class StrIndex(Index):
             value = self.i
             self.table[hashed] = value
             self.i += 1
-            if self.save_entries:
-                self.save_entry(0, str(feature), hashed, value)
-        assert value < 1000000
+            self.strings[feature] = value
         return value
 
-    cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value):
-        self.table[hashed] = value
+    def get_reverse_index(self):
+        index = {}
+        for s, i in self.strings.items():
+            index[i] = s
+        return index
 
-    def __dealloc__(self):
-        if self.save_entries:
-            self.out_file.close()
+    def load(self, path):
+        cdef uint64_t hashed
+        cdef uint64_t value
+        cdef object feature
+        max_i = 0
+        for line in open(path):
+            fields = line.strip().split()
+            i = int(fields[0])
+            feature = fields[1]
+            hashed = MurmurHash64A(<char*>feature, len(feature), 0)
+            self.table[hashed] = i
+            self.strings[feature] = i
+            if i > max_i:
+                max_i = i
+        self.i = max_i + 1
+
+    def save(self, path):
+        out = open(path, 'w')
+        for string, value in sorted(self.strings.items(), key=lambda i: i[1]):
+            out.write('%d\t%s\n' % (value, string))
 
     property vocab:
         def __get__(self):
@@ -199,47 +169,41 @@ _word_idx = StrIndex(VOCAB_SIZE, i=TAG_SET_SIZE)
 _label_idx = StrIndex(LABEL_SIZE)
 _cluster_idx = ClusterIndex()
 
-
-def init_word_idx(path):
-    global _word_idx, _cluster_idx
-    _word_idx.set_path(path)
-    _word_idx.load_vocab(os.path.join(os.path.dirname(__file__), 'vocab.txt'))
-    _word_idx.load_case_stats(os.path.join(os.path.dirname(__file__), 'case_stats.txt'))
-    _cluster_idx.load(os.path.join(os.path.dirname(__file__), 'browns.txt'))
+_word_idx.load_case_stats(os.path.join(data.path, 'case_stats.txt'))
+_cluster_idx.load(os.path.join(data.path, 'browns.txt'))
 
 
-def init_pos_idx(path):
-    global _pos_idx
-    _pos_idx.set_path(path)
-    encode_pos('ROOT')
-    encode_pos('NONE')
-    encode_pos('OOB')
+_pos_idx.encode('ROOT')
+_pos_idx.encode('NONE')
+_pos_idx.encode('OOB')
 
 
-def init_label_idx(path):
-    global _label_idx
-    _label_idx.set_path(path)
-    encode_label('ERR')
-    encode_label('ROOT')
-    encode_label('P')
-    encode_label('erased')
+_label_idx.encode('ERR')
+_label_idx.encode('ROOT')
+_label_idx.encode('P')
+_label_idx.encode('erased')
 
 
-def load_word_idx(path):
-    global _word_idx
-    _word_idx.load(path)
-    _word_idx.load_vocab(os.path.join(os.path.dirname(__file__), 'vocab.txt'))
-    _cluster_idx.load(os.path.join(os.path.dirname(__file__), 'browns.txt'))
+def load_idx(name, path):
+    global _word_idx, _pos_idx, _label_idx
+    if name == 'word':
+        _word_idx.load(path)
+    elif name == 'pos':
+        _pos_idx.load(path)
+    elif name == 'label':
+        _label_idx.load(path)
+    else:
+        raise StandardError, name
 
 
-def load_pos_idx(path):
-    global _pos_idx
-    _pos_idx.load(path)
-
-
-def load_label_idx(path):
-    global _label_idx
-    _label_idx.load(path)
+def save_idx(name, path):
+    global _word_idx, _pos_idx, _label_idx
+    if name == 'word':
+        _word_idx.save(path)
+    elif name == 'pos':
+        _pos_idx.save(path)
+    elif name == 'label':
+        _label_idx.save(path)
 
 
 cpdef encode_word(object word):
@@ -255,7 +219,8 @@ cpdef encode_pos(object pos):
     cdef StrIndex idx = _pos_idx
     py_pos = pos.encode('ascii')
     raw_pos = py_pos
-    return idx.encode(raw_pos)
+    a = idx.encode(raw_pos)
+    return a
 
 
 def encode_label(object label):
@@ -279,7 +244,6 @@ def reverse_word_index():
     global _word_idx
     cdef StrIndex idx = _word_idx
     return idx.get_reverse_index()
-
 
 
 def reverse_label_index():

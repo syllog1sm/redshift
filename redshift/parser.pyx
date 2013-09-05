@@ -12,6 +12,7 @@ from libc.string cimport memcpy, memset
 
 from _state cimport *
 from io_parse cimport Sentence, Sentences
+from io_parse import read_conll, read_pos
 from transitions cimport TransitionSystem, transition_to_str 
 from beam cimport Beam
 from tagger cimport GreedyTagger, BeamTagger
@@ -38,7 +39,7 @@ def set_debug(val):
     DEBUG = val
 
 
-def load_parser(model_dir, reuse_idx=False):
+def load_parser(model_dir):
     params = dict([line.split() for line in open(pjoin(model_dir, 'parser.cfg'))])
     train_alg = params['train_alg']
     feat_thresh = int(params['feat_thresh'])
@@ -58,19 +59,18 @@ def load_parser(model_dir, reuse_idx=False):
               'feat_set': feat_set, 'feat_thresh': feat_thresh,
               'vocab_thresh': 1, 'allow_reattach': allow_reattach,
               'use_edit': use_edit, 'allow_reduce': allow_reduce,
-              'reuse_idx': reuse_idx, 'beam_width': beam_width,
+              'beam_width': beam_width,
               'ngrams': ngrams,
               'auto_pos': auto_pos}
     if beam_width >= 2:
         parser = BeamParser(model_dir, **params)
     else:
         parser = GreedyParser(model_dir, **params)
-    pos_tags = set([int(line.split()[-1]) for line in
-                        open(pjoin(model_dir, 'pos'))])
+    pos_tags = set([int(line.split()[0]) for line in open(pjoin(model_dir, 'pos'))])
+    parser.load()
     _, nr_label = parser.moves.set_labels(pos_tags, _parse_labels_str(l_labels),
                             _parse_labels_str(r_labels))
     
-    parser.load()
     return parser
 
 
@@ -94,8 +94,7 @@ cdef class BaseParser:
                   feat_set="zhang",
                   feat_thresh=0, vocab_thresh=5,
                   allow_reattach=False, allow_reduce=False, use_edit=False,
-                  reuse_idx=False, beam_width=1,
-                  ngrams=None, auto_pos=False):
+                  beam_width=1, ngrams=None, auto_pos=False):
         self.model_dir = self.setup_model_dir(model_dir, clean)
         self.feat_set = feat_set
         self.ngrams = ngrams if ngrams is not None else []
@@ -128,16 +127,12 @@ cdef class BaseParser:
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
         self.beam_width = beam_width
-        if clean == True:
-            self.new_idx(self.model_dir)
-        else:
-            self.load_idx(self.model_dir)
         self.moves = TransitionSystem(allow_reattach=allow_reattach,
                                       allow_reduce=allow_reduce, use_edit=use_edit)
         self.auto_pos = auto_pos
         self.say_config()
         self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model.gz'))
-        self.tagger = BeamTagger(model_dir, clean=False, reuse_idx=True)
+        self.tagger = BeamTagger(model_dir, clean=False)
 
     def setup_model_dir(self, loc, clean):
         if clean and os.path.exists(loc):
@@ -148,11 +143,14 @@ cdef class BaseParser:
             os.mkdir(loc)
         return loc
 
-    def train(self, Sentences sents, n_iter=15):
+    def train(self, str train_str, unlabelled=False, n_iter=15):
         cdef size_t i, j, n
         cdef Sentence* sent
         cdef Sentences held_out_gold
         cdef Sentences held_out_parse
+
+        cdef Sentences sents = read_conll(train_str,
+                                          unlabelled=unlabelled)
         self.say_config()
         self.tagger.setup_classes(sents)
         move_classes, nr_label = self.moves.set_labels(*sents.get_labels())
@@ -199,11 +197,13 @@ cdef class BaseParser:
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:
         raise NotImplementedError
     
-    def add_parses(self, Sentences sents):
+    def parse_file(self, in_loc, out_loc):
+        cdef Sentences sents = read_pos(open(in_loc).read())
         self.guide.nr_class = self.moves.nr_class
         cdef size_t i
         for i in range(sents.length):
             self.parse(sents.s[i])
+        sents.write_parses(open(out_loc, 'w'))
 
     cdef int parse(self, Sentence* sent) except -1:
         raise NotImplementedError
@@ -211,20 +211,16 @@ cdef class BaseParser:
     def save(self):
         self.guide.save(pjoin(self.model_dir, 'model.gz'))
         self.tagger.save()
-
+        index.hashes.save_idx('word', pjoin(self.model_dir, 'words'))
+        index.hashes.save_idx('pos', pjoin(self.model_dir, 'pos'))
+        index.hashes.save_idx('labels', pjoin(self.model_dir, 'labels'))
+   
     def load(self):
         self.guide.load(pjoin(self.model_dir, 'model.gz'), thresh=self.feat_thresh)
         self.tagger.guide.load(pjoin(self.model_dir, 'tagger.gz'), thresh=self.feat_thresh)
-
-    def new_idx(self, model_dir):
-        index.hashes.init_word_idx(pjoin(model_dir, 'words'))
-        index.hashes.init_pos_idx(pjoin(model_dir, 'pos'))
-        index.hashes.init_label_idx(pjoin(model_dir, 'labels'))
-
-    def load_idx(self, model_dir):
-        index.hashes.load_word_idx(pjoin(model_dir, 'words'))
-        index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
-        index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
+        index.hashes.load_idx('word', pjoin(self.model_dir, 'words'))
+        index.hashes.load_idx('pos', pjoin(self.model_dir, 'pos'))
+        index.hashes.load_idx('label', pjoin(self.model_dir, 'labels'))
    
     def write_cfg(self, loc):
         with open(loc, 'w') as cfg:
@@ -248,6 +244,7 @@ cdef class BaseParser:
 
     def __dealloc__(self):
         pass
+
 
 cdef class BeamParser(BaseParser):
     cdef int parse(self, Sentence* sent) except -1:

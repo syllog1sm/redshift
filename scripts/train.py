@@ -22,7 +22,6 @@ USE_HELD_OUT = False
     train_loc=("Training location", "positional"),
     train_alg=("Learning algorithm [static, dyn]", "option", "a", str),
     n_iter=("Number of Perceptron iterations", "option", "i", int),
-    vocab_thresh=("Vocab pruning threshold", "option", "t", int),
     feat_thresh=("Feature pruning threshold", "option", "f", int),
     allow_reattach=("Allow left-clobber", "flag", "r", bool),
     allow_reduce=("Allow reduce when no head is set", "flag", "d", bool),
@@ -38,11 +37,18 @@ USE_HELD_OUT = False
     auto_pos=("Train tagger alongside parser", "flag", "p", bool)
 )
 def main(train_loc, model_loc, train_alg="static", n_iter=15,
-         feat_set="zhang", vocab_thresh=0, feat_thresh=10,
+         feat_set="zhang", feat_thresh=10,
          allow_reattach=False, allow_reduce=False, use_edit=False,
          ngrams='', n_sents=0,
          profile=False, debug=False, seed=0, beam_width=1, unlabelled=False,
          auto_pos=False):
+    train_sent_strs = open(train_loc).read().strip().split('\n\n')
+    if n_sents != 0:
+        print "Using %d sents for training" % n_sents
+        random.shuffle(train_sent_strs)
+        train_sent_strs = train_sent_strs[:n_sents]
+    train_str = '\n\n'.join(train_sent_strs)
+ 
     # TODO: ngrams stuff
     if not ngrams:
         ngrams = []
@@ -60,15 +66,7 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
                               feat_set=feat_set, feat_thresh=feat_thresh,
                               allow_reduce=allow_reduce,
                               allow_reattach=allow_reattach, use_edit=use_edit,
-                              ngrams=ngrams, add_clusters=add_clusters, auto_pos=auto_pos)
-    train_sent_strs = open(train_loc).read().strip().split('\n\n')
-    if n_sents != 0:
-        print "Using %d sents for training" % n_sents
-        random.shuffle(train_sent_strs)
-        train_sent_strs = train_sent_strs[:n_sents]
-    train_str = '\n\n'.join(train_sent_strs)
-    train = redshift.io_parse.read_conll(train_str, vocab_thresh=vocab_thresh,
-                                         unlabelled=unlabelled)
+                              ngrams=ngrams, auto_pos=auto_pos)
     if profile:
         print 'profiling'
         cProfile.runctx("parser.train(train, n_iter=n_iter)", globals(),
@@ -76,7 +74,7 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
         s = pstats.Stats("Profile.prof")
         s.strip_dirs().sort_stats("time").print_stats()
     else:
-        parser.train(train, n_iter=n_iter)
+        parser.train(train_str, n_iter=n_iter)
     parser.save()
 
 

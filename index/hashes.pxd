@@ -7,24 +7,14 @@ from ext.sparsehash cimport *
 DEF VOCAB_SIZE = 1e6
 DEF TAG_SET_SIZE = 100
 
-cdef class Index:
-    cdef object path
+cdef class StrIndex:
+    cdef size_t i
     cdef bint save_entries
-    cdef object out_file
-    cdef uint64_t i
-
-    cpdef set_path(self, path)
-    cpdef save_entry(self, int i, object feat_str, object hashed, object value)
-    cpdef save(self)
-    cpdef load(self, path)
-
-
-cdef class StrIndex(Index):
     cdef object vocab
     cdef object case_stats
+    cdef object strings
     cdef dense_hash_map[uint64_t, uint64_t] table
     cdef uint64_t encode(self, char* feature) except 0
-    cpdef load_entry(self, uint64_t i, object key, uint64_t hashed, uint64_t value)
 
 
 cdef struct Cluster:
@@ -55,6 +45,10 @@ cpdef encode_word(object word)
 
 cpdef int get_freq(object word) except -1
 
+cdef StrIndex _pos_idx
+cdef StrIndex _word_idx
+cdef StrIndex _label_idx
+cdef ClusterIndex _cluster_idx
 
 cdef class InstanceCounter:
     cdef uint64_t n

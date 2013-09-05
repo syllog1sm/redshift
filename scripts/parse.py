@@ -8,7 +8,6 @@ import pstats
 import cProfile
 
 import redshift.parser
-import redshift.io_parse
 
 
 def get_pos(conll_str):
@@ -37,7 +36,6 @@ def main(parser_dir, text_loc, out_dir, profile=False, debug=False):
         os.mkdir(out_dir)
     yield "Loading parser"
     parser = redshift.parser.load_parser(parser_dir)
-    sentences = redshift.io_parse.read_pos(open(text_loc).read())
     #sentences.connect_sentences(1700)
     if profile:
         cProfile.runctx("parser.add_parses(sentences)",
@@ -46,10 +44,9 @@ def main(parser_dir, text_loc, out_dir, profile=False, debug=False):
         s.strip_dirs().sort_stats("time").print_stats()
     else:
         t1 = time.time()
-        parser.add_parses(sentences)
+        parser.parse_file(text_loc, os.path.join(out_dir, 'parses'))
         t2 = time.time()
-        print '%d sents took %0.3f ms' % (sentences.length, (t2-t1)*1000.0)
-    sentences.write_parses(open(os.path.join(out_dir, 'parses'), 'w'))
+        print 'Parsing took %0.3f ms' % ((t2-t1)*1000.0)
 
 
 if __name__ == '__main__':
