@@ -259,7 +259,14 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
 
 debug = (
     (S0w,),
+    (S0p,),
     (N0w,),
+    (N0p,),
+    (S0rw,),
+    (S0lw,),
+    (N0ll, N0l2l),
+    (S0rl, S0r2l),
+    (S0ll, S0l2l)
 )
 
 from_single = (
