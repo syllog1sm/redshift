@@ -48,12 +48,6 @@ cdef enum:
     N2c6
     N2c4
     
-    N3w
-    N3p
-    N3c
-    N3c6
-    N3c4
-    
     S0w
     S0p
     S0c
@@ -102,22 +96,6 @@ cdef enum:
     
     S0r2l
 
-    S0l0w
-    S0l0p
-    S0l0c
-    S0l0c6
-    S0l0c4
-
-    S0l0l
-
-    S0r0w
-    S0r0p
-    S0r0c
-    S0r0c6
-    S0r0c4
-
-    S0r0l
-
     S0h2w
     S0h2p
     S0h2c
@@ -144,65 +122,6 @@ cdef enum:
     S0llabs
     S0rlabs
     N0llabs
-    N0orth
-    N0paren
-    N0quote
-    N1orth
-    N1paren
-    N1quote
-    S0re_orth
-
-    S0le_w
-    S0le_p
-    S0le_c
-    S0le_c6
-    S0le_c4
-    
-    S0re_w
-    S0re_p
-    S0re_c
-    S0re_c6
-    S0re_c4
-    
-    N0le_orth
-    
-    N0le_w
-    N0le_p
-    N0le_c
-    N0le_c6
-    N0le_c4
-
-    prev_edit
-    prev_edit_wmatch
-    prev_edit_pmatch
-    prev_edit_word
-    prev_edit_pos
-    prev_prev_edit
-
-    next_edit
-    next_edit_wmatch
-    next_edit_pmatch
-    next_edit_word
-    next_edit_pos
-    next_next_edit
-
-    wcopy 
-    pcopy
-
-    wexact
-    pexact
-
-    wscopy
-    pscopy
-
-    wsexact
-    psexact
-
-    m1
-    m2
-    m3
-    m4
-    m5
 
     CONTEXT_SIZE
 
@@ -212,8 +131,8 @@ def context_size():
 
 
 def get_kernel_tokens():
-    return [S0hw, S0h2w, S0w, S0lw, S0l2w, S0l0w, S0le_w, S0rw, S0r2w, S0r0w,
-            S0re_w, N0w, N0lw, N0l2w, N0l0w, N0le_w, N1w, N2w]
+    return [S0hw, S0h2w, S0w, S0lw, S0l2w, S0rw, S0r2w,
+            N0w, N0lw, N0l2w, N0l0w, N1w, N2w]
 
 
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
@@ -238,12 +157,6 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N2c] = clusters[k.i + 2]
     context[N2c6] = cprefix6s[k.i + 2]
     context[N2c4] = cprefix4s[k.i + 2]
-
-    context[N3w] = words[k.i + 3]
-    context[N3p] = tags[i + 3]
-    context[N3c] = clusters[k.i + 3]
-    context[N3c6] = cprefix6s[k.i + 3]
-    context[N3c4] = cprefix4s[k.i + 3]
 
     context[S0w] = words[k.s0]
     context[S0p] = tags[k.s0]
@@ -317,19 +230,6 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S0r2c6] = cprefix6s[s0r.idx[1]]
     context[S0r2c4] = cprefix4s[s0r.idx[1]]
 
-    context[S0l0w] = words[s0l.idx[2]]
-    context[S0l0p] = s0l.tags[2]
-    context[S0l0c] = clusters[s0l.idx[2]]
-    context[S0l0c6] = cprefix6s[s0l.idx[2]]
-    context[S0l0c4] = cprefix4s[s0l.idx[2]]
-
-    context[S0r0w] = words[s0r.idx[2]]
-    context[S0r0p] = s0r.tags[2]
-    context[S0r0c] = clusters[s0r.idx[2]]
-    context[S0r0c6] = cprefix6s[s0r.idx[2]]
-    context[S0r0c4] = cprefix6s[s0r.idx[2]]
-
-
     context[N0lw] = words[n0l.idx[0]]
     context[N0lp] = n0l.tags[0]
     context[N0lc] = clusters[n0l.idx[0]]
@@ -342,21 +242,12 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N0l2c6] = cprefix6s[n0l.idx[1]]
     context[N0l2c4] = cprefix4s[n0l.idx[1]]
 
-    context[N0l0w] = words[n0l.idx[2]]
-    context[N0l0p] = n0l.tags[2]
-    context[N0l0c] = clusters[n0l.idx[2]]
-    context[N0l0c6] = cprefix6s[n0l.idx[2]]
-    context[N0l0c4] = cprefix4s[n0l.idx[2]]
-
     context[S0ll] = s0l.lab[0]
     context[S0l2l] = s0l.lab[1]
-    context[S0l0l] = s0l.lab[2]
     context[S0rl] = s0r.lab[0]
     context[S0r2l] = s0r.lab[1]
-    context[S0r0l] = s0r.lab[2]
     context[N0ll] = n0l.lab[0]
     context[N0l2l] = n0l.lab[1]
-    context[N0l0l] = n0l.lab[2]
 
     context[S0llabs] = 0
     context[S0rlabs] = 0
@@ -373,112 +264,6 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[dist] = k.i - k.s0
     else:
         context[dist] = 0
-    context[N0orth] = orths[k.i]
-    context[N1orth] = orths[k.i + 1]
-    context[N0paren] = parens[k.i]
-    context[N1paren] = parens[k.i + 1]
-    context[N0quote] = quotes[k.i]
-    context[N1quote] = quotes[k.i + 1]
-
-    context[S0le_w] = words[k.s0ledge]
-    context[S0le_p] = tags[k.s0ledge]
-    context[S0le_c] = clusters[k.s0ledge]
-    context[S0le_c6] = cprefix6s[k.s0ledge]
-    context[S0le_c4] = cprefix4s[k.s0ledge]
-    context[N0le_orth] = orths[k.n0ledge]
-    context[N0le_w] = words[k.n0ledge]
-    context[N0le_p] = tags[k.n0ledge]
-    context[N0le_c] = clusters[k.n0ledge]
-    context[N0le_c6] = cprefix6s[k.n0ledge]
-    context[N0le_c4] = cprefix4s[k.n0ledge]
-    
-    context[S0re_p] = tags[k.s0redge]
-    if k.n0ledge > 0:
-        context[S0re_orth] = orths[k.n0ledge - 1]
-        context[S0re_w] = words[k.n0ledge - 1]
-        context[S0re_c] = clusters[k.n0ledge - 1]
-        context[S0re_c6] = cprefix6s[k.n0ledge - 1]
-        context[S0re_c4] = cprefix4s[k.n0ledge - 1]
-    else:
-        context[S0re_w] = 0
-        context[S0re_c] = 0
-        context[S0re_c6] = 0
-        context[S0re_c4] = 0
-        context[S0re_orth] = 0
-    if k.prev_edit and k.i != 0:
-        context[prev_edit] = 1
-        context[prev_edit_wmatch] = 1 if words[k.i - 1] == words[k.i] else 0
-        context[prev_edit_pmatch] = 1 if k.prev_tag == tags[k.i] else 0
-        context[prev_prev_edit] = 1 if k.prev_prev_edit else 0
-        context[prev_edit_word] = words[k.i - 1]
-        context[prev_edit_pos] = k.prev_tag
-    else:
-        context[prev_edit] = 0
-        context[prev_edit_wmatch] = 0
-        context[prev_edit_pmatch] = 0
-        context[prev_prev_edit] = 0
-        context[prev_edit_word] = 0
-        context[prev_edit_pos] = 0
-    if k.next_edit and k.s0 != 0:
-        context[next_edit] = 1
-        context[next_edit_wmatch] = 1 if words[k.s0 + 1] == words[k.s0] else 0
-        context[next_edit_pmatch] = 1 if tags[k.s0 + 1] == tags[k.s0] else 0
-        context[next_next_edit] = 1 if k.next_next_edit else 0
-        context[next_edit_word] = words[k.s0 + 1]
-        context[next_edit_pos] = k.next_tag
-    else:
-        context[next_edit] = 0
-        context[next_edit_wmatch] = 0
-        context[next_edit_pmatch] = 0
-        context[next_next_edit] = 0
-        context[next_edit_word] = 0
-        context[next_edit_pos] = 0
- 
-    # These features find how much of S0's span matches N0's span, starting from
-    # the left.
-    # 
-    context[wcopy] = 0
-    context[wexact] = 1
-    context[pcopy] = 0
-    context[pexact] = 1
-    context[wscopy] = 0
-    context[wsexact] = 1
-    context[pscopy] = 0
-    context[psexact] = 1
-    for i in range(5):
-        if ((k.n0ledge + i) > k.i) or ((k.s0ledge + i) > k.s0):
-            break
-        if context[wexact]:
-            if words[k.n0ledge + i] == words[k.s0ledge + i]:
-                context[wcopy] += 1
-            else:
-                context[wexact] = 0
-        if context[pexact]:
-            if tags[k.n0ledge + i] == tags[k.s0ledge + i]:
-                context[pcopy] += 1
-            else:
-                context[pexact] = 0
-        if context[wsexact]:
-            if words[k.s0 - i] == words[k.i - i]:
-                context[wscopy] += 1
-            else:
-                context[wsexact] = 0
-        if context[psexact]:
-            if tags[k.s0 - i] == tags[k.i - i]:
-                context[pscopy] += 1
-            else:
-                context[psexact] = 0
-
-    #context[m1] = k.hist[0]
-    #context[m2] = k.hist[1]
-    #context[m3] = k.hist[2]
-    #context[m4] = k.hist[3]
-    #context[m5] = k.hist[4]
-    context[m1] = 0
-    context[m2] = 0
-    context[m3] = 0
-    context[m4] = 0
-    context[m5] = 0
 
 debug = (
     (S0w,),
@@ -591,7 +376,7 @@ label_sets = (
    (N0w, N0llabs),
    (N0p, N0llabs),
 )
-
+"""
 extra_labels = (
     (S0p, S0ll, S0lp),
     (S0p, S0ll, S0l2l),
@@ -599,11 +384,13 @@ extra_labels = (
     (S0p, S0rl, S0r2l),
     (S0p, S0ll, S0rl),
     (S0p, S0ll, S0l2l, S0l0l),
-    (S0p, S0rl, S0r2l, S0r0l),
+    (S0p, S0rl, S0r2l),
     (S0hp, S0l, S0rl),
     (S0hp, S0l, S0ll),
 )
+"""
 
+"""
 edges = (
     (S0re_w,),
     (S0re_p,),
@@ -617,7 +404,7 @@ edges = (
     (S0re_p, N0p,),
     (S0p, N0le_p)
 )
-
+"""
 
 stack_second = (
     (S1w,),
@@ -640,6 +427,7 @@ stack_second = (
     (S2p, N0w, N1w),
     (S2w, N0p, N1p),
 )
+"""
 history = (
     (m1,),
     (m1, m2),
@@ -647,6 +435,7 @@ history = (
     (m1, m2, m3, m4),
     (m1, m2, m3, m4, m5),
 )
+"""
 
 # Koo et al (2008) dependency features, using Brown clusters.
 clusters = (
@@ -686,7 +475,7 @@ clusters = (
     (S0lc4, S0c4, N0p)
 )
 
-
+"""
 disfl = (
     (prev_edit,),
     (prev_prev_edit,),
@@ -733,7 +522,7 @@ suffix_disfl = (
     (wsexact, pscopy),
     (wscopy, psexact),
 )
- 
+"""
 
 def cluster_bigrams():
     kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]
