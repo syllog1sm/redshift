@@ -1,8 +1,11 @@
 # cython: profile=True
 from _state cimport *
+from _fast_state cimport *
 from libc.stdlib cimport malloc, calloc, free
 import redshift.io_parse
 import index.hashes
+
+
 
 # TODO: Link these with other compile constants
 DEF MAX_TAGS = 100
@@ -201,56 +204,59 @@ cdef class TransitionSystem:
             if add and self.labels[i] != label:
                 costs[i] += 1
 
-    cdef int fill_valid(self, State* s, int* valid) except -1:
+    cdef int fill_valid(self, int* valid, bint can_push, bint has_stack,
+                        bint has_head) except -1:
         cdef size_t i
         for i in range(self.nr_class):
             valid[i] = -1
-        if self.p_cost(s) != -1:
-            for i in range(self.p_start, self.p_end):
-                valid[i] = 0
+        if not can_push and not has_stack:
             return 0
-        if s.is_finished:
-            return 0
-        cdef bint can_push = not s.at_end_of_buffer
-        cdef bint can_pop = s.top != 0
         if can_push:
             valid[self.s_id] = 0
-        if can_pop and (s.heads[s.top] != 0 or (self.allow_reduce and s.stack_len >= 2)):
+        if has_stack and has_head:
             valid[self.d_id] = 0
-        if can_pop and self.use_edit:
-            valid[self.e_id] = 0
-        if can_push and can_pop:
+        if can_push and has_stack:
             for i in range(self.r_start, self.r_end):
                 valid[i] = 0
-        if can_pop and (s.heads[s.top] == 0 or self.allow_reattach):
+        if has_stack and not has_head:
             for i in range(self.l_start, self.l_end):
                 valid[i] = 0
 
     cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
                                size_t* labels, bint* edits, int* costs) except -1:
-        cdef size_t oracle = self.break_tie(s, tags, heads, labels, edits)
+        cdef size_t oracle = self.break_tie(not s.at_end_of_buffer,
+                                            s.heads[s.top] != 0, s.i, s.top, s.n,
+                                            tags, heads, labels, edits)
         cdef size_t i
         for i in range(self.nr_class):
             costs[i] = i != oracle
 
-    cdef int break_tie(self, State* s, size_t* tags, size_t* heads,
-                       size_t* labels, bint* edits) except -1:
-        if self.p_cost(s) != -1:
-            return self.p_classes[tags[s.i + 1]]
-        cdef bint can_push = not s.at_end_of_buffer
-        cdef bint can_pop = s.top != 0
-        if can_push and not can_pop:
+    cdef int break_tie(self, bint can_push, bint has_head, 
+                       size_t n0, size_t s0, size_t length, size_t* tags,
+                       size_t* heads, size_t* labels, bint* edits) except -1:
+        cdef bint has_stack = s0 != 0
+        if can_push and not has_stack:
             return self.s_id
-        elif can_push and heads[s.i] == s.top:
-            return self.r_classes[labels[s.i]]
-        elif heads[s.top] == s.i and (self.allow_reattach or s.heads[s.top] == 0):
-            return self.l_classes[labels[s.top]]
-        elif self.d_cost(s, heads, labels, edits) == 0:
-            return self.d_id
-        elif can_push and self.s_cost(s, heads, labels, edits) == 0:
+        elif can_push and heads[n0] == s0:
+            return self.r_classes[labels[n0]]
+        if heads[s0] == n0 and not has_head:
+            return self.l_classes[labels[s0]]
+        cdef size_t i
+        if has_head and has_stack:
+            for i in range(n0, length):
+                if heads[i] == s0:
+                    break
+            else:
+                return self.d_id
+        if can_push:
             return self.s_id
-        else:
-            return self.nr_class + 1
+        raise StandardError
+        #elif self.d_cost(s, heads, labels, edits) == 0:
+        #    return self.d_id
+        #elif can_push and self.s_cost(s, heads, labels, edits) == 0:
+        #    return self.s_id
+        #else:
+        #    return self.nr_class + 1
 
     cdef int s_cost(self, State *s, size_t* heads, size_t* labels, bint* edits):
         cdef int cost = 0

@@ -1,4 +1,5 @@
 from _state cimport *
+from _fast_state cimport *
 
 cdef transition_to_str(State* s, size_t move, label, object tokens)
 
@@ -41,9 +42,11 @@ cdef class TransitionSystem:
                           int c, int* costs) except -1
     cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
                                size_t* labels, bint* edits, int* costs) except -1
-    cdef int fill_valid(self, State* s, int* valid)
-    cdef int break_tie(self, State* s, size_t* tags, size_t* heads,
-                       size_t* labels, bint* edits) except -1
+    cdef int fill_valid(self, int* valid, bint can_push, bint has_stack,
+                        bint has_head) except -1
+    cdef int break_tie(self, bint can_push, bint has_head, 
+                       size_t n0, size_t s0, size_t length, size_t* tags,
+                       size_t* heads, size_t* labels, bint* edits) except -1
     cdef int s_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
     cdef int r_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
     cdef int d_cost(self, State *s, size_t* g_heads, size_t* g_labels, bint* edits)

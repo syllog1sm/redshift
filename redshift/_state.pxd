@@ -13,6 +13,25 @@ cdef struct Subtree:
 
 cdef struct Kernel:
     size_t i
+    size_t s0
+    size_t Ls0
+    size_t s1
+    size_t s2
+    size_t Ls1
+    size_t Ls2
+    Subtree s0l
+    Subtree s0r
+    Subtree n0l
+
+
+cdef struct Subtree:
+    size_t val
+    size_t[4] lab
+    size_t[4] idx
+
+"""
+cdef struct Kernel:
+    size_t i
     size_t n0p
     size_t n1p
     size_t n2p
@@ -41,7 +60,7 @@ cdef struct Kernel:
     Subtree s0r
     Subtree n0l
     size_t[5] hist
-
+"""
 
 cdef struct FastState:
     Kernel* k

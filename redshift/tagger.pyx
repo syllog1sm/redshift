@@ -94,21 +94,21 @@ cdef class BaseTagger:
         tokens = 0
         n = 0
         err = 0
-        print "Making tagdict"
-        for word, freqs in tag_freqs.items():
-            total = sum(freqs.values())
-            n += total
-            if total >= 100:
-                mode, tag = max([(freq, tag) for tag, freq in freqs.items()])
-                if float(mode) / total >= 0.99:
-                    assert tag != 0
-                    self.tagdict[word] = tag
-                    types += 1
-                    tokens += total
-                    err += (total - mode)
-        print "%d types" % types
-        print "%d/%d=%.4f true" % (err, tokens, (1 - (float(err) / tokens)) * 100)
-        print "%d/%d=%.4f cov" % (tokens, n, (float(tokens) / n) * 100)
+        #print "Making tagdict"
+        #for word, freqs in tag_freqs.items():
+        #    total = sum(freqs.values())
+        #    n += total
+        #    if total >= 100:
+        #        mode, tag = max([(freq, tag) for tag, freq in freqs.items()])
+        #        if float(mode) / total >= 0.99:
+        #            assert tag != 0
+        #            self.tagdict[word] = tag
+        #            types += 1
+        #            tokens += total
+        #            err += (total - mode)
+        #print "%d types" % types
+        #print "%d/%d=%.4f true" % (err, tokens, (1 - (float(err) / tokens)) * 100)
+        #print "%d/%d=%.4f cov" % (tokens, n, (float(tokens) / n) * 100)
  
     cdef int tag(self, Sentence* s) except -1:
         raise NotImplementedError

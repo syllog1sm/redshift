@@ -28,14 +28,6 @@ cdef enum:
 
     N0l2l
     
-    N0l0w
-    N0l0p
-    N0l0c
-    N0l0c6
-    N0l0c4
-   
-    N0l0l
-    
     N1w
     N1p
     N1c
@@ -132,7 +124,7 @@ def context_size():
 
 def get_kernel_tokens():
     return [S0hw, S0h2w, S0w, S0lw, S0l2w, S0rw, S0r2w,
-            N0w, N0lw, N0l2w, N0l0w, N1w, N2w]
+            N0w, N0lw, N0l2w, N1w, N2w]
 
 
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
@@ -207,37 +199,37 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S0rv] = s0r.val
     context[N0lv] = n0l.val
     context[S0lw] = words[s0l.idx[0]]
-    context[S0lp] = s0l.tags[0]
+    context[S0lp] = tags[s0l.idx[0]]
     context[S0lc] = clusters[s0l.idx[0]]
     context[S0lc6] = cprefix6s[s0l.idx[0]]
     context[S0lc4] = cprefix4s[s0l.idx[0]]
 
     context[S0rw] = words[s0r.idx[0]]
-    context[S0rp] = s0r.tags[0]
+    context[S0rp] = tags[s0r.idx[0]]
     context[S0rc] = clusters[s0r.idx[0]]
     context[S0rc6] = cprefix6s[s0r.idx[0]]
     context[S0rc4] = cprefix4s[s0r.idx[0]]
 
     context[S0l2w] = words[s0l.idx[1]]
-    context[S0l2p] = s0l.tags[1]
+    context[S0l2p] = tags[s0l.idx[1]]
     context[S0l2c] = clusters[s0l.idx[1]]
     context[S0l2c6] = cprefix6s[s0l.idx[1]]
     context[S0l2c4] = cprefix4s[s0l.idx[1]]
 
     context[S0r2w] = words[s0r.idx[1]]
-    context[S0r2p] = s0r.tags[1]
+    context[S0r2p] = tags[s0r.idx[1]]
     context[S0r2c] = clusters[s0r.idx[1]]
     context[S0r2c6] = cprefix6s[s0r.idx[1]]
     context[S0r2c4] = cprefix4s[s0r.idx[1]]
 
     context[N0lw] = words[n0l.idx[0]]
-    context[N0lp] = n0l.tags[0]
+    context[N0lp] = tags[n0l.idx[0]]
     context[N0lc] = clusters[n0l.idx[0]]
     context[N0lc6] = cprefix6s[n0l.idx[0]]
     context[N0lc4] = cprefix6s[n0l.idx[0]]
 
     context[N0l2w] = words[n0l.idx[1]]
-    context[N0l2p] = n0l.tags[1]
+    context[N0l2p] = tags[n0l.idx[1]]
     context[N0l2c] = clusters[n0l.idx[1]]
     context[N0l2c6] = cprefix6s[n0l.idx[1]]
     context[N0l2c4] = cprefix4s[n0l.idx[1]]

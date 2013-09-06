@@ -7,7 +7,7 @@ from libcpp.utility cimport pair
 from ext.murmurhash cimport *
 from ext.sparsehash cimport *
 
-
+"""
 cdef class Beam:
     cdef TransitionSystem trans
     #cdef priority_queue[pair[double, size_t]]* next_moves
@@ -31,7 +31,7 @@ cdef class Beam:
     cdef int extend_states(self, double** scores) except -1
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
                         size_t* labels, bint* sbd, bint* edits) except -1
-
+"""
 
 from _fast_state cimport *
 
@@ -42,6 +42,7 @@ cdef class FastBeam:
     cdef FastState** beam
     cdef int** valid
     cdef int** costs
+    cdef set seen_states
     
     cdef size_t max_class
     cdef size_t k

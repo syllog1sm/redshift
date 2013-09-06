@@ -14,7 +14,7 @@ cimport cython
 from cython.operator cimport preincrement as inc
 from cython.operator cimport dereference as deref
 
-
+"""
 cdef class Beam:
     def __cinit__(self, TransitionSystem trans, 
                   size_t k, size_t length):
@@ -117,7 +117,7 @@ cdef class Beam:
             heads[i] = self.beam[0].heads[i]
             labels[i] = self.beam[0].labels[i]
             # TODO: Do sentence boundary detection here
-        fill_edits(self.beam[0], edits)
+        #fill_edits(self.beam[0], edits)
  
     def __dealloc__(self):
         for i in range(self.k):
@@ -129,7 +129,7 @@ cdef class Beam:
         free(self.parents)
         free(self.valid)
         free(self.costs)
-
+"""
 
 cdef class FastBeam:
     def __cinit__(self, TransitionSystem trans, 
@@ -139,13 +139,16 @@ cdef class FastBeam:
         self.k = k
         self.i = 0
         self.t = 0
+        self.bsize = 1
         self.is_finished = False
         self.is_full = self.bsize >= self.k
         cdef size_t i
         self.parents = <FastState**>malloc(k * sizeof(FastState*))
         self.beam = <FastState**>malloc(k * sizeof(FastState*))
+        self.seen_states = set()
         for i in range(k):
-            self.parents[i] = <FastState*>calloc(1, sizeof(FastState))
+            self.beam[i] = init_fast_state()
+            self.parents[i] = self.beam[i]
             self.seen_states.add(<size_t>self.parents[i])
         self.valid = <int**>malloc(self.k * sizeof(int*))
         self.costs = <int**>malloc(self.k * sizeof(int*))
@@ -157,18 +160,13 @@ cdef class FastBeam:
     cdef int extend_states(self, double** ext_scores) except -1:
         # Former states are now parents, beam will hold the extensions
         cdef FastState** parents = self.parents
-        self.parents = self.beam
-        self.beam = parents 
-        self.psize = self.bsize
-        self.bsize = 0
         cdef size_t parent_idx, clas, move_id
-        cdef double mean_score, score
         cdef double* scores
         cdef priority_queue[pair[double, size_t]] next_moves
         next_moves = priority_queue[pair[double, size_t]]()
         # Get best parent/clas pairs by score
         cdef FastState* parent
-        for parent_idx in range(self.psize):
+        for parent_idx in range(self.bsize):
             parent = self.parents[parent_idx]
             scores = ext_scores[parent_idx]
             for clas in range(self.trans.nr_class):
@@ -180,6 +178,7 @@ cdef class FastBeam:
         # Apply extensions for best continuations
         cdef uint64_t key
         cdef size_t i
+        self.bsize = 0
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
             i = data.second / self.trans.nr_class
@@ -189,6 +188,7 @@ cdef class FastBeam:
                                                   self.trans.labels[clas],
                                                   clas, ext_scores[i][clas],
                                                   self.costs[i][clas])
+            assert self.beam[self.bsize].score == data.first, '%d vs %d' % (self.beam[self.bsize].score, data.first)
             self.seen_states.add(<size_t>self.beam[self.bsize])
             self.bsize += 1
             next_moves.pop()
@@ -196,6 +196,8 @@ cdef class FastBeam:
             self.parents[i] = self.beam[i]
         self.is_full = self.bsize >= self.k
         self.t += 1
+        self.is_finished = is_finished(&self.beam[0].knl, self.length)
+        assert self.t < (self.length * 3)
 
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
                         size_t* labels, bint* sbd, bint* edits) except -1:
@@ -211,11 +213,12 @@ cdef class FastBeam:
             heads[i] = s.heads[i]
             labels[i] = s.labels[i]
             # TODO: Do sentence boundary detection here
-        fill_edits(s, edits)
+        #fill_edits(s, edits)
  
 
     def __dealloc__(self):
         cdef FastState* s
+        cdef size_t addr
         for addr in self.seen_states:
             s = <FastState*>addr
             free(s)
