@@ -222,13 +222,13 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
                        size_t* orths, int* parens, int* quotes,
                        Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
     context[N0w] = words[k.i]
-    context[N0p] = k.n0p
+    context[N0p] = tags[k.i]
     context[N0c] = clusters[k.i]
     context[N0c6] = cprefix6s[k.i]
     context[N0c4] = cprefix4s[k.i]
 
     context[N1w] = words[k.i + 1]
-    context[N1p] = k.n1p
+    context[N1p] = tags[i + 1]
     context[N1c] = clusters[k.i + 1]
     context[N1c6] = cprefix6s[k.i + 1]
     context[N1c4] = cprefix4s[k.i + 1]
@@ -240,13 +240,13 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N2c4] = cprefix4s[k.i + 2]
 
     context[N3w] = words[k.i + 3]
-    context[N3p] = k.n3p
+    context[N3p] = tags[i + 3]
     context[N3c] = clusters[k.i + 3]
     context[N3c6] = cprefix6s[k.i + 3]
     context[N3c4] = cprefix4s[k.i + 3]
 
     context[S0w] = words[k.s0]
-    context[S0p] = k.s0p
+    context[S0p] = tags[k.s0]
     context[S0c] = clusters[k.s0]
     context[S0c6] = cprefix6s[k.s0]
     context[S0c4] = cprefix4s[k.s0]
@@ -254,7 +254,7 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     # If there's a label set for s0, then S1 is the head of S0
     if k.Ls0:
         context[S0hw] = words[k.s1]
-        context[S0hp] = k.s1p
+        context[S0hp] = tags[k.s1]
         context[S0hc] = clusters[k.s1]
         context[S0hc6] = cprefix6s[k.s1]
         context[S0hc4] = cprefix4s[k.s1]
@@ -269,7 +269,7 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     # Likewise, if both S0 and S1 have labels, then S2 must be S0's grandparent
     if k.Ls0 and k.Ls1:
         context[S0h2w] = words[k.s2]
-        context[S0h2p] = k.s2p
+        context[S0h2p] = tags[k.s2]
         context[S0h2c] = clusters[k.s2]
         context[S0h2c6] = cprefix6s[k.s2]
         context[S0h2c4] = cprefix4s[k.s2]
@@ -281,12 +281,12 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[S0h2c6] = 0
         context[S0h2c4] = 0
     context[S1w] = words[k.s1]
-    context[S1p] = k.s1p
+    context[S1p] = tags[k.s1]
     context[S1c] = clusters[k.s1]
     context[S1c6] = cprefix6s[k.s1]
     context[S1c4] = cprefix4s[k.s1]
     context[S2w] = words[k.s2]
-    context[S2p] = k.s2p
+    context[S2p] = tags[k.s2]
     context[S2c] = clusters[k.s2]
     context[S2c6] = cprefix6s[k.s2]
     context[S2c4] = cprefix4s[k.s2]
@@ -387,12 +387,12 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S0le_c4] = cprefix4s[k.s0ledge]
     context[N0le_orth] = orths[k.n0ledge]
     context[N0le_w] = words[k.n0ledge]
-    context[N0le_p] = k.n0ledgep
+    context[N0le_p] = tags[k.n0ledge]
     context[N0le_c] = clusters[k.n0ledge]
     context[N0le_c6] = cprefix6s[k.n0ledge]
     context[N0le_c4] = cprefix4s[k.n0ledge]
     
-    context[S0re_p] = k.s0redgep
+    context[S0re_p] = tags[k.s0redge]
     if k.n0ledge > 0:
         context[S0re_orth] = orths[k.n0ledge - 1]
         context[S0re_w] = words[k.n0ledge - 1]
@@ -469,12 +469,21 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
             else:
                 context[psexact] = 0
 
-    context[m1] = k.hist[0]
-    context[m2] = k.hist[1]
-    context[m3] = k.hist[2]
-    context[m4] = k.hist[3]
-    context[m5] = k.hist[4]
+    #context[m1] = k.hist[0]
+    #context[m2] = k.hist[1]
+    #context[m3] = k.hist[2]
+    #context[m4] = k.hist[3]
+    #context[m5] = k.hist[4]
+    context[m1] = 0
+    context[m2] = 0
+    context[m3] = 0
+    context[m4] = 0
+    context[m5] = 0
 
+debug = (
+    (S0w,),
+    (N0w,),
+)
 
 from_single = (
     (S0w, S0p),
