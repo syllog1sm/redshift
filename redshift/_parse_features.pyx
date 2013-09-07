@@ -111,9 +111,6 @@ cdef enum:
     S0lv
     S0rv
     dist
-    S0llabs
-    S0rlabs
-    N0llabs
 
     CONTEXT_SIZE
 
@@ -245,14 +242,6 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N0ll] = n0l.lab[0]
     context[N0l2l] = n0l.lab[1]
 
-    context[S0llabs] = 0
-    context[S0rlabs] = 0
-    context[N0llabs] = 0
-    cdef size_t i
-    for i in range(4):
-        context[S0llabs] += s0l.lab[i] << (nr_label - s0l.lab[i])
-        context[S0rlabs] += s0r.lab[i] << (nr_label - s0r.lab[i])
-        context[N0llabs] += n0l.lab[i] << (nr_label - n0l.lab[i])
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
     if k.s0 != 0:
@@ -261,17 +250,6 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     else:
         context[dist] = 0
 
-debug = (
-    (S0w,),
-    (S0p,),
-    (N0w,),
-    (N0p,),
-    (S0rw,),
-    (S0lw,),
-    (N0ll, N0l2l),
-    (S0rl, S0r2l),
-    (S0ll, S0l2l)
-)
 
 from_single = (
     (S0w, S0p),
@@ -372,12 +350,12 @@ labels = (
 
 
 label_sets = (
-   (S0w, S0rlabs),
-   (S0p, S0rlabs),
-   (S0w, S0llabs),
-   (S0p, S0llabs),
-   (N0w, N0llabs),
-   (N0p, N0llabs),
+   (S0w, S0rl, S0r2l),
+   (S0p, S0rl, S0r2l),
+   (S0w, S0ll, S0l2l),
+   (S0p, S0ll, S0l2l),
+   (N0w, N0ll, N0l2l),
+   (N0p, N0ll, N0l2l),
 )
 """
 extra_labels = (
@@ -662,3 +640,15 @@ def ngram_feats(ngrams, add_clusters=False):
         else:
             raise StandardError, ngram_feat
     return tuple(feats)
+
+
+problem = (
+   (S0r2p,),
+   (N0l2p,),
+   (S0l2p,),
+   (S0r2w,),
+   (S0l2w,),
+   (N0l2w,),
+)
+
+debug = from_single + labels + problem
