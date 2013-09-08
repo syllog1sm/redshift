@@ -33,7 +33,7 @@ cdef bint is_finished(Kernel* k, size_t t):
     return (not can_push(k, t)) and (not has_stack(k))
 
 
-cdef Kernel* shift_kernel(Kernel* result, Kernel* parent) except NULL:
+cdef int shift_kernel(Kernel* result, Kernel* parent) except -1:
     result.i = parent.i + 1
     result.s0 = parent.i
     result.s1 = parent.s0
@@ -47,38 +47,34 @@ cdef Kernel* shift_kernel(Kernel* result, Kernel* parent) except NULL:
     assert result.s0r.idx[0] == 0
     assert result.n0l.val == 0
     assert result.n0l.idx[0] == 0
-    return result 
 
 
-cdef Kernel* right_kernel(Kernel* ext, Kernel* buff, size_t label) except NULL:
+cdef int right_kernel(Kernel* ext, Kernel* buff, size_t label) except -1:
     shift_kernel(ext, buff)
     ext.Ls0 = label
     # The child-of features are set in Reduce, not here, because that's when
     # that word becomes top of the stack again.
-    return ext
 
 
-cdef Kernel* reduce_kernel(Kernel* ext, Kernel* buff, Kernel* stack) except NULL:
-    if stack != NULL:
-        memcpy(ext, stack, sizeof(Kernel))
+cdef int reduce_kernel(Kernel* ext, Kernel* buff, Kernel* stack) except -1:
+    memcpy(ext, stack, sizeof(Kernel))
     memcpy(&ext.n0l, &buff.n0l, sizeof(Subtree))
     ext.i = buff.i
     # Reduce means that former-S0 is child of the next item on the stack. Set
     # the dep features here
     ext.s0r.idx[0] = buff.s0
     ext.s0r.idx[1] = stack.s0r.idx[0]
-    ext.s0r.idx[2] = stack.s0r.idx[1]
-    ext.s0r.idx[3] = stack.s0r.idx[2]
+    #ext.s0r.idx[2] = stack.s0r.idx[1]
+    #ext.s0r.idx[3] = stack.s0r.idx[2]
     ext.s0r.lab[0] = buff.Ls0
     ext.s0r.lab[1] = stack.s0r.lab[0]
-    ext.s0r.lab[2] = stack.s0r.lab[1]
-    ext.s0r.lab[3] = stack.s0r.lab[2]
+    #ext.s0r.lab[2] = stack.s0r.lab[1]
+    #ext.s0r.lab[3] = stack.s0r.lab[2]
     ext.s0r.val = stack.s0r.val + 1
-    return ext
 
 
-cdef Kernel* left_kernel(Kernel* ext, Kernel* buff, Kernel* stack,
-                           size_t label) except NULL:
+cdef int left_kernel(Kernel* ext, Kernel* buff, Kernel* stack,
+                           size_t label) except -1:
     if stack != NULL:
         ext.s0 = stack.s0
         ext.s1 = stack.s1
@@ -92,13 +88,15 @@ cdef Kernel* left_kernel(Kernel* ext, Kernel* buff, Kernel* stack,
     ext.n0l.val = buff.n0l.val + 1
     ext.n0l.idx[0] = buff.s0
     ext.n0l.idx[1] = buff.n0l.idx[0]
-    ext.n0l.idx[2] = buff.n0l.idx[1]
-    ext.n0l.idx[3] = buff.n0l.idx[2]
+    #ext.n0l.idx[2] = buff.n0l.idx[1]
+    #ext.n0l.idx[3] = buff.n0l.idx[2]
     ext.n0l.lab[0] = label
     ext.n0l.lab[1] = buff.n0l.lab[0]
-    ext.n0l.lab[2] = buff.n0l.lab[1]
-    ext.n0l.lab[3] = buff.n0l.lab[2]
-    return ext
+    #ext.n0l.lab[2] = buff.n0l.lab[1]
+    #ext.n0l.lab[3] = buff.n0l.lab[2]
+    if ext.n0l.val >= 2:
+        assert ext.n0l.idx[1] != 0
+        assert ext.n0l.lab[1] != 0
 
 
 cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label, size_t clas,
@@ -114,6 +112,9 @@ cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label, size_t
         ext.tail = prev
         ext.prev = prev
     elif move == REDUCE:
+        assert prev != NULL
+        assert prev.prev != NULL
+        assert prev.tail != NULL
         reduce_kernel(&ext.knl, &prev.knl, &prev.tail.knl)
         ext.prev = prev
         ext.tail = prev.tail.tail

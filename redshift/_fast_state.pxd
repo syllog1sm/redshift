@@ -15,11 +15,10 @@ cdef bint has_stack(Kernel* k)
 cdef bint has_head(Kernel* k)
 cdef bint is_finished(Kernel* k, size_t length)
 
-cdef Kernel* shift_kernel(Kernel* result, Kernel* parent) except NULL
-cdef Kernel* right_kernel(Kernel* result, Kernel* parent, size_t label) except NULL
-cdef Kernel* reduce_kernel(Kernel* result, Kernel* parent, Kernel* gp) except NULL
-cdef Kernel* left_kernel(Kernel* result, Kernel* parent,
-                          Kernel* gp, size_t label) except NULL
+cdef int shift_kernel(Kernel* result, Kernel* parent) except -1
+cdef int right_kernel(Kernel* result, Kernel* parent, size_t label) except -1
+cdef int reduce_kernel(Kernel* result, Kernel* parent, Kernel* gp) except -1
+cdef int left_kernel(Kernel* result, Kernel* parent, Kernel* gp, size_t label) except -1
 
 
 cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label,
