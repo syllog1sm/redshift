@@ -188,7 +188,6 @@ cdef class FastBeam:
                                                   self.trans.labels[clas],
                                                   clas, ext_scores[i][clas],
                                                   self.costs[i][clas])
-            assert self.beam[self.bsize].score == data.first, '%d vs %d' % (self.beam[self.bsize].score, data.first)
             self.seen_states.add(<size_t>self.beam[self.bsize])
             self.bsize += 1
             next_moves.pop()

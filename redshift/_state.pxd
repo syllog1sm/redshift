@@ -6,9 +6,8 @@ from ext.murmurhash cimport *
 
 cdef struct Subtree:
     size_t val
-    size_t[4] lab
-    size_t[4] idx
-    size_t[4] tags
+    size_t[2] lab
+    size_t[2] idx
 
 
 cdef struct Kernel:
@@ -23,11 +22,6 @@ cdef struct Kernel:
     Subtree s0r
     Subtree n0l
 
-
-cdef struct Subtree:
-    size_t val
-    size_t[4] lab
-    size_t[4] idx
 
 """
 cdef struct Kernel:
@@ -61,17 +55,6 @@ cdef struct Kernel:
     Subtree n0l
     size_t[5] hist
 """
-
-cdef struct FastState:
-    Kernel* k
-    size_t last_action
-    FastState* previous
-    FastState* tail
-    double score
-    bint is_gold
-    size_t cost
-    size_t nr_kids
-
 
 cdef struct State:
     double score

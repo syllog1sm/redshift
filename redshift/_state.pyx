@@ -68,31 +68,31 @@ cdef int push_stack(State *s) except -1:
 
 cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, size_t* tags,  Subtree* tree):
     cdef size_t i
-    for i in range(4):
+    for i in range(2):
         tree.idx[i] = 0
         tree.lab[i] = 0
-        tree.tags[i] = 0
+        #tree.tags[i] = 0
     tree.val = val
     if val == 0:
         return 0
     # Set 0 to be the rightmost/leftmost child, i.e. last
     tree.idx[0] = kids[val - 1]
     tree.lab[0] = labs[kids[val - 1]]
-    tree.tags[0] = tags[kids[val - 1]]
+    #tree.tags[0] = tags[kids[val - 1]]
     # Set 2 to be first child
-    tree.idx[2] = kids[0]
-    tree.lab[2] = labs[kids[0]]
-    tree.tags[2] = tags[kids[0]]
+    #tree.idx[2] = kids[0]
+    #tree.lab[2] = labs[kids[0]]
+    #tree.tags[2] = tags[kids[0]]
     if val == 1:
         return 0
     # Set 1 to be the 2nd rightmost/leftmost, i.e. second last 
     tree.idx[1] = kids[val - 2]
     tree.lab[1] = labs[kids[val - 2]]
-    tree.tags[1] = tags[kids[val - 2]]
+    #tree.tags[1] = tags[kids[val - 2]]
     # Set 3 to be second child
-    tree.idx[3] = kids[1]
-    tree.lab[3] = labs[kids[1]]
-    tree.tags[3] = tags[kids[1]]
+    #tree.idx[3] = kids[1]
+    #tree.lab[3] = labs[kids[1]]
+    #tree.tags[3] = tags[kids[1]]
 
 
 cdef uint64_t hash_kernel(Kernel* k):
