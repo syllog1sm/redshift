@@ -115,7 +115,7 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
     s.kernel.s0p = tags[s.top]
     s.kernel.s1 = s.second
     s.kernel.s1p = tags[s.kernel.s1]
-    s.kernel.s2 = s.stack[s.stack_len - 2] if s.stack_len >= 2 else 0
+    s.kernel.s2 = s.stack[s.stack_len - 3] if s.stack_len >= 3 else 0
     s.kernel.s2p = tags[s.kernel.s2]
     s.kernel.Ls0 = s.labels[s.top]
     s.kernel.Ls1 = s.labels[s.kernel.s1]
