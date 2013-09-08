@@ -290,8 +290,8 @@ cdef class BeamParser(BaseParser):
             bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
             memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
             self.tagger.tag(sent)
+        self.guide.cache.flush()
         while not beam.is_finished:
-            self.guide.cache.flush()
             for i in range(beam.bsize):
                 pred = <State*>beam.beam[i]
                 self.moves.fill_valid(pred, beam.valid[i])
