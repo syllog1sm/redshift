@@ -84,7 +84,7 @@ cdef class BaseTagger:
         tags = set()
         tag_freqs = defaultdict(lambda: defaultdict(int))
         for i in range(sents.length):
-            for j in range(sents.s[i].length):
+            for j in range(1, sents.s[i].length - 1):
                 tag_freqs[sents.s[i].words[j]][sents.s[i].pos[j]] += 1
                 if sents.s[i].pos[j] >= self.nr_tag:
                     self.nr_tag = sents.s[i].pos[j]
