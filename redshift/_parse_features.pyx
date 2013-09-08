@@ -1,113 +1,56 @@
 from redshift._state cimport Kernel, Subtree
 from itertools import combinations
+
 # Context elements
 # Ensure _context_size is always last; it ensures our compile-time setting
 # is in synch with the enum
 # Ensure each token's attributes are listed: w, p, c, cp
+
 cdef enum:
-    N0w
-    N0p
-    N0c
-    N0c6
-    N0c4
-
-    N0lw
-    N0lp
-    N0lc
-    N0lc6
-    N0lc4
-    
-    N0ll
-    N0lv
-    
-    N0l2w
-    N0l2p
-    N0l2c
-    N0l2c6
-    N0l2c4
-
-    N0l2l
-    
-    N1w
-    N1p
-    N1c
-    N1c6
-    N1c4
-    
-    N2w
-    N2p
-    N2c
-    N2c6
-    N2c4
-    
     S0w
     S0p
-    S0c
-    S0c6
-    S0c4
     
-    S0l
-    
-    S0hw
-    S0hp
-    S0hc
-    S0hc6
-    S0hc4
-    
-    S0hl
-
     S0lw
     S0lp
-    S0lc
-    S0lc6
-    S0lc4
-    
-    S0ll
+    S0l2w
+    S0l2p
     
     S0rw
     S0rp
-    S0rc
-    S0rc6
-    S0rc4
-    
-    S0rl
-    
-    S0l2w
-    S0l2p
-    S0l2c
-    S0l2c6
-    S0l2c4
-    
-    S0l2l
-
     S0r2w
     S0r2p
-    S0r2c
-    S0r2c6
-    S0r2c4
     
-    S0r2l
+    N0w
+    N0p
 
+    N0lw
+    N0lp
+    N0l2w
+    N0l2p
+   
+    S0hw
+    S0hp
     S0h2w
     S0h2p
-    S0h2c
-    S0h2c6
-    S0h2c4
+
+    N1w
+    N1p
+    N2w
+    N2p
     
+    S0l
+    S0ll
+    S0l2l
+    S0rl
+    S0r2l
+
+    N0ll
+    N0l2l
+
+    S0hl
     S0h2l
-
-    S1w
-    S1p
-    S1c
-    S1c6
-    S1c4
-
-    S2w
-    S2p
-    S2c
-    S2c6
-    S2c4
     
+    N0lv
     S0lv
     S0rv
     dist
@@ -129,112 +72,52 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
                        size_t* clusters, size_t* cprefix6s, size_t* cprefix4s,
                        size_t* orths, int* parens, int* quotes,
                        Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
-    context[N0w] = words[k.i]
-    context[N0p] = tags[k.i]
-    context[N0c] = clusters[k.i]
-    context[N0c6] = cprefix6s[k.i]
-    context[N0c4] = cprefix4s[k.i]
-
-    context[N1w] = words[k.i + 1]
-    context[N1p] = tags[k.i + 1]
-    context[N1c] = clusters[k.i + 1]
-    context[N1c6] = cprefix6s[k.i + 1]
-    context[N1c4] = cprefix4s[k.i + 1]
-
-    context[N2w] = words[k.i + 2]
-    context[N2p] = tags[k.i + 2]
-    context[N2c] = clusters[k.i + 2]
-    context[N2c6] = cprefix6s[k.i + 2]
-    context[N2c4] = cprefix4s[k.i + 2]
 
     context[S0w] = words[k.s0]
     context[S0p] = tags[k.s0]
-    context[S0c] = clusters[k.s0]
-    context[S0c6] = cprefix6s[k.s0]
-    context[S0c4] = cprefix4s[k.s0]
+    # TODO: Bug with these values not being zeroed on 0-valencies. Probably
+    # messes up word match features.
+    context[S0lw] = words[s0l.idx[0]]
+    context[S0lp] = tags[s0l.idx[0]] if s0l.idx[0] != 0 else 0
+    context[S0l2w] = words[s0l.idx[1]]
+    context[S0l2p] = tags[s0l.idx[1]] if s0l.idx[1] != 0 else 0
+
+    context[S0rw] = words[s0r.idx[0]]
+    context[S0rp] = tags[s0r.idx[0]] if s0r.idx[0] != 0 else 0
+    context[S0r2w] = words[s0r.idx[1]]
+    context[S0r2p] = tags[s0r.idx[1]] if s0r.idx[1] != 0 else 0
+
+    context[N0w] = words[k.i]
+    context[N0p] = tags[k.i]
+    context[N0lw] = words[n0l.idx[0]]
+    context[N0lp] = tags[n0l.idx[0]] if n0l.idx[0] != 0 else 0
+    context[N0l2w] = words[n0l.idx[1]]
+    context[N0l2p] = tags[n0l.idx[1]] if n0l.idx[1] != 0 else 0
+    context[N1w] = words[k.i + 1]
+    context[N1p] = tags[k.i + 1]
+    context[N2w] = words[k.i + 2]
+    context[N2p] = tags[k.i + 2]
     context[S0l] = k.Ls0
     # If there's a label set for s0, then S1 is the head of S0
     if k.Ls0:
+        assert k.s1
         context[S0hw] = words[k.s1]
         context[S0hp] = tags[k.s1]
-        context[S0hc] = clusters[k.s1]
-        context[S0hc6] = cprefix6s[k.s1]
-        context[S0hc4] = cprefix4s[k.s1]
         context[S0hl] = k.Ls1
     else:
         context[S0hw] = 0
         context[S0hp] = 0
-        context[S0hc] = 0
-        context[S0hc6] = 0
-        context[S0hc4] = 0
         context[S0hl] = 0
     # Likewise, if both S0 and S1 have labels, then S2 must be S0's grandparent
     if k.Ls0 and k.Ls1:
+        assert k.s2
         context[S0h2w] = words[k.s2]
         context[S0h2p] = tags[k.s2]
-        context[S0h2c] = clusters[k.s2]
-        context[S0h2c6] = cprefix6s[k.s2]
-        context[S0h2c4] = cprefix4s[k.s2]
         context[S0h2l] = k.Ls2
     else:
         context[S0h2w] = 0
         context[S0h2p] = 0
-        context[S0h2c] = 0
-        context[S0h2c6] = 0
-        context[S0h2c4] = 0
         context[S0h2l] = 0
-    context[S1w] = words[k.s1]
-    context[S1p] = tags[k.s1]
-    context[S1c] = clusters[k.s1]
-    context[S1c6] = cprefix6s[k.s1]
-    context[S1c4] = cprefix4s[k.s1]
-    
-    context[S2w] = words[k.s2]
-    context[S2p] = tags[k.s2]
-    context[S2c] = clusters[k.s2]
-    context[S2c6] = cprefix6s[k.s2]
-    context[S2c4] = cprefix4s[k.s2]
-    
-    context[S0lv] = s0l.val
-    context[S0rv] = s0r.val
-    context[N0lv] = n0l.val
-
-    context[S0lw] = words[s0l.idx[0]]
-    context[S0lp] = tags[s0l.idx[0]]
-    context[S0lc] = clusters[s0l.idx[0]]
-    context[S0lc6] = cprefix6s[s0l.idx[0]]
-    context[S0lc4] = cprefix4s[s0l.idx[0]]
-
-    context[S0rw] = words[s0r.idx[0]]
-    context[S0rp] = tags[s0r.idx[0]]
-    context[S0rc] = clusters[s0r.idx[0]]
-    context[S0rc6] = cprefix6s[s0r.idx[0]]
-    context[S0rc4] = cprefix4s[s0r.idx[0]]
-
-    context[S0l2w] = words[s0l.idx[1]]
-    context[S0l2p] = tags[s0l.idx[1]]
-    context[S0l2c] = clusters[s0l.idx[1]]
-    context[S0l2c6] = cprefix6s[s0l.idx[1]]
-    context[S0l2c4] = cprefix4s[s0l.idx[1]]
-
-    context[S0r2w] = words[s0r.idx[1]]
-    context[S0r2p] = tags[s0r.idx[1]]
-    context[S0r2c] = clusters[s0r.idx[1]]
-    context[S0r2c6] = cprefix6s[s0r.idx[1]]
-    context[S0r2c4] = cprefix4s[s0r.idx[1]]
-
-    context[N0lw] = words[n0l.idx[0]]
-    context[N0lp] = tags[n0l.idx[0]]
-    context[N0lc] = clusters[n0l.idx[0]]
-    context[N0lc6] = cprefix6s[n0l.idx[0]]
-    context[N0lc4] = cprefix6s[n0l.idx[0]]
-
-    context[N0l2w] = words[n0l.idx[1]]
-    context[N0l2p] = tags[n0l.idx[1]]
-    context[N0l2c] = clusters[n0l.idx[1]]
-    context[N0l2c6] = cprefix6s[n0l.idx[1]]
-    context[N0l2c4] = cprefix4s[n0l.idx[1]]
-
     context[S0ll] = s0l.lab[0]
     context[S0l2l] = s0l.lab[1]
     context[S0rl] = s0r.lab[0]
@@ -242,6 +125,9 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N0ll] = n0l.lab[0]
     context[N0l2l] = n0l.lab[1]
 
+    context[S0lv] = s0l.val
+    context[S0rv] = s0r.val
+    context[N0lv] = n0l.val
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
     if k.s0 != 0:
@@ -369,9 +255,7 @@ extra_labels = (
     (S0hp, S0l, S0rl),
     (S0hp, S0l, S0ll),
 )
-"""
 
-"""
 edges = (
     (S0re_w,),
     (S0re_p,),
@@ -385,7 +269,6 @@ edges = (
     (S0re_p, N0p,),
     (S0p, N0le_p)
 )
-"""
 
 stack_second = (
     (S1w,),
@@ -408,7 +291,6 @@ stack_second = (
     (S2p, N0w, N1w),
     (S2w, N0p, N1p),
 )
-"""
 history = (
     (m1,),
     (m1, m2),
@@ -416,7 +298,6 @@ history = (
     (m1, m2, m3, m4),
     (m1, m2, m3, m4, m5),
 )
-"""
 
 # Koo et al (2008) dependency features, using Brown clusters.
 clusters = (
@@ -456,7 +337,6 @@ clusters = (
     (S0lc4, S0c4, N0p)
 )
 
-"""
 disfl = (
     (prev_edit,),
     (prev_prev_edit,),
@@ -503,7 +383,6 @@ suffix_disfl = (
     (wsexact, pscopy),
     (wscopy, psexact),
 )
-"""
 
 def cluster_bigrams():
     kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]
@@ -523,7 +402,7 @@ def pos_bigrams():
         bitags.append(feat)
     print "Adding %d bitags" % len(bitags)
     return tuple(bitags)
-
+"""
 
 def get_best_bigrams(all_bigrams, n=0):
     return []
@@ -643,12 +522,7 @@ def ngram_feats(ngrams, add_clusters=False):
 
 
 problem = (
-   (S0r2p,),
-   (N0l2p,),
-   (S0l2p,),
-   (S0r2w,),
-   (S0l2w,),
-   (N0l2w,),
+   (S0h2p,),
 )
 
-debug = from_single + labels + problem
+debug = problem 
