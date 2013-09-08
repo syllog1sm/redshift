@@ -290,9 +290,9 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S2c] = clusters[k.s2]
     context[S2c6] = cprefix6s[k.s2]
     context[S2c4] = cprefix4s[k.s2]
-    context[S0lv] = s0l.val
-    context[S0rv] = s0r.val
-    context[N0lv] = n0l.val
+    context[S0lv] = s0l.val + 1
+    context[S0rv] = s0r.val + 1
+    context[N0lv] = n0l.val + 1
     context[S0lw] = words[s0l.idx[0]]
     context[S0lp] = s0l.tags[0]
     context[S0lc] = clusters[s0l.idx[0]]
@@ -328,7 +328,6 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S0r0c] = clusters[s0r.idx[2]]
     context[S0r0c6] = cprefix6s[s0r.idx[2]]
     context[S0r0c4] = cprefix6s[s0r.idx[2]]
-
 
     context[N0lw] = words[n0l.idx[0]]
     context[N0lp] = n0l.tags[0]
