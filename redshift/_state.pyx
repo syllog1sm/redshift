@@ -106,7 +106,7 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
     if s.heads[s.top] != 0 and s.heads[s.top] == s.second:
         assert s.labels[s.top] != 0
     s.kernel.s1 = s.second
-    s.kernel.s2 = s.stack[s.stack_len - 2] if s.stack_len >= 2 else 0
+    s.kernel.s2 = s.stack[s.stack_len - 3] if s.stack_len >= 3 else 0
     s.kernel.Ls0 = s.labels[s.top]
     s.kernel.Ls1 = s.labels[s.kernel.s1]
     s.kernel.Ls2 = s.labels[s.kernel.s2]
