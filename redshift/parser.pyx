@@ -12,6 +12,7 @@ from libc.string cimport memcpy, memset
 
 from _fast_state cimport *
 cimport _state
+from _state cimport hash_kernel
 from io_parse cimport Sentence, Sentences
 from io_parse import read_conll, read_pos
 from transitions cimport TransitionSystem 
@@ -303,7 +304,6 @@ cdef class BeamParser(BaseParser):
             pred = beam.beam[0]
             gold = extend_fstate(gold, self.moves.moves[oracle], self.moves.labels[oracle],
                                  oracle, scores[oracle], 0)
-            print gold.clas, pred.clas
             if pred.clas == gold.clas:
                 self.guide.n_corr += 1
             self.guide.total += 1
@@ -314,7 +314,6 @@ cdef class BeamParser(BaseParser):
                 upd_p = pred
         if upd_g != NULL:
             counted = self._count_feats(sent, upd_g, upd_p)
-            print counted
             if counted:
                 self.guide.batch_update(counted)
         if self.auto_pos:
@@ -407,28 +406,19 @@ cdef class BeamParser(BaseParser):
         return scores
 
     cdef dict _count_feats(self, Sentence* sent, FastState* g, FastState* p):
-        cdef size_t d, i
-        cdef uint64_t* feats
-        cdef size_t clas
         cdef dict counts = {}
         for clas in range(self.moves.nr_class):
             counts[clas] = {}
-        while g != NULL:
-            self._inc_feats(counts[g.clas], sent, &g.knl, 1.0)
+        cdef bint seen_diff = False
+        while g.prev != NULL and p.prev != NULL:
+            if g.clas != p.clas:
+                seen_diff = True
+            if seen_diff and hash_kernel(&g.knl) != hash_kernel(&p.knl):
+                self._inc_feats(counts[g.clas], sent, &g.prev.knl, 1.0)
+                self._inc_feats(counts[p.clas], sent, &p.prev.knl, -1.0)
             g = g.prev
-        while p != NULL:
-            self._inc_feats(counts[p.clas], sent, &p.knl, -1.0)
             p = p.prev
-        filtered = {}
-        cdef uint64_t f
-        for c, cls_counts in counts.items():
-            new_feats = {}
-            for f, v in cls_counts.items():
-                if v != 0:
-                    new_feats[f] = v
-            if new_feats:
-                filtered[c] = new_feats
-        return filtered
+        return counts 
 
     cdef int _inc_feats(self, dict counts, Sentence* sent, Kernel* k, double inc) except -1:
         fill_context(self._context, self.moves.n_labels, sent.words,
