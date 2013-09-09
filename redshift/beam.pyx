@@ -1,5 +1,5 @@
 # cython: profile=True
-from _state cimport *
+#from _state cimport *
 from _fast_state cimport *
 from transitions cimport TransitionSystem
 
@@ -197,23 +197,6 @@ cdef class FastBeam:
         self.t += 1
         self.is_finished = is_finished(&self.beam[0].knl, self.length)
         assert self.t < (self.length * 3)
-
-    cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
-                        size_t* labels, bint* sbd, bint* edits) except -1:
-        fill_hist(hist, self.beam[0], self.t)
-        cdef State* s = init_state(self.length)
-        cdef size_t i
-        for i in range(self.t):
-            self.trans.transition(hist[i], s)
-        # No need to copy heads for root and start symbols
-        for i in range(1, self.length - 1):
-            assert s.heads[i] != 0
-            #tags[i] = self.beam[0].tags[i]
-            heads[i] = s.heads[i]
-            labels[i] = s.labels[i]
-            # TODO: Do sentence boundary detection here
-        #fill_edits(s, edits)
- 
 
     def __dealloc__(self):
         cdef FastState* s

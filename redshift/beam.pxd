@@ -1,4 +1,4 @@
-from _state cimport *
+#from _state cimport *
 from transitions cimport TransitionSystem
 
 from libcpp.queue cimport priority_queue
@@ -54,6 +54,4 @@ cdef class FastBeam:
     cdef bint is_finished
 
     cdef int extend_states(self, double** scores) except -1
-    cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
-                        size_t* labels, bint* sbd, bint* edits) except -1
 

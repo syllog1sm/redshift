@@ -4,12 +4,12 @@ from _fast_state cimport *
 from libc.stdlib cimport malloc, calloc, free
 import redshift.io_parse
 import index.hashes
-cimport _state
+#cimport _state
 from _state cimport has_head_in_buffer, has_child_in_buffer
 from _state cimport has_head_in_stack, has_child_in_stack
-from _state cimport get_r, get_r2, get_l, get_l2
-from _state cimport push_stack, pop_stack
-from _state cimport del_l_child, del_r_child, add_dep
+#from _state cimport get_r, get_r2, get_l, get_l2
+#from _state cimport push_stack, pop_stack
+#from _state cimport del_l_child, del_r_child, add_dep
 from _fast_state cimport *
 
 
@@ -28,24 +28,6 @@ cdef enum:
     ASSIGN_POS
     N_MOVES
 
-"""
-cdef transition_to_str(State* s, size_t move, label, object tokens):
-    tokens = tokens + ['<end>']
-    if move == SHIFT:
-        return u'%s-->%s' % (tokens[s.i], tokens[s.top])
-    elif move == REDUCE:
-        if s.heads[s.top] == 0:
-            return u'%s(%s)!!' % (tokens[s.second], tokens[s.top])
-        return u'%s/%s' % (tokens[s.top], tokens[s.second])
-    else:
-        if move == LEFT:
-            head = s.i
-            child = s.top
-        else:
-            head = s.top
-            child = s.i if s.i < len(tokens) else 0
-        return u'%s(%s)' % (tokens[head], tokens[child])
-"""
 
 cdef class TransitionSystem:
     def __cinit__(self, allow_reattach=False, allow_reduce=False, use_edit=False):
@@ -115,7 +97,8 @@ cdef class TransitionSystem:
             self.p_end = clas
         self.nr_class = clas
         return clas, len(set(list(left_labels) + list(right_labels)))
-        
+    
+    """
     cdef int transition(self, size_t clas, _state.State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc, move, label, end
         cdef int idx
@@ -177,6 +160,7 @@ cdef class TransitionSystem:
             s.at_end_of_buffer = True
         if s.at_end_of_buffer and s.stack_len == 0:
             s.is_finished = True
+    """
   
     cdef int fill_costs(self, int* costs, size_t n0, size_t length, size_t stack_len, 
                         size_t* stack, bint has_head, size_t* tags, size_t* heads,
@@ -229,14 +213,14 @@ cdef class TransitionSystem:
             for i in range(self.l_start, self.l_end):
                 valid[i] = 0
 
-    cdef int fill_static_costs(self, _state.State* s, size_t* tags, size_t* heads,
-                               size_t* labels, bint* edits, int* costs) except -1:
-        cdef size_t oracle = self.break_tie(not s.at_end_of_buffer,
-                                            s.heads[s.top] != 0, s.i, s.top, s.n,
-                                            tags, heads, labels, edits)
-        cdef size_t i
-        for i in range(self.nr_class):
-            costs[i] = i != oracle
+    #cdef int fill_static_costs(self, _state.State* s, size_t* tags, size_t* heads,
+    #                           size_t* labels, bint* edits, int* costs) except -1:
+    #    cdef size_t oracle = self.break_tie(not s.at_end_of_buffer,
+    #                                        s.heads[s.top] != 0, s.i, s.top, s.n,
+    #                                        tags, heads, labels, edits)
+    #    cdef size_t i
+    #    for i in range(self.nr_class):
+    #        costs[i] = i != oracle
 
     cdef int break_tie(self, bint can_push, bint has_head, 
                        size_t n0, size_t s0, size_t length, size_t* tags,
@@ -348,14 +332,7 @@ cdef class TransitionSystem:
         else:
             return 1
 
-    cdef int p_cost(self, _state.State* s):
+    cdef int p_cost(self) except -9000:
         if not self.assign_pos:
             return -1
-        if s.i >= (s.n - 2):
-            return -1
-        if s.t == 0:
-            return 0
-        cdef size_t last_move = self.moves[s.history[s.t - 1]]
-        if last_move == SHIFT or last_move == RIGHT:
-            return 0
-        return -1
+        raise NotImplementedError

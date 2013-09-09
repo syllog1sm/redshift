@@ -11,8 +11,7 @@ from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
 
 from _fast_state cimport *
-cimport _state
-from _state cimport hash_kernel
+#from _state cimport hash_kernel
 from io_parse cimport Sentence, Sentences
 from io_parse import read_conll, read_pos
 from transitions cimport TransitionSystem 
@@ -464,7 +463,6 @@ cdef class GreedyParser(BaseParser):
         sent.parse.n_moves = t
         free_fstate(s)
         #_state.fill_edits(s, sent.parse.edits)
-        #_state.free_state(s)
  
     cdef int dyn_train(self, int iter_num, Sentence* sent) except -1:
         cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))
@@ -508,38 +506,7 @@ cdef class GreedyParser(BaseParser):
             s = s.prev
             free(<FastState*>addr)
         free(valid)
-    """
-    cdef int static_train(self, int iter_num, Sentence* sent) except -1:
-        cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))
-        cdef _state.State* s = _state.init_state(sent.length)
-        cdef size_t pred
-        cdef uint64_t* feats
-        cdef size_t _ = 0
-        cdef size_t* bu_tags 
-        if self.auto_pos:
-            bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
-            memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
-            self.tagger.tag(sent)
- 
-        while not s.is_finished:
-            _state.fill_kernel(s, sent.pos)
-            feats = self._extract(sent, &s.kernel)
-            self.moves.fill_valid(valid, not s.at_end_of_buffer, s.top != 0,
-                                  s.heads[s.top] != 0)
-            pred = self._predict(feats, valid, &s.guess_labels[s.i])
-            gold = self.moves.break_tie(not s.at_end_of_buffer, s.heads[s.top], s.i,
-                                        s.top, s.n, sent.pos, sent.parse.heads,
-                                         sent.parse.labels, sent.parse.edits)
-            self.guide.update(pred, gold, feats, 1)
-            self.moves.transition(gold, s)
-            self.guide.n_corr += (gold == pred)
-            self.guide.total += 1
-        if self.auto_pos:
-            memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
-            free(bu_tags) 
-        _state.free_state(s)
-        free(valid)
-    """
+
     def say_config(self):
         if self.moves.allow_reattach and self.moves.allow_reduce:
             print 'NM L+D'
@@ -597,6 +564,3 @@ def print_train_msg(n, n_corr, n_move, n_hit, n_miss):
 
 def _parse_labels_str(labels_str):
     return [index.hashes.encode_label(l) for l in labels_str.split(',')]
-
-
-

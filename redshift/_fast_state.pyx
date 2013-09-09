@@ -1,6 +1,6 @@
 from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport memcpy
-from _state cimport Kernel, Subtree
+from ext.murmurhash cimport MurmurHash64A
 
 cdef enum:
     ERR
@@ -16,6 +16,10 @@ cdef FastState* init_fast_state() except NULL:
     cdef FastState* s = <FastState*>calloc(1, sizeof(FastState))
     s.knl.i = 1
     return s
+
+
+cdef uint64_t hash_kernel(Kernel* k):
+    return MurmurHash64A(k, sizeof(Kernel), 0)
 
 
 cdef bint can_push(Kernel* k, size_t t):
