@@ -275,9 +275,9 @@ cdef class BeamParser(BaseParser):
         cdef FastState* gold = init_fast_state()
         cdef FastState* pred
         cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
-        cdef size_t* ghist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
-        cdef size_t* phist = <size_t*>calloc(sent.length * 3, sizeof(size_t))
         cdef double max_violn = 0
+        cdef FastState* upd_g
+        cdef FastState* upd_p
         cdef size_t t = 0
         # Backup pos tags
         cdef size_t* bu_tags
@@ -303,22 +303,23 @@ cdef class BeamParser(BaseParser):
             pred = beam.beam[0]
             gold = extend_fstate(gold, self.moves.moves[oracle], self.moves.labels[oracle],
                                  oracle, scores[oracle], 0)
+            print gold.clas, pred.clas
             if pred.clas == gold.clas:
                 self.guide.n_corr += 1
             self.guide.total += 1
-            if (pred.score - gold.score) >= max_violn:
-                max_violn = pred.score - gold.score
-                t = beam.t
-                fill_hist(ghist, gold, t)
-                fill_hist(phist, pred, t)
-        if t != 0:
-            counted = self._count_feats(sent, t, t, phist, ghist, words)
-            self.guide.batch_update(counted)
+            delta = pred.score - gold.score
+            if delta >= max_violn:
+                max_violn = delta
+                upd_g = gold
+                upd_p = pred
+        if upd_g != NULL:
+            counted = self._count_feats(sent, upd_g, upd_p)
+            print counted
+            if counted:
+                self.guide.batch_update(counted)
         if self.auto_pos:
             memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
             free(bu_tags)
-        free(ghist)
-        free(phist)
         free(beam_scores)
         cdef FastState* prev = gold.prev
         while gold != NULL:
