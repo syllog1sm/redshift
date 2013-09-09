@@ -77,22 +77,22 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S0p] = tags[k.s0]
     # TODO: Bug with these values not being zeroed on 0-valencies. Probably
     # messes up word match features.
-    context[S0lw] = words[s0l.idx[0]]
-    context[S0lp] = tags[s0l.idx[0]] if s0l.idx[0] != 0 else 0
-    context[S0l2w] = words[s0l.idx[1]]
-    context[S0l2p] = tags[s0l.idx[1]] if s0l.idx[1] != 0 else 0
+    context[S0lw] = words[s0l.kids[0].idx]
+    context[S0lp] = tags[s0l.kids[0].idx] if s0l.val >= 1 else 0
+    context[S0l2w] = words[s0l.kids[1].idx]
+    context[S0l2p] = tags[s0l.kids[1].idx] if s0l.val >= 2 else 0
 
-    context[S0rw] = words[s0r.idx[0]]
-    context[S0rp] = tags[s0r.idx[0]] if s0r.idx[0] != 0 else 0
-    context[S0r2w] = words[s0r.idx[1]]
-    context[S0r2p] = tags[s0r.idx[1]] if s0r.idx[1] != 0 else 0
+    context[S0rw] = words[s0r.kids[0].idx]
+    context[S0rp] = tags[s0r.kids[0].idx] if s0r.val >= 1 else 0
+    context[S0r2w] = words[s0r.kids[1].idx]
+    context[S0r2p] = tags[s0r.kids[1].idx] if s0r.val >= 2 else 0
 
     context[N0w] = words[k.i]
     context[N0p] = tags[k.i]
-    context[N0lw] = words[n0l.idx[0]]
-    context[N0lp] = tags[n0l.idx[0]] if n0l.idx[0] != 0 else 0
-    context[N0l2w] = words[n0l.idx[1]]
-    context[N0l2p] = tags[n0l.idx[1]] if n0l.idx[1] != 0 else 0
+    context[N0lw] = words[n0l.kids[0].idx]
+    context[N0lp] = tags[n0l.kids[0].idx] if n0l.val >= 1 else 0
+    context[N0l2w] = words[n0l.kids[1].idx]
+    context[N0l2p] = tags[n0l.kids[1].idx] if n0l.val>= 2 else 0
     context[N1w] = words[k.i + 1]
     context[N1p] = tags[k.i + 1]
     context[N2w] = words[k.i + 2]
@@ -118,12 +118,12 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[S0h2w] = 0
         context[S0h2p] = 0
         context[S0h2l] = 0
-    context[S0ll] = s0l.lab[0]
-    context[S0l2l] = s0l.lab[1]
-    context[S0rl] = s0r.lab[0]
-    context[S0r2l] = s0r.lab[1]
-    context[N0ll] = n0l.lab[0]
-    context[N0l2l] = n0l.lab[1]
+    context[S0ll] = s0l.kids[0].lab
+    context[S0l2l] = s0l.kids[1].lab
+    context[S0rl] = s0r.kids[0].lab
+    context[S0r2l] = s0r.kids[1].lab
+    context[N0ll] = n0l.kids[0].lab
+    context[N0l2l] = n0l.kids[1].lab
 
     context[S0lv] = s0l.val
     context[S0rv] = s0r.val

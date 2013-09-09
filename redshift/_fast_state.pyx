@@ -90,10 +90,6 @@ cdef int shift_kernel(Kernel* result, Kernel* parent) except -1:
     result.n0l.edge = result.i
     # Parents of s0, e.g. hs0, h2s0, Lhs0 etc all null in Shift
     memcpy(&result.s0l, &parent.n0l, sizeof(Subtree))
-    assert result.s0r.val == 0
-    assert result.s0r.idx[0] == 0
-    assert result.n0l.val == 0
-    assert result.n0l.idx[0] == 0
 
 
 cdef int right_kernel(Kernel* ext, Kernel* buff, size_t label) except -1:
@@ -110,10 +106,13 @@ cdef int reduce_kernel(Kernel* ext, Kernel* buff, Kernel* stack) except -1:
     ext.i = buff.i
     # Reduce means that former-S0 is child of the next item on the stack. Set
     # the dep features here
-    ext.s0r.idx[0] = buff.s0
-    ext.s0r.idx[1] = stack.s0r.idx[0]
-    ext.s0r.lab[0] = buff.Ls0
-    ext.s0r.lab[1] = stack.s0r.lab[0]
+    #ext.s0r.idx[0] = buff.s0
+    #ext.s0r.lab[0] = buff.Ls0
+    #ext.s0r.lab[1] = stack.s0r.lab[0]
+    ext.s0r.kids[0].idx = buff.s0
+    ext.s0r.kids[0].lab = buff.Ls0
+    ext.s0r.kids[1].idx = stack.s0r.kids[0].idx
+    ext.s0r.kids[1].lab = stack.s0r.kids[0].lab
     ext.s0r.val = stack.s0r.val + 1
     ext.s0r.first = stack.s0r.first if ext.s0r.val >= 2 else buff.s0
     ext.s0r.edge = buff.s0r.edge
@@ -132,12 +131,20 @@ cdef int left_kernel(Kernel* ext, Kernel* buff, Kernel* stack,
         memcpy(&ext.s0r, &stack.s0r, sizeof(Subtree))
     ext.i = buff.i
     ext.n0l.val = buff.n0l.val + 1
-    ext.n0l.idx[0] = buff.s0
-    ext.n0l.idx[1] = buff.n0l.idx[0]
-    ext.n0l.lab[0] = label
-    ext.n0l.lab[1] = buff.n0l.lab[0]
+    ext.n0l.kids[0].idx = buff.s0
+    ext.n0l.kids[0].lab = label
+    ext.n0l.kids[1].idx = buff.n0l.kids[0].idx
+    ext.n0l.kids[1].lab = buff.n0l.kids[0].lab
     ext.n0l.first = buff.n0l.first if ext.n0l.val >= 2 else buff.s0
     ext.n0l.edge = buff.s0l.edge
+
+
+cdef int edit_kernel(Kernel* ext, Kernel* buff, Kernel* stack):
+    # Handle the work of restoring the children to the stack in extend_fstate.
+    # Here we assume stack is in the correct state for us.
+    memcpy(ext, stack, sizeof(Kernel))
+    memcpy(&ext.n0l, &buff.n0l, sizeof(Subtree))
+    ext.i = buff.i
 
 
 cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label, size_t clas,
@@ -163,12 +170,37 @@ cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label, size_t
         left_kernel(&ext.knl, &prev.knl, &prev.tail.knl, label)
         ext.tail = prev.tail.tail
         ext.prev = prev
+    elif move == EDIT:
+        ext.tail = _restore_lefts(&prev, prev.tail.tail)
+        edit_kernel(&ext.knl, &prev.knl, &prev.tail.knl)
     else:
         raise StandardError
     ext.score = prev.score + local_score
     ext.cost = prev.cost + cost
     ext.clas = clas
+    ext.move = move
     return ext
+
+
+cdef FastState* _restore_lefts(FastState* prev, FastState* stack) except NULL:
+    if prev.s0l.val == 0:
+        return stack
+    cdef size_t missing = prev.s0l.val
+    cdef FastState* head = init_fstate()
+    head.prev = prev
+    cdef FastState* tail = head
+    while missing >= 1:
+        if stack.knl.i == prev.knl.s0 and stack.move == LEFT:
+            memcpy(&tail.knl, &stack.knl, sizeof(Kernel))
+            tail.prev = prev
+            tail.tail = init_fstate()
+            tail = tail.tail
+            missing -= 1
+        stack = stack.prev
+        assert stack != NULL
+    return head
+
+    
 
 
 cdef int fill_hist(size_t* hist, FastState* s, int t) except -1:
@@ -195,9 +227,9 @@ cdef int fill_parse(size_t* heads, size_t* labels, FastState* s) except -1:
         if s.knl.Ls0 != 0 and heads[s.knl.s0] == 0:
             heads[s.knl.s0] = s.knl.s1
             labels[s.knl.s0] = s.knl.Ls0
-        if s.knl.n0l.idx[0] != 0 and heads[s.knl.n0l.idx[0]] == 0:
-            heads[s.knl.n0l.idx[0]] = s.knl.i
-            labels[s.knl.n0l.idx[0]] = s.knl.n0l.lab[0]
+        if s.knl.n0l.val >= 1 and heads[s.knl.n0l.kids[0].idx] == 0:
+            heads[s.knl.n0l.kids[0].idx] = s.knl.i
+            labels[s.knl.n0l.kids[0].idx] = s.knl.n0l.kids[0].lab
         s = s.prev
         cnt += 1
         assert cnt < 100000
