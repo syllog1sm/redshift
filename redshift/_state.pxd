@@ -100,11 +100,11 @@ cdef size_t get_l2(State *s, size_t head)
 cdef size_t get_r(State *s, size_t head)
 cdef size_t get_r2(State *s, size_t head)
 
-cdef int has_child_in_buffer(State *s, size_t word, size_t* heads) except -1
-cdef int has_head_in_buffer(State *s, size_t word, size_t* heads) except -1
-cdef int has_child_in_stack(State *s, size_t word, size_t* heads) except -1
-cdef int has_head_in_stack(State *s, size_t word, size_t* heads) except -1
-cdef bint has_root_child(State *s, size_t token)
+cdef int has_child_in_buffer(size_t w, size_t s, size_t e, size_t* heads) except -1
+cdef int has_head_in_buffer(size_t w, size_t s, size_t e, size_t* heads) except -1
+cdef int has_child_in_stack(size_t w, size_t stack_len, size_t* stack, size_t* heads) except -1
+cdef int has_head_in_stack(size_t w, size_t stack_len, size_t* stack, size_t* heads) except -1
+#cdef bint has_root_child(State *s, size_t token)
 
 cdef int fill_edits(State *s, bint* edits) except -1
 cdef State* init_state(size_t n)
