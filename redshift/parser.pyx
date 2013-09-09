@@ -446,8 +446,8 @@ cdef class GreedyParser(BaseParser):
         while not s.is_finished:
             _state.fill_kernel(s, sent.pos)
             feats = self._extract(sent, &s.kernel)
-            self.moves.fill_valid(self.moves._costs, s.at_end_of_buffer, s.top != 0, 
-                                  s.heads[s.top] != 0)
+            self.moves.fill_valid(self.moves._costs, not s.at_end_of_buffer,
+                                  s.top != 0,  s.heads[s.top] != 0)
             clas = self._predict(feats, self.moves._costs,
                                  &s.guess_labels[s.i])
             self.moves.transition(clas, s)
@@ -477,8 +477,8 @@ cdef class GreedyParser(BaseParser):
             self.tagger.tag(sent)
         while not s.is_finished:
             _state.fill_kernel(s, sent.pos)
-            self.moves.fill_valid(valid, s.at_end_of_buffer, s.top != 0,
-                                  s.heads[s.top] == 0)
+            self.moves.fill_valid(valid, not s.at_end_of_buffer, s.top != 0,
+                                  s.heads[s.top] != 0)
             feats = self._extract(sent, &s.kernel)
             pred = self._predict(feats, valid, &s.guess_labels[s.i])
             self.moves.fill_costs(costs, s.i, s.n, s.stack_len, s.stack,
@@ -513,10 +513,10 @@ cdef class GreedyParser(BaseParser):
         while not s.is_finished:
             _state.fill_kernel(s, sent.pos)
             feats = self._extract(sent, &s.kernel)
-            self.moves.fill_valid(valid, s.at_end_of_buffer, s.top != 0,
+            self.moves.fill_valid(valid, not s.at_end_of_buffer, s.top != 0,
                                   s.heads[s.top] != 0)
             pred = self._predict(feats, valid, &s.guess_labels[s.i])
-            gold = self.moves.break_tie(s.at_end_of_buffer, s.heads[s.top], s.i,
+            gold = self.moves.break_tie(not s.at_end_of_buffer, s.heads[s.top], s.i,
                                         s.top, s.n, sent.pos, sent.parse.heads,
                                          sent.parse.labels, sent.parse.edits)
             self.guide.update(pred, gold, feats, 1)
@@ -569,7 +569,7 @@ cdef class GreedyParser(BaseParser):
             if self.moves.r_end > clas >= self.moves.r_start and score > right_score:
                 best_right = clas
                 right_score = score
-        assert seen_valid 
+        assert seen_valid
         rlabel[0] = self.moves.labels[best_right]
         return best_valid
 
