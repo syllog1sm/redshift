@@ -13,9 +13,6 @@ from _state cimport del_l_child, del_r_child, add_dep
 from _fast_state cimport *
 
 
-
-
-
 # TODO: Link these with other compile constants
 DEF MAX_TAGS = 100
 DEF MAX_LABELS = 200
@@ -322,7 +319,7 @@ cdef class TransitionSystem:
         cdef int cost = 0
         if stack_len < 1:
             return -1
-        if heads[s0] != 0 and not self.allow_reattach:
+        if has_head and not self.allow_reattach:
             return -1
         # This would form a dep between an edit and non-edit word
         if self.use_edit and edits[s0] and not edits[n0]:
