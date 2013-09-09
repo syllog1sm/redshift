@@ -1,9 +1,12 @@
 from libc.stdint cimport uint64_t, int64_t
 
+
 cdef struct Subtree:
     size_t val
     size_t[2] lab
     size_t[2] idx
+    size_t first
+    size_t edge
 
 
 cdef struct Kernel:

@@ -86,6 +86,8 @@ cdef int shift_kernel(Kernel* result, Kernel* parent) except -1:
     result.Ls0 = 0
     result.Ls1 = parent.Ls0
     result.Ls2 = parent.Ls1
+    result.s0r.edge = result.s0
+    result.n0l.edge = result.i
     # Parents of s0, e.g. hs0, h2s0, Lhs0 etc all null in Shift
     memcpy(&result.s0l, &parent.n0l, sizeof(Subtree))
     assert result.s0r.val == 0
@@ -97,6 +99,7 @@ cdef int shift_kernel(Kernel* result, Kernel* parent) except -1:
 cdef int right_kernel(Kernel* ext, Kernel* buff, size_t label) except -1:
     shift_kernel(ext, buff)
     ext.Ls0 = label
+    ext.s0r.edge = ext.s0
     # The child-of features are set in Reduce, not here, because that's when
     # that word becomes top of the stack again.
 
@@ -109,13 +112,11 @@ cdef int reduce_kernel(Kernel* ext, Kernel* buff, Kernel* stack) except -1:
     # the dep features here
     ext.s0r.idx[0] = buff.s0
     ext.s0r.idx[1] = stack.s0r.idx[0]
-    #ext.s0r.idx[2] = stack.s0r.idx[1]
-    #ext.s0r.idx[3] = stack.s0r.idx[2]
     ext.s0r.lab[0] = buff.Ls0
     ext.s0r.lab[1] = stack.s0r.lab[0]
-    #ext.s0r.lab[2] = stack.s0r.lab[1]
-    #ext.s0r.lab[3] = stack.s0r.lab[2]
     ext.s0r.val = stack.s0r.val + 1
+    ext.s0r.first = stack.s0r.first if ext.s0r.val >= 2 else buff.s0
+    ext.s0r.edge = buff.s0r.edge
 
 
 cdef int left_kernel(Kernel* ext, Kernel* buff, Kernel* stack,
@@ -133,15 +134,10 @@ cdef int left_kernel(Kernel* ext, Kernel* buff, Kernel* stack,
     ext.n0l.val = buff.n0l.val + 1
     ext.n0l.idx[0] = buff.s0
     ext.n0l.idx[1] = buff.n0l.idx[0]
-    #ext.n0l.idx[2] = buff.n0l.idx[1]
-    #ext.n0l.idx[3] = buff.n0l.idx[2]
     ext.n0l.lab[0] = label
     ext.n0l.lab[1] = buff.n0l.lab[0]
-    #ext.n0l.lab[2] = buff.n0l.lab[1]
-    #ext.n0l.lab[3] = buff.n0l.lab[2]
-    if ext.n0l.val >= 2:
-        assert ext.n0l.idx[1] != 0
-        assert ext.n0l.lab[1] != 0
+    ext.n0l.first = buff.n0l.first if ext.n0l.val >= 2 else buff.s0
+    ext.n0l.edge = buff.s0l.edge
 
 
 cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label, size_t clas,
