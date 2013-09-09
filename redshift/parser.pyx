@@ -454,9 +454,9 @@ cdef class GreedyParser(BaseParser):
             if s.knl.Ls0 != 0:
                 sent.parse.heads[s.knl.s0] = s.knl.s1
                 sent.parse.labels[s.knl.s0] = s.knl.Ls0
-            if s.knl.n0l.idx[0] != 0:
-                sent.parse.heads[s.knl.n0l.idx[0]] = s.knl.i
-                sent.parse.labels[s.knl.n0l.idx[0]] = s.knl.n0l.lab[0]
+            if s.knl.n0l.kids[0].idx != 0:
+                sent.parse.heads[s.knl.n0l.kids[0].idx] = s.knl.i
+                sent.parse.labels[s.knl.n0l.kids[0].idx] = s.knl.n0l.kids[0].lab
             sent.parse.moves[t] = clas 
         sent.parse.n_moves = t
         free_fstate(s)

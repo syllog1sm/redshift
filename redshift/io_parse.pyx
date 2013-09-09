@@ -87,6 +87,8 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
         s.prefix[i] = index.hashes.encode_word(py_words[i][0])
         s.parens[i] = paren_cnt
         s.quotes[i] = quote_cnt
+    s.words[0] = 0
+    s.pos[0] = 0
     return s
 
 

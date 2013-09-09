@@ -28,6 +28,7 @@ cdef struct Kernel:
 cdef struct FastState:
     Kernel knl
     size_t clas
+    size_t move
     FastState* prev
     FastState* tail
     double score

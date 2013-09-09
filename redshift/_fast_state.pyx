@@ -171,8 +171,8 @@ cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label, size_t
         ext.tail = prev.tail.tail
         ext.prev = prev
     elif move == EDIT:
-        ext.tail = _restore_lefts(&prev, prev.tail.tail)
-        edit_kernel(&ext.knl, &prev.knl, &prev.tail.knl)
+        _restore_lefts(ext, prev, prev.tail.tail)
+        edit_kernel(&ext.knl, &prev.knl, &ext.tail.knl)
     else:
         raise StandardError
     ext.score = prev.score + local_score
@@ -182,23 +182,22 @@ cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label, size_t
     return ext
 
 
-cdef FastState* _restore_lefts(FastState* prev, FastState* stack) except NULL:
-    if prev.s0l.val == 0:
-        return stack
-    cdef size_t missing = prev.s0l.val
-    cdef FastState* head = init_fstate()
-    head.prev = prev
-    cdef FastState* tail = head
+cdef int _restore_lefts(FastState* ext, FastState* prev, FastState* stack) except -1:
+    cdef size_t missing = prev.knl.s0l.val
+    if missing == 0:
+        return 0
+    ext.prev = prev
+    ext.tail = init_fast_state()
+    tail = ext.tail
     while missing >= 1:
         if stack.knl.i == prev.knl.s0 and stack.move == LEFT:
             memcpy(&tail.knl, &stack.knl, sizeof(Kernel))
             tail.prev = prev
-            tail.tail = init_fstate()
+            tail.tail = init_fast_state()
             tail = tail.tail
             missing -= 1
         stack = stack.prev
         assert stack != NULL
-    return head
 
     
 

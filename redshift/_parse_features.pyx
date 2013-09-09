@@ -14,11 +14,21 @@ cdef enum:
     S0lp
     S0l2w
     S0l2p
+
+    S0lew
+    S0lep
+    S0l0w
+    S0l0p
     
     S0rw
     S0rp
     S0r2w
     S0r2p
+
+    S0rew
+    S0rep
+    S0r0w
+    S0r0p
     
     N0w
     N0p
@@ -27,6 +37,11 @@ cdef enum:
     N0lp
     N0l2w
     N0l2p
+
+    N0lew
+    N0lep
+    N0l0w
+    N0l0p
    
     S0hw
     S0hp
@@ -55,6 +70,15 @@ cdef enum:
     S0rv
     dist
 
+    wcopy
+    pcopy
+    wexact
+    pexact
+    wscopy
+    pscopy
+    wsexact
+    psexact
+
     CONTEXT_SIZE
 
 
@@ -78,27 +102,44 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     # TODO: Bug with these values not being zeroed on 0-valencies. Probably
     # messes up word match features.
     context[S0lw] = words[s0l.kids[0].idx]
-    context[S0lp] = tags[s0l.kids[0].idx] if s0l.val >= 1 else 0
+    context[S0lp] = tags[s0l.kids[0].idx]
     context[S0l2w] = words[s0l.kids[1].idx]
-    context[S0l2p] = tags[s0l.kids[1].idx] if s0l.val >= 2 else 0
+    context[S0l2p] = tags[s0l.kids[1].idx]
+
+    context[S0lew] = words[s0l.edge]
+    context[S0lep] = tags[s0l.edge]
+    context[S0l0w] = words[s0l.first]
+    context[S0l0p] = tags[s0l.first]
 
     context[S0rw] = words[s0r.kids[0].idx]
-    context[S0rp] = tags[s0r.kids[0].idx] if s0r.val >= 1 else 0
+    context[S0rp] = tags[s0r.kids[0].idx]
     context[S0r2w] = words[s0r.kids[1].idx]
-    context[S0r2p] = tags[s0r.kids[1].idx] if s0r.val >= 2 else 0
+    context[S0r2p] = tags[s0r.kids[1].idx]
+
+    context[S0rew] = words[s0r.edge]
+    context[S0rep] = tags[s0r.edge]
+    context[S0r0w] = words[s0r.first]
+    context[S0r0p] = tags[s0r.first]
 
     context[N0w] = words[k.i]
     context[N0p] = tags[k.i]
+
     context[N0lw] = words[n0l.kids[0].idx]
-    context[N0lp] = tags[n0l.kids[0].idx] if n0l.val >= 1 else 0
+    context[N0lp] = tags[n0l.kids[0].idx]
     context[N0l2w] = words[n0l.kids[1].idx]
-    context[N0l2p] = tags[n0l.kids[1].idx] if n0l.val>= 2 else 0
+    context[N0l2p] = tags[n0l.kids[1].idx]
+
+    context[N0lew] = words[n0l.edge]
+    context[N0lep] = tags[n0l.edge]
+    context[N0l0w] = words[n0l.first]
+    context[N0l0p] = tags[n0l.first]
+
     context[N1w] = words[k.i + 1]
     context[N1p] = tags[k.i + 1]
     context[N2w] = words[k.i + 2]
     context[N2p] = tags[k.i + 2]
-    context[S0l] = k.Ls0
     # If there's a label set for s0, then S1 is the head of S0
+    context[S0l] = k.Ls0
     if k.Ls0:
         assert k.s1
         context[S0hw] = words[k.s1]
@@ -118,6 +159,7 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[S0h2w] = 0
         context[S0h2p] = 0
         context[S0h2l] = 0
+
     context[S0ll] = s0l.kids[0].lab
     context[S0l2l] = s0l.kids[1].lab
     context[S0rl] = s0r.kids[0].lab
@@ -131,10 +173,41 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
     if k.s0 != 0:
-        assert k.i > k.s0
         context[dist] = k.i - k.s0
     else:
         context[dist] = 0
+
+    context[wcopy] = 0
+    context[wexact] = 1
+    context[pcopy] = 0
+    context[pexact] = 1
+    context[wscopy] = 0
+    context[wsexact] = 1
+    context[pscopy] = 0
+    context[psexact] = 1
+    for i in range(5):
+        if ((n0l.edge + i) > k.i) or ((s0l.edge + i) > k.s0):
+            break
+        if context[wexact]:
+            if words[n0l.edge + i] == words[s0l.edge + i]:
+                context[wcopy] += 1
+            else:
+                context[wexact] = 0
+        if context[pexact]:
+            if tags[n0l.edge + i] == tags[s0l.edge + i]:
+                context[pcopy] += 1
+            else:
+                context[pexact] = 0
+        if context[wsexact]:
+            if words[k.s0 - i] == words[k.i - i]:
+                context[wscopy] += 1
+            else:
+                context[wsexact] = 0
+        if context[psexact]:
+            if tags[k.s0 - i] == tags[k.i - i]:
+                context[pscopy] += 1
+            else:
+                context[psexact] = 0
 
 
 from_single = (
@@ -255,21 +328,22 @@ extra_labels = (
     (S0hp, S0l, S0rl),
     (S0hp, S0l, S0ll),
 )
-
+"""
 edges = (
-    (S0re_w,),
-    (S0re_p,),
-    (S0re_w, S0re_p),
-    (S0le_w,),
-    (S0le_p,),
-    (S0le_w, S0le_p),
-    (N0le_w,),
-    (N0le_p,),
-    (N0le_w, N0le_p),
-    (S0re_p, N0p,),
-    (S0p, N0le_p)
+    (S0rew,),
+    (S0rep,),
+    (S0rew, S0rep),
+    (S0lew,),
+    (S0lep,),
+    (S0lew, S0lep),
+    (N0lew,),
+    (N0lep,),
+    (N0lew, N0lep),
+    (S0rep, N0p,),
+    (S0p, N0lep)
 )
 
+"""
 stack_second = (
     (S1w,),
     (S1p,),
