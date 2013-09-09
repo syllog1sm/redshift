@@ -437,30 +437,34 @@ cdef class BeamParser(BaseParser):
 cdef double STRAY_PC = 0.90
 cdef class GreedyParser(BaseParser):
     cdef int parse(self, Sentence* sent) except -1:
-        cdef _state.State* s
         cdef uint64_t* feats
-        s = _state.init_state(sent.length)
+        cdef FastState* s = init_fast_state()
+        cdef size_t _ = 0
         sent.parse.n_moves = 0
         if self.auto_pos:
             self.tagger.tag(sent)
-        while not s.is_finished:
-            _state.fill_kernel(s, sent.pos)
-            feats = self._extract(sent, &s.kernel)
-            self.moves.fill_valid(self.moves._costs, not s.at_end_of_buffer,
-                                  s.top != 0,  s.heads[s.top] != 0)
-            clas = self._predict(feats, self.moves._costs,
-                                 &s.guess_labels[s.i])
-            self.moves.transition(clas, s)
-        # No need to copy heads for root and start symbols
-        cdef size_t i
-        for i in range(1, sent.length - 1):
-            sent.parse.heads[i] = s.heads[i]
-            sent.parse.labels[i] = s.labels[i]
-        for i in range(s.t):
-            sent.parse.moves[i] = s.history[i]
-        sent.parse.n_moves = s.t
-        _state.fill_edits(s, sent.parse.edits)
-        _state.free_state(s)
+        cdef size_t t = 0
+        while not is_finished(&s.knl, sent.length):
+            feats = self._extract(sent, &s.knl)
+            self.moves.fill_valid(self.moves._costs, can_push(&s.knl, sent.length),
+                                  has_stack(&s.knl),  has_head(&s.knl))
+            # TODO: Fix label guessing
+            clas = self._predict(feats, self.moves._costs, &_)
+            s = extend_fstate(s, self.moves.moves[clas], self.moves.labels[clas],
+                              clas, 0, 0)
+            # Take the last set head, to support non-monotonicity
+            # Take the heads from states just after right and left arcs
+            if s.knl.Ls0 != 0:
+                sent.parse.heads[s.knl.s0] = s.knl.s1
+                sent.parse.labels[s.knl.s0] = s.knl.Ls0
+            if s.knl.n0l.idx[0] != 0:
+                sent.parse.heads[s.knl.n0l.idx[0]] = s.knl.i
+                sent.parse.labels[s.knl.n0l.idx[0]] = s.knl.n0l.lab[0]
+            sent.parse.moves[t] = clas 
+        sent.parse.n_moves = t
+        free_fstate(s)
+        #_state.fill_edits(s, sent.parse.edits)
+        #_state.free_state(s)
  
     cdef int dyn_train(self, int iter_num, Sentence* sent) except -1:
         cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))
