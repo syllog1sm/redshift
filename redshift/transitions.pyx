@@ -1,9 +1,18 @@
 # cython: profile=True
-from _state cimport *
+#from _state cimport *
 from _fast_state cimport *
 from libc.stdlib cimport malloc, calloc, free
 import redshift.io_parse
 import index.hashes
+cimport _state
+from _state cimport has_head_in_buffer, has_child_in_buffer
+from _state cimport has_head_in_stack, has_child_in_stack
+from _state cimport get_r, get_r2, get_l, get_l2
+from _state cimport push_stack, pop_stack
+from _state cimport del_l_child, del_r_child, add_dep
+from _fast_state cimport *
+
+
 
 
 
@@ -22,7 +31,7 @@ cdef enum:
     ASSIGN_POS
     N_MOVES
 
-
+"""
 cdef transition_to_str(State* s, size_t move, label, object tokens):
     tokens = tokens + ['<end>']
     if move == SHIFT:
@@ -39,6 +48,7 @@ cdef transition_to_str(State* s, size_t move, label, object tokens):
             head = s.top
             child = s.i if s.i < len(tokens) else 0
         return u'%s(%s)' % (tokens[head], tokens[child])
+"""
 
 cdef class TransitionSystem:
     def __cinit__(self, allow_reattach=False, allow_reduce=False, use_edit=False):
@@ -109,7 +119,7 @@ cdef class TransitionSystem:
         self.nr_class = clas
         return clas, len(set(list(left_labels) + list(right_labels)))
         
-    cdef int transition(self, size_t clas, State *s) except -1:
+    cdef int transition(self, size_t clas, _state.State *s) except -1:
         cdef size_t head, child, new_parent, new_child, c, gc, move, label, end
         cdef int idx
         if s.stack_len >= 1:
@@ -171,31 +181,31 @@ cdef class TransitionSystem:
         if s.at_end_of_buffer and s.stack_len == 0:
             s.is_finished = True
   
-    cdef int* get_costs(self, State* s, size_t* tags, size_t* heads,
-                        size_t* labels, bint* edits) except NULL:
-        if s.stack_len >= 1:
-            assert s.top != 0, s.stack_len
+    cdef int fill_costs(self, int* costs, size_t n0, size_t length, size_t stack_len, 
+                        size_t* stack, bint has_head, size_t* tags, size_t* heads,
+                        size_t* labels, bint* edits) except -1:
         cdef size_t i
-        cdef int* costs = self._costs
+        cdef size_t s0 = stack[0] if stack_len >= 1 else 0
         for i in range(self.nr_class):
             costs[i] = -1
-        if s.is_finished:
-            return costs
-        p_cost = self.p_cost(s)
-        self._label_costs(self.p_start, self.p_end, tags[s.i + 1], True, p_cost, costs)
-        costs[self.s_id] = self.s_cost(s, heads, labels, edits)
-        costs[self.d_id] = self.d_cost(s, heads, labels, edits)
-        costs[self.e_id] = self.e_cost(s, heads, labels, edits)
-        cdef int r_cost = self.r_cost(s, heads, labels, edits)
-        self._label_costs(self.r_start, self.r_end, labels[s.i], heads[s.i] == s.top,
-                          r_cost, costs)
-        cdef int l_cost = self.l_cost(s, heads, labels, edits)
-        self._label_costs(self.l_start, self.l_end, labels[s.top],
-                          heads[s.top] == s.i, l_cost, costs)
-        return costs
+        if n0 == length - 1 and stack_len == 0:
+            return 0
+        #p_cost = self.p_cost(s)
+        #self._label_costs(self.p_start, self.p_end, tags[n0 + 1], True, p_cost, costs)
+        costs[self.s_id] = self.s_cost(n0, length, stack_len, stack, heads, labels, edits)
+        costs[self.d_id] = self.d_cost(n0, length, stack_len, stack, has_head,
+                                       heads, labels, edits)
+        costs[self.e_id] = self.e_cost(n0, length, stack_len, stack, heads, labels, edits)
+        cdef int r_cost = self.r_cost(n0, length, stack_len, stack, heads, labels, edits)
+        self._label_costs(costs, r_cost, self.r_start, self.r_end, labels[n0],
+                          heads[n0] == s0)
+        cdef int l_cost = self.l_cost(n0, length, stack_len, stack, has_head,
+                                      heads, labels, edits)
+        self._label_costs(costs, l_cost, self.l_start, self.l_end, labels[s0],
+                          heads[s0] == n0)
 
-    cdef int _label_costs(self, size_t start, size_t end, size_t label, bint add,
-                          int c, int* costs) except -1:
+    cdef int _label_costs(self, int* costs, int c, size_t start, size_t end,
+                          size_t label, bint add) except -1:
         if c == -1:
             return 0
         cdef size_t i
@@ -222,7 +232,7 @@ cdef class TransitionSystem:
             for i in range(self.l_start, self.l_end):
                 valid[i] = 0
 
-    cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
+    cdef int fill_static_costs(self, _state.State* s, size_t* tags, size_t* heads,
                                size_t* labels, bint* edits, int* costs) except -1:
         cdef size_t oracle = self.break_tie(not s.at_end_of_buffer,
                                             s.heads[s.top] != 0, s.i, s.top, s.n,
@@ -251,96 +261,95 @@ cdef class TransitionSystem:
         if can_push:
             return self.s_id
         raise StandardError
-        #elif self.d_cost(s, heads, labels, edits) == 0:
-        #    return self.d_id
-        #elif can_push and self.s_cost(s, heads, labels, edits) == 0:
-        #    return self.s_id
-        #else:
-        #    return self.nr_class + 1
 
-    cdef int s_cost(self, State *s, size_t* heads, size_t* labels, bint* edits):
+    cdef int s_cost(self, size_t n0, size_t length, size_t stack_len, size_t* stack,
+                    size_t* heads, size_t* labels, bint* edits):
+        cdef size_t s0 = stack[0] if stack_len >= 1 else 0
         cdef int cost = 0
-        cdef size_t i, stack_i
-        if s.at_end_of_buffer:
+        if n0 == length - 1:
             return -1
-        if self.use_edit and edits[s.i]:
+        if self.use_edit and edits[n0]:
             return 0
-        if s.stack_len < 1:
+        if stack_len < 1:
             return 0
-        cost += has_child_in_stack(s, s.i, heads)
-        cost += has_head_in_stack(s, s.i, heads)
+        cost += has_child_in_stack(n0, stack_len, stack, heads)
+        cost += has_head_in_stack(n0, stack_len, stack, heads)
         return cost
 
-    cdef int r_cost(self, State *s, size_t* heads, size_t* labels, bint* edits):
+    cdef int r_cost(self, size_t n0, size_t length, size_t stack_len, size_t* stack,
+                    size_t* heads, size_t* labels, bint* edits):
+        cdef size_t s0 = stack[0] if stack_len >= 1 else 0
         cdef int cost = 0
         cdef size_t i, buff_i, stack_i
-        if s.at_end_of_buffer:
+        if n0 == length - 1:
             return -1
-        if s.stack_len < 1:
+        if stack_len < 1:
             return -1
-        if has_root_child(s, s.i):
-            return -1
-        if self.use_edit and edits[s.top] and not edits[s.i]:
+        if self.use_edit and edits[s0] and not edits[n0]:
             return 1
-        if self.use_edit and edits[s.i]:
+        if self.use_edit and edits[n0]:
             return 0
-        if heads[s.i] == s.top:
+        if heads[n0] == s0:
             return 0
-        cost += has_head_in_buffer(s, s.i, heads)
-        cost += has_child_in_stack(s, s.i, heads)
-        cost += has_head_in_stack(s, s.i, heads)
+        cost += has_head_in_buffer(n0, n0, length, heads)
+        cost += has_child_in_stack(n0, stack_len, stack, heads)
+        cost += has_head_in_stack(n0, stack_len, stack, heads)
         return cost
 
-    cdef int d_cost(self, State *s, size_t* heads, size_t* labels, bint* edits):
+    cdef int d_cost(self, size_t n0, size_t length, size_t stack_len, size_t* stack,
+                    bint has_head, size_t* heads, size_t* labels, bint* edits):
         cdef int cost = 0
-        if s.heads[s.top] == 0 and not self.allow_reduce:
+        cdef size_t s0 = stack[0] if stack_len >= 1 else 0
+        cdef size_t s1 = stack[1] if stack_len >= 2 else 0
+        if not has_head and not self.allow_reduce:
             return -1
-        if s.stack_len < 1:
+        if stack_len < 1:
             return -1
-        cost += has_child_in_buffer(s, s.top, heads)
+        cost += has_child_in_buffer(s0, n0, length, heads)
         if self.allow_reattach:
-            cost += has_head_in_buffer(s, s.top, heads)
-            if cost == 0 and s.second == 0:
+            cost += has_head_in_buffer(s0, n0, length, heads)
+            if cost == 0 and s1 == 0:
                 return -1
-        if self.use_edit and edits[s.top] and not edits[s.heads[s.top]]:
+        if self.use_edit and edits[s0] and (has_head and not edits[s1]):
             cost += 1
         return cost
 
-    cdef int l_cost(self, State *s, size_t* heads, size_t* labels, bint* edits) except -9000:
+    cdef int l_cost(self, size_t n0, size_t length, size_t stack_len, size_t* stack,
+                    bint has_head, size_t* heads, size_t* labels, bint* edits) except -9000:
+        cdef size_t s0 = stack[0] if stack_len >= 1 else 0
+        cdef size_t s1 = stack[1] if stack_len >= 2 else 0
         cdef size_t buff_i, i
         cdef int cost = 0
-        if s.stack_len < 1:
+        if stack_len < 1:
             return -1
-        if s.heads[s.top] != 0 and not self.allow_reattach:
-            return -1
-        if has_root_child(s, s.i):
+        if heads[s0] != 0 and not self.allow_reattach:
             return -1
         # This would form a dep between an edit and non-edit word
-        if self.use_edit and edits[s.top] and not edits[s.i]:
+        if self.use_edit and edits[s0] and not edits[n0]:
             return 1
-        elif self.use_edit and edits[s.i]:
+        elif self.use_edit and edits[n0]:
             return 0
-        if heads[s.top] == s.i:
+        if heads[s0] == n0:
             return 0
-        cost +=  has_head_in_buffer(s, s.top, heads)
-        cost +=  has_child_in_buffer(s, s.top, heads)
-        if self.allow_reattach and heads[s.top] == s.heads[s.top]:
-            cost += 1
-        if self.allow_reduce and heads[s.top] == s.second:
+        cost +=  has_head_in_buffer(s0, n0, length, heads)
+        cost +=  has_child_in_buffer(s0, n0, length, heads)
+        if (self.allow_reattach or self.allow_reduce) and heads[s0] == s1:
             cost += 1
         return cost
     
-    cdef int e_cost(self, State *s, size_t* heads, size_t* labels, bint* edits):
+    cdef int e_cost(self, size_t n0, size_t length, size_t stack_len, size_t* stack,
+                    size_t* heads, size_t* labels, bint* edits):
+        cdef size_t s0 = stack[0] if stack_len >= 1 else 0
         if not self.use_edit:
             return -1
-        if s.top == 0:
+        if s0 == 0:
             return -1
-        if edits[s.top]:
+        if edits[s0]:
             return 0
         else:
             return 1
 
-    cdef int p_cost(self, State* s):
+    cdef int p_cost(self, _state.State* s):
         if not self.assign_pos:
             return -1
         if s.i >= (s.n - 2):
@@ -351,4 +360,3 @@ cdef class TransitionSystem:
         if last_move == SHIFT or last_move == RIGHT:
             return 0
         return -1
-
