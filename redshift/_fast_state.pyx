@@ -160,3 +160,10 @@ cdef int fill_parse(size_t* heads, size_t* labels, FastState* s) except -1:
         s = s.prev
         cnt += 1
         assert cnt < 100000
+
+cdef int free_fstate(FastState* s) except -1:
+    cdef FastState* tmp
+    while s != NULL:
+        tmp = s.prev
+        free(s)
+        s = tmp
