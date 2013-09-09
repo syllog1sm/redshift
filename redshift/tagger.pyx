@@ -1,4 +1,3 @@
-from redshift._state cimport *
 from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
 import index.hashes
