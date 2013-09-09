@@ -137,15 +137,13 @@ cdef int fill_hist(size_t* hist, FastState* s, int t) except -1:
         s = s.prev
 
 
-DEF MAX_STACK = 256
 cdef int fill_stack(size_t* stack, FastState* s) except -1:
     cdef size_t t = 0
     while s != NULL:
         stack[t] = s.knl.s0
         s = s.tail
         t += 1
-        assert t < MAX_STACK
-    return t
+    return t - 1 if t >= 1 else 0
 
 
 cdef int fill_parse(size_t* heads, size_t* labels, FastState* s) except -1:
