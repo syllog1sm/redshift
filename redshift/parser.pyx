@@ -434,7 +434,7 @@ cdef class BeamParser(BaseParser):
             counts[self._features[f]] += inc
             f += 1
 
-cdef double FOLLOW_ERR_PC = 0.90
+cdef double STRAY_PC = 0.90
 cdef class GreedyParser(BaseParser):
     cdef int parse(self, Sentence* sent) except -1:
         cdef _state.State* s
@@ -464,40 +464,47 @@ cdef class GreedyParser(BaseParser):
  
     cdef int dyn_train(self, int iter_num, Sentence* sent) except -1:
         cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))
-        cdef _state.State* s = _state.init_state(sent.length)
-        cdef size_t pred
+        cdef size_t pred, stack_len
         cdef uint64_t* feats
         cdef size_t _ = 0
         cdef int* costs = self.moves._costs
 
         cdef size_t* bu_tags 
+        cdef FastState* s = init_fast_state()
         if self.auto_pos:
             bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
             memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
             self.tagger.tag(sent)
-        while not s.is_finished:
-            _state.fill_kernel(s, sent.pos)
-            self.moves.fill_valid(valid, not s.at_end_of_buffer, s.top != 0,
-                                  s.heads[s.top] != 0)
-            feats = self._extract(sent, &s.kernel)
-            pred = self._predict(feats, valid, &s.guess_labels[s.i])
-            self.moves.fill_costs(costs, s.i, s.n, s.stack_len, s.stack,
-                                  s.heads[s.top] != 0, sent.pos, sent.parse.heads,
+        seen_states = set()
+        cdef size_t* stack = <size_t*>calloc(sent.length, sizeof(size_t))
+        while not is_finished(&s.knl, sent.length):
+            self.moves.fill_valid(valid, can_push(&s.knl, sent.length),
+                                  has_stack(&s.knl), has_head(&s.knl))
+            feats = self._extract(sent, &s.knl)
+            # TODO: Fix label guessing here
+            pred = self._predict(feats, valid, &_)
+            stack_len = fill_stack(stack, s)
+            self.moves.fill_costs(costs, s.knl.i, sent.length, stack_len, stack,
+                                  has_head(&s.knl), sent.pos, sent.parse.heads,
                                   sent.parse.labels, sent.parse.edits)
             gold = pred if costs[pred] == 0 else self._predict(feats, self.moves._costs, &_)
             self.guide.update(pred, gold, feats, 1)
-            if iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
-                self.moves.transition(pred, s)
-            else:
-                self.moves.transition(gold, s)
+            clas = pred if iter_num >= 2 and random.random() < STRAY_PC else gold
+            seen_states.add(<size_t>s)
+            s = extend_fstate(s, self.moves.moves[clas], self.moves.labels[clas],
+                              clas, self.guide.scores[clas], costs[clas])
             self.guide.n_corr += (gold == pred)
             self.guide.total += 1
         if self.auto_pos:
             memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
             free(bu_tags)
-        _state.free_state(s)
+        cdef size_t addr
+        for addr in seen_states:
+            s = <FastState*>addr
+            s = s.prev
+            free(<FastState*>addr)
         free(valid)
-
+    """
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:
         cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))
         cdef _state.State* s = _state.init_state(sent.length)
@@ -528,7 +535,7 @@ cdef class GreedyParser(BaseParser):
             free(bu_tags) 
         _state.free_state(s)
         free(valid)
-
+    """
     def say_config(self):
         if self.moves.allow_reattach and self.moves.allow_reduce:
             print 'NM L+D'
