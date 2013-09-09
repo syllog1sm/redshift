@@ -1,23 +1,22 @@
 from libc.stdint cimport uint64_t, int64_t
-from _state cimport Subtree, Kernel
 
-#cdef struct Subtree:
-#    size_t val
-#    size_t[2] lab
-#    size_t[2] idx
+cdef struct Subtree:
+    size_t val
+    size_t[2] lab
+    size_t[2] idx
 
 
-#cdef struct Kernel:
-#    size_t i
-#    size_t s0
-#    size_t Ls0
-#    size_t s1
-#    size_t s2
-#    size_t Ls1
-#    size_t Ls2
-#    Subtree s0l
-#    Subtree s0r
-#    Subtree n0l
+cdef struct Kernel:
+    size_t i
+    size_t s0
+    size_t Ls0
+    size_t s1
+    size_t s2
+    size_t Ls1
+    size_t Ls2
+    Subtree s0l
+    Subtree s0r
+    Subtree n0l
 
 
 cdef struct FastState:
@@ -49,7 +48,16 @@ cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label,
 
 cdef int fill_hist(size_t* hist, FastState* s, int t) except -1
 
+cdef int fill_parse(size_t* heads, size_t* labels, FastState* s) except -1
+
 cdef int fill_stack(size_t* stack, FastState* s) except -1
 
 cdef int free_fstate(FastState* s) except -1
+
+
+cdef int has_child_in_buffer(size_t w, size_t s, size_t e, size_t* heads) except -1
+cdef int has_head_in_buffer(size_t w, size_t s, size_t e, size_t* heads) except -1
+cdef int has_child_in_stack(size_t w, size_t stack_len, size_t* stack, size_t* heads) except -1
+cdef int has_head_in_stack(size_t w, size_t stack_len, size_t* stack, size_t* heads) except -1
+
 

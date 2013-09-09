@@ -1,4 +1,4 @@
-from redshift._state cimport Kernel, Subtree
+from redshift._fast_state cimport Kernel, Subtree
 from itertools import combinations
 
 # Context elements

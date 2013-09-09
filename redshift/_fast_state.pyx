@@ -37,6 +37,47 @@ cdef bint is_finished(Kernel* k, size_t t):
     return (not can_push(k, t)) and (not has_stack(k))
 
 
+cdef int has_child_in_buffer(size_t word, size_t s, size_t e, size_t* heads) except -1:
+    assert word != 0
+    cdef size_t buff_i
+    cdef int n = 0
+    for buff_i in range(s, e):
+        if heads[buff_i] == word:
+            n += 1
+    return n
+
+
+cdef int has_head_in_buffer(size_t word, size_t s, size_t e, size_t* heads) except -1:
+    assert word != 0
+    cdef size_t buff_i
+    for buff_i in range(s, e):
+        if heads[word] == buff_i:
+            return 1
+    return 0
+
+
+cdef int has_child_in_stack(size_t word, size_t length, size_t* stack, size_t* heads) except -1:
+    assert word != 0
+    cdef size_t i, stack_i
+    cdef int n = 0
+    for i in range(length):
+        stack_i = stack[i]
+        # Should this be sensitie to whether the word has a head already?
+        if heads[stack_i] == word:
+            n += 1
+    return n
+
+
+cdef int has_head_in_stack(size_t word, size_t length, size_t* stack, size_t* heads) except -1:
+    assert word != 0
+    cdef size_t i, stack_i
+    for i in range(length):
+        stack_i = stack[i]
+        if heads[word] == stack_i:
+            return 1
+    return 0
+
+
 cdef int shift_kernel(Kernel* result, Kernel* parent) except -1:
     result.i = parent.i + 1
     result.s0 = parent.i

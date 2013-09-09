@@ -1,4 +1,4 @@
-from _state cimport Kernel, Subtree
+from _fast_state cimport Kernel, Subtree
 
 
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words,

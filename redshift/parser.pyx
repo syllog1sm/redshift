@@ -11,7 +11,6 @@ from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
 
 from _fast_state cimport *
-#from _state cimport hash_kernel
 from io_parse cimport Sentence, Sentences
 from io_parse import read_conll, read_pos
 from transitions cimport TransitionSystem 
@@ -263,8 +262,7 @@ cdef class BeamParser(BaseParser):
             beam.extend_states(beam_scores)
         s = <FastState*>beam.beam[0]
         sent.parse.n_moves = beam.t
-        beam.fill_parse(sent.parse.moves, sent.pos, sent.parse.heads, sent.parse.labels,
-                        sent.parse.sbd, sent.parse.edits)
+        fill_parse(sent.parse.heads, sent.parse.labels, s)
         free(beam_scores)
 
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:

@@ -110,3 +110,38 @@ cdef int fill_edits(State *s, bint* edits) except -1
 cdef State* init_state(size_t n)
 cdef free_state(State* s)
 cdef copy_state(State* s, State* old)
+
+
+
+
+#cdef int transition(self, size_t clas, State *s) except -1
+#cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
+#                           size_t* labels, bint* edits, int* costs) except -1
+ 
+"""
+cdef class Beam:
+    cdef TransitionSystem trans
+    #cdef priority_queue[pair[double, size_t]]* next_moves
+    
+    cdef State** parents
+    cdef State** beam
+    cdef int** valid
+    cdef int** costs
+    
+    cdef size_t max_class
+    cdef size_t k
+    cdef size_t i
+    cdef size_t t
+    cdef size_t length
+    cdef size_t bsize
+    cdef size_t psize
+    cdef bint is_full
+    cdef bint is_finished
+
+    cdef Kernel* next_state(self, size_t i, size_t* tags)
+    cdef int extend_states(self, double** scores) except -1
+    cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
+                        size_t* labels, bint* sbd, bint* edits) except -1
+"""
+
+

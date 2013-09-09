@@ -1,15 +1,8 @@
 # cython: profile=True
-#from _state cimport *
 from _fast_state cimport *
 from libc.stdlib cimport malloc, calloc, free
 import redshift.io_parse
 import index.hashes
-#cimport _state
-from _state cimport has_head_in_buffer, has_child_in_buffer
-from _state cimport has_head_in_stack, has_child_in_stack
-#from _state cimport get_r, get_r2, get_l, get_l2
-#from _state cimport push_stack, pop_stack
-#from _state cimport del_l_child, del_r_child, add_dep
 from _fast_state cimport *
 
 
@@ -98,70 +91,6 @@ cdef class TransitionSystem:
         self.nr_class = clas
         return clas, len(set(list(left_labels) + list(right_labels)))
     
-    """
-    cdef int transition(self, size_t clas, _state.State *s) except -1:
-        cdef size_t head, child, new_parent, new_child, c, gc, move, label, end
-        cdef int idx
-        if s.stack_len >= 1:
-            assert s.top != 0
-        assert not s.is_finished
-        move = self.moves[clas]
-        label = self.labels[clas]
-        s.history[s.t] = clas
-        s.t += 1 
-        if move == SHIFT:
-            push_stack(s)
-        elif move == REDUCE:
-            if s.heads[s.top] == 0:
-                assert self.allow_reduce
-                assert s.second != 0
-                assert s.second < s.top
-                add_dep(s, s.second, s.top, s.guess_labels[s.top])
-            pop_stack(s)
-        elif move == LEFT:
-            child = pop_stack(s)
-            if s.heads[child] != 0:
-                del_r_child(s, s.heads[child])
-            head = s.i
-            add_dep(s, head, child, label)
-        elif move == RIGHT:
-            child = s.i
-            head = s.top
-            add_dep(s, head, child, label)
-            push_stack(s)
-        elif move == EDIT:
-            if s.heads[s.top] != 0:
-                del_r_child(s, s.heads[s.top])
-            s.heads[s.top] = s.top
-            s.labels[s.top] = self.erase_label
-            edited = pop_stack(s)
-            while s.l_valencies[edited]:
-                child = get_l(s, edited)
-                del_l_child(s, edited)
-                s.second = s.top
-                s.top = child
-                s.stack[s.stack_len] = child
-                s.stack_len += 1
-            end = edited
-            while s.r_valencies[end]:
-                end = get_r(s, end)
-            for i in range(edited, end + 1):
-                s.heads[i] = i
-                s.labels[i] = self.erase_label
-        #elif move == ASSIGN_POS:
-        #    s.tags[s.i + 1] = label
-        else:
-            print clas
-            print move
-            print label
-            print s.is_finished
-            raise StandardError(clas)
-        if s.i == (s.n - 1):
-            s.at_end_of_buffer = True
-        if s.at_end_of_buffer and s.stack_len == 0:
-            s.is_finished = True
-    """
-  
     cdef int fill_costs(self, int* costs, size_t n0, size_t length, size_t stack_len, 
                         size_t* stack, bint has_head, size_t* tags, size_t* heads,
                         size_t* labels, bint* edits) except -1:
@@ -212,15 +141,6 @@ cdef class TransitionSystem:
         if has_stack and not has_head:
             for i in range(self.l_start, self.l_end):
                 valid[i] = 0
-
-    #cdef int fill_static_costs(self, _state.State* s, size_t* tags, size_t* heads,
-    #                           size_t* labels, bint* edits, int* costs) except -1:
-    #    cdef size_t oracle = self.break_tie(not s.at_end_of_buffer,
-    #                                        s.heads[s.top] != 0, s.i, s.top, s.n,
-    #                                        tags, heads, labels, edits)
-    #    cdef size_t i
-    #    for i in range(self.nr_class):
-    #        costs[i] = i != oracle
 
     cdef int break_tie(self, bint can_push, bint has_head, 
                        size_t n0, size_t s0, size_t length, size_t* tags,
