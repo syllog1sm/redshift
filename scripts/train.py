@@ -13,8 +13,7 @@ except ImportError:
 from itertools import combinations
 
 import redshift.parser
-#from redshift.parser import GreedyParser, BeamParser
-from redshift.parser import BeamParser
+from redshift.parser import GreedyParser, BeamParser
 import redshift.io_parse
 
 USE_HELD_OUT = False
@@ -62,12 +61,12 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
                             feat_thresh=feat_thresh, allow_reduce=allow_reduce,
                             allow_reattach=allow_reattach, beam_width=beam_width,
                             ngrams=ngrams, auto_pos=auto_pos)
-    #else:
-    #    parser = GreedyParser(model_loc, clean=True, train_alg=train_alg,
-    #                          feat_set=feat_set, feat_thresh=feat_thresh,
-    #                          allow_reduce=allow_reduce,
-    #                          allow_reattach=allow_reattach, use_edit=use_edit,
-    #                          ngrams=ngrams, auto_pos=auto_pos)
+    else:
+        parser = GreedyParser(model_loc, clean=True, train_alg=train_alg,
+                              feat_set=feat_set, feat_thresh=feat_thresh,
+                              allow_reduce=allow_reduce,
+                              allow_reattach=allow_reattach, use_edit=use_edit,
+                              ngrams=ngrams, auto_pos=auto_pos)
     if profile:
         print 'profiling'
         cProfile.runctx("parser.train(train, n_iter=n_iter)", globals(),
