@@ -66,8 +66,8 @@ def load_parser(model_dir):
               'auto_pos': auto_pos}
     if beam_width >= 2:
         parser = BeamParser(model_dir, **params)
-    #else:
-    #    parser = GreedyParser(model_dir, **params)
+    else:
+        parser = GreedyParser(model_dir, **params)
     pos_tags = set([int(line.split()[0]) for line in open(pjoin(model_dir, 'pos'))])
     parser.load()
     _, nr_label = parser.moves.set_labels(pos_tags, _parse_labels_str(l_labels),
