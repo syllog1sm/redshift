@@ -51,13 +51,13 @@ cdef class TransitionSystem:
                        size_t n0, size_t s0, size_t length, size_t* tags,
                        size_t* heads, size_t* labels, bint* edits) except -1
     cdef int s_cost(self, size_t n0, size_t length, size_t stack_len, size_t* stack,
-                    size_t* heads, size_t* labels, bint* edits)
+            size_t* heads, size_t* labels, bint* edits) except -9000
     cdef int r_cost(self, size_t n0, size_t length, size_t stack_len, size_t* stack,
-                    size_t* heads, size_t* labels, bint* edits)
+            size_t* heads, size_t* labels, bint* edits) except -9000
     cdef int d_cost(self, size_t n0, size_t length, size_t stack_len, size_t* stack,
-                    bint has_head, size_t* heads, size_t* labels, bint* edits)
+            bint has_head, size_t* heads, size_t* labels, bint* edits) except -9000
     cdef int l_cost(self, size_t n0, size_t length, size_t stack_len, size_t* stack,
-                    bint has_head, size_t* heads, size_t* labels, bint* edits)
+            bint has_head, size_t* heads, size_t* labels, bint* edits) except -9000
     cdef int e_cost(self, size_t n0, size_t length, size_t stack_len, size_t* stack,
-                    size_t* heads, size_t* labels, bint* edits)
+            size_t* heads, size_t* labels, bint* edits) except -9000
     cdef int p_cost(self, State *s)

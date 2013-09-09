@@ -319,6 +319,8 @@ cdef class TransitionSystem:
         cdef int cost = 0
         if stack_len < 1:
             return -1
+        if n0 == 0:
+            return -1
         if has_head and not self.allow_reattach:
             return -1
         # This would form a dep between an edit and non-edit word
