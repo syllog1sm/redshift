@@ -135,6 +135,8 @@ cdef class TransitionSystem:
             valid[self.s_id] = 0
         if has_stack and has_head:
             valid[self.d_id] = 0
+        if has_stack and self.use_edit:
+            valid[self.e_id] = 0
         if can_push and has_stack:
             for i in range(self.r_start, self.r_end):
                 valid[i] = 0
