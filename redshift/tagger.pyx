@@ -82,7 +82,7 @@ cdef class BaseTagger:
         tags = set()
         tag_freqs = defaultdict(lambda: defaultdict(int))
         for i in range(sents.length):
-            for j in range(sents.s[i].length):
+            for j in range(1, sents.s[i].length - 1):
                 tag_freqs[sents.s[i].words[j]][sents.s[i].pos[j]] += 1
                 if sents.s[i].pos[j] >= self.nr_tag:
                     self.nr_tag = sents.s[i].pos[j]
@@ -93,21 +93,20 @@ cdef class BaseTagger:
         tokens = 0
         n = 0
         err = 0
-        #print "Making tagdict"
-        #for word, freqs in tag_freqs.items():
-        #    total = sum(freqs.values())
-        #    n += total
-        #    if total >= 100:
-        #        mode, tag = max([(freq, tag) for tag, freq in freqs.items()])
-        #        if float(mode) / total >= 0.99:
-        #            assert tag != 0
-        #            self.tagdict[word] = tag
-        #            types += 1
-        #            tokens += total
-        #            err += (total - mode)
-        #print "%d types" % types
-        #print "%d/%d=%.4f true" % (err, tokens, (1 - (float(err) / tokens)) * 100)
-        #print "%d/%d=%.4f cov" % (tokens, n, (float(tokens) / n) * 100)
+        print "Making tagdict"
+        for word, freqs in tag_freqs.items():
+            total = sum(freqs.values())
+            n += total
+            if total >= 100:
+                mode, tag = max([(freq, tag) for tag, freq in freqs.items()])
+                if float(mode) / total >= 0.99:
+                    self.tagdict[word] = tag
+                    types += 1
+                    tokens += total
+                    err += (total - mode)
+        print "%d types" % types
+        print "%d/%d=%.4f true" % (err, tokens, (1 - (float(err) / tokens)) * 100)
+        print "%d/%d=%.4f cov" % (tokens, n, (float(tokens) / n) * 100)
  
     cdef int tag(self, Sentence* s) except -1:
         raise NotImplementedError
@@ -177,6 +176,8 @@ cdef class GreedyTagger(BaseTagger):
         for w in range(1, sent.length - 1):
             lookup = self.tagdict[sent.words[w]]
             if lookup != 0:
+                self.guide.n_corr += lookup == sent.pos[w]
+                self.guide.total += 1
                 alt = 0
                 prevprev = prev
                 prev = lookup
