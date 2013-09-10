@@ -13,7 +13,6 @@ cimport cython
 from cython.operator cimport preincrement as inc
 from cython.operator cimport dereference as deref
 
-
 cdef class FastBeam:
     def __cinit__(self, TransitionSystem trans, 
                   size_t k, size_t length):
@@ -62,6 +61,8 @@ cdef class FastBeam:
         cdef uint64_t key
         cdef size_t i
         self.bsize = 0
+        cdef dense_hash_map[uint64_t, bint] seen_equivs = dense_hash_map[uint64_t, bint]()
+        seen_equivs.set_empty_key(0)
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
             i = data.second / self.trans.nr_class
@@ -72,14 +73,18 @@ cdef class FastBeam:
                                                   clas, ext_scores[i][clas],
                                                   self.costs[i][clas])
             self.seen_states.add(<size_t>self.beam[self.bsize])
-            self.bsize += 1
             next_moves.pop()
+            # TODO: This will be a problem for the Edit transition!!
+            if not seen_equivs[self.beam[self.bsize].sig]:
+                self.bsize += 1
+                seen_equivs[self.beam[self.bsize].sig] = 1
         for i in range(self.bsize):
             self.parents[i] = self.beam[i]
         self.is_full = self.bsize >= self.k
         self.t += 1
         self.is_finished = is_finished(&self.beam[0].knl, self.length)
         assert self.t < (self.length * 3)
+        assert self.beam[0].clas < 100000
 
     def __dealloc__(self):
         cdef FastState* s

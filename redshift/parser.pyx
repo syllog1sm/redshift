@@ -15,6 +15,7 @@ from io_parse cimport Sentence, Sentences
 from io_parse import read_conll, read_pos
 from transitions cimport TransitionSystem 
 from beam cimport FastBeam
+import beam
 from tagger cimport GreedyTagger, BeamTagger
 
 from features.extractor cimport Extractor
