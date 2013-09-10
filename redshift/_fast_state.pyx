@@ -2,6 +2,7 @@ from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport memcpy
 from ext.murmurhash cimport MurmurHash64A
 
+
 cdef enum:
     ERR
     SHIFT
@@ -12,9 +13,11 @@ cdef enum:
     ASSIGN_POS
     N_MOVES
 
+
 cdef FastState* init_fast_state() except NULL:
     cdef FastState* s = <FastState*>calloc(1, sizeof(FastState))
     s.knl.i = 1
+    s.sig = hash_kernel(&s.knl)
     return s
 
 
@@ -62,7 +65,7 @@ cdef int has_child_in_stack(size_t word, size_t length, size_t* stack, size_t* h
     cdef int n = 0
     for i in range(length):
         stack_i = stack[i]
-        # Should this be sensitie to whether the word has a head already?
+        # Should this be sensitive to whether the word has a head already?
         if heads[stack_i] == word:
             n += 1
     return n
@@ -175,10 +178,14 @@ cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label, size_t
         edit_kernel(&ext.knl, &prev.knl, &ext.tail.knl)
     else:
         raise StandardError
+    assert clas < 100000
     ext.score = prev.score + local_score
     ext.cost = prev.cost + cost
     ext.clas = clas
     ext.move = move
+    ext.sig = hash_kernel(&ext.knl)
+    if ext.tail != NULL:
+        ext.sig *= ext.tail.sig
     return ext
 
 
@@ -189,6 +196,8 @@ cdef int _restore_lefts(FastState* ext, FastState* prev, FastState* stack) excep
     ext.prev = prev
     ext.tail = init_fast_state()
     tail = ext.tail
+    # TODO: This is broken for the "signatures" idea, as we don't update
+    # the signatures of stack states
     while missing >= 1:
         if stack.knl.i == prev.knl.s0 and stack.move == LEFT:
             memcpy(&tail.knl, &stack.knl, sizeof(Kernel))

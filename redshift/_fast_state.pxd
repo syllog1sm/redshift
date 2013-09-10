@@ -33,6 +33,7 @@ cdef struct FastState:
     FastState* tail
     double score
     size_t cost
+    uint64_t sig 
 
 cdef FastState* init_fast_state() except NULL
 
