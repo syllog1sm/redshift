@@ -74,10 +74,20 @@ cdef enum:
     pcopy
     wexact
     pexact
-    wscopy
-    pscopy
-    wsexact
-    psexact
+
+    prev_edit
+    prev_edit_wmatch
+    prev_edit_pmatch
+    prev_edit_word
+    prev_edit_pos
+    prev_prev_edit
+
+    next_edit
+    next_edit_wmatch
+    next_edit_pmatch
+    next_edit_word
+    next_edit_pos
+    next_next_edit
 
     CONTEXT_SIZE
 
@@ -88,7 +98,7 @@ def context_size():
 
 def get_kernel_tokens():
     return [S0hw, S0h2w, S0w, S0lw, S0l2w, S0rw, S0r2w,
-            N0w, N0lw, N0l2w, N1w, N2w]
+            N0w, N0lw, N0l2w, N1w, N2w, S0lew, N0lew, S0rew, S0l0w, N0l0w, S0r0w]
 
 
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
@@ -172,19 +182,15 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N0lv] = n0l.val
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
-    if k.s0 != 0:
-        context[dist] = k.i - k.s0
-    else:
-        context[dist] = 0
-
     context[wcopy] = 0
     context[wexact] = 1
     context[pcopy] = 0
     context[pexact] = 1
-    context[wscopy] = 0
-    context[wsexact] = 1
-    context[pscopy] = 0
-    context[psexact] = 1
+ 
+    if k.s0 != 0:
+        context[dist] = k.i - k.s0
+    else:
+        context[dist] = 0
     for i in range(5):
         if ((n0l.edge + i) > k.i) or ((s0l.edge + i) > k.s0):
             break
@@ -198,16 +204,18 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
                 context[pcopy] += 1
             else:
                 context[pexact] = 0
-        if context[wsexact]:
-            if words[k.s0 - i] == words[k.i - i]:
-                context[wscopy] += 1
-            else:
-                context[wsexact] = 0
-        if context[psexact]:
-            if tags[k.s0 - i] == tags[k.i - i]:
-                context[pscopy] += 1
-            else:
-                context[psexact] = 0
+    context[prev_edit] = 0
+    context[prev_edit_wmatch] = 0
+    context[prev_edit_pmatch] = 0
+    context[prev_edit_word] = 0
+    context[prev_edit_pos] = 0
+    context[prev_prev_edit] = 0
+
+    context[next_edit] = 0
+    context[next_edit_wmatch] = 0
+    context[next_edit_pmatch] = 0
+    context[next_edit_word] = 0
+    context[next_edit_pos] = 0
 
 
 from_single = (
@@ -410,14 +418,15 @@ clusters = (
     (S0lc4, S0p, N0c4),
     (S0lc4, S0c4, N0p)
 )
+"""
 
 disfl = (
-    (prev_edit,),
-    (prev_prev_edit,),
-    (prev_edit_wmatch,),
-    (prev_edit_pmatch,),
-    (prev_edit_word,),
-    (prev_edit_pos,),
+    #(prev_edit,),
+    #(prev_prev_edit,),
+    #(prev_edit_wmatch,),
+    #(prev_edit_pmatch,),
+    #(prev_edit_word,),
+    #(prev_edit_pos,),
     (wcopy,),
     (pcopy,),
     (wexact,),
@@ -426,14 +435,15 @@ disfl = (
     (wexact, pexact),
     (wexact, pcopy),
     (wcopy, pexact),
-    (prev_edit, wcopy),
-    (prev_prev_edit, wcopy),
-    (prev_edit, pcopy),
-    (prev_prev_edit, pcopy)
+    #(prev_edit, wcopy),
+    #(prev_prev_edit, wcopy),
+    #(prev_edit, pcopy),
+    #(prev_prev_edit, pcopy)
 )
 
 
 # After emailing Mark after ACL
+"""
 new_disfl = (
     (next_edit,),
     (next_next_edit,),
