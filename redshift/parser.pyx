@@ -325,7 +325,6 @@ cdef class BeamParser(BaseParser):
 
     cdef int dyn_train(self, int iter_num, Sentence* sent) except -1:
         cdef size_t i
-        cdef Kernel* kernel
         cdef FastState* p
         cdef FastState* g
         cdef FastState* upd_p
@@ -341,7 +340,7 @@ cdef class BeamParser(BaseParser):
         gold = FastBeam(self.moves, self.beam_width, sent.length)
         pred_scores = <double**>malloc(self.beam_width * sizeof(double*))
         gold_scores = <double**>malloc(self.beam_width * sizeof(double*))
-        cdef double max_violn = 0
+        cdef double max_violn = -1
         self.guide.cache.flush()
         while not pred.is_finished and not gold.is_finished:
             for i in range(pred.bsize):
@@ -357,7 +356,7 @@ cdef class BeamParser(BaseParser):
             for i in range(gold.bsize):
                 g = gold.beam[i]
                 self.moves.fill_valid(gold.valid[i], can_push(&g.knl, sent.length),
-                                      has_stack(&p.knl), has_head(&p.knl))
+                                      has_stack(&g.knl), has_head(&g.knl))
                 gold_scores[i] = self._predict(sent, &g.knl)
                 stack_len = fill_stack(stack, g)
                 self.moves.fill_costs(gold.costs[i], g.knl.i, sent.length, stack_len,
@@ -376,7 +375,7 @@ cdef class BeamParser(BaseParser):
                 upd_p = p
             self.guide.n_corr += p.clas == g.clas
             self.guide.total += 1
-        if max_violn >= 0:
+        if upd_g != NULL and max_violn >= 0:
             counted = self._count_feats(sent, upd_g, upd_p)
             self.guide.batch_update(counted)
         if self.auto_pos:
