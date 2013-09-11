@@ -72,8 +72,7 @@ cdef class Extractor:
             bint seen_non_zero, seen_masked
             Template* pred
         cdef size_t f = 0
-        # Extra trick:
-        # Always include this feature to give classifier priors over the classes
+        # Simple way to implement a bias term
         features[0] = 1
         f += 1
         for i in range(self.nr_template):
