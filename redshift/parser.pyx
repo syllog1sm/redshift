@@ -217,7 +217,7 @@ cdef class BaseParser:
         self.tagger.save()
         index.hashes.save_idx('word', pjoin(self.model_dir, 'words'))
         index.hashes.save_idx('pos', pjoin(self.model_dir, 'pos'))
-        index.hashes.save_idx('labels', pjoin(self.model_dir, 'labels'))
+        index.hashes.save_idx('label', pjoin(self.model_dir, 'labels'))
    
     def load(self):
         self.guide.load(pjoin(self.model_dir, 'model.gz'), thresh=self.feat_thresh)
