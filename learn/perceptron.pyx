@@ -261,7 +261,8 @@ cdef class Perceptron:
                               self.now, -1.0, pred_i, <SquareFeature*>feat_addr)
    
     cdef inline int fill_scores(self, uint64_t* features, double* scores) except -1:
-        cdef size_t i, f, j, k, c
+        cdef size_t i, j, k, c
+        cdef uint64_t f
         cdef size_t feat_addr
         cdef SquareFeature* feat
         cdef DenseFeature* raw_feat
