@@ -62,7 +62,7 @@ cdef class FastBeam:
         cdef size_t i
         self.bsize = 0
         cdef dense_hash_map[uint64_t, bint] seen_equivs = dense_hash_map[uint64_t, bint]()
-        seen_equivs.set_empty_key(0)
+        seen_equivs.set_empty_key(1)
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
             i = data.second / self.trans.nr_class
@@ -74,10 +74,11 @@ cdef class FastBeam:
                                                   self.costs[i][clas])
             self.seen_states.add(<size_t>self.beam[self.bsize])
             next_moves.pop()
+            key = self.beam[self.bsize].sig
             # TODO: This will be a problem for the Edit transition!!
-            if not seen_equivs[self.beam[self.bsize].sig]:
+            if not seen_equivs[key]:
                 self.bsize += 1
-                seen_equivs[self.beam[self.bsize].sig] = 1
+                seen_equivs[key] = 1
         for i in range(self.bsize):
             self.parents[i] = self.beam[i]
         self.is_full = self.bsize >= self.k
