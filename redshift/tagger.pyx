@@ -4,9 +4,9 @@ import index.hashes
 cimport index.hashes
 from ext.murmurhash cimport MurmurHash64A
 from ext.sparsehash cimport *
+from redshift.io_parse import read_pos
 
-
-from redshift.io_parse cimport Sentences, Sentence
+from redshift.io_parse cimport Sentences, Sentence, make_sentence
 from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport memcpy, memset
 from libc.stdint cimport uint64_t, int64_t
@@ -51,6 +51,7 @@ cdef class BaseTagger:
         self.beam_scores = <double**>malloc(sizeof(double*) * self.beam_width)
         for i in range(self.beam_width):
             self.beam_scores[i] = <double*>calloc(self.nr_tag, sizeof(double))
+        self.pos_idx = None
 
     def __dealloc__(self):
         for i in range(self.beam_width):
@@ -60,12 +61,28 @@ cdef class BaseTagger:
         free(self._features)
 
 
-    def add_tags(self, Sentences sents):
-        cdef size_t i
-        for i in range(sents.length):
-            self.tag(sents.s[i])
+    def tag(self, str sent_str, tokenize=True):
+        cdef Sentence* sentence
+        if self.pos_idx is None:
+            self.pos_idx = index.hashes.reverse_pos_index()
+        if tokenize:
+            raise StandardError
+        else:
+            words = sent_str.split()
+        ids = list(range(len(words)))
+        ids.insert(0, 0)
+        words.insert(0, '<start>')
+        words.append('<root>')
+        ids.append(0)
+        length = len(words)
+        tags = ['FW']*length
+        sentence = make_sentence(0, length, ids, words, tags)
+        self.fill_tags(sentence.pos, sentence)
+        return [(words[i], self.pos_idx[sentence.pos[i]]) for i in range(1, length - 1)]
  
-    def train(self, Sentences sents, nr_iter=10):
+    def train(self, str train_str, nr_iter=10):
+        cdef Sentences sents = read_pos(train_str)
+ 
         self.setup_classes(sents)
         indices = list(range(sents.length))
         for n in range(nr_iter):
@@ -99,22 +116,22 @@ cdef class BaseTagger:
         tokens = 0
         n = 0
         err = 0
-        print "Making tagdict"
-        for word, freqs in tag_freqs.items():
-            total = sum(freqs.values())
-            n += total
-            if total >= 100:
-                mode, tag = max([(freq, tag) for tag, freq in freqs.items()])
-                if float(mode) / total >= 0.99:
-                    self.tagdict[word] = tag
-                    types += 1
-                    tokens += total
-                    err += (total - mode)
-        print "%d types" % types
-        print "%d/%d=%.4f true" % (err, tokens, (1 - (float(err) / tokens)) * 100)
-        print "%d/%d=%.4f cov" % (tokens, n, (float(tokens) / n) * 100)
+        #print "Making tagdict"
+        #for word, freqs in tag_freqs.items():
+        #    total = sum(freqs.values())
+        #    n += total
+        #    if total >= 100:
+        #        mode, tag = max([(freq, tag) for tag, freq in freqs.items()])
+        #        if float(mode) / total >= 0.99:
+        #            self.tagdict[word] = tag
+        #            types += 1
+        #            tokens += total
+        #            err += (total - mode)
+        #print "%d types" % types
+        #print "%d/%d=%.4f true" % (err, tokens, (1 - (float(err) / tokens)) * 100)
+        #print "%d/%d=%.4f cov" % (tokens, n, (float(tokens) / n) * 100)
  
-    cdef int tag(self, Sentence* s) except -1:
+    cdef int fill_tags(self, size_t* tags, Sentence* sent) except -1:
         raise NotImplementedError
 
     cdef int train_sent(self, Sentence* sent) except -1:
@@ -130,15 +147,11 @@ cdef class BaseTagger:
         self.nr_tag = self.guide.nr_class
         index.hashes.load_idx('word', pjoin(self.model_dir, 'words'))
         index.hashes.load_idx('pos', pjoin(self.model_dir, 'pos'))
+        self.pos_idx = index.hashes.reverse_pos_index()
 
 
 cdef class GreedyTagger(BaseTagger):
-    def add_tags(self, Sentences sents):
-        cdef size_t i
-        for i in range(sents.length):
-            self.tag(sents.s[i])
-
-    cdef int tag(self, Sentence* sent) except -1:
+    cdef int fill_tags(self, size_t* tags, Sentence* sent) except -1:
         cdef size_t i, clas, lookup
         cdef double incumbent, runner_up, score
         cdef size_t prev = sent.pos[0]
@@ -147,14 +160,11 @@ cdef class GreedyTagger(BaseTagger):
         for i in range(1, sent.length - 1):
             lookup = self.tagdict[sent.words[i]]
             if lookup != 0:
-                sent.pos[i] = lookup
+                tags[i] = lookup
                 sent.alt_pos[i] = 0
                 alt = 0
-                prevprev = prev
-                prev = lookup
+                prevprev = prev; prev = lookup
                 continue 
-            sent.pos[i] = 0
-            sent.alt_pos[i] = 0
             fill_context(self._context, sent, prev, prevprev, alt, i)
             self.features.extract(self._features, self._context)
             self.guide.fill_scores(self._features, self.guide.scores)
@@ -163,12 +173,12 @@ cdef class GreedyTagger(BaseTagger):
             for clas in range(self.guide.nr_class):
                 score = self.guide.scores[clas]
                 if score >= incumbent:
-                    sent.alt_pos[i] = sent.pos[i]
-                    sent.pos[i] = clas
+                    sent.alt_pos[i] = tags[i]
+                    tags[i] = clas
                     runner_up = incumbent
                     incumbent = score
             prevprev = prev
-            prev = sent.pos[i]
+            prev = tags[i]
             alt = sent.alt_pos[i]
 
     cdef int train_sent(self, Sentence* sent) except -1:
@@ -200,10 +210,8 @@ cdef class GreedyTagger(BaseTagger):
                     second = pred
                     incumbent = score
                     pred = clas
-            if pred != sent.pos[w]:
-                self.guide.update(pred, sent.pos[w], self._features, 1.0)
-            else:
-                self.guide.n_corr += 1
+            self.guide.update(pred, sent.pos[w], self._features, 1.0)
+            self.guide.n_corr += pred == sent.pos[w]
             self.guide.total += 1
             prevprev = prev
             prev = pred
@@ -211,7 +219,7 @@ cdef class GreedyTagger(BaseTagger):
 
 
 cdef class BeamTagger(BaseTagger):
-    cdef int tag(self, Sentence* sent) except -1:
+    cdef int fill_tags(self, size_t* tags, Sentence* sent) except -1:
         cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.length, self.nr_tag)
         cdef size_t p_idx
         cdef TagState* s
@@ -219,7 +227,7 @@ cdef class BeamTagger(BaseTagger):
             self.fill_beam_scores(beam, sent, i)
             beam.extend_states(self.beam_scores)
         s = <TagState*>beam.beam[0]
-        fill_hist(sent.pos, s, sent.length - 1)
+        fill_hist(tags, s, sent.length - 1)
 
     cdef int fill_beam_scores(self, TaggerBeam beam, Sentence* sent,
                               size_t word_i) except -1:
@@ -247,6 +255,8 @@ cdef class BeamTagger(BaseTagger):
         if updater.delta != -1:
             counts = updater.count_feats(self._features, self._context, sent, self.features)
             self.guide.batch_update(counts)
+        else:
+            self.guide.now += 1
         cdef TagState* prev
         while gold_state != NULL:
             prev = gold_state.prev
