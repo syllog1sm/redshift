@@ -1,6 +1,8 @@
 # cython: profile=True
+import sys
 import math
 import gzip
+
 from libc.stdlib cimport *
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
@@ -412,7 +414,7 @@ cdef class Perceptron:
         self.scores = <double *>malloc(self.nr_class * sizeof(double))
         cdef uint64_t f
         cdef size_t nr_raws = 1
-        print "Loading %d class..." % self.nr_class,
+        print >> sys.stderr, "Loading %d class..." % self.nr_class,
         cdef double* weights = <double*>calloc(self.nr_class, sizeof(double))
         cdef char* param_str
         cdef char* line
@@ -453,7 +455,7 @@ cdef class Perceptron:
                                                <SquareFeature*>self.W[f])
                 nr_feat += 1
         free(weights)
-        print "%d weights for %d features" % (nr_weight, nr_feat)
+        print >> sys.stderr, "%d weights for %d features" % (nr_weight, nr_feat)
 
     def flush_cache(self):
         self.cache.flush()
