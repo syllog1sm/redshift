@@ -36,11 +36,9 @@ cdef class BaseTagger:
         if not os.path.exists(model_dir):
             os.mkdir(model_dir)
         self.feat_thresh = feat_thresh
-        #if trained:
-        #    self.load_idx(model_dir)
         self.guide = Perceptron(100, pjoin(model_dir, 'tagger.gz'))
         if trained:
-            self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
+            self.load()
         self.features = Extractor(basic + clusters + case + orth, [],
                                   bag_of_words=[P1p, P1alt])
         self.tagdict = dense_hash_map[size_t, size_t]()
@@ -53,6 +51,14 @@ cdef class BaseTagger:
         self.beam_scores = <double**>malloc(sizeof(double*) * self.beam_width)
         for i in range(self.beam_width):
             self.beam_scores[i] = <double*>calloc(self.nr_tag, sizeof(double))
+
+    def __dealloc__(self):
+        for i in range(self.beam_width):
+            free(self.beam_scores[i])
+        free(self.beam_scores)
+        free(self._context)
+        free(self._features)
+
 
     def add_tags(self, Sentences sents):
         cdef size_t i
@@ -118,14 +124,12 @@ cdef class BaseTagger:
         self.guide.save(pjoin(self.model_dir, 'tagger.gz'))
         index.hashes.save_idx('word', pjoin(self.model_dir, 'words'))
         index.hashes.save_idx('pos', pjoin(self.model_dir, 'pos'))
-        index.hashes.save_idx('label', pjoin(self.model_dir, 'labels'))
 
     def load(self):
         self.guide.load(pjoin(self.model_dir, 'tagger.gz'), thresh=self.feat_thresh)
         self.nr_tag = self.guide.nr_class
-        index.hashes.load_idx(pjoin(self.model_dir, 'words'))
-        index.hashes.load_idx(pjoin(self.model_dir, 'pos'))
-        index.hashes.load_idx(pjoin(self.model_dir, 'labels'))
+        index.hashes.load_idx('word', pjoin(self.model_dir, 'words'))
+        index.hashes.load_idx('pos', pjoin(self.model_dir, 'pos'))
 
 
 cdef class GreedyTagger(BaseTagger):
