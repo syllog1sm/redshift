@@ -16,14 +16,12 @@ cdef class BaseTagger:
     cdef size_t nr_tag
     cdef size_t _acc
     cdef dense_hash_map[size_t, size_t] tagdict
-
     cdef size_t* _context
     cdef uint64_t* _features
     cdef double** beam_scores
+    cdef dict pos_idx
 
-    
-    cdef int tag(self, Sentence* s) except -1
-
+    cdef int fill_tags(self, size_t* tags, Sentence* sent) except -1
     cdef int train_sent(self, Sentence* sent) except -1
 
 cdef class GreedyTagger(BaseTagger):
