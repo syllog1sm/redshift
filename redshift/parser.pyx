@@ -312,8 +312,8 @@ cdef class BeamParser(BaseParser):
             counted = self._count_feats(sent, tags, upd_g, upd_p)
             assert counted
             self.guide.batch_update(counted)
-        #else:
-        #    self.guide.now += 1
+        else:
+            self.guide.now += 1
         free(tags)
         free(beam_scores)
         cdef FastState* prev = gold.prev
@@ -377,8 +377,8 @@ cdef class BeamParser(BaseParser):
         if upd_g != NULL and max_violn >= 0:
             counted = self._count_feats(sent, tags, upd_g, upd_p)
             self.guide.batch_update(counted)
-        #else:
-        #    self.guide.now += 1
+        else:
+            self.guide.now += 1
         free(tags)
         free(pred_scores)
         free(gold_scores)
