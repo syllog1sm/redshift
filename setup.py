@@ -63,6 +63,13 @@ if sys.argv[1] == 'clean':
 
 distutils.core.setup(
 #    name='Redshift shift-reduce dependency parser',
+    classifiers=[
+        'Programming Language :: Python :: 2.7',
+    ],
+    description='Redshift shift-reduce dependency parser',
+    keywords='natural-language syntactic dependency parser',
+    long_description=open('README.md').read(),
+    license='GPL',
     name='redshift-parser',
     packages=['redshift'],
     author='Matthew Honnibal',
@@ -70,6 +77,7 @@ distutils.core.setup(
     version='1.0',
     cmdclass={'build_ext': Cython.Distutils.build_ext},
     ext_modules=exts,
+    url='https://github.com/syllog1sm/redshift',
 )
 
 
