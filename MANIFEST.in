@@ -1,0 +1,13 @@
+include *.md
+include *.py
+include *.sh
+recursive-include ext *.h
+recursive-include ext *.pxd
+recursive-include ext *.py
+recursive-include index *.pxd
+recursive-include index *.py
+recursive-include index *.txt
+recursive-include learn *.pxd
+recursive-include learn *.py
+recursive-include redshift *.pxd
+recursive-include scripts *.py
