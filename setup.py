@@ -68,7 +68,7 @@ distutils.core.setup(
     ],
     description='Redshift shift-reduce dependency parser',
     keywords='natural-language syntactic dependency parser',
-    long_description=open('README.md').read(),
+    long_description=open('README.rst').read(),
     license='GPL',
     name='redshift-parser',
     packages=['redshift'],
