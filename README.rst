@@ -1,4 +1,5 @@
-# Redshift #
+Redshift
+========
 
 Redshift is a natural-language syntactic dependency parser.  The current release features fast and accurate parsing,
 but requires the text to be pre-processed.  Future releases will integrate tokenisation and part-of-speech tagging,
@@ -8,20 +9,24 @@ If you don't know what a syntactic dependency is, read this:
 http://googleresearch.blogspot.com.au/2013/05/syntactic-ngrams-over-time.html
 
 Main features:
+
 * Fast linear time parsing: the slowest model is still over 100 sentences/second
 * State-of-the-art accuracy: 93.5% UAS on English (Stanford scheme, WSJ 23)
 * Super fast "greedy" mode: over 1,000 sentences per second at 91.5% accuracy
 * Native Python interface (the parser is written in Cython)
 
 Key techniques:
+
 * Arc-eager transition-based dependency parser
 * Averaged perceptron for learning
 * redshift.parser.BeamParser is basically the model of Zhang and Nivre (2011)
-* redshift.parser.GreedyParser adds the non-monotonic model of Honnibal et al (2013) to the dynamic oracle
-model of Goldberg and Nivre (2012)
+* redshift.parser.GreedyParser adds the non-monotonic model of Honnibal et al (2013) to the dynamic oracle model of Goldberg and Nivre (2012)
 * redshift.features includes the standard Zhang and Nivre (2011) feature set, and also some work pending publication.
 
-## Example usage ##
+Example usage
+-------------
+
+::
 
     >>> import redshift.parser
     >>> parser = redshift.parser.load_parser('/tmp/stanford_beam8')
@@ -54,19 +59,20 @@ scripts/train.py, scripts/parse.py, and scripts/evaluate.py . All print usage in
 Published results always refer to multiple runs (usually with 20 random seeds). These experiments are automated via fabric,
 which I also usually use for compilation (e.g. "fab make").
 
-## Installation ##
+Installation
+------------
 
-The following commands will set up a virtualenv with Python 2.7.5, the parser, and its core dependencies from scratch:
+The following commands will set up a virtualenv with Python 2.7.5, the parser, and its core dependencies from scratch::
 
-    git clone https://github.com/syllog1sm/redshift.git
-    cd redshift
-    ./make_virtualenv.sh # Downloads Python 2.7.5 and virtualenv
-    source $HOME/rsve/bin/activate
-    ./install_sparsehash.sh # Downloads the Google sparsehash 2.2 library and installs it under the virtualenv
-    pip install cython
-    python setup.py build_ext --inplace # site-install currently broken, use --inplace
-    export PYTHONPATH=`pwd`:$PYTHONPATH # ...and set PYTHONPATH.
-    pip install plac # For command-line interfaces
+    $ git clone https://github.com/syllog1sm/redshift.git
+    $ cd redshift
+    $ ./make_virtualenv.sh # Downloads Python 2.7.5 and virtualenv
+    $ source $HOME/rsve/bin/activate
+    $ ./install_sparsehash.sh # Downloads the Google sparsehash 2.2 library and installs it under the virtualenv
+    $ pip install cython
+    $ python setup.py build_ext --inplace # site-install currently broken, use --inplace
+    $ export PYTHONPATH=`pwd`:$PYTHONPATH # ...and set PYTHONPATH.
+    $ pip install plac # For command-line interfaces
 
 virtualenv is not a requirement, although it's useful.  If a virtualenv is not active (i.e. if the $VIRTUALENV
 environment variable is not set), install_sparsehash.sh will install the Google sparsehash library under redshift/ext/,
@@ -76,7 +82,8 @@ list in setup.py
 You might wish to handle the tasks covered by ./make_virtualenv.sh and ./install_sparsehash.sh yourself, depending on
 how you want your environment set up.
 
-## Cython ##
+Cython
+------
 
 redshift is written almost entirely in Cython, a superset of the Python language that additionally supports
 calling C/C++ functions and declaring C/C++ types on variables and class attributes. This allows the compiler to
@@ -91,15 +98,18 @@ The parser currently has Cython as a requirement, instead of distributing
 the "compiled" .cpp files as part of the release (against Cython's recommendation). This could change in future,
 but currently it feels strange to have a "source" release that users wouldn't be able to modify. 
 
-## LICENSE (GPL 3) ##
+LICENSE (GPL 3)
+---------------
 
-    I'm still working out how to specify the license, but my intention at the moment is:
-    * FOSS for non-commercial use
-    * Modifications should be distributed
-    * Commercial use licenses available on request. These will be granted pretty much automatically to any
-      company that isn't yet profitable, or really anyone who isn't big.
-    * RESTful parser APIs to make it easier to start using the parser.
+I'm still working out how to specify the license, but my intention at the moment is:
+
+- FOSS for non-commercial use
+- Modifications should be distributed
+- Commercial use licenses available on request. These will be granted pretty much automatically to any company that isn't yet profitable, or really anyone who isn't big.
+- RESTful parser APIs to make it easier to start using the parser.
     
+::
+
     Copyright (C) 2013 Matthew Honnibal
 
     This program is free software: you can redistribute it and/or modify
