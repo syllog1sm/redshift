@@ -62,7 +62,8 @@ if sys.argv[1] == 'clean':
     map(clean, exts)
 
 distutils.core.setup(
-    name='Redshift shift-reduce dependency parser',
+#    name='Redshift shift-reduce dependency parser',
+    name='redshift-parser',
     packages=['redshift'],
     author='Matthew Honnibal',
     author_email='honnibal@gmail.com',
