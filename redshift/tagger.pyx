@@ -22,6 +22,7 @@ from os.path import join as pjoin
 import random
 import shutil
 from collections import defaultdict
+import cPickle
 
 DEBUG = False
 
@@ -37,10 +38,12 @@ cdef class BaseTagger:
             os.mkdir(model_dir)
         self.feat_thresh = feat_thresh
         self.guide = Perceptron(100, pjoin(model_dir, 'tagger.gz'))
-        if trained:
-            self.load()
-        self.features = Extractor(basic + clusters + case + orth, [],
-                                  bag_of_words=[P1p, P1alt])
+        #self.features = Extractor(basic + clusters + case + orth, [],
+        #                          bag_of_words=[P1p, P1alt])
+        self.features = Extractor(debug, [],
+                                  bag_of_words=[])
+
+
         self.tagdict = dense_hash_map[size_t, size_t]()
         self.tagdict.set_empty_key(0)
         self.nr_tag = 100
@@ -52,6 +55,10 @@ cdef class BaseTagger:
         for i in range(self.beam_width):
             self.beam_scores[i] = <double*>calloc(self.nr_tag, sizeof(double))
         self.pos_idx = None
+        self._td = set()
+        if trained:
+            self.load()
+ 
 
     def __dealloc__(self):
         for i in range(self.beam_width):
@@ -95,7 +102,7 @@ cdef class BaseTagger:
             self.guide.total = 0
             if n % 2 == 1 and self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
-            if n < 3:
+            if n < 3 and len(indices) >= 5000:
                 self.guide.reindex()
             random.shuffle(indices)
         self.guide.finalize()
@@ -116,20 +123,21 @@ cdef class BaseTagger:
         tokens = 0
         n = 0
         err = 0
-        #print "Making tagdict"
-        #for word, freqs in tag_freqs.items():
-        #    total = sum(freqs.values())
-        #    n += total
-        #    if total >= 100:
-        #        mode, tag = max([(freq, tag) for tag, freq in freqs.items()])
-        #        if float(mode) / total >= 0.99:
-        #            self.tagdict[word] = tag
-        #            types += 1
-        #            tokens += total
-        #            err += (total - mode)
-        #print "%d types" % types
-        #print "%d/%d=%.4f true" % (err, tokens, (1 - (float(err) / tokens)) * 100)
-        #print "%d/%d=%.4f cov" % (tokens, n, (float(tokens) / n) * 100)
+        print "Making tagdict"
+        for word, freqs in tag_freqs.items():
+            total = sum(freqs.values())
+            n += total
+            if total >= 100:
+                mode, tag = max([(freq, tag) for tag, freq in freqs.items()])
+                if float(mode) / total >= 0.99:
+                    self.tagdict[word] = tag
+                    self._td.add((word, tag))
+                    types += 1
+                    tokens += total
+                    err += (total - mode)
+        print "%d types" % types
+        print "%d/%d=%.4f true" % (err, tokens, (1 - (float(err) / tokens)) * 100)
+        print "%d/%d=%.4f cov" % (tokens, n, (float(tokens) / n) * 100)
  
     cdef int fill_tags(self, size_t* tags, Sentence* sent) except -1:
         raise NotImplementedError
@@ -138,12 +146,17 @@ cdef class BaseTagger:
         raise NotImplementedError
 
     def save(self):
+        cPickle.dump(self._td, open(pjoin(self.model_dir, 'tagdict'), 'w'))
         self.guide.save(pjoin(self.model_dir, 'tagger.gz'))
         index.hashes.save_idx('word', pjoin(self.model_dir, 'words'))
         index.hashes.save_idx('pos', pjoin(self.model_dir, 'pos'))
 
     def load(self):
         self.guide.load(pjoin(self.model_dir, 'tagger.gz'), thresh=self.feat_thresh)
+        self._td = cPickle.load(open(pjoin(self.model_dir, 'tagdict')))
+        cdef size_t w, p
+        for w, p in self._td:
+            self.tagdict[<size_t>w] = <size_t>p
         self.nr_tag = self.guide.nr_class
         index.hashes.load_idx('word', pjoin(self.model_dir, 'words'))
         index.hashes.load_idx('pos', pjoin(self.model_dir, 'pos'))
@@ -417,6 +430,21 @@ cdef enum:
 
     CONTEXT_SIZE
 
+debug = (
+    (N0w,),
+    (P1w,),
+    (N1w,),
+    (P2w,),
+    (N2w,),
+    (P1p,),
+    (P2p,),
+    (P1p, P2p),
+    (P1p, N0w,),
+    (N0suff,),
+    (P1suff,),
+    (N1suff,),
+    (N0pre,),
+)
 
 basic = (
     (N0w,),

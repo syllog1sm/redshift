@@ -20,6 +20,7 @@ cdef class BaseTagger:
     cdef uint64_t* _features
     cdef double** beam_scores
     cdef dict pos_idx
+    cdef set _td
 
     cdef int fill_tags(self, size_t* tags, Sentence* sent) except -1
     cdef int train_sent(self, Sentence* sent) except -1

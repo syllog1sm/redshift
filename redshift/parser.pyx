@@ -187,7 +187,7 @@ cdef class BaseParser:
             if n % 2 == 1 and self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
                 self.tagger.guide.prune(self.feat_thresh / 2)
-            if n < 3:
+            if n < 3 and len(indices) >= 5000:
                 self.guide.reindex()
                 self.tagger.guide.reindex()
             random.shuffle(indices)
