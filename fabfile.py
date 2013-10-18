@@ -427,17 +427,17 @@ def parse_n(name, devname):
     data = str(REMOTE_SWBD.join('dps_converted'))
     exp_dir = str(REMOTE_PARSERS)
     repo = str(REMOTE_REPO)
-    pos = devname + '.pos'
+    #pos = devname + '.pos'
     gold = devname + '.conll'
-
+    pos = '/home/mhonniba/data/wazoo_test.txt'
     n = len(run("ls %s" % pjoin(exp_dir, name), quiet=True).split())
     script = []
     for seed in range(n):
         model = pjoin(exp_dir, name, str(seed))
         script.append("mkdir %s" % pjoin(model, devname))
-        script.append(_parse(model, pjoin(data, pos), pjoin(model, devname)))
-        #script.append(_add_edits(pjoin(model, devname), pjoin(data, 'test.pos')))
-        script.append(_evaluate(pjoin(model, devname, 'parses'), pjoin(data, gold)))
+        script.append(_parse(model, pos, pjoin(model, devname)))
+        script.append(_add_edits(pjoin(model, devname), pjoin(data, 'test.pos')))
+        script.append(_evaluate(pjoin(model, devname, 'pipe.parses'), pjoin(data, gold)))
         script.append("grep 'U:' %s >> %s" % (pjoin(model, devname, 'acc'),
                                            pjoin(model, devname, 'uas')))
     script = _pbsify(repo, script)
