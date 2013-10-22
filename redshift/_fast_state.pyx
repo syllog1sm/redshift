@@ -208,8 +208,6 @@ cdef int _restore_lefts(FastState* ext, FastState* prev, FastState* stack) excep
         stack = stack.prev
         assert stack != NULL
 
-    
-
 
 cdef int fill_hist(size_t* hist, FastState* s, int t) except -1:
     while t >= 1 and s.prev != NULL:
@@ -241,6 +239,7 @@ cdef int fill_parse(size_t* heads, size_t* labels, FastState* s) except -1:
         s = s.prev
         cnt += 1
         assert cnt < 100000
+
 
 cdef int free_fstate(FastState* s) except -1:
     cdef FastState* tmp
