@@ -183,6 +183,10 @@ cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label, size_t
     ext.cost = prev.cost + cost
     ext.clas = clas
     ext.move = move
+    # The idea here is that the signature depends on the previous stack-element's
+    # hash, which depends on the one behind it, etc.
+    # So two states will sign the same iff they have the same local
+    # hash and their tails hash the same.
     ext.sig = hash_kernel(&ext.knl)
     if ext.tail != NULL:
         ext.sig *= ext.tail.sig
