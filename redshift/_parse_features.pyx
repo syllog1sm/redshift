@@ -466,7 +466,6 @@ extra_labels = (
     (S0hp, S0l, S0ll),
 )
 
-"""
 edges = (
     (S0rew,),
     (S0rep,),
@@ -481,6 +480,7 @@ edges = (
     (S0p, N0lep)
 )
 
+"""
 stack_second = (
     (S1w,),
     (S1p,),
