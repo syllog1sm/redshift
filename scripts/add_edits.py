@@ -31,8 +31,8 @@ def add_toks(test, gold):
     return '\n'.join(reversed(new))
 
 def main(test, gold):
-    test_sents = open(test).read().split('\n\n')
-    gold_sents = open(gold).read().split('\n')
+    test_sents = open(test).read().strip().split('\n\n')
+    gold_sents = open(gold).read().strip().split('\n')
     assert len(test_sents) == len(gold_sents)
     for test_sent, gold_sent in zip(test_sents, gold_sents):
         if not test_sent.strip() and not gold_sent.strip(): continue
