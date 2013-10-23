@@ -1,6 +1,7 @@
 from fabric.api import local, run, lcd, cd, env
 from fabric.operations import get, put
 from fabric.contrib.files import exists
+import fabtools
 from pathlib import Path
 import time
 import re
@@ -58,14 +59,14 @@ def tacl_dfl_exp(dir_name, n=5, k=16, size=0):
     n = int(n)
     k = int(k)
     size = int(size)
-    beam(dir_name + '_base', train_alg="static", feats="zhang", tb="swbd",
-         auto_pos=True, k=k, size=size, n=n)
-    beam(dir_name + '_base_clust', train_alg="static", feats="clusters+xlabels",
-         tb="swbd", auto_pos=True, k=k, size=size, n=n)
-    beam(dir_name + '_feats', train_alg="static", feats="match+disfl+clusters+xlabels",
-               tb="swbd", auto_pos=True, k=k, size=size, n=n)
-    beam(dir_name + '_edit', train_alg="dynedit", feats="match+disfl+clusters+xlabels",
-         tb="swbd", auto_pos=True, k=k, size=size, n=n)
+    #beam(dir_name + '_base', train_alg="static", feats="zhang", tb="swbd",
+    #     auto_pos=True, k=k, size=size, n=n)
+    #beam(dir_name + '_base_clust', train_alg="static", feats="clusters+xlabels",
+    #     tb="swbd", auto_pos=True, k=k, size=size, n=n)
+    #beam(dir_name + '_feats', train_alg="static", feats="match+disfl+clusters+xlabels",
+    #           tb="swbd", auto_pos=True, k=k, size=size, n=n)
+    #beam(dir_name + '_edit', train_alg="dynedit", feats="match+disfl+clusters+xlabels",
+    #     tb="swbd", auto_pos=True, k=k, size=size, n=n)
     beam(dir_name + '_clean', train_alg="static", feats="clusters+xlabels",
          tb="clean_swbd", auto_pos=True, k=k, size=size, n=n)
 
@@ -86,17 +87,17 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
         eval_parse = 'devr.txt'
     elif tb == 'swbd':
         data = str(REMOTE_SWBD)
-        train_name = 'dps_converted/train.conll'
-        eval_pos = 'dps_converted/dev.pos'
-        eval_parse = 'dps_converted/dev.conll'
+        train_name = 'train.conll'
+        eval_pos = 'dev.pos'
+        eval_parse = 'dev.conll'
         if train_alg == 'dynedit':
             use_edit = True
             train_alg = 'dyn'
     elif tb == 'clean_swbd':
         data = str(REMOTE_SWBD)
-        train_name = 'dps_converted/train.clean.conll'
-        eval_pos = 'dps_converted/dev.clean.pos'
-        eval_parse = 'dps_converted/dev.clean.conll'
+        train_name = 'train.clean.conll'
+        eval_pos = 'dev.clean.pos'
+        eval_parse = 'dev.clean.conll'
     exp_dir = str(REMOTE_PARSERS)
     train_n(n, name, exp_dir,
             data, k=k, i=iters, f=10, feat_str=feats, 
@@ -402,6 +403,8 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
     for seed in range(n):
         exp_name = '%s_%d' % (name, seed)
         model = pjoin(exp_dir, name, str(seed))
+        if fabtools.files.is_file(pjoin(model, 'dev', 'uas')):
+            continue
         run("mkdir -p %s" % model, quiet=True)
         train_str = _train(pjoin(data, train_name), model, k=k, i=i,
                            feat_str=feat_str, train_alg=train_alg, seed=seed,
@@ -424,7 +427,7 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
             run('qsub -N %s %s -e %s -o %s' % (exp_name, script_loc, err_loc, out_loc), quiet=True)
 
 def parse_n(name, devname):
-    data = str(REMOTE_SWBD.join('dps_converted'))
+    data = str(REMOTE_SWBD)
     exp_dir = str(REMOTE_PARSERS)
     repo = str(REMOTE_REPO)
     pos = devname + '.pos'
@@ -462,7 +465,7 @@ def tabulate(prefix, names, terms):
             row.append(sum(results) / len(results))
         print name, '&\t',
         print '\t&\t'.join('%.1f' % r for r in row),
-        print r'\\'
+        print r'\\ % {nr_samples}'.format(nr_samples=len(results))
     
 
 def count_finished(exp_dir):
