@@ -1,5 +1,7 @@
 from libc.stdint cimport uint64_t, int64_t
 
+DEF ERASED = 999
+
 cdef struct Token:
     size_t idx
     size_t lab
@@ -20,6 +22,7 @@ cdef struct Kernel:
     size_t s2
     size_t Ls1
     size_t Ls2
+    bint dfl
     Subtree s0l
     Subtree s0r
     Subtree n0l

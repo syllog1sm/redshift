@@ -82,6 +82,7 @@ cdef int has_head_in_stack(size_t word, size_t length, size_t* stack, size_t* he
 
 
 cdef int shift_kernel(Kernel* result, Kernel* parent) except -1:
+    result.dfl = False
     result.i = parent.i + 1
     result.s0 = parent.i
     result.s1 = parent.s0
@@ -106,6 +107,7 @@ cdef int right_kernel(Kernel* ext, Kernel* buff, size_t label) except -1:
 cdef int reduce_kernel(Kernel* ext, Kernel* buff, Kernel* stack) except -1:
     memcpy(ext, stack, sizeof(Kernel))
     memcpy(&ext.n0l, &buff.n0l, sizeof(Subtree))
+    ext.dfl = False
     ext.i = buff.i
     # Reduce means that former-S0 is child of the next item on the stack. Set
     # the dep features here
@@ -132,6 +134,7 @@ cdef int left_kernel(Kernel* ext, Kernel* buff, Kernel* stack,
         ext.Ls2 = stack.Ls2
         memcpy(&ext.s0l, &stack.s0l, sizeof(Subtree))
         memcpy(&ext.s0r, &stack.s0r, sizeof(Subtree))
+    ext.dfl = False
     ext.i = buff.i
     ext.n0l.val = buff.n0l.val + 1
     ext.n0l.kids[0].idx = buff.s0
@@ -143,11 +146,10 @@ cdef int left_kernel(Kernel* ext, Kernel* buff, Kernel* stack,
 
 
 cdef int edit_kernel(Kernel* ext, Kernel* buff, Kernel* stack):
+    reduce_kernel(ext, buff, stack)
+    ext.dfl = True
     # Handle the work of restoring the children to the stack in extend_fstate.
     # Here we assume stack is in the correct state for us.
-    memcpy(ext, stack, sizeof(Kernel))
-    memcpy(&ext.n0l, &buff.n0l, sizeof(Subtree))
-    ext.i = buff.i
 
 
 cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label, size_t clas,
@@ -174,8 +176,10 @@ cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label, size_t
         ext.tail = prev.tail.tail
         ext.prev = prev
     elif move == EDIT:
-        _restore_lefts(ext, prev, prev.tail.tail)
-        edit_kernel(&ext.knl, &prev.knl, &ext.tail.knl)
+        #_restore_lefts(ext, prev, prev.tail.tail)
+        edit_kernel(&ext.knl, &prev.knl, &prev.tail.knl)
+        ext.tail = prev.tail.tail
+        ext.prev = prev
     else:
         raise StandardError
     assert clas < 100000
@@ -231,6 +235,7 @@ cdef int fill_stack(size_t* stack, FastState* s) except -1:
 
 cdef int fill_parse(size_t* heads, size_t* labels, FastState* s) except -1:
     cdef size_t cnt = 0
+    cdef size_t w
     while s != NULL:
         # Take the last set head, to support non-monotonicity
         # Take the heads from states just after right and left arcs
@@ -240,6 +245,12 @@ cdef int fill_parse(size_t* heads, size_t* labels, FastState* s) except -1:
         if s.knl.n0l.val >= 1 and heads[s.knl.n0l.kids[0].idx] == 0:
             heads[s.knl.n0l.kids[0].idx] = s.knl.i
             labels[s.knl.n0l.kids[0].idx] = s.knl.n0l.kids[0].lab
+        if s.knl.dfl:
+            print s.prev.knl.s0, s.prev.knl.s0r.edge, s.knl.i
+            for w in range(s.prev.knl.s0, s.prev.knl.s0r.edge):
+                heads[w] = w
+                labels[w] = 0
+
         s = s.prev
         cnt += 1
         assert cnt < 100000

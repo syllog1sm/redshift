@@ -9,6 +9,7 @@ from _fast_state cimport *
 # TODO: Link these with other compile constants
 DEF MAX_TAGS = 100
 DEF MAX_LABELS = 200
+DEF ERASED = 99
 
 
 cdef enum:
