@@ -233,7 +233,7 @@ cdef int fill_stack(size_t* stack, FastState* s) except -1:
     return t - 1 if t >= 1 else 0
 
 
-cdef int fill_parse(size_t* heads, size_t* labels, FastState* s) except -1:
+cdef int fill_parse(size_t* heads, size_t* labels, bint* edits, FastState* s) except -1:
     cdef size_t cnt = 0
     cdef size_t w
     while s != NULL:
@@ -246,10 +246,12 @@ cdef int fill_parse(size_t* heads, size_t* labels, FastState* s) except -1:
             heads[s.knl.n0l.kids[0].idx] = s.knl.i
             labels[s.knl.n0l.kids[0].idx] = s.knl.n0l.kids[0].lab
         if s.knl.dfl:
-            print s.prev.knl.s0, s.prev.knl.s0r.edge, s.knl.i
-            for w in range(s.prev.knl.s0, s.prev.knl.s0r.edge):
+            start = s.prev.knl.s0l.edge if s.prev.knl.s0l.edge > 0 else s.prev.knl.s0
+            #start = s.prev.knl.s0
+            for w in range(start, s.prev.knl.s0r.edge + 1):
                 heads[w] = w
-                labels[w] = 0
+                labels[w] = 5
+                edits[w] = True
 
         s = s.prev
         cnt += 1

@@ -262,7 +262,7 @@ cdef class BeamParser(BaseParser):
             beam.extend_states(beam_scores)
         s = <FastState*>beam.beam[0]
         sent.parse.n_moves = beam.t
-        fill_parse(sent.parse.heads, sent.parse.labels, s)
+        fill_parse(sent.parse.heads, sent.parse.labels, sent.parse.edits, s)
         free(beam_scores)
 
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:

@@ -59,7 +59,7 @@ cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label,
 
 cdef int fill_hist(size_t* hist, FastState* s, int t) except -1
 
-cdef int fill_parse(size_t* heads, size_t* labels, FastState* s) except -1
+cdef int fill_parse(size_t* heads, size_t* labels, bint* edits, FastState* s) except -1
 
 cdef int fill_stack(size_t* stack, FastState* s) except -1
 
