@@ -429,7 +429,7 @@ def parse_n(name, devname):
     repo = str(REMOTE_REPO)
     #pos = devname + '.pos'
     gold = devname + '.conll'
-    pos = '/home/mhonniba/data/wazoo_test.txt'
+    pos = '/home/mhonniba/data/swbd_stanford/raw_wazoo_test.pos'
     n = len(run("ls %s" % pjoin(exp_dir, name), quiet=True).split())
     script = []
     for seed in range(n):
