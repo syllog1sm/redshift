@@ -23,6 +23,8 @@ cdef struct Kernel:
     size_t Ls1
     size_t Ls2
     bint dfl
+    size_t prev_dfl
+    size_t next_dfl
     Subtree s0l
     Subtree s0r
     Subtree n0l

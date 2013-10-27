@@ -83,6 +83,8 @@ cdef int has_head_in_stack(size_t word, size_t length, size_t* stack, size_t* he
 
 cdef int shift_kernel(Kernel* result, Kernel* parent) except -1:
     result.dfl = False
+    result.next_dfl = 0
+    result.prev_dfl = 0
     result.i = parent.i + 1
     result.s0 = parent.i
     result.s1 = parent.s0
@@ -108,6 +110,8 @@ cdef int reduce_kernel(Kernel* ext, Kernel* buff, Kernel* stack) except -1:
     memcpy(ext, stack, sizeof(Kernel))
     memcpy(&ext.n0l, &buff.n0l, sizeof(Subtree))
     ext.dfl = False
+    ext.prev_dfl = buff.prev_dfl
+    ext.next_dfl = stack.next_dfl
     ext.i = buff.i
     # Reduce means that former-S0 is child of the next item on the stack. Set
     # the dep features here
@@ -135,6 +139,8 @@ cdef int left_kernel(Kernel* ext, Kernel* buff, Kernel* stack,
         memcpy(&ext.s0l, &stack.s0l, sizeof(Subtree))
         memcpy(&ext.s0r, &stack.s0r, sizeof(Subtree))
     ext.dfl = False
+    ext.prev_dfl = buff.prev_dfl
+    ext.next_dfl = stack.next_dfl
     ext.i = buff.i
     ext.n0l.val = buff.n0l.val + 1
     ext.n0l.kids[0].idx = buff.s0
@@ -148,6 +154,12 @@ cdef int left_kernel(Kernel* ext, Kernel* buff, Kernel* stack,
 cdef int edit_kernel(Kernel* ext, Kernel* buff, Kernel* stack):
     reduce_kernel(ext, buff, stack)
     ext.dfl = True
+    # This is the word immediately before i, which may be disfluent
+    if buff.i == (buff.s0r.edge + 1):
+        ext.prev_dfl = buff.s0r.edge
+    # This is the word immediately after S0, which may be disfluent
+    if (stack.s0 + 1) == buff.s0l.edge:
+        ext.next_dfl = buff.s0l.edge
     # Handle the work of restoring the children to the stack in extend_fstate.
     # Here we assume stack is in the correct state for us.
 

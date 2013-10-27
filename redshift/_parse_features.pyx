@@ -334,18 +334,18 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
                 context[pcopy] += 1
             else:
                 context[pexact] = 0
-    context[prev_edit] = 0
-    context[prev_edit_wmatch] = 0
-    context[prev_edit_pmatch] = 0
-    context[prev_edit_word] = 0
-    context[prev_edit_pos] = 0
+    context[prev_edit] = k.prev_dfl != 0
+    context[prev_edit_wmatch] = k.prev_dfl and words[k.prev_dfl] == words[k.s0]
+    context[prev_edit_pmatch] = k.prev_dfl and tags[k.prev_dfl] == tags[k.s0]
+    context[prev_edit_word] = words[k.prev_dfl] if k.prev_dfl else 0
+    context[prev_edit_pos] = tags[k.prev_dfl] if k.prev_dfl else 0
     context[prev_prev_edit] = 0
 
     context[next_edit] = 0
-    context[next_edit_wmatch] = 0
-    context[next_edit_pmatch] = 0
-    context[next_edit_word] = 0
-    context[next_edit_pos] = 0
+    context[next_edit_wmatch] = k.next_dfl and words[k.next_dfl] == words[k.s0]
+    context[next_edit_pmatch] = k.next_dfl and tags[k.next_dfl] == tags[k.s0]
+    context[next_edit_word] = words[k.next_dfl] if k.next_dfl else 0
+    context[next_edit_pos] = tags[k.next_dfl] if k.next_dfl else 0
 
 
 from_single = (
