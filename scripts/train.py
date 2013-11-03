@@ -74,7 +74,7 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
         s = pstats.Stats("Profile.prof")
         s.strip_dirs().sort_stats("time").print_stats()
     else:
-        parser.train(train_str, n_iter=n_iter)
+        parser.train(train_str, n_iter=n_iter, unlabelled=unlabelled)
     parser.save()
 
 
