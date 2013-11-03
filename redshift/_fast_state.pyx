@@ -188,10 +188,9 @@ cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label, size_t
         ext.tail = prev.tail.tail
         ext.prev = prev
     elif move == EDIT:
-        #_restore_lefts(ext, prev, prev.tail.tail)
-        edit_kernel(&ext.knl, &prev.knl, &prev.tail.knl)
-        ext.tail = prev.tail.tail
+        _restore_lefts(ext, prev, prev.tail.tail)
         ext.prev = prev
+        edit_kernel(&ext.knl, &prev.knl, &prev.tail.knl)
     else:
         raise StandardError
     assert clas < 100000
@@ -209,24 +208,26 @@ cdef FastState* extend_fstate(FastState* prev, size_t move, size_t label, size_t
     return ext
 
 
-cdef int _restore_lefts(FastState* ext, FastState* prev, FastState* stack) except -1:
-    cdef size_t missing = prev.knl.s0l.val
-    if missing == 0:
-        return 0
-    ext.prev = prev
-    ext.tail = init_fast_state()
-    tail = ext.tail
-    # TODO: This is broken for the "signatures" idea, as we don't update
-    # the signatures of stack states
-    while missing >= 1:
-        if stack.knl.i == prev.knl.s0 and stack.move == LEFT:
-            memcpy(&tail.knl, &stack.knl, sizeof(Kernel))
-            tail.prev = prev
-            tail.tail = init_fast_state()
-            tail = tail.tail
-            missing -= 1
-        stack = stack.prev
-        assert stack != NULL
+cdef int _restore_lefts(FastState* ext, FastState* buff, FastState* stack) except -1:
+    cdef FastState* s
+    cdef size_t s0 = buff.knl.s0
+    cdef FastState* hist_state = buff
+    cdef FastState* tail = ext
+    while hist_state != NULL:
+        if hist_state.move == LEFT and hist_state.knl.i == s0:
+            s = init_fast_state()
+            memcpy(&s.knl, &hist_state.prev.knl, sizeof(Kernel))
+            memcpy(&s.knl.n0l, &buff.knl.n0l, sizeof(Subtree))
+            s.knl.i = buff.knl.i
+            # No pre-decessor state --- we shouldn't be traversing through it
+            s.prev = NULL
+            #s.prev = buff
+            # Connect the new state to the tail
+            tail.tail = s
+            tail = s
+        hist_state = hist_state.prev
+    ext.prev = buff
+    tail.tail = stack
 
 
 cdef int fill_hist(size_t* hist, FastState* s, int t) except -1:
