@@ -172,8 +172,9 @@ def read_conll(conll_str, moves=None, unlabelled=False):
                     raise
                 head = int(head)
                 is_edit = False
-            if unlabelled and label not in ['ROOT', 'P', 'conj', 'cc', 'erased',
-					    'discourse', 'interregnum']:
+            if unlabelled:
+            #if unlabelled and label not in ['ROOT', 'P', 'conj', 'cc', 'erased',
+		    #			    'discourse', 'interregnum']:
                 label = 'ERR'
             # For SWBD
             if pos.startswith('^'):

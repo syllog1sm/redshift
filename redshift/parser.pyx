@@ -162,9 +162,9 @@ cdef class BaseParser:
         if self.beam_width >= 2:
             self.guide.use_cache = True
         indices = list(range(sents.length))
-        if not DEBUG:
+        #if not DEBUG:
             # Extra trick: sort by sentence length for first iteration
-            indices.sort(key=lambda i: sents.s[i].length)
+        #    indices.sort(key=lambda i: sents.s[i].length)
         for n in range(n_iter):
             for i in indices:
                 if DEBUG:
@@ -190,7 +190,7 @@ cdef class BaseParser:
             if n < 3 and len(indices) >= 5000:
                 self.guide.reindex()
                 self.tagger.guide.reindex()
-            random.shuffle(indices)
+            #random.shuffle(indices)
         if self.auto_pos:
             self.tagger.guide.finalize()
         self.guide.finalize()
@@ -476,6 +476,7 @@ cdef class GreedyParser(BaseParser):
             memcpy(tags, sent.pos, sent.length * sizeof(size_t))
         seen_states = set()
         cdef size_t* stack = <size_t*>calloc(sent.length, sizeof(size_t))
+        i = 0
         while not is_finished(&s.knl, sent.length):
             self.moves.fill_valid(valid, can_push(&s.knl, sent.length),
                                   has_stack(&s.knl), has_head(&s.knl))
@@ -487,8 +488,15 @@ cdef class GreedyParser(BaseParser):
                                   has_head(&s.knl), sent.pos, sent.parse.heads,
                                   sent.parse.labels, sent.parse.edits)
             gold = pred if costs[pred] == 0 else self._predict(feats, self.moves._costs, &_)
+            j = 0
+            while feats[j] != 0:
+                j += 1
+            #print i, self.moves.moves[pred] - 1, self.moves.moves[gold] - 1, self.guide.scores[pred], self.guide.scores[gold], j
+            i += 1
+            assert valid[gold] == 0, valid[gold]
             self.guide.update(pred, gold, feats, 1)
-            clas = pred if iter_num >= 2 and random.random() < STRAY_PC else gold
+            #clas = pred if iter_num >= 2 and random.random() < STRAY_PC else gold
+            clas = pred
             seen_states.add(<size_t>s)
             s = extend_fstate(s, self.moves.moves[clas], self.moves.labels[clas],
                               clas, self.guide.scores[clas], costs[clas])

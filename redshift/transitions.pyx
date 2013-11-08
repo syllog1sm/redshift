@@ -134,14 +134,14 @@ cdef class TransitionSystem:
             return 0
         if can_push:
             valid[self.s_id] = 0
-        if has_stack and has_head:
+        if has_stack and (has_head or self.allow_reduce):
             valid[self.d_id] = 0
         if has_stack and self.use_edit:
             valid[self.e_id] = 0
         if can_push and has_stack:
             for i in range(self.r_start, self.r_end):
                 valid[i] = 0
-        if has_stack and not has_head:
+        if has_stack and (self.allow_reattach or not has_head):
             for i in range(self.l_start, self.l_end):
                 valid[i] = 0
 
@@ -239,7 +239,9 @@ cdef class TransitionSystem:
             return 0
         cost +=  has_head_in_buffer(s0, n0, length, heads)
         cost +=  has_child_in_buffer(s0, n0, length, heads)
-        if (self.allow_reattach or self.allow_reduce) and heads[s0] == s1:
+        # We lose if we pop S0 when its real head is S1, even if they're not
+        # attached, in the case of allow_reduce
+        if self.allow_reattach and heads[s0] == s1 and (self.allow_reduce or has_head):
             cost += 1
         return cost
     

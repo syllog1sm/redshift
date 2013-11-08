@@ -310,6 +310,7 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S0lv] = s0l.val
     context[S0rv] = s0r.val
     context[N0lv] = n0l.val
+
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
     context[wcopy] = 0
@@ -346,7 +347,6 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[next_edit_pmatch] = k.next_dfl and tags[k.next_dfl] == tags[k.s0]
     context[next_edit_word] = words[k.next_dfl] if k.next_dfl else 0
     context[next_edit_pos] = tags[k.next_dfl] if k.next_dfl else 0
-
 
 from_single = (
     (S0w, S0p),
@@ -705,8 +705,10 @@ def trigram(a, b, c, add_clusters=False):
 
   
 def baseline_templates():
-    return from_single + from_word_pairs + from_three_words + distance + \
-           valency + zhang_unigrams + third_order + labels + label_sets
+    #return from_single + zhang_unigrams + third_order + from_word_pairs + \
+    #       from_three_words + labels + label_sets  + distance + valency
+    return from_single + zhang_unigrams + third_order + from_word_pairs + \
+            from_three_words + distance + valency
 
 
 def match_templates():
