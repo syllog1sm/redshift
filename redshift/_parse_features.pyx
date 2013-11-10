@@ -618,25 +618,23 @@ stack_second = (
     (S1w, N0p),
     (S1p, N0w),
     (S1p, N0p),
-    (S1w, N1w),
+    #(S1w, N1w),
     (S1w, N1p),
     (S1p, N1p),
     (S1p, N1w),
     (S1p, S0p, N0p),
-    (S1w, S0w, N0w),
+    #(S1w, S0w, N0w),
     (S1w, S0p, N0p),
-    (S2w, N0w),
-    (S2w, N1w),
+    #(S2w, N0w),
+    #(S2w, N1w),
     (S2p, N0p, N1w),
-    (S2p, N0w, N1w),
+    #(S2p, N0w, N1w),
     (S2w, N0p, N1p),
 )
 history = (
     (m1,),
     (m1, m2),
     (m1, m2, m3),
-    (m1, m2, m3, m4),
-    (m1, m2, m3, m4, m5),
 )
 
 # Koo et al (2008) dependency features, using Brown clusters.
