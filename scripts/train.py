@@ -60,7 +60,7 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
                               feat_set=feat_set, feat_thresh=feat_thresh,
                               allow_reduce=allow_reduce,
                               allow_reattach=allow_reattach, use_edit=use_edit,
-                              ngrams=ngrams, add_clusters=add_clusters, auto_pos=auto_pos)
+                              auto_pos=auto_pos)
     train_sent_strs = open(train_loc).read().strip().split('\n\n')
     if n_sents != 0:
         print "Using %d sents for training" % n_sents
