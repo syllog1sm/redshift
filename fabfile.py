@@ -58,8 +58,8 @@ def tacl_dfl_exp(dir_name, n=5, k=16, size=0):
     n = int(n)
     k = int(k)
     size = int(size)
-    beam(dir_name + '_base', train_alg="static", feats="zhang", tb="swbd",
-         auto_pos=True, k=k, size=size, n=n)
+    #beam(dir_name + '_base', train_alg="static", feats="zhang", tb="swbd",
+    #     auto_pos=True, k=k, size=size, n=n)
     beam(dir_name + '_base_clust', train_alg="static", feats="clusters+xlabels",
          tb="swbd", auto_pos=True, k=k, size=size, n=n)
     beam(dir_name + '_feats', train_alg="static", feats="match+disfl+clusters+xlabels",
@@ -86,17 +86,17 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
         eval_parse = 'devr.txt'
     elif tb == 'swbd':
         data = str(REMOTE_SWBD)
-        train_name = 'dps_converted/train.conll'
-        eval_pos = 'dps_converted/dev.pos'
-        eval_parse = 'dps_converted/dev.conll'
+        train_name = 'train.conll'
+        eval_pos = 'dev.pos'
+        eval_parse = 'dev.conll'
         if train_alg == 'dynedit':
             use_edit = True
             train_alg = 'dyn'
     elif tb == 'clean_swbd':
         data = str(REMOTE_SWBD)
-        train_name = 'dps_converted/train.clean.conll'
-        eval_pos = 'dps_converted/dev.clean.pos'
-        eval_parse = 'dps_converted/dev.clean.conll'
+        train_name = 'train.clean.conll'
+        eval_pos = 'dev.clean.pos'
+        eval_parse = 'dev.clean.conll'
     exp_dir = str(REMOTE_PARSERS)
     train_n(n, name, exp_dir,
             data, k=k, i=iters, f=10, feat_str=feats, 
@@ -424,20 +424,20 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
             run('qsub -N %s %s -e %s -o %s' % (exp_name, script_loc, err_loc, out_loc), quiet=True)
 
 def parse_n(name, devname):
-    data = str(REMOTE_SWBD.join('dps_converted'))
+    data = str(REMOTE_SWBD)
     exp_dir = str(REMOTE_PARSERS)
     repo = str(REMOTE_REPO)
-    pos = devname + '.pos'
+    #pos = devname + '.pos'
     gold = devname + '.conll'
-
+    pos = '/home/mhonniba/data/swbd_stanford/raw_wazoo_test.pos'
     n = len(run("ls %s" % pjoin(exp_dir, name), quiet=True).split())
     script = []
     for seed in range(n):
         model = pjoin(exp_dir, name, str(seed))
         script.append("mkdir %s" % pjoin(model, devname))
-        script.append(_parse(model, pjoin(data, pos), pjoin(model, devname)))
-        #script.append(_add_edits(pjoin(model, devname), pjoin(data, 'test.pos')))
-        script.append(_evaluate(pjoin(model, devname, 'parses'), pjoin(data, gold)))
+        script.append(_parse(model, pos, pjoin(model, devname)))
+        script.append(_add_edits(pjoin(model, devname), pjoin(data, 'test.pos')))
+        script.append(_evaluate(pjoin(model, devname, 'pipe.parses'), pjoin(data, gold)))
         script.append("grep 'U:' %s >> %s" % (pjoin(model, devname, 'acc'),
                                            pjoin(model, devname, 'uas')))
     script = _pbsify(repo, script)
@@ -514,9 +514,9 @@ def _add_edits(test_dir, pos):
     return 'python scripts/add_edits.py %s %s > %s' % (in_loc, pos, out_loc)
 
 
-def _pbsify(repo, command_strs, size=5):
+def _pbsify(repo, command_strs, size=3):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=4gb,nodes=1:ppn={n_procs}
+#PBS -l walltime=20:00:00,mem=3gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
