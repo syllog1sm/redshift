@@ -270,6 +270,7 @@ cdef class BeamParser(BaseParser):
         sent.parse.n_moves = s.t
         beam.fill_parse(sent.parse.moves, sent.pos, sent.parse.heads, sent.parse.labels,
                         sent.parse.sbd, sent.parse.edits)
+        sent.parse.score = beam.beam[0].score
         free(beam_scores)
 
     cdef int static_train(self, int iter_num, Sentence* sent) except -1:
@@ -485,6 +486,7 @@ cdef class GreedyParser(BaseParser):
         for i in range(s.t):
             sent.parse.moves[i] = s.history[i]
         sent.parse.n_moves = s.t
+        sent.parse.score = s.score
         fill_edits(s, sent.parse.edits)
         free_state(s)
  
