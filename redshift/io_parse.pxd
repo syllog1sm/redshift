@@ -1,5 +1,6 @@
 cdef struct _Parse:
     size_t n_moves
+    double score
     size_t* heads
     size_t* labels
     bint* sbd

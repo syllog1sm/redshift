@@ -19,6 +19,7 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.id = id_
     s.parse = <_Parse*>malloc(sizeof(_Parse))
     s.parse.n_moves = 0
+    s.parse.score = 0
     size = length + PADDING
     s.parse.heads = <size_t*>calloc(size, sizeof(size_t))
     s.parse.labels = <size_t*>calloc(size, sizeof(size_t))
@@ -309,6 +310,15 @@ cdef class Sentences:
                 fields = (py_words[j], pos_idx[s.pos[j]])
                 out_file.write(u'%s/%s ' % fields)
             out_file.write(u'\n')
+
+    property scores:
+        def __get__(self):
+            scores = []
+            cdef object score
+            for i in range(self.length):
+                score = self.s[i].parse.score
+                scores.append(score)
+            return scores
       
     property length:
         def __get__(self): return self.length

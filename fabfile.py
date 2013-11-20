@@ -58,23 +58,24 @@ def tacl_dfl_exp(dir_name, n=5, k=16, size=0):
     n = int(n)
     k = int(k)
     size = int(size)
-    beam(dir_name + '_base', train_alg="static", feats="zhang", tb="swbd",
-         auto_pos=True, k=k, size=size, n=n)
-    beam(dir_name + '_base_clust', train_alg="static", feats="clusters", tb="swbd",
-         auto_pos=True, k=k, size=size, n=n)
-    beam(dir_name + '_feats', train_alg="static", feats="match+disfl+clusters",
-               tb="swbd", auto_pos=True, k=k, size=size, n=n)
-    beam(dir_name + '_edit', train_alg="dynedit", feats="match+disfl+clusters",
+    #beam(dir_name + '_base', train_alg="static", feats="zhang", tb="swbd",
+    #     auto_pos=True, k=k, size=size, n=n)
+    beam(dir_name + '_base_clust', train_alg="static", feats="clusters+xlabels",
          tb="swbd", auto_pos=True, k=k, size=size, n=n)
-    beam(dir_name + '_clean', train_alg="static", feats="clusters",
+    beam(dir_name + '_feats', train_alg="static", feats="match+disfl+clusters+xlabels",
+               tb="swbd", auto_pos=True, k=k, size=size, n=n)
+    beam(dir_name + '_edit', train_alg="dynedit", feats="match+disfl+clusters+xlabels",
+         tb="swbd", auto_pos=True, k=k, size=size, n=n)
+    beam(dir_name + '_clean', train_alg="static", feats="clusters+xlabels",
          tb="clean_swbd", auto_pos=True, k=k, size=size, n=n)
 
-        
+
 def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
-         unlabelled=False, auto_pos=False):
+         unlabelled=False, auto_pos=False, iters=15):
     size = int(size)
     k = int(k)
     n = int(n)
+    iters = int(iters)
     unlabelled = unlabelled and unlabelled != 'False'
     auto_pos = auto_pos and auto_pos != 'False'
     use_edit = False
@@ -85,20 +86,20 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
         eval_parse = 'devr.txt'
     elif tb == 'swbd':
         data = str(REMOTE_SWBD)
-        train_name = 'dps_converted/train.conll'
-        eval_pos = 'dps_converted/dev.pos'
-        eval_parse = 'dps_converted/dev.conll'
+        train_name = 'train.conll'
+        eval_pos = 'dev.pos'
+        eval_parse = 'dev.conll'
         if train_alg == 'dynedit':
             use_edit = True
             train_alg = 'dyn'
     elif tb == 'clean_swbd':
         data = str(REMOTE_SWBD)
-        train_name = 'dps_converted/train.clean.conll'
-        eval_pos = 'dps_converted/dev.clean.pos'
-        eval_parse = 'dps_converted/dev.clean.conll'
+        train_name = 'train.clean.conll'
+        eval_pos = 'dev.clean.pos'
+        eval_parse = 'dev.clean.conll'
     exp_dir = str(REMOTE_PARSERS)
     train_n(n, name, exp_dir,
-            data, k=k, i=15, f=10, feat_str=feats, 
+            data, k=k, i=iters, f=10, feat_str=feats, 
             n_sents=size, train_name=train_name, train_alg=train_alg,
             unlabelled=unlabelled, auto_pos=auto_pos,
             use_edit=use_edit, dev_names=(eval_pos, eval_parse))
@@ -402,7 +403,7 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
         exp_name = '%s_%d' % (name, seed)
         model = pjoin(exp_dir, name, str(seed))
         run("mkdir -p %s" % model, quiet=True)
-        train_str = _train(pjoin(data, train_name), model, k=k, i=15,
+        train_str = _train(pjoin(data, train_name), model, k=k, i=i,
                            feat_str=feat_str, train_alg=train_alg, seed=seed,
                            n_sents=n_sents, use_edit=use_edit,
                            unlabelled=unlabelled,
@@ -422,6 +423,47 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
             out_loc = pjoin(model, 'stdout')
             run('qsub -N %s %s -e %s -o %s' % (exp_name, script_loc, err_loc, out_loc), quiet=True)
 
+def parse_n(name, devname):
+    data = str(REMOTE_SWBD)
+    exp_dir = str(REMOTE_PARSERS)
+    repo = str(REMOTE_REPO)
+    #pos = devname + '.pos'
+    gold = devname + '.conll'
+    pos = '/home/mhonniba/data/swbd_stanford/raw_wazoo_test.pos'
+    n = len(run("ls %s" % pjoin(exp_dir, name), quiet=True).split())
+    script = []
+    for seed in range(n):
+        model = pjoin(exp_dir, name, str(seed))
+        script.append("mkdir %s" % pjoin(model, devname))
+        script.append(_parse(model, pos, pjoin(model, devname)))
+        script.append(_add_edits(pjoin(model, devname), pjoin(data, 'test.pos')))
+        script.append(_evaluate(pjoin(model, devname, 'pipe.parses'), pjoin(data, gold)))
+        script.append("grep 'U:' %s >> %s" % (pjoin(model, devname, 'acc'),
+                                           pjoin(model, devname, 'uas')))
+    script = _pbsify(repo, script)
+    script_loc = pjoin(repo, 'pbs', 'parse_' + name)
+    with cd(repo):
+        put(StringIO(script), script_loc)
+        run('qsub -N %s %s' % ('parse_' + name, script_loc), quiet=True)
+
+
+def tabulate(prefix, names, terms):
+    terms = terms.split('-')
+    names = names.split('-')
+    rows = [terms]
+    print prefix, '&\t',
+    print '\t&\t'.join(terms),
+    print r'\\'
+    for name in names:
+        exp_dir = str(REMOTE_PARSERS.join(prefix + '_' + name))
+        row = []
+        for term in terms:
+            results = get_accs(exp_dir, term=term)
+            row.append(sum(results) / len(results))
+        print name, '&\t',
+        print '\t&\t'.join('%.1f' % r for r in row),
+        print r'\\'
+    
 
 def count_finished(exp_dir):
     with cd(exp_dir):
@@ -430,11 +472,11 @@ def count_finished(exp_dir):
     return len(samples)
 
 
-def get_accs(exp_dir, eval_name='dev'):
+def get_accs(exp_dir, eval_name='dev', term='U'):
     results = []
     with cd(exp_dir):
-        results = [float(s.split()[1]) for s in
-                   run("grep 'U:' %s/*/dev/acc" % exp_dir, quiet=True).split('\n')
+        results = [float(s.split()[-1]) for s in
+                run("grep '%s:' %s/*/dev/acc" % (term, exp_dir), quiet=True).split('\n')
                    if s.strip()]
     return results
 
@@ -466,10 +508,15 @@ def _parse(model, data, out, gold=False):
 def _evaluate(test, gold):
     return './scripts/evaluate.py %s %s > %s' % (test, gold, test.replace('parses', 'acc'))
 
+def _add_edits(test_dir, pos):
+    in_loc = pjoin(test_dir, 'parses')
+    out_loc = pjoin(test_dir, 'pipe.parses')
+    return 'python scripts/add_edits.py %s %s > %s' % (in_loc, pos, out_loc)
 
-def _pbsify(repo, command_strs, size=5):
+
+def _pbsify(repo, command_strs, size=3):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=6gb,nodes=1:ppn={n_procs}
+#PBS -l walltime=20:00:00,mem=3gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
