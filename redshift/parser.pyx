@@ -614,6 +614,7 @@ nr_edit = 0
 nr_true_edit = 0
 nr_left = 0
 nr_had_left = 0
+nr_multi_return = 0
 nr_left_edit_tp = 0
 nr_left_edit_fp = 0
 nr_left_true_head = 0
@@ -630,6 +631,7 @@ def get_edit_stats(parser, Sentences sents):
     print 'nr_left', nr_left
     print 'nr_had_left', nr_had_left
     print 'nr_single_left', nr_single_left
+    print 'nr_multi_return', nr_multi_return
     print 'nr_left_edit_tp', nr_left_edit_tp
     print 'nr_left_edit_fp', nr_left_edit_fp
     print 'nr_left_edit_true_head', nr_left_true_head
@@ -637,7 +639,7 @@ def get_edit_stats(parser, Sentences sents):
     print 'nr_left_edit_fn', nr_left_edit_fn
 
 cdef _get_edit_stats(BeamParser parser, Sentences sents, size_t sent_id):
-    global nr_edit, nr_true_edit, nr_left, nr_left_edit_fp, nr_left_true_head
+    global nr_edit, nr_true_edit, nr_left, nr_left_edit_fp, nr_left_true_head, nr_multi_return
     global nr_left_bad_head, nr_left_edit_tp, nr_single_left, nr_left_edit_fn, nr_had_left
     cdef size_t i, v
 
@@ -661,8 +663,9 @@ cdef _get_edit_stats(BeamParser parser, Sentences sents, size_t sent_id):
             nr_single_left += s.l_valencies[s.top] == 1
             nr_had_left += s.l_valencies[s.top] >= 1
             for v in range(s.l_valencies[s.top]):
+                if s.l_children[s.top][v] in lefts: nr_multi_return += 1
                 lefts.add(s.l_children[s.top][v])
-        parser.moves.transition(move_id, s)
+        parser.moves.transition(sent.parse.moves[i], s)
     #if lefts:
     #    print ' '.join(sents.strings[sent_id][0])
     #    print lefts
