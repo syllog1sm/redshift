@@ -705,10 +705,8 @@ def trigram(a, b, c, add_clusters=False):
 
   
 def baseline_templates():
-    #return from_single + zhang_unigrams + third_order + from_word_pairs + \
-    #       from_three_words + labels + label_sets  + distance + valency
     return from_single + zhang_unigrams + third_order + from_word_pairs + \
-            from_three_words + distance + valency
+           from_three_words + labels + label_sets  + distance + valency
 
 
 def match_templates():
