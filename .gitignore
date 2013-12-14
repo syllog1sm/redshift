@@ -1,6 +1,11 @@
+_paths.py
 *.pyc
 *.swp
 *.swo
+*.swn
+*.swl
+*.swm
+*.swk
 *.cpp
 *.so
 *.so.1
@@ -16,3 +21,4 @@ train
 *.pdf
 *.aux
 *.html
+*.prof
