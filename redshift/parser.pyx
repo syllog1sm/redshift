@@ -312,7 +312,7 @@ cdef class BeamParser(BaseParser):
                 memcpy(ghist, gold.history, t * sizeof(size_t))
                 memcpy(phist, pred.history, t * sizeof(size_t))
         if t == 0:
-            # TODO: Should we tick here?
+            self.guide.now += 1
             self.guide.n_corr += beam.t
             self.guide.total += beam.t
         else:
