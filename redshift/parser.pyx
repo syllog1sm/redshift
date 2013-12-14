@@ -190,7 +190,7 @@ cdef class BaseParser:
             if n < 3 and len(indices) >= 5000:
                 self.guide.reindex()
                 self.tagger.guide.reindex()
-            #random.shuffle(indices)
+            random.shuffle(indices)
         if self.auto_pos:
             self.tagger.guide.finalize()
         self.guide.finalize()
@@ -290,7 +290,6 @@ cdef class BeamParser(BaseParser):
                                       has_stack(&pred.knl), has_head(&pred.knl))
                 beam_scores[i] = self._predict(sent, tags, &pred.knl)
             beam.extend_states(beam_scores)
-
             oracle = self.moves.break_tie(can_push(&gold.knl, sent.length),
                                           has_head(&gold.knl),
                                           gold.knl.i, gold.knl.s0, sent.length, sent.pos,
