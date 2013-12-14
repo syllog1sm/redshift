@@ -1,8 +1,7 @@
 # cython: profile=True
-import sys
 import math
 import gzip
-
+import sys
 from libc.stdlib cimport *
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
@@ -588,7 +587,6 @@ cdef class Perceptron:
                     raw.w[clas] = w[k]
                     raw.acc[clas] = accs[k]
                     raw.last_upd[clas] = last_upd[k]
-
         free_square_feat(feat, self.div)
         self.W[f_id] = i
         assert self.W[f_id] < self.nr_raws
