@@ -163,9 +163,9 @@ cdef class BaseParser:
         if self.beam_width >= 2:
             self.guide.use_cache = True
         indices = list(range(sents.length))
-        #if not DEBUG:
+        if not DEBUG:
             # Extra trick: sort by sentence length for first iteration
-        #    indices.sort(key=lambda i: sents.s[i].length)
+            indices.sort(key=lambda i: sents.s[i].length)
         for n in range(n_iter):
             for i in indices:
                 if DEBUG:
