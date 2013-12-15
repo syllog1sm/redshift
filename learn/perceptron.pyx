@@ -231,6 +231,24 @@ cdef class Perceptron:
                         update_square(self.nr_class, self.div,
                                       self.now, d, clas, <SquareFeature*>feat_addr)
 
+    def get_weight(self, uint64_t f, size_t clas):
+        """Fetch a feature weight. Used in calculating weight decay. Don't use
+        this as part of normal decoding..."""
+        cdef size_t feat_addr = self.W[f]
+        cdef size_t part_idx = clas / self.div
+        cdef size_t clas_idx = clas % self.div
+        cdef SquareFeature* feature
+        if feat_addr == 0:
+            return 0.0
+        elif feat_addr < self.nr_raws:
+            return self.raws[feat_addr].w[clas]
+        else:
+            feat = <SquareFeature*>feat_addr
+            if feat.seen[part_idx]:
+                return feat.parts[part_idx].w[clas_idx]
+            else:
+                return 0.0
+
     cdef int64_t update(self, size_t pred_i, size_t gold_i,
                     uint64_t* features, double margin) except -1:
         cdef size_t i
