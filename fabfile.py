@@ -81,7 +81,7 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
     auto_pos = auto_pos and auto_pos != 'False'
     use_edit = False
     if tb == 'wsj':
-        data = str(REMOTE_STANFORD)
+        data = str(REMOTE_MALT)
         train_name = 'train.txt'
         eval_pos = 'devi.txt'
         eval_parse = 'devr.txt'
@@ -410,7 +410,7 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
                            feat_str=feat_str, train_alg=train_alg, seed=seed,
                            n_sents=n_sents, use_edit=use_edit,
                            unlabelled=unlabelled,
-                           vocab_thresh=t, feat_thresh=f, auto_pos=auto_pos)
+                           feat_thresh=f, auto_pos=auto_pos)
         parse_str = _parse(model, pjoin(data, dev_names[0]), pjoin(model, 'dev'))
         eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, dev_names[1]))
         grep_str = "grep 'U:' %s >> %s" % (pjoin(model, 'dev', 'acc'),
@@ -486,16 +486,16 @@ def get_accs(exp_dir, eval_name='dev', term='U'):
 
 def _train(data, model, debug=False, k=1, feat_str='zhang', i=15,
            train_alg="static", seed=0, args='',
-           n_sents=0, ngrams=0, vocab_thresh=0, feat_thresh=10,
+           n_sents=0, ngrams=0, feat_thresh=10,
            use_edit=False, unlabelled=False, auto_pos=False):
     use_edit = '-e' if use_edit else ''
     unlabelled = '-u' if unlabelled else ''
     auto_pos = '-p' if auto_pos else ''
-    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -n {n_sents} -t {vocab_thresh} -f {feat_thresh} {use_edit} {unlabelled} {auto_pos} {args}'
+    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -n {n_sents} -f {feat_thresh} {use_edit} {unlabelled} {auto_pos} {args}'
     if debug:
         template += ' -debug'
     return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i,
-                           vocab_thresh=vocab_thresh, feat_thresh=feat_thresh,
+                           feat_thresh=feat_thresh,
                            alg=train_alg, use_edit=use_edit, seed=seed,
                           args=args, n_sents=n_sents, ngrams=ngrams,
                           unlabelled=unlabelled, auto_pos=auto_pos)
