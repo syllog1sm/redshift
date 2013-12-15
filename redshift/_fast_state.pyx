@@ -36,6 +36,7 @@ cdef bint has_stack(Kernel* k):
 cdef bint has_head(Kernel* k):
     return k.Ls0 != 0
 
+
 cdef bint is_finished(Kernel* k, size_t t):
     return (not can_push(k, t)) and (not has_stack(k))
 
