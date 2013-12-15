@@ -378,14 +378,11 @@ cdef class BeamParser(BaseParser):
             self.guide.total += 1
         g = gold.beam[0]
         p = pred.beam[0]
-        #if upd_g != NULL and max_violn >= 0:
-        #counted = self._count_feats(sent, tags, g, p)
-        #self.guide.batch_update(counted)
-        #else:
-        #    self.guide.now += 1
-        update = self._est_sgd_upd(sent, tags, gold, pred, 1.0, 1.0)
-        #update = self._count_feats(sent, tags, gold.beam[0], pred.beam[0])
-        self.guide.batch_update(update)
+        if upd_g != NULL and max_violn >= 0:
+            counted = self._count_feats(sent, tags, g, p)
+            self.guide.batch_update(counted)
+        else:
+            self.guide.now += 1
         free(tags)
         free(pred_scores)
         free(gold_scores)
