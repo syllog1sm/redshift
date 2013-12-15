@@ -4,6 +4,7 @@ MALT-style dependency parser
 cimport cython
 import random
 import os.path
+import math
 from os.path import join as pjoin
 import shutil
 
@@ -348,8 +349,8 @@ cdef class BeamParser(BaseParser):
                 pred_scores[i] = self._predict(sent, tags, &p.knl)
                 stack_len = fill_stack(stack, p)
                 self.moves.fill_costs(pred.costs[i], p.knl.i, sent.length,
-                                     stack_len, stack, p.knl.Ls0 != 0, sent.pos,
-                                     sent.parse.heads, sent.parse.labels, sent.parse.edits)
+                                      stack_len, stack, p.knl.Ls0 != 0, sent.pos,
+                                      sent.parse.heads, sent.parse.labels, sent.parse.edits)
             pred.extend_states(pred_scores)
             for i in range(gold.bsize):
                 g = gold.beam[i]
@@ -367,17 +368,24 @@ cdef class BeamParser(BaseParser):
             gold.extend_states(gold_scores)
             g = gold.beam[0]
             p = pred.beam[0]
-            if p.score - g.score >= max_violn and p.cost >= 1:
-                max_violn = p.score - g.score
+            delta = p.score - g.score
+            if delta >= max_violn:
+                max_violn = delta
                 upd_g = g
                 upd_p = p
+
             self.guide.n_corr += p.clas == g.clas
             self.guide.total += 1
+        g = gold.beam[0]
+        p = pred.beam[0]
         #if upd_g != NULL and max_violn >= 0:
-        counted = self._count_feats(sent, tags, upd_g, upd_p)
-        self.guide.batch_update(counted)
+        #counted = self._count_feats(sent, tags, g, p)
+        #self.guide.batch_update(counted)
         #else:
         #    self.guide.now += 1
+        update = self._est_sgd_upd(sent, tags, gold, pred, 1.0, 1.0)
+        #update = self._count_feats(sent, tags, gold.beam[0], pred.beam[0])
+        self.guide.batch_update(update)
         free(tags)
         free(pred_scores)
         free(gold_scores)
@@ -398,6 +406,46 @@ cdef class BeamParser(BaseParser):
             self.extractor.extract(self._features, self._context)
             self.guide.fill_scores(self._features, scores)
         return scores
+
+    cdef dict _est_sgd_upd(self, Sentence* sent, size_t* tags, FastBeam gold,
+                           FastBeam pred, double rho, double alpha):
+        cdef:
+            size_t addr
+            FastState* s
+        a_counts = {}; g_counts = {}; gradient = {}
+        for clas in range(self.moves.nr_class):
+            a_counts[clas] = {}; g_counts[clas] = {}; gradient[clas] = {}
+
+        all_parses = []; gold_parses = []
+        for i in range(self.beam_width):
+            if gold.beam[i] != NULL and gold.beam[i].prev != NULL:
+                gold_parses.append(<size_t>gold.beam[i])
+                all_parses.append(<size_t>gold.beam[i])
+            if pred.beam[i] != NULL and pred.beam[i].prev != NULL and pred.beam[i].cost != 0:
+                all_parses.append(<size_t>pred.beam[i])
+        cdef double g_norm
+        for addr in gold_parses:
+            s = <FastState*>addr
+            self._inc_feats(g_counts[s.clas], sent, tags, &s.prev.knl, math.exp(s.score))
+            g_norm += math.exp(s.score)
+        cdef double a_norm = 0.0
+        for addr in all_parses:
+            s = <FastState*>addr
+            self._inc_feats(a_counts[s.clas], sent, tags, &s.prev.knl, math.exp(s.score))
+            a_norm += math.exp(s.score)
+        assert a_norm >= g_norm
+        for clas, feats in a_counts.items():
+            for feat in feats:
+                gold_expect = g_counts[clas].get(feat, 0.0) / g_norm
+                all_expect = a_counts[clas][feat] / a_norm
+                decay = 2 * alpha * self.guide.get_weight(feat, clas)
+                gradient[clas][feat] = rho * (gold_expect - all_expect - decay)
+                print g_counts[clas].get(feat), g_norm
+                print a_counts[clas][feat], a_norm
+                print decay
+                print gradient[clas][feat]
+        return gradient
+
 
     cdef dict _count_feats(self, Sentence* sent, size_t* tags, FastState* g, FastState* p):
         cdef dict counts = {}
