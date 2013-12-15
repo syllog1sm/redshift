@@ -311,8 +311,6 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S0rv] = s0r.val
     context[N0lv] = n0l.val
 
-    # TODO: Seems hard to believe we want to keep d non-zero when there's no
-    # stack top. Experiment with this futrther.
     context[wcopy] = 0
     context[wexact] = 1
     context[pcopy] = 0
