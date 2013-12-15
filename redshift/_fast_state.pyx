@@ -115,9 +115,6 @@ cdef int reduce_kernel(Kernel* ext, Kernel* buff, Kernel* stack) except -1:
     ext.i = buff.i
     # Reduce means that former-S0 is child of the next item on the stack. Set
     # the dep features here
-    #ext.s0r.idx[0] = buff.s0
-    #ext.s0r.lab[0] = buff.Ls0
-    #ext.s0r.lab[1] = stack.s0r.lab[0]
     ext.s0r.kids[0].idx = buff.s0
     ext.s0r.kids[0].lab = buff.Ls0
     ext.s0r.kids[1].idx = stack.s0r.kids[0].idx
