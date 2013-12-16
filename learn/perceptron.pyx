@@ -59,9 +59,11 @@ cdef void free_dense_feat(DenseFeature* feat):
 cdef inline void score_dense_feat(double* scores, size_t nr_class, DenseFeature* feat):
     feat.nr_seen += 1
     cdef size_t c
-    #cdef int _ = ext.yeppp.add_inplace(scores, feat.w, 2)
-    for c in range(feat.s, feat.e):
-        scores[c] += feat.w[c]
+    print 'Adding inplace...'
+    cdef int _ = ext.yeppp.add_inplace(scores, feat.w, nr_class * sizeof(double))
+    print _
+    #for c in range(feat.s, feat.e):
+    #    scores[c] += feat.w[c]
 
 
 cdef void update_dense(size_t now, double w, size_t clas, DenseFeature* raw):
