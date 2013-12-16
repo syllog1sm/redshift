@@ -29,15 +29,16 @@ includes = [os.path.join(virtual_env, 'include'),
             os.path.join(pwd, 'include'),
             os.path.join(pwd, 'ext'),
             os.path.join(pwd, 'ext/include')]
-libs = [os.path.join(pwd, 'ext')]
+libs = ['yeppp']
 
 exts = [
     Extension('ext.murmurhash', ["ext/murmurhash.pyx", "ext/MurmurHash2.cpp",
               "ext/MurmurHash3.cpp"], language="c++", include_dirs=includes),
     Extension('ext.sparsehash', ["ext/sparsehash.pyx"], language="c++",
               include_dirs=includes),
-    Extension('redshift.parser', ["redshift/parser.pyx"], language="c++",
-              include_dirs=includes),
+    Extension('ext.yeppp', ["ext/yeppp.pyx", "ext/yeppp_wrapper.c"], language="c++", include_dirs=includes, libraries=libs),
+    Extension('redshift.parser', ["redshift/parser.pyx", "ext/yeppp_wrapper.c"], language="c++",
+              include_dirs=includes, libraries=libs),
     Extension('redshift.beam', ["redshift/beam.pyx"], language="c++",
               include_dirs=includes),
     #Extension('redshift._state', ["redshift/_state.pyx", "ext/MurmurHash2.cpp",
@@ -53,7 +54,7 @@ exts = [
               language="c++", include_dirs=includes),
     Extension('redshift.transitions', ["redshift/transitions.pyx"],
         language="c++", include_dirs=includes),
-    Extension('learn.perceptron', ['learn/perceptron.pyx'], language="c++",
+    Extension('learn.perceptron', ['learn/perceptron.pyx', "ext/yeppp_wrapper.c"], language="c++",
               include_dirs=includes),
     Extension("index.hashes", ["index/hashes.pyx", "ext/MurmurHash2.cpp",
                                "ext/MurmurHash3.cpp"], language="c++",
