@@ -7,6 +7,7 @@ from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 from libcpp.queue cimport priority_queue
 from libc.string cimport strtok
+cimport ext.yeppp
 
 from cython.operator cimport dereference as deref, preincrement as inc
 
@@ -42,9 +43,9 @@ cdef size_t load_dense_feat(size_t nr_class, double* weights, size_t nr_seen,
         if weights[clas] != 0:
             nr_weight += 1
             feat.e = clas + 1
+            if nr_weight == 1:
+                feat.s = clas
         feat.w[clas] = weights[clas]
-        if nr_weight == 0:
-            feat.s = clas
     return nr_weight
 
 
@@ -58,6 +59,7 @@ cdef void free_dense_feat(DenseFeature* feat):
 cdef inline void score_dense_feat(double* scores, size_t nr_class, DenseFeature* feat):
     feat.nr_seen += 1
     cdef size_t c
+    #cdef int _ = ext.yeppp.add_inplace(scores, feat.w, 2)
     for c in range(feat.s, feat.e):
         scores[c] += feat.w[c]
 
