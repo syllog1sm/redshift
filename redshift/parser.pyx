@@ -29,6 +29,8 @@ from learn.perceptron cimport Perceptron
 
 from libc.stdint cimport uint64_t, int64_t
 
+from ext cimport yeppp
+
 
 VOCAB_SIZE = 1e6
 TAG_SET_SIZE = 50
