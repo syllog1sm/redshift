@@ -422,7 +422,7 @@ cdef class BeamParser(BaseParser):
                 all_parses.append(<size_t>gold.beam[i])
             if pred.beam[i] != NULL and pred.beam[i].prev != NULL and pred.beam[i].cost != 0:
                 all_parses.append(<size_t>pred.beam[i])
-        cdef double g_norm
+        cdef double g_norm = 0.0
         for addr in gold_parses:
             s = <FastState*>addr
             self._inc_feats(g_counts[s.clas], sent, tags, &s.prev.knl, math.exp(s.score))
