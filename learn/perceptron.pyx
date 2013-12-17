@@ -6,7 +6,7 @@ from libc.stdlib cimport *
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 from libcpp.queue cimport priority_queue
-from libc.string cimport strtok
+from libc.string cimport strtok, memcpy
 cimport ext.yeppp
 
 from cython.operator cimport dereference as deref, preincrement as inc
@@ -59,9 +59,8 @@ cdef void free_dense_feat(DenseFeature* feat):
 cdef inline void score_dense_feat(double* scores, size_t nr_class, DenseFeature* feat):
     feat.nr_seen += 1
     cdef size_t c
-    print 'Adding inplace...'
-    cdef int _ = ext.yeppp.add_inplace(scores, feat.w, nr_class * sizeof(double))
-    print _
+    cdef int _ = ext.yeppp.add_inplace(&scores[feat.s], &feat.w[feat.s],
+                                       feat.e - feat.s)
     #for c in range(feat.s, feat.e):
     #    scores[c] += feat.w[c]
 
@@ -134,10 +133,11 @@ cdef inline void score_square_feat(double* scores, size_t div, size_t nr_class,
     for j in range(div):
         if feat.seen[j]:
             part_idx = j * div
-            for k in range(div):
-                if (part_idx + k) >= nr_class:
-                    break
-                scores[part_idx + k] += feat.parts[j].w[k]
+            ext.yeppp.add_inplace(&scores[part_idx], feat.parts[j].w, div)
+            #for k in range(div):
+            #    if (part_idx + k) >= nr_class:
+            #        break
+            #    scores[part_idx + k] += feat.parts[j].w[k]
 
 
 cdef inline void update_square(size_t nr_class, size_t div,
@@ -180,6 +180,7 @@ cdef class Perceptron:
         self.total = 0.0
         self.use_cache = True
         self.cache = index.hashes.ScoresCache(max_classes) 
+        ext.yeppp.init_yeppp()
 
     def __dealloc__(self):
         cdef pair[uint64_t, size_t] data
