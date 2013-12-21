@@ -374,6 +374,7 @@ cdef class BeamParser(BaseParser):
                         gold.valid[i][clas] = -1
             gold.extend_states(gold_scores)
             g = <State*>gold.beam[0]
+            assert g.history[g.t - 1] != 85
             p = <State*>pred.beam[0]
             delta = p.score - g.score
             if delta >= max_violn and p.cost >= 1:
@@ -385,6 +386,8 @@ cdef class BeamParser(BaseParser):
             self.guide.n_corr += p.history[p.t-1] == g.history[g.t-1]
             self.guide.total += 1
         if max_violn >= 0:
+            for i in range(gt):
+                assert ghist[i] != 85
             counted = self._count_feats(sent, pt, gt, phist, ghist)
             self.guide.batch_update(counted)
         if self.auto_pos:
@@ -435,11 +438,11 @@ cdef class BeamParser(BaseParser):
                 self.moves.transition(phist[i], pred_state)
                 continue
             seen_diff = True
-            if not gold_state.is_finished:
+            if i < gt:
                 fill_kernel(gold_state, sent.pos)
                 self._inc_feats(counts[ghist[i]], sent, &gold_state.kernel, g_inc)
                 self.moves.transition(ghist[i], gold_state)
-            if not pred_state.is_finished:
+            if i < pt:
                 fill_kernel(pred_state, sent.pos)
                 self._inc_feats(counts[phist[i]], sent, &pred_state.kernel, p_inc)
                 self.moves.transition(phist[i], pred_state)
