@@ -298,14 +298,13 @@ cdef int fill_edits(State* s, bint* edits) except -1:
 
 
 cdef bint has_root_child(State *s, size_t token):
-    # TODO: This is an SBD thingy currently not in use
     if s.at_end_of_buffer:
         return False
     return False
     # TODO: Refer to the root label constant instead here!!
     # TODO: Instead update left-arc on root so that it attaches the rest of the
     # stack to S0
-    #return s.labels[get_l(s, token)] == 1
+    return s.labels[get_l(s, token)] == 1
 
 
 DEF PADDING = 5
