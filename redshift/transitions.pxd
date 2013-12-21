@@ -32,6 +32,7 @@ cdef class TransitionSystem:
     cdef size_t p_start
     cdef size_t p_end
     cdef size_t erase_label
+    cdef size_t root_label
     cdef size_t counter
 
     cdef int transition(self, size_t clas, State *s) except -1

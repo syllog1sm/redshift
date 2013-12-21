@@ -65,6 +65,7 @@ cdef class TransitionSystem:
         self.p_end = 0
         self.counter = 0
         self.erase_label = index.hashes.encode_label('erased')
+        self.root_label = index.hashes.encode_label('ROOT')
         # TODO: Clean this up, or rename them or something
         self.left_labels = []
         self.right_labels = []
@@ -223,8 +224,16 @@ cdef class TransitionSystem:
             for i in range(self.r_start, self.r_end):
                 valid[i] = 0
         if can_pop and (s.heads[s.top] == 0 or self.allow_reattach) and not has_root_child(s, s.i):
-            for i in range(self.l_start, self.l_end):
-                valid[i] = 0
+            if has_root_child(s, s.top):
+                valid[self.l_classes[self.root_label]] = 0
+            else:
+                for i in range(self.l_start, self.l_end):
+                    valid[i] = 0
+        for i in range(self.nr_class):
+            if valid[i] == 0:
+                break
+        else:
+            raise StandardError
 
     cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
                                size_t* labels, bint* edits, int* costs) except -1:
