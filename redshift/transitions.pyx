@@ -219,10 +219,10 @@ cdef class TransitionSystem:
             valid[self.d_id] = 0
         if can_pop and self.use_edit:
             valid[self.e_id] = 0
-        if can_push and can_pop:
+        if can_push and can_pop and not has_root_child(s, s.i):
             for i in range(self.r_start, self.r_end):
                 valid[i] = 0
-        if can_pop and (s.heads[s.top] == 0 or self.allow_reattach):
+        if can_pop and (s.heads[s.top] == 0 or self.allow_reattach) and not has_root_child(s, s.i):
             for i in range(self.l_start, self.l_end):
                 valid[i] = 0
 
