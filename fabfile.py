@@ -15,7 +15,7 @@ from itertools import combinations
 env.use_ssh_config = True
 
 from _paths import REMOTE_REPO, REMOTE_CONLL, REMOTE_MALT, REMOTE_STANFORD, REMOTE_PARSERS
-from _paths import REMOTE_SWBD
+from _paths import REMOTE_SWBD, REMOTE_UNSEG_SWBD
 from _paths import LOCAL_REPO, LOCAL_MALT, LOCAL_STANFORD, LOCAL_PARSERS
 from _paths import HOSTS, GATEWAY
 
@@ -84,8 +84,8 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
         train_name = 'train.txt'
         eval_pos = 'devi.txt'
         eval_parse = 'devr.txt'
-    elif tb == 'swbd':
-        data = str(REMOTE_SWBD)
+    elif tb == 'swbd' or tb == 'unseg_swbd':
+        data = str(REMOTE_SWBD) if tb == 'swbd' else str(REMOTE_UNSEG_SWBD)
         train_name = 'train.conll'
         eval_pos = 'dev.pos'
         eval_parse = 'dev.conll'
