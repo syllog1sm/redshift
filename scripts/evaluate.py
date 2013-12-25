@@ -19,6 +19,8 @@ def gen_toks(loc):
     token = None
     i = 0
     for sent_str in sent_strs:
+        if not sent_str.strip():
+            continue
         tokens = [Token(i, tok_str.split()) for i, tok_str in enumerate(sent_str.split('\n'))]
         flatten_edits(tokens)
         tokens[-1].sbd = True
@@ -64,10 +66,10 @@ class Token(object):
             new_attrs.append(attrs[3])
             new_attrs.append(str(int(attrs[6]) - 1))
             dfl_feats = attrs[5].split('|')
-            self.dfl_tag = dfl_feats[1]
+            self.dfl_tag = dfl_feats[2]
             new_attrs.append(attrs[7])
             attrs = new_attrs
-            attrs.append(str(dfl_feats[2] == '1'))
+            attrs.append(str(dfl_feats[1] == '1'))
         self.is_edit = attrs.pop() == 'True'
         self.label = attrs.pop()
         if self.label.lower() == 'root':
@@ -122,8 +124,9 @@ def main(test_loc, gold_loc, eval_punct=False):
         if g.is_edit:
             ed_n += 1
             continue
-        if g.dfl_tag != '-':
+        if g.label == 'filler':
             continue
+        #if g.dfl_tag != '-': continue
         u_c = g.head == t.head
         l_c = u_c and g.label == t.label
         N += 1
