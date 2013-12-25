@@ -144,6 +144,8 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
     cdef size_t word_idx = 0
     cdef size_t id_
     for id_, sent_str in enumerate(sent_strs):
+        if not sent_str.split():
+            continue
         words = ['<start>']
         tags = ['OOB']
         heads = [0]
@@ -217,6 +219,8 @@ def read_pos(file_str, vocab_thresh=0, sep='/'):
     sentences = Sentences(max_length=len(sent_strs), vocab_thresh=vocab_thresh)
     cdef size_t w_id = 0
     for i, sent_str in enumerate(sent_strs):
+        if not sent_str.strip():
+            continue
         words = ['<start>']
         tags = ['OOB']
         ids = [0]
