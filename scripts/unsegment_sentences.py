@@ -10,11 +10,14 @@ class Sentence(object):
     def __init__(self, lines):
         self.lines = lines
         self.tokens = [Token(i, line.split()) for i, line in enumerate(lines)]
+        self.is_filler = all(t.label in ('filler', 'erased') for t in self.tokens)
         self.last_head = -1
         assert self.tokens
 
     @property
     def head(self):
+        if len(self.tokens) == 1:
+            return self.tokens[0]
         for token in self.tokens:
             if token.head == -1:
                 return token
@@ -71,6 +74,9 @@ def main(loc):
         sent = sents.pop(0)
         while sents:
             next_sent = sents.pop(0)
+            while next_sent.is_filler and sents:
+                sent.tokens.extend(next_sent.tokens)
+                next_sent = sents.pop(0)
             segment_now = sent.head.dfl[:3] != next_sent.head.dfl[:3]
             if segment_now:
                 print sent.to_str(offset, -1)
