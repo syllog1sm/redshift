@@ -22,6 +22,7 @@ def gen_toks(loc):
         if not sent_str.strip():
             continue
         tokens = [Token(i, tok_str.split()) for i, tok_str in enumerate(sent_str.split('\n'))]
+        move_root_deps(tokens)
         flatten_edits(tokens)
         tokens[-1].sbd = True
         for token in tokens:
@@ -49,6 +50,13 @@ def flatten_edits(tokens):
         for child in subtrees[token.id]:
             edits.append(child)
     
+def move_root_deps(tokens):
+    """Deal with unsegmented text by moving all root dependencies to the
+    root token, for more stable evaluation."""
+    root = len(tokens)
+    for token in tokens:
+        if token.label.lower() == 'root':
+            token.head = root
 
 class Token(object):
     def __init__(self, id_, attrs):
@@ -69,7 +77,7 @@ class Token(object):
             self.dfl_tag = dfl_feats[2]
             new_attrs.append(attrs[7])
             attrs = new_attrs
-            attrs.append(str(dfl_feats[1] == '1'))
+            attrs.append(str(dfl_feats[2] == '1'))
         self.is_edit = attrs.pop() == 'True'
         self.label = attrs.pop()
         if self.label.lower() == 'root':
