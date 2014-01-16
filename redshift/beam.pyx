@@ -115,6 +115,7 @@ cdef class Beam:
             #tags[i] = self.beam[0].tags[i]
             heads[i] = self.beam[0].heads[i]
             labels[i] = self.beam[0].labels[i]
+            sbd[i] = self.beam[0].sbd[i]
             # TODO: Do sentence boundary detection here
         fill_edits(self.beam[0], edits)
  

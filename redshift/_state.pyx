@@ -320,6 +320,7 @@ cdef State* init_state(size_t n):
     s.top = 0
     s.second = 0
     s.stack_len = 0
+    s.segment = 0
     s.is_finished = False
     s.at_end_of_buffer = n == 2
     n = n + PADDING
@@ -327,6 +328,7 @@ cdef State* init_state(size_t n):
     # These make the tags match the OOB/ROOT/NONE values.
     s.heads = <size_t*>calloc(n, sizeof(size_t))
     s.labels = <size_t*>calloc(n, sizeof(size_t))
+    s.sbd = <size_t*>calloc(n, sizeof(size_t))
     s.guess_labels = <size_t*>calloc(n, sizeof(size_t))
     s.l_valencies = <size_t*>calloc(n, sizeof(size_t))
     s.r_valencies = <size_t*>calloc(n, sizeof(size_t))
@@ -350,6 +352,7 @@ cdef copy_state(State* s, State* old):
     s.n = old.n
     s.t = old.t
     s.i = old.i
+    s.segment = old.segment
     s.cost = old.cost
     s.score = old.score
     s.top = old.top
@@ -363,6 +366,7 @@ cdef copy_state(State* s, State* old):
     memcpy(s.r_valencies, old.r_valencies, nbytes)
     memcpy(s.heads, old.heads, nbytes)
     memcpy(s.labels, old.labels, nbytes)
+    memcpy(s.sbd, old.sbd, nbytes)
     memcpy(s.guess_labels, old.guess_labels, nbytes)
     memcpy(s.history, old.history, old.t * sizeof(size_t))
     for i in range(old.i + 2):
@@ -375,6 +379,7 @@ cdef free_state(State* s):
     free(s.heads)
     free(s.labels)
     free(s.guess_labels)
+    free(s.sbd)
     free(s.l_valencies)
     free(s.r_valencies)
     free(s.ledges)

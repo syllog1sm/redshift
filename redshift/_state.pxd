@@ -31,6 +31,7 @@ cdef struct Kernel:
     size_t s0redgep
     size_t n0ledge
     size_t n0ledgep
+    size_t segment
     bint prev_edit
     bint prev_prev_edit
     bint next_edit
@@ -62,6 +63,7 @@ cdef struct State:
     size_t stack_len
     size_t top
     size_t second
+    size_t segment
     bint is_finished
     bint at_end_of_buffer
     int cost
@@ -76,6 +78,7 @@ cdef struct State:
     size_t** l_children
     size_t** r_children
     size_t* history
+    size_t* sbd
     Kernel kernel
 
 cdef uint64_t hash_kernel(Kernel* k)

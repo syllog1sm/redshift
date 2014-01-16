@@ -100,7 +100,7 @@ cdef int add_parse(Sentence* sent, list word_ids, list heads, list labels, edits
     for i in range(sent.length):
         sent.parse.heads[i] = <size_t>heads[i]
         sent.parse.labels[i] = index.hashes.encode_label(labels[i])
-        if i >= 1 and word_ids[i] is not None and word_ids[i] >= word_ids[i - 1]:
+        if i >= 1 and word_ids[i] is not None and word_ids[i - 1] >= word_ids[i]:
             segment += 1
         sent.parse.sbd[i] = segment
         if edits:
@@ -295,11 +295,11 @@ cdef class Sentences:
                     head = -1
                 else:
                     head = <int>(s.parse.heads[j]) - (j - w_id)
-                fields = (w_id, py_words[j], pos_idx[s.pos[j]], head,
+                fields = (s.parse.sbd[j], w_id, py_words[j], pos_idx[s.pos[j]], head,
                           label_idx.get(s.parse.labels[j], 'ERR'))
-                out_file.write(u'%d\t%s\t%s\t%s\t%s\n' % fields)
+                out_file.write(u'%d\t%d\t%s\t%s\t%s\t%s\n' % fields)
                 w_id += 1
-                if s.parse.sbd[j] or j == (s.length - 2):
+                if j == (s.length - 2):
                     out_file.write(u'\n')
                     w_id = 0
 

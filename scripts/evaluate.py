@@ -65,7 +65,7 @@ class Token(object):
         self.sbd = False
         # CoNLL format
         is_edit = False
-        if len(attrs) == 5 or len(attrs) == 4:
+        if len(attrs) == 6 or len(attrs) == 5 or len(attrs) == 4:
             attrs.append('False')
             self.dfl_tag = '-'
         elif len(attrs) == 10:
