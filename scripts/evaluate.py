@@ -69,7 +69,7 @@ class Token(object):
             self.dfl_tag = dfl_feats[2]
             new_attrs.append(attrs[7])
             attrs = new_attrs
-            attrs.append(str(dfl_feats[1] == '1'))
+            attrs.append(str(dfl_feats[2] == '1'))
         self.is_edit = attrs.pop() == 'True'
         self.label = attrs.pop()
         if self.label.lower() == 'root':
