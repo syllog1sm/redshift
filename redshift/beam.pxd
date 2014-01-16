@@ -89,5 +89,5 @@ cdef class Beam:
     cdef Kernel* next_state(self, size_t i, size_t* tags)
     cdef int extend_states(self, double** scores) except -1
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
-                        size_t* labels, bint* sbd, bint* edits) except -1
+                        size_t* labels, size_t* sbd, bint* edits) except -1
 

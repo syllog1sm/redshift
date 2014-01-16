@@ -107,7 +107,7 @@ cdef class Beam:
             self.is_finished = True
 
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
-                        size_t* labels, bint* sbd, bint* edits) except -1:
+                        size_t* labels, size_t* sbd, bint* edits) except -1:
         cdef size_t i
         # No need to copy heads for root and start symbols
         for i in range(1, self.length - 1):
