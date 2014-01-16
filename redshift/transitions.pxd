@@ -39,7 +39,7 @@ cdef class TransitionSystem:
 
     cdef int transition(self, size_t clas, State *s) except -1
     cdef int* get_costs(self, State* s, size_t* tags, size_t* heads,
-                        size_t* labels, bint* costs) except NULL
+                        size_t* labels, bint* edits, size_t* sbd) except NULL
     cdef int _label_costs(self, size_t start, size_t end, size_t label, bint add, 
                           int c, int* costs) except -1
     cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
@@ -51,6 +51,7 @@ cdef class TransitionSystem:
     cdef int r_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
     cdef int d_cost(self, State *s, size_t* g_heads, size_t* g_labels, bint* edits)
     cdef int l_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
-    cdef int b_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
+    cdef int b_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
+                    size_t* sbd)
     cdef int e_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
     cdef int p_cost(self, State *s)
