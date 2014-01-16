@@ -5,6 +5,7 @@ cdef transition_to_str(State* s, size_t move, label, object tokens)
 
 cdef class TransitionSystem:
     cdef bint use_edit
+    cdef bint use_sbd
     cdef bint allow_reattach
     cdef bint allow_reduce
     cdef bint assign_pos
@@ -24,6 +25,7 @@ cdef class TransitionSystem:
     cdef size_t max_class
     cdef size_t s_id
     cdef size_t d_id
+    cdef size_t b_id
     cdef size_t e_id
     cdef size_t l_start
     cdef size_t l_end
@@ -49,5 +51,6 @@ cdef class TransitionSystem:
     cdef int r_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
     cdef int d_cost(self, State *s, size_t* g_heads, size_t* g_labels, bint* edits)
     cdef int l_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
+    cdef int b_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
     cdef int e_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
     cdef int p_cost(self, State *s)
