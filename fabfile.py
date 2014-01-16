@@ -71,7 +71,7 @@ def tacl_dfl_exp(dir_name, n=5, k=16, size=0):
 
 
 def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
-         unlabelled=False, auto_pos=False, iters=15):
+         unlabelled=False, auto_pos='False', iters=15):
     size = int(size)
     k = int(k)
     n = int(n)
@@ -84,8 +84,14 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
         train_name = 'train.txt'
         eval_pos = 'devi.txt'
         eval_parse = 'devr.txt'
-    elif tb == 'swbd' or tb == 'unseg_swbd':
-        data = str(REMOTE_SWBD) if tb == 'swbd' else str(REMOTE_UNSEG_SWBD)
+    elif tb == 'swbd' or tb == 'unseg_swbd' or tb == 'unseg_swbd_root':
+        if tb == 'swbd':
+            data = str(REMOTE_SWBD)
+        elif tb == 'swbd':
+            data = str(REMOTE_UNSEG_SWBD)
+        else:
+            data = str(REMOTE_UNSEG_SWBD) + '_root'
+        #data = str(REMOTE_SWBD) if tb == 'swbd' else str(REMOTE_UNSEG_SWBD)
         train_name = 'train.conll'
         eval_pos = 'dev.pos'
         eval_parse = 'dev.conll'
@@ -514,7 +520,7 @@ def _add_edits(test_dir, pos):
     return 'python scripts/add_edits.py %s %s > %s' % (in_loc, pos, out_loc)
 
 
-def _pbsify(repo, command_strs, size=3):
+def _pbsify(repo, command_strs, size=6):
     header = """#! /bin/bash
 #PBS -l walltime=20:00:00,mem=3gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate
