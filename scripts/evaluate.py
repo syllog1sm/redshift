@@ -84,11 +84,6 @@ class Token(object):
             self.label = 'ROOT'
         head = int(attrs.pop())
         self.head = head
-        # Make head an offset from the token id, for sent variation
-        #if head == -1 or self.label.upper() == 'ROOT':
-        #    self.head = id_
-        #else:
-        #    self.head = head - id_
         self.pos = attrs.pop()
         self.word = attrs.pop()
         self.dir = 'R' if head >= 0 and head < self.id else 'L'
