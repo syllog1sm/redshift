@@ -117,6 +117,8 @@ cdef class BaseParser:
             templates += _parse_features.pos_bigrams()
         if 'edges' in self.feat_set:
             templates += _parse_features.edges
+        if 'sbd' in self.feat_set:
+            templates += _parse_features.sbd
         if 'match' in self.feat_set:
             match_feats = _parse_features.match_templates()
             print "Using %d match feats" % len(match_feats)
@@ -358,7 +360,8 @@ cdef class BeamParser(BaseParser):
                 fill_kernel(p, sent.pos)
                 pred_scores[i] = self._predict(sent, &p.kernel)
                 costs = self.moves.get_costs(p, sent.pos, sent.parse.heads,
-                                             sent.parse.labels, sent.parse.edits)
+                                             sent.parse.labels, sent.parse.edits,
+                                             sent.parse.sbd)
                 memcpy(pred.costs[i], costs, sizeof(int) * self.moves.nr_class)
             pred.extend_states(pred_scores)
             for i in range(gold.bsize):
@@ -368,7 +371,7 @@ cdef class BeamParser(BaseParser):
                 gold_scores[i] = self._predict(sent, &g.kernel)
                 costs = self.moves.get_costs(<State*>gold.beam[i], sent.pos,
                                              sent.parse.heads, sent.parse.labels,
-                                             sent.parse.edits)
+                                             sent.parse.edits, sent.parse.sbd)
                 for clas in range(self.moves.nr_class):
                     if costs[clas] != 0:
                         gold.valid[i][clas] = -1
@@ -511,7 +514,8 @@ cdef class GreedyParser(BaseParser):
             feats = self._extract(sent, &s.kernel)
             pred = self._predict(feats, valid, &s.guess_labels[s.i])
             costs = self.moves.get_costs(s, sent.pos, sent.parse.heads,
-                                         sent.parse.labels, sent.parse.edits)
+                                         sent.parse.labels, sent.parse.edits,
+                                         sent.parse.sbd)
             gold = pred if costs[pred] == 0 else self._predict(feats, costs, &_)
             self.guide.update(pred, gold, feats, 1)
             if iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
