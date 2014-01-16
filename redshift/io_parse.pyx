@@ -4,7 +4,7 @@ import index.hashes
 cimport index.hashes
 
 
-cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tags,
+cdef Sentence* make_sentence(size_t id_, size_t length, py_words, py_tags,
                              size_t thresh):
     cdef:
         size_t i
@@ -23,7 +23,7 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     size = length + PADDING
     s.parse.heads = <size_t*>calloc(size, sizeof(size_t))
     s.parse.labels = <size_t*>calloc(size, sizeof(size_t))
-    s.parse.sbd = <bint*>calloc(size, sizeof(bint))
+    s.parse.sbd = <size_t*>calloc(size, sizeof(size_t))
     s.parse.edits = <bint*>calloc(size, sizeof(bint))
     s.parse.moves = <size_t*>calloc(size * 2, sizeof(size_t))
     
@@ -31,7 +31,6 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     s.owords = <size_t*>calloc(size, sizeof(size_t))
     s.pos = <size_t*>calloc(size, sizeof(size_t))       
     s.alt_pos = <size_t*>calloc(size, sizeof(size_t))
-    s.ids = <size_t*>calloc(size, sizeof(size_t))
     s.clusters = <size_t*>calloc(size, sizeof(size_t))
     s.cprefix4s = <size_t*>calloc(size, sizeof(size_t))
     s.cprefix6s = <size_t*>calloc(size, sizeof(size_t))
@@ -78,7 +77,6 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
             s.cprefix6s[i] = brown_idx.table[s.owords[i]].prefix6
         if thresh != 0 and index.hashes.get_freq(py_words[i]) <= thresh:
             s.words[i] = mask_value
-        s.ids[i] = py_ids[i]
         # Use POS tag to semi-smartly get ' disambiguation
         if py_tags[i] == "``":
             quote_cnt += 1
@@ -97,10 +95,14 @@ cdef Sentence* make_sentence(size_t id_, size_t length, py_ids, py_words, py_tag
     return s
 
 
-cdef int add_parse(Sentence* sent, list heads, list labels, edits) except -1:
+cdef int add_parse(Sentence* sent, list word_ids, list heads, list labels, edits) except -1:
+    cdef size_t segment = 0
     for i in range(sent.length):
         sent.parse.heads[i] = <size_t>heads[i]
         sent.parse.labels[i] = index.hashes.encode_label(labels[i])
+        if i >= 1 and word_ids[i] is not None and word_ids[i] >= word_ids[i - 1]:
+            segment += 1
+        sent.parse.sbd[i] = segment
         if edits:
             sent.parse.edits[i] = <bint>edits[i]
             if sent.parse.edits[i] and not edits[sent.parse.heads[i]]:
@@ -112,7 +114,6 @@ cdef free_sent(Sentence* s):
     free(s.owords)
     free(s.pos)
     free(s.alt_pos)
-    free(s.ids)
     free(s.clusters)
     free(s.cprefix4s)
     free(s.cprefix6s)
@@ -141,7 +142,6 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
     sent_strs = conll_str.strip().split('\n\n')
     sentences = Sentences(max_length=len(sent_strs), vocab_thresh=vocab_thresh)
     first_sent = sent_strs[0]
-    cdef size_t word_idx = 0
     cdef size_t id_
     for id_, sent_str in enumerate(sent_strs):
         if not sent_str.split():
@@ -150,12 +150,13 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
         tags = ['OOB']
         heads = [0]
         labels = ['ERR']
-        ids = [0]
+        ids = [None]
         token_strs = sent_str.split('\n')
         edits = [False]
         for tok_id, token_str in enumerate(token_strs):
             pieces = token_str.split()
             if len(pieces) == 10:
+                word_id = int(pieces[0])
                 word = pieces[1]
                 pos = pieces[3]
                 pos2 = pieces[4]
@@ -179,6 +180,7 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
                     raise
                 head = int(head)
                 is_edit = False
+                word_id = tok_id
             if unlabelled and label not in ['ROOT', 'P', 'conj', 'cc', 'erased',
 					    'discourse', 'interregnum']:
                 label = 'ERR'
@@ -193,16 +195,15 @@ def read_conll(conll_str, moves=None, vocab_thresh=0, unlabelled=False):
                 head = len(token_strs)
             heads.append(int(head) + 1)
             labels.append(label)
-            ids.append(word_idx)
-            word_idx += 1
-        ids.append(0)
+            ids.append(word_id)
+        ids.append(None)
         words.append('<root>')
         tags.append('ROOT')
         heads.append(0)
         labels.append('ERR')
         edits.append(False)
-        sent = make_sentence(id_, len(ids), ids, words, tags, vocab_thresh)
-        add_parse(sent, heads, labels, edits)
+        sent = make_sentence(id_, len(ids), words, tags, vocab_thresh)
+        add_parse(sent, ids, heads, labels, edits)
         sentences.add(sent, words, tags)
     if moves is not None and moves.strip():
         sentences.add_moves(moves)
@@ -223,7 +224,7 @@ def read_pos(file_str, vocab_thresh=0, sep='/'):
             continue
         words = ['<start>']
         tags = ['OOB']
-        ids = [0]
+        ids = [None]
         for token_str in sent_str.split():
             try:
                 word, pos = token_str.rsplit(sep, 1)
@@ -239,8 +240,8 @@ def read_pos(file_str, vocab_thresh=0, sep='/'):
             w_id += 1
         words.append('<root>')
         tags.append('ROOT')
-        ids.append(0)
-        sent = make_sentence(i, len(ids), ids, words, tags, vocab_thresh)
+        ids.append(None)
+        sent = make_sentence(i, len(ids), words, tags, vocab_thresh)
         sentences.add(sent, words, tags)
     return sentences
 

@@ -3,14 +3,13 @@ cdef struct _Parse:
     double score
     size_t* heads
     size_t* labels
-    bint* sbd
+    size_t* sbd
     bint* edits
     size_t* moves
 
 cdef struct Sentence:
     size_t id
     size_t length
-    size_t* ids
     size_t* words
     size_t* owords
     size_t* pos
@@ -28,7 +27,7 @@ cdef struct Sentence:
     _Parse* parse
 
 
-cdef Sentence* make_sentence(size_t id_, size_t length, object py_ids,
+cdef Sentence* make_sentence(size_t id_, size_t length,
                             object py_words, object py_tags, size_t vocab_thresh)
 
 cdef free_sent(Sentence* s)
