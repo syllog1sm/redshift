@@ -100,30 +100,22 @@ cdef class BaseParser:
         self.feat_set = feat_set
         self.ngrams = ngrams if ngrams is not None else []
         templates = _parse_features.baseline_templates()
+        match_feats = []
         #templates += _parse_features.ngram_feats(self.ngrams)
         if 'disfl' in self.feat_set:
             templates += _parse_features.disfl
             templates += _parse_features.new_disfl
             templates += _parse_features.suffix_disfl
-        if 'xlabels' in self.feat_set:
             templates += _parse_features.extra_labels
+            templates += _parse_features.clusters
+            templates += _parse_features.edges
+            match_feats = _parse_features.match_templates()
         if 'stack' in self.feat_set:
             templates += _parse_features.stack_second
         if 'hist' in self.feat_set:
             templates += _parse_features.history
-        if 'clusters' in self.feat_set:
-            templates += _parse_features.clusters
         if 'bitags' in self.feat_set:
             templates += _parse_features.pos_bigrams()
-        if 'edges' in self.feat_set:
-            templates += _parse_features.edges
-        if 'sbd' in self.feat_set:
-            templates += _parse_features.sbd
-        if 'match' in self.feat_set:
-            match_feats = _parse_features.match_templates()
-            print "Using %d match feats" % len(match_feats)
-        else:
-            match_feats = []
         self.extractor = Extractor(templates, match_feats)
         self._features = <uint64_t*>calloc(self.extractor.nr_feat, sizeof(uint64_t))
         self._context = <size_t*>calloc(_parse_features.context_size(), sizeof(size_t))
