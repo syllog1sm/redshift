@@ -31,7 +31,7 @@ cdef struct Kernel:
     size_t s0redgep
     size_t n0ledge
     size_t n0ledgep
-    size_t segment
+    bint segment
     bint prev_edit
     bint prev_prev_edit
     bint next_edit
@@ -63,7 +63,7 @@ cdef struct State:
     size_t stack_len
     size_t top
     size_t second
-    size_t segment
+    bint segment
     bint is_finished
     bint at_end_of_buffer
     int cost
@@ -106,8 +106,9 @@ cdef int has_head_in_buffer(State *s, size_t word, size_t* heads) except -1
 cdef int has_child_in_stack(State *s, size_t word, size_t* heads) except -1
 cdef int has_head_in_stack(State *s, size_t word, size_t* heads) except -1
 cdef bint has_root_child(State *s, size_t token)
+cdef int nr_headless(State *s) except -1
 
 cdef int fill_edits(State *s, bint* edits) except -1
 cdef State* init_state(size_t n)
 cdef free_state(State* s)
-cdef copy_state(State* s, State* old)
+cdef int copy_state(State* s, State* old) except -1

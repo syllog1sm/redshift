@@ -57,6 +57,8 @@ cdef size_t pop_stack(State *s) except 0:
     assert s.top <= s.n, s.top
     assert popped != 0
     cdef size_t child
+    if s.stack_len == 0:
+        s.segment = False
     return popped
 
 
@@ -104,6 +106,7 @@ cdef uint64_t hash_kernel(Kernel* k):
 
 cdef int fill_kernel(State *s, size_t* tags) except -1:
     cdef size_t i, val
+    s.kernel.segment = s.segment
     s.kernel.i = s.i
     s.kernel.n0p = tags[s.i]
     s.kernel.n1p = tags[s.i + 1]
@@ -277,6 +280,13 @@ cdef int has_head_in_stack(State *s, size_t word, size_t* heads) except -1:
             return 1
     return 0
 
+cdef int nr_headless(State* s) except -1:
+    cdef size_t n = 0
+    cdef size_t i
+    for i in range(s.stack_len):
+        n += s.heads[s.stack[i]] == 0
+    return n
+
 cdef int fill_edits(State* s, bint* edits) except -1:
     cdef size_t i, j
     i = 0
@@ -320,7 +330,7 @@ cdef State* init_state(size_t n):
     s.top = 0
     s.second = 0
     s.stack_len = 0
-    s.segment = 0
+    s.segment = False
     s.is_finished = False
     s.at_end_of_buffer = n == 2
     n = n + PADDING
@@ -343,7 +353,7 @@ cdef State* init_state(size_t n):
     s.history = <size_t*>calloc(n * 3, sizeof(size_t))
     return s
 
-cdef copy_state(State* s, State* old):
+cdef int copy_state(State* s, State* old) except -1:
     cdef size_t nbytes, i
     if s.i > old.i:
         nbytes = (s.i + 1) * sizeof(size_t)
