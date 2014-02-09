@@ -144,14 +144,15 @@ cdef class TransitionSystem:
             push_stack(s)
         # Left-structured boundaries atm.
         elif move == BOUNDARY:
-            head = s.i
-            child = s.top
-            #add_dep(s, head, child, self.root_label)
-            s.heads[child] = head
-            s.labels[child] = self.root_label
-            for i in range(s.ledges[s.top], s.ledges[s.i]):
-                s.sbd[i] = s.segment
-            s.segment += 1
+            assert s.stack_len != 0
+            assert s.top != 0
+            if s.heads[s.top] == 0:
+                add_dep(s, s.n, s.top, self.root_label)
+            elif s.heads[s.stack[0]] == 0:
+                add_dep(s, s.n, s.stack[0], self.root_label)
+            else:
+                raise StandardError
+            s.segment = True
             pop_stack(s)
         elif move == EDIT:
             if s.heads[s.top] != 0:
@@ -230,19 +231,21 @@ cdef class TransitionSystem:
         if s.is_finished:
             return 0
         cdef bint can_push = not s.at_end_of_buffer
+        if s.segment and s.stack_len:
+            can_push = False
         cdef bint can_pop = s.top != 0
         if can_push:
             valid[self.s_id] = 0
         if can_pop and (s.heads[s.top] != 0 or (self.allow_reduce and s.stack_len >= 2)):
             valid[self.d_id] = 0
-        if can_pop and self.use_edit:
+        if can_pop and self.use_edit and not s.segment:
             valid[self.e_id] = 0
-        if can_pop and self.use_sbd and s.heads[s.top] == 0 and s.stack_len == 1:
+        if can_pop and self.use_sbd and nr_headless(s) == 1:
             valid[self.b_id] = 0
         if can_push and can_pop:
             for i in range(self.r_start, self.r_end):
                 valid[i] = 0
-        if can_pop and (s.heads[s.top] == 0 or self.allow_reattach):
+        if can_pop and (s.heads[s.top] == 0 or self.allow_reattach) and not s.segment:
             for i in range(self.l_start, self.l_end):
                 valid[i] = 0
         for i in range(self.nr_class):
@@ -282,6 +285,8 @@ cdef class TransitionSystem:
         cdef size_t i, stack_i
         if s.at_end_of_buffer:
             return -1
+        if s.segment:
+            return -1
         if self.use_edit and edits[s.i]:
             return 0
         if s.stack_len < 1:
@@ -297,6 +302,8 @@ cdef class TransitionSystem:
         if s.at_end_of_buffer:
             return -1
         if s.stack_len < 1:
+            return -1
+        if s.segment:
             return -1
         if self.use_edit and edits[s.top] and not edits[s.i]:
             return 1
@@ -315,6 +322,8 @@ cdef class TransitionSystem:
             return -1
         if s.stack_len < 1:
             return -1
+        if s.segment:
+            return 0
         cost += has_child_in_buffer(s, s.top, heads)
         if self.allow_reattach:
             cost += has_head_in_buffer(s, s.top, heads)
@@ -331,6 +340,8 @@ cdef class TransitionSystem:
         if s.stack_len < 1:
             return -1
         if s.heads[s.top] != 0 and not self.allow_reattach:
+            return -1
+        if s.segment:
             return -1
         # This would form a dep between an edit and non-edit word
         if self.use_edit and edits[s.top] and not edits[s.i]:
@@ -351,14 +362,14 @@ cdef class TransitionSystem:
                     size_t* sbd):
         if not self.use_sbd:
             return -1
-        if s.top == 0:
+        if nr_headless(s) != 1:
             return -1
-        if s.heads[s.top] != 0:
+        if s.segment:
             return -1
-        if s.stack_len != 1 and not s.at_end_of_buffer:
+        cdef size_t last_clas = s.history[s.t - 1]
+        if self.moves[last_clas] != SHIFT and self.moves[last_clas] != RIGHT:
             return -1
-        if edits[s.top]:
-            return 1
+
         if sbd[s.top] == sbd[s.i]:
             return 1
         else:
@@ -368,6 +379,8 @@ cdef class TransitionSystem:
         if not self.use_edit:
             return -1
         if s.top == 0:
+            return -1
+        if s.segment:
             return -1
         if edits[s.top]:
             return 0
