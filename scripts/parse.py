@@ -8,7 +8,7 @@ import pstats
 import cProfile
 
 import redshift.parser
-import redshift
+from redshift.sentence import Sentence
 
 
 @plac.annotations(
@@ -22,7 +22,8 @@ def main(parser_dir, text_loc, out_dir, profile=False, debug=False):
         os.mkdir(out_dir)
     print "Loading parser"
     parser = redshift.parser.load_parser(parser_dir)
-    sentences = redshift.read_pos(open(text_loc).read())
+    sentences = [Sentence.from_pos(i, p) for i, p in
+                 enumerate(open(text_loc).read().strip().split('\n'))]
     if profile:
         cProfile.runctx("parser.add_parses(sentences)",
                         globals(), locals(), "Profile.prof")
@@ -32,7 +33,7 @@ def main(parser_dir, text_loc, out_dir, profile=False, debug=False):
         t1 = time.time()
         parser.add_parses(sentences)
         t2 = time.time()
-        print '%d sents took %0.3f ms' % (sentences.length, (t2-t1)*1000.0)
+        print '%d sents took %0.3f ms' % (len(sentences), (t2-t1)*1000.0)
 
     with open(os.path.join(out_dir, 'parses'), 'w') as out_file:
         for sentence in sentences:
