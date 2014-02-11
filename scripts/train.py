@@ -14,9 +14,8 @@ from itertools import combinations
 
 import redshift.parser
 from redshift.parser import GreedyParser, BeamParser
-import redshift.io_parse
+from redshift import Sentence
 
-USE_HELD_OUT = False
 
 @plac.annotations(
     train_loc=("Training location", "positional"),
@@ -32,20 +31,15 @@ USE_HELD_OUT = False
     seed=("Set random seed", "option", "s", int),
     beam_width=("Beam width", "option", "k", int),
     feat_set=("Name of feat set [zhang, iso, full]", "option", "x", str),
-    ngrams=("How many ngrams to include", "option", "g", str),
     n_sents=("Number of sentences to train from", "option", "n", int),
-    unlabelled=("Use most of the dependency labels", "flag", "u", bool),
     auto_pos=("Train tagger alongside parser", "flag", "p", bool)
 )
 def main(train_loc, model_loc, train_alg="static", n_iter=15,
          feat_set="zhang", vocab_thresh=0, feat_thresh=10,
          allow_reattach=False, allow_reduce=False, use_edit=False,
-         ngrams='', n_sents=0,
+         n_sents=0,
          profile=False, debug=False, seed=0, beam_width=1, unlabelled=False,
          auto_pos=False):
-    # TODO: ngrams stuff
-    if not ngrams:
-        ngrams = []
     random.seed(seed)
     if debug:
         redshift.parser.set_debug(True)
@@ -54,7 +48,7 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
                             train_alg=train_alg, feat_set=feat_set,
                             feat_thresh=feat_thresh, allow_reduce=allow_reduce,
                             allow_reattach=allow_reattach, beam_width=beam_width,
-                            ngrams=ngrams, auto_pos=auto_pos)
+                            auto_pos=auto_pos)
     else:
         parser = GreedyParser(model_loc, clean=True, train_alg=train_alg,
                               feat_set=feat_set, feat_thresh=feat_thresh,
@@ -66,9 +60,7 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
         print "Using %d sents for training" % n_sents
         random.shuffle(train_sent_strs)
         train_sent_strs = train_sent_strs[:n_sents]
-    train_str = '\n\n'.join(train_sent_strs)
-    train = redshift.io_parse.read_conll(train_str, vocab_thresh=vocab_thresh,
-                                         unlabelled=unlabelled)
+    train = [Sentence.from_conll(i, s) for i, s in enumerate(train_sent_strs)]
     if profile:
         print 'profiling'
         cProfile.runctx("parser.train(train, n_iter=n_iter)", globals(),

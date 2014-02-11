@@ -145,11 +145,7 @@ cdef enum:
     S0rlabs
     N0llabs
     N0orth
-    N0paren
-    N0quote
     N1orth
-    N1paren
-    N1quote
     S0re_orth
 
     S0le_w
@@ -219,7 +215,7 @@ def get_kernel_tokens():
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
                        size_t* tags,
                        size_t* clusters, size_t* cprefix6s, size_t* cprefix4s,
-                       size_t* orths, int* parens, int* quotes,
+                       size_t* orths, 
                        Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
     context[N0w] = words[k.i]
     context[N0p] = k.n0p
@@ -374,10 +370,6 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[dist] = 0
     context[N0orth] = orths[k.i]
     context[N1orth] = orths[k.i + 1]
-    context[N0paren] = parens[k.i]
-    context[N1paren] = parens[k.i + 1]
-    context[N0quote] = quotes[k.i]
-    context[N1quote] = quotes[k.i + 1]
 
     context[S0le_w] = words[k.s0ledge]
     context[S0le_p] = tags[k.s0ledge]

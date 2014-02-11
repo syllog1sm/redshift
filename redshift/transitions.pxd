@@ -36,21 +36,24 @@ cdef class TransitionSystem:
     cdef size_t erase_label
     cdef size_t root_label
     cdef size_t counter
+    cdef object sbd_at
 
     cdef int transition(self, size_t clas, State *s) except -1
     cdef int* get_costs(self, State* s, size_t* tags, size_t* heads,
                         size_t* labels, bint* edits, size_t* sbd) except NULL
     cdef int _label_costs(self, size_t start, size_t end, size_t label, bint add, 
                           int c, int* costs) except -1
-    cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
-                               size_t* labels, bint* edits, int* costs) except -1
-    cdef int fill_valid(self, State* s, int* valid)
+    #cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
+    #                           size_t* labels, bint* edits, int* costs) except -1
+    cdef int fill_valid(self, State* s, int* valid) except -1
     cdef int break_tie(self, State* s, size_t* tags, size_t* heads,
-                       size_t* labels, bint* edits) except -1
-    cdef int s_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
+                       size_t* labels, bint* edits, size_t* sbd) except -1
+    cdef int s_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
+                    size_t* sbd)
     cdef int r_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
                     size_t* sbd)
-    cdef int d_cost(self, State *s, size_t* g_heads, size_t* g_labels, bint* edits)
+    cdef int d_cost(self, State *s, size_t* g_heads, size_t* g_labels, bint* edits,
+                    size_t* sbd)
     cdef int l_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
                     size_t* sbd)
     cdef int b_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,

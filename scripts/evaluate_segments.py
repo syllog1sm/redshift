@@ -6,7 +6,8 @@ class Token(object):
     def __init__(self, line, utterance):
         fields = line.split()
         self.nl = False
-        if len(fields) == 5:
+        if len(fields) == 6:
+            fields.pop(0)
             self.idx = int(fields[0])
             self.text = fields[1]
             self.pos = fields[2]

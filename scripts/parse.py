@@ -8,22 +8,7 @@ import pstats
 import cProfile
 
 import redshift.parser
-import redshift.io_parse
-
-
-def get_pos(conll_str):
-    pos_sents = []
-    for sent_str in conll_str.strip().split('\n\n'):
-        sent = []
-        for line in sent_str.split('\n'):
-            pieces = line.split()
-            if len(pieces) == 5:
-                pieces.pop(0)
-            word = pieces[0]
-            pos = pieces[1]
-            sent.append('%s/%s' % (word, pos))
-        pos_sents.append(' '.join(sent))
-    return '\n'.join(pos_sents)
+import redshift
 
 
 @plac.annotations(
@@ -35,10 +20,9 @@ def main(parser_dir, text_loc, out_dir, profile=False, debug=False):
         redshift.parser.set_debug(debug)
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
-    yield "Loading parser"
+    print "Loading parser"
     parser = redshift.parser.load_parser(parser_dir)
-    sentences = redshift.io_parse.read_pos(open(text_loc).read())
-    #sentences.connect_sentences(1700)
+    sentences = redshift.read_pos(open(text_loc).read())
     if profile:
         cProfile.runctx("parser.add_parses(sentences)",
                         globals(), locals(), "Profile.prof")
@@ -49,7 +33,11 @@ def main(parser_dir, text_loc, out_dir, profile=False, debug=False):
         parser.add_parses(sentences)
         t2 = time.time()
         print '%d sents took %0.3f ms' % (sentences.length, (t2-t1)*1000.0)
-    sentences.write_parses(open(os.path.join(out_dir, 'parses'), 'w'))
+
+    with open(os.path.join(out_dir, 'parses'), 'w') as out_file:
+        for sentence in sentences:
+            out_file.write(sentence.to_conll())
+            out_file.write('\n\n')
 
 
 if __name__ == '__main__':
