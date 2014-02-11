@@ -64,35 +64,45 @@ cdef CSentence* init_c_sent(size_t id_, size_t length, py_word_ids, py_words,
         py_tags, py_heads, py_labels, py_edits) except NULL:
     cdef:
         size_t i
-        bytes py_word
-        bytes py_pos
-        char* raw_word
-        char* raw_pos
         CSentence* s
     cdef size_t PADDING = 5
+    cdef size_t size = length + PADDING
     s = <CSentence*>malloc(sizeof(CSentence))
     s.length = length
     s.id = id_
     s.parse = init_c_parse(length, py_word_ids, py_heads, py_labels, py_edits)
-   
-    s.words = <size_t*>calloc(length, sizeof(size_t))
-    s.pos = <size_t*>calloc(length, sizeof(size_t))       
-    s.clusters = <size_t*>calloc(length, sizeof(size_t))
-    s.cprefix4s = <size_t*>calloc(length, sizeof(size_t))
-    s.cprefix6s = <size_t*>calloc(length, sizeof(size_t))
-    s.suffix = <size_t*>calloc(length, sizeof(size_t))
-    s.prefix = <size_t*>calloc(length, sizeof(size_t))
+    s.words = <size_t*>calloc(size, sizeof(size_t))
+    s.pos = <size_t*>calloc(size, sizeof(size_t))       
+    s.clusters = <size_t*>calloc(size, sizeof(size_t))
+    s.cprefix4s = <size_t*>calloc(size, sizeof(size_t))
+    s.cprefix6s = <size_t*>calloc(size, sizeof(size_t))
+    s.suffix = <size_t*>calloc(size, sizeof(size_t))
+    s.prefix = <size_t*>calloc(size, sizeof(size_t))
+    s.oft_upper = <bint*>calloc(length, sizeof(bint))
+    s.oft_title = <bint*>calloc(length, sizeof(bint))
+    s.non_alpha = <bint*>calloc(length, sizeof(bint))
     cdef object word
+    cdef dict case_dict = index.hashes.get_case_stats()
     cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
-    s.words[0] = 0
-    s.pos[0] = 0
     for i in range(1, length):
+        case_stats = case_dict.get(py_words[i])
+        if case_stats is not None:
+            upper_pc, title_pc = case_stats
+            # Cut points determined by maximum information gain
+            if upper_pc >= 0.05:
+                s.oft_upper[i] = True
+            if title_pc >= 0.3:
+                s.oft_title[i] = True
+        elif not py_words[i].isalpha():
+            s.non_alpha[i] = True
         word = normalize_word(py_words[i])
         s.words[i] = index.hashes.encode_word(word)
+        s.suffix[i] = index.hashes.encode_word(py_words[i][-3:])
+        s.prefix[i] = index.hashes.encode_word(py_words[i][0])
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
-        s.clusters[i] = brown_idx.table[s.words[i]].full
-        s.cprefix4s[i] = brown_idx.table[s.words[i]].prefix4
-        s.cprefix6s[i] = brown_idx.table[s.words[i]].prefix6
+        #s.clusters[i] = brown_idx.table[s.words[i]].full
+        #s.cprefix4s[i] = brown_idx.table[s.words[i]].prefix4
+        #s.cprefix6s[i] = brown_idx.table[s.words[i]].prefix6
     return s
 
 
@@ -104,6 +114,9 @@ cdef free_sent(CSentence* s):
     free(s.cprefix6s)
     free(s.suffix)
     free(s.prefix)
+    free(s.oft_upper)
+    free(s.oft_title)
+    free(s.non_alpha)
 
     free(s.parse.heads)
     free(s.parse.labels)

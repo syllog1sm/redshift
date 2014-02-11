@@ -18,6 +18,9 @@ cdef struct CSentence:
     size_t* cprefix6s
     size_t* suffix
     size_t* prefix
+    bint* oft_upper
+    bint* oft_title
+    bint* non_alpha
     CParse* parse
 
 cdef CParse* init_c_parse(size_t length, list word_ids, list heads, list labels,
