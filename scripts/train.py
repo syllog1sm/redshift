@@ -14,7 +14,7 @@ from itertools import combinations
 
 import redshift.parser
 from redshift.parser import GreedyParser, BeamParser
-import redshift.io_parse
+from redshift.sentence import PySentence
 
 USE_HELD_OUT = False
 
@@ -67,8 +67,10 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
         random.shuffle(train_sent_strs)
         train_sent_strs = train_sent_strs[:n_sents]
     train_str = '\n\n'.join(train_sent_strs)
-    train = redshift.io_parse.read_conll(train_str, vocab_thresh=vocab_thresh,
-                                         unlabelled=unlabelled)
+    #train = redshift.io_parse.read_conll(train_str, vocab_thresh=vocab_thresh,
+    #                                     unlabelled=unlabelled)
+    train = [PySentence.from_conll(i, s) for i, s in
+             enumerate(train_str.strip().split('\n\n'))]
     if profile:
         print 'profiling'
         cProfile.runctx("parser.train(train, n_iter=n_iter)", globals(),

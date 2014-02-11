@@ -1,6 +1,6 @@
 from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
-from redshift.io_parse cimport Sentence, Sentences
+from redshift.sentence cimport PySentence, Sentence
 from ext.sparsehash cimport dense_hash_map
 
 from libc.stdint cimport uint64_t, int64_t
@@ -20,10 +20,7 @@ cdef class BaseTagger:
     cdef size_t* _context
     cdef uint64_t* _features
     cdef double** beam_scores
-
-    
     cdef int tag(self, Sentence* s) except -1
-
     cdef int train_sent(self, Sentence* sent) except -1
 
 cdef class GreedyTagger(BaseTagger):

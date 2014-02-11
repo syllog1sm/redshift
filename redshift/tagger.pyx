@@ -7,7 +7,8 @@ from ext.murmurhash cimport MurmurHash64A
 from ext.sparsehash cimport *
 
 
-from redshift.io_parse cimport Sentences, Sentence
+#from redshift.io_parse cimport Sentences, Sentence
+from redshift.sentence cimport PySentence, Sentence
 from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport memcpy, memset
 from libc.stdint cimport uint64_t, int64_t
@@ -56,19 +57,20 @@ cdef class BaseTagger:
         for i in range(self.beam_width):
             self.beam_scores[i] = <double*>calloc(self.nr_tag, sizeof(double))
 
-    def add_tags(self, Sentences sents):
+    def add_tags(self, list sents):
         cdef size_t i
-        for i in range(sents.length):
-            self.tag(sents.s[i])
+        cdef PySentence sent
+        for sent in sents:
+            self.tag(sent.c_sent)
  
-    def train(self, Sentences sents, nr_iter=10):
+    def train(self, list sents, nr_iter=10):
         self.setup_classes(sents)
-        indices = list(range(sents.length))
+        indices = list(range(len(sents)))
+        cdef PySentence sent
         for n in range(nr_iter):
             for i in indices:
-                if DEBUG:
-                    print ' '.join(sents.strings[i][0])
-                self.train_sent(sents.s[i])
+                sent = sents[i]
+                self.train_sent(sent.c_sent)
             print_train_msg(n, self.guide.n_corr, self.guide.total)
             self.guide.n_corr = 0
             self.guide.total = 0
@@ -79,16 +81,18 @@ cdef class BaseTagger:
             random.shuffle(indices)
         self.guide.finalize()
 
-    def setup_classes(self, Sentences sents):
+    def setup_classes(self, list sents):
         self.nr_tag = 0
         tags = set()
         tag_freqs = defaultdict(lambda: defaultdict(int))
-        for i in range(sents.length):
-            for j in range(1, sents.s[i].length - 1):
-                tag_freqs[sents.s[i].words[j]][sents.s[i].pos[j]] += 1
-                if sents.s[i].pos[j] >= self.nr_tag:
-                    self.nr_tag = sents.s[i].pos[j]
-                    tags.add(sents.s[i].pos[j])
+        cdef PySentence sent
+        for i in range(len(sents)):
+            sent = sents[i]
+            for j in range(1, sent.length):
+                tag_freqs[sent.c_sent.words[j]][sent.c_sent.pos[j]] += 1
+                if sent.c_sent.pos[j] >= self.nr_tag:
+                    self.nr_tag = sent.c_sent.pos[j]
+                    tags.add(sent.c_sent.pos[j])
         self.nr_tag += 1
         self.guide.set_classes(range(self.nr_tag))
         types = 0
@@ -136,11 +140,6 @@ cdef class BaseTagger:
 
 
 cdef class GreedyTagger(BaseTagger):
-    def add_tags(self, Sentences sents):
-        cdef size_t i
-        for i in range(sents.length):
-            self.tag(sents.s[i])
-
     cdef int tag(self, Sentence* sent) except -1:
         cdef size_t i, clas, lookup
         cdef double incumbent, runner_up, score
