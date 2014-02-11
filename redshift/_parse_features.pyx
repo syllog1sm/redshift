@@ -144,9 +144,6 @@ cdef enum:
     S0llabs
     S0rlabs
     N0llabs
-    N0orth
-    N1orth
-    S0re_orth
 
     S0le_w
     S0le_p
@@ -159,8 +156,6 @@ cdef enum:
     S0re_c
     S0re_c6
     S0re_c4
-    
-    N0le_orth
     
     N0le_w
     N0le_p
@@ -215,7 +210,6 @@ def get_kernel_tokens():
 cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
                        size_t* tags,
                        size_t* clusters, size_t* cprefix6s, size_t* cprefix4s,
-                       size_t* orths, 
                        Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
     context[N0w] = words[k.i]
     context[N0p] = k.n0p
@@ -368,15 +362,12 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[dist] = k.i - k.s0
     else:
         context[dist] = 0
-    context[N0orth] = orths[k.i]
-    context[N1orth] = orths[k.i + 1]
 
     context[S0le_w] = words[k.s0ledge]
     context[S0le_p] = tags[k.s0ledge]
     context[S0le_c] = clusters[k.s0ledge]
     context[S0le_c6] = cprefix6s[k.s0ledge]
     context[S0le_c4] = cprefix4s[k.s0ledge]
-    context[N0le_orth] = orths[k.n0ledge]
     context[N0le_w] = words[k.n0ledge]
     context[N0le_p] = k.n0ledgep
     context[N0le_c] = clusters[k.n0ledge]
@@ -385,7 +376,6 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     
     context[S0re_p] = k.s0redgep
     if k.n0ledge > 0:
-        context[S0re_orth] = orths[k.n0ledge - 1]
         context[S0re_w] = words[k.n0ledge - 1]
         context[S0re_c] = clusters[k.n0ledge - 1]
         context[S0re_c6] = cprefix6s[k.n0ledge - 1]
@@ -395,7 +385,6 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[S0re_c] = 0
         context[S0re_c6] = 0
         context[S0re_c4] = 0
-        context[S0re_orth] = 0
     if k.prev_edit and k.i != 0:
         context[prev_edit] = 1
         context[prev_edit_wmatch] = 1 if words[k.i - 1] == words[k.i] else 0
