@@ -84,7 +84,7 @@ cdef CSentence* init_c_sent(size_t id_, size_t length, py_word_ids, py_words,
     cdef object word
     cdef dict case_dict = index.hashes.get_case_stats()
     cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
-    for i in range(1, length):
+    for i in range(length):
         case_stats = case_dict.get(py_words[i])
         if case_stats is not None:
             upper_pc, title_pc = case_stats
@@ -103,6 +103,8 @@ cdef CSentence* init_c_sent(size_t id_, size_t length, py_word_ids, py_words,
         #s.clusters[i] = brown_idx.table[s.words[i]].full
         #s.cprefix4s[i] = brown_idx.table[s.words[i]].prefix4
         #s.cprefix6s[i] = brown_idx.table[s.words[i]].prefix6
+    s.words[0] = 0
+    s.pos[0] = 0
     return s
 
 
