@@ -43,6 +43,7 @@ cdef class TransitionSystem:
         self.assign_pos = False
         self.use_edit = use_edit
         self.use_sbd = True
+        self.sbd_at = 'gov' # as opposed to 'leaf'
         self.n_labels = MAX_LABELS
         self.n_tags = MAX_TAGS
         self.allow_reattach = allow_reattach
@@ -198,8 +199,8 @@ cdef class TransitionSystem:
             return costs
         p_cost = self.p_cost(s)
         self._label_costs(self.p_start, self.p_end, tags[s.i + 1], True, p_cost, costs)
-        costs[self.s_id] = self.s_cost(s, heads, labels, edits)
-        costs[self.d_id] = self.d_cost(s, heads, labels, edits)
+        costs[self.s_id] = self.s_cost(s, heads, labels, edits, sbd)
+        costs[self.d_id] = self.d_cost(s, heads, labels, edits, sbd)
         costs[self.e_id] = self.e_cost(s, heads, labels, edits)
         costs[self.b_id] = self.b_cost(s, heads, labels, edits, sbd)
         cdef int r_cost = self.r_cost(s, heads, labels, edits, sbd)
@@ -254,15 +255,15 @@ cdef class TransitionSystem:
         else:
             raise StandardError
 
-    cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
-                               size_t* labels, bint* edits, int* costs) except -1:
-        cdef size_t oracle = self.break_tie(s, tags, heads, labels, edits)
-        cdef size_t i
-        for i in range(self.nr_class):
-            costs[i] = i != oracle
+    #cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
+    #                           size_t* labels, bint* edits, int* costs) except -1:
+    #    cdef size_t oracle = self.break_tie(s, tags, heads, labels, edits, sbd)
+    #    cdef size_t i
+    #    for i in range(self.nr_class):
+    #        costs[i] = i != oracle
 
     cdef int break_tie(self, State* s, size_t* tags, size_t* heads,
-                       size_t* labels, bint* edits) except -1:
+                       size_t* labels, bint* edits, size_t* sbd) except -1:
         if self.p_cost(s) != -1:
             return self.p_classes[tags[s.i + 1]]
         cdef bint can_push = not s.at_end_of_buffer
@@ -273,14 +274,15 @@ cdef class TransitionSystem:
             return self.r_classes[labels[s.i]]
         elif heads[s.top] == s.i and (self.allow_reattach or s.heads[s.top] == 0):
             return self.l_classes[labels[s.top]]
-        elif self.d_cost(s, heads, labels, edits) == 0:
+        elif self.d_cost(s, heads, labels, edits, sbd) == 0:
             return self.d_id
-        elif can_push and self.s_cost(s, heads, labels, edits) == 0:
+        elif can_push and self.s_cost(s, heads, labels, edits, sbd) == 0:
             return self.s_id
         else:
             return self.nr_class + 1
 
-    cdef int s_cost(self, State *s, size_t* heads, size_t* labels, bint* edits):
+    cdef int s_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
+                    size_t* sbd):
         cdef int cost = 0
         cdef size_t i, stack_i
         if s.at_end_of_buffer:
@@ -293,6 +295,7 @@ cdef class TransitionSystem:
             return 0
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
+        cost += sbd[s.top] != sbd[s.i]
         return cost
 
     cdef int r_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
@@ -314,9 +317,11 @@ cdef class TransitionSystem:
         cost += has_head_in_buffer(s, s.i, heads)
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
+        cost += sbd[s.top] != sbd[s.i]
         return cost
 
-    cdef int d_cost(self, State *s, size_t* heads, size_t* labels, bint* edits):
+    cdef int d_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
+                    size_t* sbd):
         cdef int cost = 0
         if s.heads[s.top] == 0 and not self.allow_reduce:
             return -1
@@ -330,6 +335,8 @@ cdef class TransitionSystem:
             if cost == 0 and s.second == 0:
                 return -1
         if self.use_edit and edits[s.top] and not edits[s.heads[s.top]]:
+            cost += 1
+        if sbd[s.top] != sbd[s.i]:
             cost += 1
         return cost
 
