@@ -1,6 +1,6 @@
 from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
-from redshift.io_parse cimport Sentence, Sentences
+from redshift.sentence cimport Sentence, CSentence
 from ext.sparsehash cimport dense_hash_map
 
 from libc.stdint cimport uint64_t, int64_t
@@ -22,17 +22,17 @@ cdef class BaseTagger:
     cdef double** beam_scores
 
     
-    cdef int tag(self, Sentence* s) except -1
+    cdef int tag(self, CSentence* s) except -1
 
-    cdef int train_sent(self, Sentence* sent) except -1
+    cdef int train_sent(self, CSentence* sent) except -1
 
 cdef class GreedyTagger(BaseTagger):
     pass
 
 
 cdef class BeamTagger(BaseTagger):
-    cdef TagState* extend_gold(self, TagState* s, Sentence* sent, size_t i) except NULL
-    cdef int fill_beam_scores(self, TaggerBeam beam, Sentence* sent,
+    cdef TagState* extend_gold(self, TagState* s, CSentence* sent, size_t i) except NULL
+    cdef int fill_beam_scores(self, TaggerBeam beam, CSentence* sent,
                               size_t word_i) except -1
  
 
@@ -60,6 +60,5 @@ cdef size_t get_pp(TagState* s)
 cdef struct TagState:
     double score
     TagState* prev
-    size_t alt
     size_t clas
     size_t length
