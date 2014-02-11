@@ -12,6 +12,7 @@ cdef struct CSentence:
     size_t id
     size_t length
     size_t* words
+    size_t* owords
     size_t* pos
     size_t* clusters
     size_t* cprefix4s

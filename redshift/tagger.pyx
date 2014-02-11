@@ -43,7 +43,7 @@ cdef class BaseTagger:
         self.guide = Perceptron(100, pjoin(model_dir, 'tagger.gz'))
         if trained:
             self.guide.load(pjoin(model_dir, 'tagger.gz'), thresh=self.feat_thresh)
-        self.features = Extractor(basic + clusters + case + orth, [])
+        self.features = Extractor(basic + clusters + case + orth, [], bag_of_words=[])
         self.tagdict = dense_hash_map[size_t, size_t]()
         self.tagdict.set_empty_key(0)
         self.nr_tag = 100

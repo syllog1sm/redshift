@@ -20,7 +20,6 @@ def get_labels(sents):
     return tags, list(sorted(left_labels)), list(sorted(right_labels))
 
 
-
 def normalize_word(word):
     if '-' in word and word[0] != '-':
         return '!HYPHEN'
@@ -72,17 +71,19 @@ cdef CSentence* init_c_sent(size_t id_, size_t length, py_word_ids, py_words,
     s.id = id_
     s.parse = init_c_parse(length, py_word_ids, py_heads, py_labels, py_edits)
     s.words = <size_t*>calloc(size, sizeof(size_t))
+    s.owords = <size_t*>calloc(size, sizeof(size_t))
     s.pos = <size_t*>calloc(size, sizeof(size_t))       
     s.clusters = <size_t*>calloc(size, sizeof(size_t))
     s.cprefix4s = <size_t*>calloc(size, sizeof(size_t))
     s.cprefix6s = <size_t*>calloc(size, sizeof(size_t))
     s.suffix = <size_t*>calloc(size, sizeof(size_t))
     s.prefix = <size_t*>calloc(size, sizeof(size_t))
-    s.oft_upper = <bint*>calloc(length, sizeof(bint))
-    s.oft_title = <bint*>calloc(length, sizeof(bint))
-    s.non_alpha = <bint*>calloc(length, sizeof(bint))
+    s.oft_upper = <bint*>calloc(size, sizeof(bint))
+    s.oft_title = <bint*>calloc(size, sizeof(bint))
+    s.non_alpha = <bint*>calloc(size, sizeof(bint))
     cdef object word
     cdef dict case_dict = index.hashes.get_case_stats()
+    cdef size_t oword
     cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
     for i in range(length):
         case_stats = case_dict.get(py_words[i])
@@ -96,13 +97,15 @@ cdef CSentence* init_c_sent(size_t id_, size_t length, py_word_ids, py_words,
         elif not py_words[i].isalpha():
             s.non_alpha[i] = True
         word = normalize_word(py_words[i])
+        s.owords[i] = index.hashes.encode_word(py_words[i])
         s.words[i] = index.hashes.encode_word(word)
         s.suffix[i] = index.hashes.encode_word(py_words[i][-3:])
         s.prefix[i] = index.hashes.encode_word(py_words[i][0])
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
-        #s.clusters[i] = brown_idx.table[s.words[i]].full
-        #s.cprefix4s[i] = brown_idx.table[s.words[i]].prefix4
-        #s.cprefix6s[i] = brown_idx.table[s.words[i]].prefix6
+        if oword < brown_idx.n:
+            s.clusters[i] = brown_idx.table[s.owords[i]].full
+            s.cprefix4s[i] = brown_idx.table[s.owords[i]].prefix4
+            s.cprefix6s[i] = brown_idx.table[s.owords[i]].prefix6
     s.words[0] = 0
     s.pos[0] = 0
     return s
@@ -110,6 +113,7 @@ cdef CSentence* init_c_sent(size_t id_, size_t length, py_word_ids, py_words,
 
 cdef free_sent(CSentence* s):
     free(s.words)
+    free(s.owords)
     free(s.pos)
     free(s.clusters)
     free(s.cprefix4s)
