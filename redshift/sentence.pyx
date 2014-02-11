@@ -164,11 +164,10 @@ cdef class Sentence:
         return cls(id_, [Token.from_str(i, t) for i, t in
                    enumerate(sent_str.split('\n'))])
 
-
     @classmethod
     def from_pos(cls, id_, object sent_str):
-        return cls(id_, [Token.from_pos(i, *t.split('|')) for i, t in
-                   enumerate(sent_str.split(' '))])
+        return cls(id_, [Token.from_pos(i, *t.rsplit('/', 1)) for i, t in
+                   enumerate(sent_str.strip().split(' '))])
 
     property length:
         def __get__(self): return self.length
