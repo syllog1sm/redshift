@@ -15,7 +15,7 @@ from sentence import get_labels
 from sentence cimport Sentence, CSentence
 from transitions cimport TransitionSystem, transition_to_str 
 from beam cimport Beam
-#from tagger cimport GreedyTagger, BeamTagger
+from tagger cimport GreedyTagger, BeamTagger
 
 from features.extractor cimport Extractor
 import _parse_features
@@ -79,7 +79,7 @@ cdef class BaseParser:
     cdef Extractor extractor
     cdef Perceptron guide
     cdef TransitionSystem moves
-    #cdef BeamTagger tagger
+    cdef BeamTagger tagger
     cdef object model_dir
     cdef bint auto_pos
     cdef size_t beam_width
@@ -132,7 +132,7 @@ cdef class BaseParser:
         self.auto_pos = auto_pos
         self.say_config()
         self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model.gz'))
-        #self.tagger = BeamTagger(model_dir, clean=False, reuse_idx=True)
+        self.tagger = BeamTagger(model_dir, clean=False, reuse_idx=True)
 
     def setup_model_dir(self, loc, clean):
         if clean and os.path.exists(loc):
@@ -147,7 +147,7 @@ cdef class BaseParser:
         cdef size_t i, j, n
         cdef Sentence sent
         self.say_config()
-        #self.tagger.setup_classes(sents)
+        self.tagger.setup_classes(sents)
         move_classes, nr_label = self.moves.set_labels(*get_labels(sents))
         #self.features.set_nr_label(nr_label)
         self.guide.set_classes(range(move_classes))
@@ -160,29 +160,29 @@ cdef class BaseParser:
             indices.sort(key=lambda i: sents[i].length)
         for n in range(n_iter):
             for i in indices:
-                #if self.auto_pos:
-                #    self.tagger.train_sent(sents.s[i])
                 sent = sents[i]
+                if self.auto_pos:
+                    self.tagger.train_sent(sent.c_sent)
                 if self.train_alg == 'static':
                     self.static_train(n, sent.c_sent)
                 else:
                     self.dyn_train(n, sent.c_sent)
-            #if self.auto_pos:
-            #    print_train_msg(n, self.tagger.guide.n_corr, self.tagger.guide.total,
-            #                    0, 0)
+            if self.auto_pos:
+                print_train_msg(n, self.tagger.guide.n_corr, self.tagger.guide.total,
+                                0, 0)
             print_train_msg(n, self.guide.n_corr, self.guide.total, self.guide.cache.n_hit,
                             self.guide.cache.n_miss)
             self.guide.n_corr = 0
             self.guide.total = 0
             if n % 2 == 1 and self.feat_thresh > 1:
                 self.guide.prune(self.feat_thresh)
-                #self.tagger.guide.prune(self.feat_thresh / 2)
+                self.tagger.guide.prune(self.feat_thresh / 2)
             if n < 3:
                 self.guide.reindex()
-                #self.tagger.guide.reindex()
+                self.tagger.guide.reindex()
             random.shuffle(indices)
-        #if self.auto_pos:
-        #    self.tagger.guide.finalize()
+        if self.auto_pos:
+            self.tagger.guide.finalize()
         self.guide.finalize()
 
     cdef int dyn_train(self, int iter_num, CSentence* sent) except -1:
@@ -249,8 +249,8 @@ cdef class BeamParser(BaseParser):
         cdef size_t p_idx
         cdef Kernel* kernel
         cdef double** beam_scores = <double**>malloc(beam.k * sizeof(double*))
-        #if self.auto_pos:
-        #    self.tagger.tag(sent)
+        if self.auto_pos:
+            self.tagger.tag(sent)
         self.guide.cache.flush()
         while not beam.is_finished:
             for p_idx in range(beam.bsize):
@@ -279,11 +279,11 @@ cdef class BeamParser(BaseParser):
         cdef double max_violn = 0
         cdef size_t t = 0
         # Backup pos tags
-        #cdef size_t* bu_tags
-        #if self.auto_pos:
-        #    bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
-        #    memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
-        #    self.tagger.tag(sent)
+        cdef size_t* bu_tags
+        if self.auto_pos:
+            bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
+            memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
+            self.tagger.tag(sent)
         self.guide.cache.flush()
         while not beam.is_finished:
             for i in range(beam.bsize):
@@ -312,9 +312,9 @@ cdef class BeamParser(BaseParser):
         else:
             counted = self._count_feats(sent, t, t, phist, ghist)
             self.guide.batch_update(counted)
-        #if self.auto_pos:
-        #    memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
-        #    free(bu_tags)
+        if self.auto_pos:
+            memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
+            free(bu_tags)
         free(ghist)
         free(phist)
         free(beam_scores)
@@ -326,11 +326,11 @@ cdef class BeamParser(BaseParser):
         cdef int* costs
         cdef State* p
         cdef State* g
-        #cdef size_t* bu_tags
-        #if self.auto_pos:
-        #    bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
-        #    memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
-        #    self.tagger.tag(sent)
+        cdef size_t* bu_tags
+        if self.auto_pos:
+            bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
+            memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
+            self.tagger.tag(sent)
         ghist = <size_t*>malloc(sent.length * 3 * sizeof(size_t))
         phist = <size_t*>malloc(sent.length * 3 * sizeof(size_t))
         for i in range(sent.length * 3):
@@ -382,9 +382,9 @@ cdef class BeamParser(BaseParser):
         if max_violn >= 0:
             counted = self._count_feats(sent, pt, gt, phist, ghist)
             self.guide.batch_update(counted)
-        #if self.auto_pos:
-        #    memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
-        #    free(bu_tags)
+        if self.auto_pos:
+            memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
+            free(bu_tags)
         free(ghist)
         free(phist)
         free(pred_scores)
@@ -464,8 +464,8 @@ cdef class GreedyParser(BaseParser):
         cdef uint64_t* feats
         s = init_state(sent.length)
         sent.parse.n_moves = 0
-        #if self.auto_pos:
-        #    self.tagger.tag(sent)
+        if self.auto_pos:
+            self.tagger.tag(sent)
         while not s.is_finished:
             fill_kernel(s, sent.pos)
             feats = self._extract(sent, &s.kernel)
@@ -492,11 +492,11 @@ cdef class GreedyParser(BaseParser):
         cdef uint64_t* feats
         cdef size_t _ = 0
 
-        #cdef size_t* bu_tags 
-        #if self.auto_pos:
-        #    bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
-        #    memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
-        #    self.tagger.tag(sent)
+        cdef size_t* bu_tags 
+        if self.auto_pos:
+            bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
+            memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
+            self.tagger.tag(sent)
         while not s.is_finished:
             fill_kernel(s, sent.pos)
             self.moves.fill_valid(s, valid)
@@ -513,9 +513,9 @@ cdef class GreedyParser(BaseParser):
                 self.moves.transition(gold, s)
             self.guide.n_corr += (gold == pred)
             self.guide.total += 1
-        #if self.auto_pos:
-        #    memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
-        #    free(bu_tags)
+        if self.auto_pos:
+            memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
+            free(bu_tags)
         free_state(s)
         free(valid)
 
@@ -526,10 +526,10 @@ cdef class GreedyParser(BaseParser):
         cdef uint64_t* feats
         cdef size_t _ = 0
         cdef size_t* bu_tags 
-        #if self.auto_pos:
-        #    bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
-        #    memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
-        #    self.tagger.tag(sent)
+        if self.auto_pos:
+            bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
+            memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
+            self.tagger.tag(sent)
  
         while not s.is_finished:
             fill_kernel(s, sent.pos)
