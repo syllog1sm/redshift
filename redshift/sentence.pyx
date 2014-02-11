@@ -177,14 +177,14 @@ cdef class Sentence:
         label_idx = index.hashes.reverse_label_index()
         pos_idx = index.hashes.reverse_pos_index()
         for i, token in enumerate(self.tokens):
-            if self.c_sent.parse.heads[i] == self.length - 1:
+            if self.c_sent.parse.heads[i+1] == self.length - 1:
                 head = -1
             else:
-                head = <int>(self.c_sent.parse.heads[i])
-            pos = pos_idx[self.c_sent.pos[i]]
-            label = label_idx.get(self.c_sent.parse.labels[i], 'ERR')
-            fields = (self.c_sent.parse.sbd[i], id, token.word, pos, head, label)
-            tokens.append('\t'.join(fields))
+                head = <int>(self.c_sent.parse.heads[i+1] - 1)
+            pos = pos_idx[self.c_sent.pos[i+1]]
+            label = label_idx.get(self.c_sent.parse.labels[i+1], 'ERR')
+            fields = (self.c_sent.parse.sbd[i+1], i, token.word, pos, head, label)
+            tokens.append('\t'.join([str(f) for f in fields]))
         return '\n'.join(tokens)
 
 
