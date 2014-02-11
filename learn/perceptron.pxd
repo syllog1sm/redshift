@@ -45,6 +45,7 @@ cdef class Perceptron:
     cdef bint is_trained
     cdef float n_corr
     cdef float total
+    cdef bint accept_new_feats
 
     cdef size_t nr_raws
     cdef DenseFeature** raws
@@ -63,5 +64,6 @@ cdef class Perceptron:
     cdef int fill_scores(self, uint64_t* features, double* scores) except -1
     cdef uint64_t predict_best_class(self, uint64_t* features)
     cdef int64_t finalize(self) except -1
+    cdef int unfinalize(self) except -1
 
 

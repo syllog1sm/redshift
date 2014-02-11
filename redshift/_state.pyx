@@ -57,6 +57,8 @@ cdef size_t pop_stack(State *s) except 0:
     assert s.top <= s.n, s.top
     assert popped != 0
     cdef size_t child
+    if s.stack_len == 0:
+        s.segment = False
     return popped
 
 
@@ -104,20 +106,23 @@ cdef uint64_t hash_kernel(Kernel* k):
 
 cdef int fill_kernel(State *s, size_t* tags) except -1:
     cdef size_t i, val
+    s.kernel.segment = s.segment
     s.kernel.i = s.i
     s.kernel.n0p = tags[s.i]
     s.kernel.n1p = tags[s.i + 1]
     s.kernel.n2p = tags[s.i + 2]
     s.kernel.n3p = tags[s.i + 3]
     s.kernel.s0 = s.top
+    if s.heads[s.top] != 0 and s.heads[s.top] == s.second:
+        assert s.labels[s.top] != 0
     s.kernel.s0p = tags[s.top]
-    s.kernel.hs0 = s.heads[s.top]
-    s.kernel.hs0p = tags[s.heads[s.top]]
-    s.kernel.h2s0 = s.heads[s.heads[s.top]]
-    s.kernel.h2s0p = tags[s.heads[s.heads[s.top]]]
+    s.kernel.s1 = s.second
+    s.kernel.s1p = tags[s.kernel.s1]
+    s.kernel.s2 = s.stack[s.stack_len - 3] if s.stack_len >= 3 else 0
+    s.kernel.s2p = tags[s.kernel.s2]
     s.kernel.Ls0 = s.labels[s.top]
-    s.kernel.Lhs0 = s.labels[s.heads[s.top]]
-    s.kernel.Lh2s0 = s.labels[s.heads[s.heads[s.top]]]
+    s.kernel.Ls1 = s.labels[s.kernel.s1]
+    s.kernel.Ls2 = s.labels[s.kernel.s2]
     s.kernel.s0ledge = s.ledges[s.top]
     s.kernel.s0ledgep = tags[s.ledges[s.top]]
     s.kernel.n0ledge = s.ledges[s.i]
@@ -139,13 +144,31 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
         s.kernel.prev_edit = False
         s.kernel.prev_prev_edit = False
         s.kernel.prev_tag = False
-
+    cdef size_t next_
+    cdef size_t next_next
+    if s.top != 0:
+        next_ = s.top + 1
+        s.kernel.next_edit = True if s.heads[next_] == next_ else False
+        s.kernel.next_tag = tags[next_]
+        next_next = s.top + 2
+        s.kernel.next_next_edit = True if s.heads[next_next] == next_next else False
     fill_subtree(s.l_valencies[s.top], s.l_children[s.top],
                  s.labels, tags, &s.kernel.s0l)
     fill_subtree(s.r_valencies[s.top], s.r_children[s.top],
                  s.labels, tags, &s.kernel.s0r)
     fill_subtree(s.l_valencies[s.i], s.l_children[s.i],
                  s.labels, tags, &s.kernel.n0l)
+    if s.t >= 5:
+        s.kernel.hist[0] = s.history[s.t - 1]
+        s.kernel.hist[1] = s.history[s.t - 2]
+        s.kernel.hist[2] = s.history[s.t - 3]
+        s.kernel.hist[3] = s.history[s.t - 4]
+        s.kernel.hist[4] = s.history[s.t - 5]
+    else:
+        for i in range(s.t):
+            s.kernel.hist[i] = s.history[s.t - (i + 1)]
+        for i in range(s.t, 5):
+            s.kernel.hist[i] = 0
 
 
 #cdef Kernel* kernel_from_s(Kernel* parent) except NULL:
@@ -257,6 +280,13 @@ cdef int has_head_in_stack(State *s, size_t word, size_t* heads) except -1:
             return 1
     return 0
 
+cdef int nr_headless(State* s) except -1:
+    cdef size_t n = 0
+    cdef size_t i
+    for i in range(s.stack_len):
+        n += s.heads[s.stack[i]] == 0
+    return n
+
 cdef int fill_edits(State* s, bint* edits) except -1:
     cdef size_t i, j
     i = 0
@@ -278,14 +308,12 @@ cdef int fill_edits(State* s, bint* edits) except -1:
 
 
 cdef bint has_root_child(State *s, size_t token):
-    # TODO: This is an SBD thingy currently not in use
     if s.at_end_of_buffer:
         return False
-    return False
     # TODO: Refer to the root label constant instead here!!
     # TODO: Instead update left-arc on root so that it attaches the rest of the
     # stack to S0
-    #return s.labels[get_l(s, token)] == 1
+    return s.labels[get_l(s, token)] == 3
 
 
 DEF PADDING = 5
@@ -293,7 +321,7 @@ DEF PADDING = 5
 
 cdef State* init_state(size_t n):
     cdef size_t i, j
-    cdef State* s = <State*>malloc(sizeof(State))
+    cdef State* s = <State*>calloc(1, sizeof(State))
     s.n = n
     s.t = 0
     s.i = 1
@@ -302,6 +330,7 @@ cdef State* init_state(size_t n):
     s.top = 0
     s.second = 0
     s.stack_len = 0
+    s.segment = False
     s.is_finished = False
     s.at_end_of_buffer = n == 2
     n = n + PADDING
@@ -309,6 +338,7 @@ cdef State* init_state(size_t n):
     # These make the tags match the OOB/ROOT/NONE values.
     s.heads = <size_t*>calloc(n, sizeof(size_t))
     s.labels = <size_t*>calloc(n, sizeof(size_t))
+    s.sbd = <size_t*>calloc(n, sizeof(size_t))
     s.guess_labels = <size_t*>calloc(n, sizeof(size_t))
     s.l_valencies = <size_t*>calloc(n, sizeof(size_t))
     s.r_valencies = <size_t*>calloc(n, sizeof(size_t))
@@ -323,7 +353,7 @@ cdef State* init_state(size_t n):
     s.history = <size_t*>calloc(n * 3, sizeof(size_t))
     return s
 
-cdef copy_state(State* s, State* old):
+cdef int copy_state(State* s, State* old) except -1:
     cdef size_t nbytes, i
     if s.i > old.i:
         nbytes = (s.i + 1) * sizeof(size_t)
@@ -332,6 +362,7 @@ cdef copy_state(State* s, State* old):
     s.n = old.n
     s.t = old.t
     s.i = old.i
+    s.segment = old.segment
     s.cost = old.cost
     s.score = old.score
     s.top = old.top
@@ -345,6 +376,7 @@ cdef copy_state(State* s, State* old):
     memcpy(s.r_valencies, old.r_valencies, nbytes)
     memcpy(s.heads, old.heads, nbytes)
     memcpy(s.labels, old.labels, nbytes)
+    memcpy(s.sbd, old.sbd, nbytes)
     memcpy(s.guess_labels, old.guess_labels, nbytes)
     memcpy(s.history, old.history, old.t * sizeof(size_t))
     for i in range(old.i + 2):
@@ -357,6 +389,7 @@ cdef free_state(State* s):
     free(s.heads)
     free(s.labels)
     free(s.guess_labels)
+    free(s.sbd)
     free(s.l_valencies)
     free(s.r_valencies)
     free(s.ledges)

@@ -16,6 +16,7 @@ cdef enum:
     LEFT
     RIGHT
     EDIT
+    BOUNDARY
     ASSIGN_POS
     N_MOVES
 
@@ -41,6 +42,7 @@ cdef class TransitionSystem:
     def __cinit__(self, allow_reattach=False, allow_reduce=False, use_edit=False):
         self.assign_pos = False
         self.use_edit = use_edit
+        self.use_sbd = True
         self.n_labels = MAX_LABELS
         self.n_tags = MAX_TAGS
         self.allow_reattach = allow_reattach
@@ -57,7 +59,8 @@ cdef class TransitionSystem:
         self.s_id = 0
         self.d_id = self.s_id + 1
         self.e_id = self.d_id + 1
-        self.l_start = self.e_id + 1
+        self.b_id = self.e_id + 1
+        self.l_start = self.b_id + 1
         self.l_end = 0
         self.r_start = self.l_start + 1
         self.r_end = 0
@@ -65,6 +68,7 @@ cdef class TransitionSystem:
         self.p_end = 0
         self.counter = 0
         self.erase_label = index.hashes.encode_label('erased')
+        self.root_label = index.hashes.encode_label('ROOT')
         # TODO: Clean this up, or rename them or something
         self.left_labels = []
         self.right_labels = []
@@ -77,9 +81,11 @@ cdef class TransitionSystem:
         self.labels[self.s_id] = 0
         self.labels[self.d_id] = 0
         self.labels[self.e_id] = 0
+        self.labels[self.b_id] = 0
         self.moves[self.s_id] = <size_t>SHIFT
         self.moves[self.d_id] = <size_t>REDUCE
         self.moves[self.e_id] = <size_t>EDIT
+        self.moves[self.b_id] = <size_t>BOUNDARY
         clas = self.l_start
         for label in left_labels:
             self.moves[clas] = <size_t>LEFT
@@ -136,6 +142,18 @@ cdef class TransitionSystem:
             head = s.top
             add_dep(s, head, child, label)
             push_stack(s)
+        # Left-structured boundaries atm.
+        elif move == BOUNDARY:
+            assert s.stack_len != 0
+            assert s.top != 0
+            if s.heads[s.top] == 0:
+                add_dep(s, s.n, s.top, self.root_label)
+            elif s.heads[s.stack[0]] == 0:
+                add_dep(s, s.n, s.stack[0], self.root_label)
+            else:
+                raise StandardError
+            s.segment = True
+            pop_stack(s)
         elif move == EDIT:
             if s.heads[s.top] != 0:
                 del_r_child(s, s.heads[s.top])
@@ -169,7 +187,7 @@ cdef class TransitionSystem:
             s.is_finished = True
   
     cdef int* get_costs(self, State* s, size_t* tags, size_t* heads,
-                        size_t* labels, bint* edits) except NULL:
+                        size_t* labels, bint* edits, size_t* sbd) except NULL:
         if s.stack_len >= 1:
             assert s.top != 0, s.stack_len
         cdef size_t i
@@ -183,12 +201,13 @@ cdef class TransitionSystem:
         costs[self.s_id] = self.s_cost(s, heads, labels, edits)
         costs[self.d_id] = self.d_cost(s, heads, labels, edits)
         costs[self.e_id] = self.e_cost(s, heads, labels, edits)
-        cdef int r_cost = self.r_cost(s, heads, labels, edits)
+        costs[self.b_id] = self.b_cost(s, heads, labels, edits, sbd)
+        cdef int r_cost = self.r_cost(s, heads, labels, edits, sbd)
         self._label_costs(self.r_start, self.r_end, labels[s.i], heads[s.i] == s.top,
                           r_cost, costs)
-        cdef int l_cost = self.l_cost(s, heads, labels, edits)
+        cdef int l_cost = self.l_cost(s, heads, labels, edits, sbd)
         self._label_costs(self.l_start, self.l_end, labels[s.top],
-                          heads[s.top] == s.i, l_cost, costs)
+                          heads[s.top] == s.i and sbd[s.top] != s.i, l_cost, costs)
         return costs
 
     cdef int _label_costs(self, size_t start, size_t end, size_t label, bint add,
@@ -212,19 +231,28 @@ cdef class TransitionSystem:
         if s.is_finished:
             return 0
         cdef bint can_push = not s.at_end_of_buffer
+        if s.segment and s.stack_len:
+            can_push = False
         cdef bint can_pop = s.top != 0
         if can_push:
             valid[self.s_id] = 0
         if can_pop and (s.heads[s.top] != 0 or (self.allow_reduce and s.stack_len >= 2)):
             valid[self.d_id] = 0
-        if can_pop and self.use_edit:
+        if can_pop and self.use_edit and not s.segment:
             valid[self.e_id] = 0
+        if can_pop and self.use_sbd and nr_headless(s) == 1:
+            valid[self.b_id] = 0
         if can_push and can_pop:
             for i in range(self.r_start, self.r_end):
                 valid[i] = 0
-        if can_pop and (s.heads[s.top] == 0 or self.allow_reattach):
+        if can_pop and (s.heads[s.top] == 0 or self.allow_reattach) and not s.segment:
             for i in range(self.l_start, self.l_end):
                 valid[i] = 0
+        for i in range(self.nr_class):
+            if valid[i] == 0:
+                break
+        else:
+            raise StandardError
 
     cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
                                size_t* labels, bint* edits, int* costs) except -1:
@@ -257,6 +285,8 @@ cdef class TransitionSystem:
         cdef size_t i, stack_i
         if s.at_end_of_buffer:
             return -1
+        if s.segment:
+            return -1
         if self.use_edit and edits[s.i]:
             return 0
         if s.stack_len < 1:
@@ -265,21 +295,22 @@ cdef class TransitionSystem:
         cost += has_head_in_stack(s, s.i, heads)
         return cost
 
-    cdef int r_cost(self, State *s, size_t* heads, size_t* labels, bint* edits):
+    cdef int r_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
+                    size_t* sbd):
         cdef int cost = 0
         cdef size_t i, buff_i, stack_i
         if s.at_end_of_buffer:
             return -1
         if s.stack_len < 1:
             return -1
-        if has_root_child(s, s.i):
+        if s.segment:
             return -1
         if self.use_edit and edits[s.top] and not edits[s.i]:
             return 1
         if self.use_edit and edits[s.i]:
             return 0
         if heads[s.i] == s.top:
-            return 0
+            return cost
         cost += has_head_in_buffer(s, s.i, heads)
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
@@ -291,6 +322,8 @@ cdef class TransitionSystem:
             return -1
         if s.stack_len < 1:
             return -1
+        if s.segment:
+            return 0
         cost += has_child_in_buffer(s, s.top, heads)
         if self.allow_reattach:
             cost += has_head_in_buffer(s, s.top, heads)
@@ -300,14 +333,15 @@ cdef class TransitionSystem:
             cost += 1
         return cost
 
-    cdef int l_cost(self, State *s, size_t* heads, size_t* labels, bint* edits) except -9000:
+    cdef int l_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
+                    size_t* sbd) except -9000:
         cdef size_t buff_i, i
         cdef int cost = 0
         if s.stack_len < 1:
             return -1
         if s.heads[s.top] != 0 and not self.allow_reattach:
             return -1
-        if has_root_child(s, s.i):
+        if s.segment:
             return -1
         # This would form a dep between an edit and non-edit word
         if self.use_edit and edits[s.top] and not edits[s.i]:
@@ -315,19 +349,38 @@ cdef class TransitionSystem:
         elif self.use_edit and edits[s.i]:
             return 0
         if heads[s.top] == s.i:
-            return 0
-        cost +=  has_head_in_buffer(s, s.top, heads)
-        cost +=  has_child_in_buffer(s, s.top, heads)
+            return cost
+        cost += has_head_in_buffer(s, s.top, heads)
+        cost += has_child_in_buffer(s, s.top, heads)
         if self.allow_reattach and heads[s.top] == s.heads[s.top]:
             cost += 1
         if self.allow_reduce and heads[s.top] == s.second:
             cost += 1
         return cost
-    
+
+    cdef int b_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
+                    size_t* sbd):
+        if not self.use_sbd:
+            return -1
+        if nr_headless(s) != 1:
+            return -1
+        if s.segment:
+            return -1
+        cdef size_t last_clas = s.history[s.t - 1]
+        if self.moves[last_clas] != SHIFT and self.moves[last_clas] != RIGHT:
+            return -1
+
+        if sbd[s.top] == sbd[s.i]:
+            return 1
+        else:
+            return 0
+
     cdef int e_cost(self, State *s, size_t* heads, size_t* labels, bint* edits):
         if not self.use_edit:
             return -1
         if s.top == 0:
+            return -1
+        if s.segment:
             return -1
         if edits[s.top]:
             return 0
@@ -345,4 +398,3 @@ cdef class TransitionSystem:
         if last_move == SHIFT or last_move == RIGHT:
             return 0
         return -1
-

@@ -20,23 +20,28 @@ cdef struct Kernel:
     size_t s0
     size_t s0p
     size_t Ls0
-    size_t hs0
-    size_t hs0p
-    size_t h2s0
-    size_t h2s0p
-    size_t Lhs0
-    size_t Lh2s0
+    size_t s1
+    size_t s1p
+    size_t s2
+    size_t s2p
+    size_t Ls1
+    size_t Ls2
     size_t s0ledge
     size_t s0ledgep
     size_t s0redgep
     size_t n0ledge
     size_t n0ledgep
+    bint segment
     bint prev_edit
     bint prev_prev_edit
+    bint next_edit
+    bint next_next_edit
     size_t prev_tag
+    size_t next_tag
     Subtree s0l
     Subtree s0r
     Subtree n0l
+    size_t[5] hist
 
 
 cdef struct FastState:
@@ -58,6 +63,7 @@ cdef struct State:
     size_t stack_len
     size_t top
     size_t second
+    bint segment
     bint is_finished
     bint at_end_of_buffer
     int cost
@@ -72,6 +78,7 @@ cdef struct State:
     size_t** l_children
     size_t** r_children
     size_t* history
+    size_t* sbd
     Kernel kernel
 
 cdef uint64_t hash_kernel(Kernel* k)
@@ -99,8 +106,9 @@ cdef int has_head_in_buffer(State *s, size_t word, size_t* heads) except -1
 cdef int has_child_in_stack(State *s, size_t word, size_t* heads) except -1
 cdef int has_head_in_stack(State *s, size_t word, size_t* heads) except -1
 cdef bint has_root_child(State *s, size_t token)
+cdef int nr_headless(State *s) except -1
 
 cdef int fill_edits(State *s, bint* edits) except -1
 cdef State* init_state(size_t n)
 cdef free_state(State* s)
-cdef copy_state(State* s, State* old)
+cdef int copy_state(State* s, State* old) except -1

@@ -8,6 +8,7 @@ from libc.stdint cimport uint64_t, int64_t
 
 from libcpp.queue cimport priority_queue
 from libcpp.utility cimport pair
+cimport cython
 
 from cython.operator cimport preincrement as inc
 from cython.operator cimport dereference as deref
@@ -43,8 +44,8 @@ cdef class Beam:
         fill_kernel(self.beam[idx], tags)
         return &self.beam[idx].kernel
 
+    @cython.cdivision(True)
     cdef int extend_states(self, double** ext_scores) except -1:
-        global merged
         # Former states are now parents, beam will hold the extensions
         cdef State** parents = self.parents
         self.parents = self.beam
@@ -52,33 +53,37 @@ cdef class Beam:
         self.psize = self.bsize
         self.bsize = 0
         cdef size_t parent_idx, clas, move_id
-        cdef double parent_score, score
+        cdef double mean_score, score
         cdef double* scores
         cdef priority_queue[pair[double, size_t]] next_moves = priority_queue[pair[double, size_t]]()
         # Get best parent/clas pairs by score
+        cdef State* parent
         for parent_idx in range(self.psize):
-            parent_score = self.parents[parent_idx].score
+            parent = self.parents[parent_idx]
             # Account for variable-length transition histories
-            if self.parents[parent_idx].is_finished:
+            if parent.is_finished:
                 move_id = (parent_idx * self.trans.nr_class) + 0
-                mean_score = parent_score / self.parents[parent_idx].t
-                next_moves.push(pair[double, size_t](parent_score + mean_score, move_id))
+                mean_score = parent.score / self.t
+                next_moves.push(pair[double, size_t](parent.score + mean_score, move_id))
                 continue
             scores = ext_scores[parent_idx]
+            r_score = scores[self.trans.r_start]
+            parent.guess_labels[parent.i] = self.trans.labels[self.trans.r_start]
             for clas in range(self.trans.nr_class):
                 if self.valid[parent_idx][clas] != -1:
-                    score = parent_score + scores[clas]
+                    score = parent.score + scores[clas]
                     move_id = (parent_idx * self.trans.nr_class) + clas
                     next_moves.push(pair[double, size_t](score, move_id))
+                if scores[clas] >= r_score and self.trans.r_start < clas < self.trans.r_end:
+                    r_score = scores[clas]
+                    parent.guess_labels[parent.i] = self.trans.labels[clas]
         cdef pair[double, size_t] data
         # Apply extensions for best continuations
         cdef State* s
-        cdef State* parent
         cdef uint64_t key
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
             parent_idx = data.second / self.trans.nr_class
-            assert parent_idx < self.psize
             clas = data.second % self.trans.nr_class
             parent = self.parents[parent_idx]
             # We've got two arrays of states, and we swap beam-for-parents.
@@ -87,7 +92,6 @@ cdef class Beam:
             copy_state(s, parent)
             s.score = data.first
             if not s.is_finished:
-                assert self.costs[parent_idx][clas] != -1
                 s.cost += self.costs[parent_idx][clas]
                 self.trans.transition(clas, s)
             self.bsize += 1
@@ -103,7 +107,7 @@ cdef class Beam:
             self.is_finished = True
 
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
-                        size_t* labels, bint* sbd, bint* edits) except -1:
+                        size_t* labels, size_t* sbd, bint* edits) except -1:
         cdef size_t i
         # No need to copy heads for root and start symbols
         for i in range(1, self.length - 1):
@@ -111,6 +115,7 @@ cdef class Beam:
             #tags[i] = self.beam[0].tags[i]
             heads[i] = self.beam[0].heads[i]
             labels[i] = self.beam[0].labels[i]
+            sbd[i] = self.beam[0].sbd[i]
             # TODO: Do sentence boundary detection here
         fill_edits(self.beam[0], edits)
  
