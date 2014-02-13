@@ -164,12 +164,14 @@ cdef class PySentence:
         labels = ['ERR']
         ids = [None]
         edits = [False]
-        for token in tokens:
+        for i, token in enumerate(tokens):
             words.append(token.word)
             tags.append(token.pos)
             edits.append(token.is_edit)
-            heads.append(token.head if token.head != -1 else len(tokens))
-            heads[-1] = heads[-1] + 1
+            if token.head == -1:
+                heads.append(n - 1)
+            else:
+                heads.append(token.head + 1)
             labels.append(token.label)
             ids.append(token.id)
         ids.append(None)
@@ -216,7 +218,7 @@ cdef class PySentence:
                 head = <int>(self.c_sent.parse.heads[i+1] - 1)
             pos = pos_idx[self.c_sent.pos[i+1]]
             label = label_idx.get(self.c_sent.parse.labels[i+1], 'ERR')
-            fields = (self.c_sent.parse.sbd[i+1], i, token.word, pos, head, label)
+            fields = (self.c_sent.parse.sbd[i+1], i, token.word, pos, head, label, token.is_edit)
             tokens.append('\t'.join([str(f) for f in fields]))
         return '\n'.join(tokens)
 
