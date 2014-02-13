@@ -209,7 +209,7 @@ cdef class TransitionSystem:
             print label
             print s.is_finished
             raise StandardError(clas)
-        if s.i == (s.n - 1):
+        if s.i >= (s.n - 1):
             s.at_end_of_buffer = True
         if s.at_end_of_buffer and s.stack_len == 0:
             s.is_finished = True
@@ -231,11 +231,20 @@ cdef class TransitionSystem:
                           r_cost, costs)
         cdef int l_cost = self.l_cost(s, heads, labels, edits, sbd)
         self._label_costs(self.l_start, self.l_end, labels[s.top],
-                          heads[s.top] == s.i and sbd[s.top] != s.i, l_cost, costs)
+                          heads[s.top] == s.i, l_cost, costs)
         for i in range(self.nr_class):
             if costs[i] == 0:
                 break
         else:
+            print 'Conditions:', s.stack_len, s.n, s.at_end_of_buffer, s.segment
+            print 'Top, i', s.top - 1, s.i - 1
+            print 'Head set:', s.heads[s.top] - 1 if s.heads[s.top] != 0 else 0
+            print 'Gold heads:', heads[s.top] - 1, heads[s.i] - 1
+            print 'SBD', sbd[s.top], sbd[s.i]
+            print 'Edits', edits[s.top], edits[s.i]
+            print l_cost
+            print nr_headless(s)
+            print costs[self.b_id]
             raise StandardError
         return costs
 
@@ -294,14 +303,13 @@ cdef class TransitionSystem:
         if not can_shift(s):
             return -1
         cdef int cost = 0
-        cost += sbd[s.top] != sbd[s.i]
-        if self.use_edit and edits[s.i]:
-            return cost
         if s.stack_len < 1:
             return 0
+        if self.use_edit and edits[s.i]:
+            return cost
+        cost += can_segment(s, self.moves) and sbd[s.top] != sbd[s.i]
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
-        cost += sbd[s.top] != sbd[s.i]
         return cost
 
     cdef int r_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
@@ -329,14 +337,12 @@ cdef class TransitionSystem:
         cdef int cost = 0
         if s.segment:
             return 0
-        if self.use_sbd and sbd[s.top] != sbd[s.i]:
+        if can_segment(s, self.moves) and sbd[s.top] != sbd[s.i]:
             cost += 1
         cost += has_child_in_buffer(s, s.top, heads)
         if self.allow_reattach:
             cost += has_head_in_buffer(s, s.top, heads)
         if self.use_edit and edits[s.top] and not edits[s.heads[s.top]]:
-            cost += 1
-        if sbd[s.top] != sbd[s.i]:
             cost += 1
         return cost
 
@@ -344,8 +350,8 @@ cdef class TransitionSystem:
                     size_t* sbd) except -9000:
         if not can_left(s, self.allow_reattach):
             return -1
-        cdef cost = 0
-        if self.use_sbd and not s.at_end_of_buffer and sbd[s.top] != sbd[s.i]:
+        cdef int cost = 0
+        if can_segment(s, self.moves) and sbd[s.top] != sbd[s.i]:
             cost += 1
         # This would form a dep between an edit and non-edit word
         if self.use_edit and edits[s.top] and not edits[s.i]:
