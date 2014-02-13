@@ -24,11 +24,10 @@ class Sentence(object):
         print >> sys.stderr, '\n'.join(self.lines)
         raise StandardError
 
-    def to_str(self, offset, last_head, merge_strat):
+    def to_str(self, offset):
         tok_strs = []
-        if merge_strat == 'root':
-            for token in self.tokens:
-                tok_strs.append(token.to_str(offset, -1))
+        for token in self.tokens:
+            tok_strs.append(token.to_str(offset, -1))
         return '\n'.join(tok_strs)
         #return '\n'.join(token.to_str(offset, last_head) for token in self.tokens)
 
@@ -70,12 +69,10 @@ def read_sentences(text):
 
 @plac.annotations(
     loc=("Data location",),
-    merge_strat=("How to merge the sentences",)
 )
-def main(loc, merge_strat='root'):
+def main(loc):
     with open(loc) as file_:
         text = file_.read()
-        last_head = -1
         offset = 0
         sents = list(read_sentences(text))
         i = 0
@@ -86,15 +83,15 @@ def main(loc, merge_strat='root'):
                 sent.tokens.extend(next_sent.tokens)
                 next_sent = sents.pop(0)
             segment_now = sent.head.dfl[:3] != next_sent.head.dfl[:3]
+            print sent.to_str(offset)
             if segment_now:
-                print sent.to_str(offset, -1, merge_strat)
                 print
                 offset = 0
             else:
-                print sent.to_str(offset, next_sent.head.idx + len(sent.tokens), merge_strat)
                 offset += len(sent.tokens)
             sent = next_sent
-        print sent.to_str(offset, -1, merge_strat)
+        print sent.to_str(offset)
+        print
 
 
 if __name__ == '__main__':
