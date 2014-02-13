@@ -14,6 +14,7 @@ from _state cimport *
 from sentence cimport Sentence
 from sentence cimport PySentence
 from sentence import get_labels
+from sentence cimport PySentence, Sentence
 from transitions cimport TransitionSystem, transition_to_str 
 from beam cimport Beam
 #from tagger cimport GreedyTagger, BeamTagger
@@ -148,7 +149,6 @@ cdef class BaseParser:
         cdef size_t i, j, n
         cdef list held_out_gold
         cdef list held_out_parse
-        self.say_config()
         #self.tagger.setup_classes(sents)
         move_classes, nr_label = self.moves.set_labels(*get_labels(sents))
         #self.features.set_nr_label(nr_label)

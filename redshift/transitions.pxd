@@ -6,6 +6,7 @@ cdef transition_to_str(State* s, size_t move, label, object tokens)
 cdef class TransitionSystem:
     cdef bint use_edit
     cdef bint use_sbd
+    cdef object sbd_at
     cdef bint allow_reattach
     cdef bint allow_reduce
     cdef bint assign_pos
@@ -31,12 +32,9 @@ cdef class TransitionSystem:
     cdef size_t l_end
     cdef size_t r_start
     cdef size_t r_end
-    cdef size_t p_start
-    cdef size_t p_end
     cdef size_t erase_label
     cdef size_t root_label
     cdef size_t counter
-    cdef object sbd_at
 
     cdef int transition(self, size_t clas, State *s) except -1
     cdef int* get_costs(self, State* s, size_t* tags, size_t* heads,
@@ -59,4 +57,3 @@ cdef class TransitionSystem:
     cdef int b_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
                     size_t* sbd)
     cdef int e_cost(self, State *s, size_t* heads, size_t* labels, bint* edits)
-    cdef int p_cost(self, State *s)
