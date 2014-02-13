@@ -1,7 +1,6 @@
 # cython: profile=True
 from _state cimport *
 from libc.stdlib cimport malloc, calloc, free
-import redshift.io_parse
 import index.hashes
 
 # TODO: Link these with other compile constants
@@ -254,13 +253,6 @@ cdef class TransitionSystem:
                 break
         else:
             raise StandardError
-
-    #cdef int fill_static_costs(self, State* s, size_t* tags, size_t* heads,
-    #                           size_t* labels, bint* edits, int* costs) except -1:
-    #    cdef size_t oracle = self.break_tie(s, tags, heads, labels, edits, sbd)
-    #    cdef size_t i
-    #    for i in range(self.nr_class):
-    #        costs[i] = i != oracle
 
     cdef int break_tie(self, State* s, size_t* tags, size_t* heads,
                        size_t* labels, bint* edits, size_t* sbd) except -1:

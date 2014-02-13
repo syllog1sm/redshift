@@ -16,6 +16,7 @@ import redshift.parser
 from redshift.parser import GreedyParser, BeamParser
 from redshift import Sentence
 
+USE_HELD_OUT = False
 
 @plac.annotations(
     train_loc=("Training location", "positional"),
@@ -60,7 +61,9 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
         print "Using %d sents for training" % n_sents
         random.shuffle(train_sent_strs)
         train_sent_strs = train_sent_strs[:n_sents]
-    train = [Sentence.from_conll(i, s) for i, s in enumerate(train_sent_strs)]
+    train_str = '\n\n'.join(train_sent_strs)
+    train = [Sentence.from_conll(i, s) for i, s in
+             enumerate(train_str.strip().split('\n\n'))]
     if profile:
         print 'profiling'
         cProfile.runctx("parser.train(train, n_iter=n_iter)", globals(),

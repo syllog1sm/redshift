@@ -43,11 +43,11 @@ exts = [
     Extension('redshift._state', ["redshift/_state.pyx", "ext/MurmurHash2.cpp",
                                   "ext/MurmurHash3.cpp"],
                                   language="c++", include_dirs=includes),
-    Extension('redshift.io_parse', ["redshift/io_parse.pyx"], language="c++",
-               include_dirs=includes),
     Extension('redshift.sentence', ["redshift/sentence.pyx"], language="c++",
                include_dirs=includes),
 
+    Extension('redshift.sentence', ["redshift/sentence.pyx"], language="c++",
+              include_dirs=includes),
     Extension('redshift._parse_features', ["redshift/_parse_features.pyx"],
               language="c++", include_dirs=includes),
     Extension('redshift.transitions', ["redshift/transitions.pyx"],

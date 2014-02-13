@@ -1,1 +1,1 @@
-from sentence import Sentence
+from sentence import PySentence as Sentence

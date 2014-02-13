@@ -30,6 +30,8 @@ cdef struct Sentence:
 cdef Sentence* make_sentence(size_t id_, size_t length,
                             object py_words, object py_tags, size_t vocab_thresh)
 
+cdef int add_parse(Sentence* sent, list ids, list heads, list labels, edits) except -1
+
 cdef free_sent(Sentence* s)
 
 cdef class Sentences:

@@ -8,7 +8,7 @@ import pstats
 import cProfile
 
 import redshift.parser
-from redshift.sentence import Sentence
+from redshift.sentence import PySentence
 
 
 @plac.annotations(
@@ -22,7 +22,7 @@ def main(parser_dir, text_loc, out_dir, profile=False, debug=False):
         os.mkdir(out_dir)
     print "Loading parser"
     parser = redshift.parser.load_parser(parser_dir)
-    sentences = [Sentence.from_pos(i, p) for i, p in
+    sentences = [PySentence.from_pos(i, p) for i, p in
                  enumerate(open(text_loc).read().strip().split('\n'))]
     if profile:
         cProfile.runctx("parser.add_parses(sentences)",
