@@ -117,7 +117,7 @@ def main(test_loc, gold_loc, eval_punct=False):
     for (sst, t), (ss, g) in zip(gen_toks(test_loc), gen_toks(gold_loc)):
         tags_corr += t.pos == g.pos
         tags_tot += 1
-        if g.label in ["P", 'punct'] and not eval_punct:
+        if g.label in ["P", 'punct', 'discourse'] and not eval_punct:
             continue
         ed_tp += t.is_edit and g.is_edit
         ed_fp += t.is_edit and not g.is_edit
