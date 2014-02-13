@@ -202,6 +202,9 @@ cdef class PySentence:
     property length:
         def __get__(self): return self.length
 
+    property tokens:
+        def __get__(self): return self.tokens
+
     def to_conll(self):
         tokens = []
         label_idx = index.hashes.reverse_label_index()

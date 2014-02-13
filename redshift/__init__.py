@@ -1,2 +1,2 @@
-from sentence import PySentence as Sentence
-from sentence import Token
+from redshift.sentence import PySentence as Sentence
+from redshift.sentence import Token
