@@ -73,6 +73,7 @@ cdef class TransitionSystem:
                   sbd_at_leaf=True):
         self.use_edit = use_edit
         self.sbd_at_leaf = sbd_at_leaf
+        print 'SBD at leaf?', self.sbd_at_leaf
         self.n_labels = MAX_LABELS
         self.n_tags = MAX_TAGS
         self.allow_reattach = allow_reattach

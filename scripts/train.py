@@ -16,7 +16,9 @@ import redshift.parser
 from redshift.parser import GreedyParser, BeamParser
 from redshift import Sentence
 
+
 USE_HELD_OUT = False
+
 
 @plac.annotations(
     train_loc=("Training location", "positional"),
@@ -27,6 +29,7 @@ USE_HELD_OUT = False
     allow_reattach=("Allow left-clobber", "flag", "r", bool),
     allow_reduce=("Allow reduce when no head is set", "flag", "d", bool),
     use_edit=("Use edit transition", "flag", "e", bool),
+    sbd_strat=("Strategy for segmenting into sentences", "option", "b", str),
     profile=("Run profiler (slow)", "flag", None, bool),
     debug=("Set debug flag to True.", "flag", None, bool),
     seed=("Set random seed", "option", "s", int),
@@ -37,24 +40,26 @@ USE_HELD_OUT = False
 )
 def main(train_loc, model_loc, train_alg="static", n_iter=15,
          feat_set="zhang", vocab_thresh=0, feat_thresh=10,
-         allow_reattach=False, allow_reduce=False, use_edit=False,
+         allow_reattach=False, allow_reduce=False,
+         use_edit=False, sbd_strat='leaf',
          n_sents=0,
-         profile=False, debug=False, seed=0, beam_width=1, unlabelled=False,
+         profile=False, debug=False, seed=0, beam_width=1,
          auto_pos=False):
     random.seed(seed)
     if debug:
         redshift.parser.set_debug(True)
     if beam_width >= 2:
-        parser = BeamParser(model_loc, clean=True, use_edit=use_edit,
+        parser = BeamParser(model_loc, clean=True, 
                             train_alg=train_alg, feat_set=feat_set,
-                            feat_thresh=feat_thresh, allow_reduce=allow_reduce,
-                            allow_reattach=allow_reattach, beam_width=beam_width,
-                            auto_pos=auto_pos)
+                            feat_thresh=feat_thresh,
+                            allow_reduce=allow_reduce, allow_reattach=allow_reattach,
+                            use_edit=use_edit, sbd_strat=sbd_strat,
+                            beam_width=beam_width, auto_pos=auto_pos)
     else:
         parser = GreedyParser(model_loc, clean=True, train_alg=train_alg,
                               feat_set=feat_set, feat_thresh=feat_thresh,
-                              allow_reduce=allow_reduce,
-                              allow_reattach=allow_reattach, use_edit=use_edit,
+                              allow_reduce=allow_reduce, allow_reattach=allow_reattach,
+                              use_edit=use_edit, sbd_strat=sbd_strat,
                               auto_pos=auto_pos)
     train_sent_strs = open(train_loc).read().strip().split('\n\n')
     if n_sents != 0:

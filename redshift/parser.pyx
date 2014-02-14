@@ -48,6 +48,7 @@ def load_parser(model_dir, reuse_idx=False):
     allow_reattach = params['allow_reattach'] == 'True'
     allow_reduce = params['allow_reduce'] == 'True'
     use_edit = params['use_edit'] == 'True'
+    sbd_strat = params['sbd_strat']
     l_labels = params['left_labels']
     r_labels = params['right_labels']
     beam_width = int(params['beam_width'])
@@ -60,7 +61,8 @@ def load_parser(model_dir, reuse_idx=False):
     params = {'clean': False, 'train_alg': train_alg,
               'feat_set': feat_set, 'feat_thresh': feat_thresh,
               'vocab_thresh': 1, 'allow_reattach': allow_reattach,
-              'use_edit': use_edit, 'allow_reduce': allow_reduce,
+              'use_edit': use_edit, 'sbd_strat': sbd_strat, 
+              'allow_reduce': allow_reduce,
               'reuse_idx': reuse_idx, 'beam_width': beam_width,
               'ngrams': ngrams,
               'auto_pos': auto_pos}
@@ -90,13 +92,15 @@ cdef class BaseParser:
     cdef int feat_thresh
     cdef object feat_set
     cdef object ngrams
+    cdef object sbd_strat
     cdef uint64_t* _features
     cdef size_t* _context
 
     def __cinit__(self, model_dir, clean=False, train_alg='static',
                   feat_set="zhang",
                   feat_thresh=0, vocab_thresh=5,
-                  allow_reattach=False, allow_reduce=False, use_edit=False,
+                  allow_reattach=False, allow_reduce=False,
+                  use_edit=False, sbd_strat='leaf',
                   reuse_idx=False, beam_width=1,
                   ngrams=None, auto_pos=False):
         self.model_dir = self.setup_model_dir(model_dir, clean)
@@ -125,12 +129,15 @@ cdef class BaseParser:
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
         self.beam_width = beam_width
+        self.sbd_strat = sbd_strat
         if clean == True:
             self.new_idx(self.model_dir)
         else:
             self.load_idx(self.model_dir)
         self.moves = TransitionSystem(allow_reattach=allow_reattach,
-                                      allow_reduce=allow_reduce, use_edit=use_edit)
+                                      allow_reduce=allow_reduce,
+                                      use_edit=use_edit,
+                                      sbd_at_leaf=sbd_strat == 'leaf')
         self.auto_pos = auto_pos
         self.say_config()
         self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model.gz'))
@@ -234,6 +241,7 @@ cdef class BaseParser:
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
             cfg.write(u'beam_width\t%d\n' % self.beam_width)
             cfg.write(u'auto_pos\t%s\n' % self.auto_pos)
+            cfg.write(u'sbd_strat\t%s\n' % self.sbd_strat)
             #if not self.features.ngrams:
             #    cfg.write(u'ngrams\t-1\n')
             #else:
@@ -396,6 +404,16 @@ cdef class BeamParser(BaseParser):
     def say_config(self):
         beam_settings = (self.beam_width, self.train_alg)
         print 'Beam settings: k=%d; upd_strat=%s' % beam_settings
+        if self.moves.allow_reattach and self.moves.allow_reduce:
+            print 'NM L+D'
+        elif self.moves.allow_reattach:
+            print 'NM L'
+        elif self.moves.allow_reduce:
+            print 'NM D'
+        else:
+            print 'NM None'
+
+
 
     cdef double* _predict(self, Sentence* sent, Kernel* kernel) except NULL:
         cdef bint cache_hit = False
