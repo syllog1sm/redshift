@@ -218,7 +218,9 @@ cdef class PySentence:
                 head = <int>(self.c_sent.parse.heads[i+1] - 1)
             pos = pos_idx[self.c_sent.pos[i+1]]
             label = label_idx.get(self.c_sent.parse.labels[i+1], 'ERR')
-            fields = (self.c_sent.parse.sbd[i+1], i, token.word, pos, head, label, token.is_edit)
+            if self.c_sent.parse.edits[i + 1]:
+                label = 'erased'
+            fields = (token.word, pos, head, label)
             tokens.append('\t'.join([str(f) for f in fields]))
         return '\n'.join(tokens)
 
@@ -242,7 +244,8 @@ class Token(object):
         if len(fields) == 4:
             word, pos, head, label = fields
             word_id = int(i)
-            is_edit = False
+            head = int(head)
+            is_edit = head == i or label == 'erased'
         else:
             word_id, word, _, pos, pos2, feats, head, label, _, _ = fields
             word_id = int(word_id)
@@ -256,4 +259,4 @@ class Token(object):
         if pos.startswith('^'):
             pos = pos[1:]
             pos = pos.split('^')[0]
-        return cls(word_id, word, pos, head, label, is_edit)
+        return cls(i, word, pos, head, label, is_edit)
