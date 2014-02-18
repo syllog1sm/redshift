@@ -5,6 +5,7 @@ def read_sents(loc):
     sents = open(loc).read().strip().split('\n\n')
     for sent in sents:
         tokens = [t.split() for t in sent.split('\n')]
+        tokens[-1][2] = 'T'
         yield tokens
         
 
@@ -42,7 +43,7 @@ def main(test_loc, gold_loc):
     print 'R: %.2f' % r 
     print 'F: %.2f' % f
     print 'Err: %.2f' % ((fp + fn) / (tp + fp + fn + tn))
-    print 'NIST: %.2f' % ((fp + fn) / tp)
+    print 'NIST: %.2f' % ((fp + fn) / (tp + fn))
             
 
 if __name__ == '__main__':
