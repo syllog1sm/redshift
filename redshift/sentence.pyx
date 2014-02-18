@@ -31,7 +31,7 @@ def normalize_word(word):
         return word.lower()
  
 
-cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags,
+cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags, py_pauses,
                              size_t thresh):
     cdef:
         size_t i
@@ -63,6 +63,8 @@ cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags,
     s.cprefix6s = <size_t*>calloc(size, sizeof(size_t))
     s.suffix = <size_t*>calloc(size, sizeof(size_t))
     s.prefix = <size_t*>calloc(size, sizeof(size_t))
+
+    s.pauses = <int*>calloc(size, sizeof(int))
     s.parens = <int*>calloc(size, sizeof(int))
     s.quotes = <int*>calloc(size, sizeof(int))
     s.non_alpha = <bint*>calloc(size, sizeof(bint))
@@ -80,6 +82,7 @@ cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags,
         word = normalize_word(py_words[i])
         s.words[i] = index.hashes.encode_word(word)
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
+        s.pauses[i] = <int>py_pauses[i]
         case_stats = case_dict.get(py_words[i])
         if case_stats is None:
             if not py_words[i].isalpha():
@@ -133,6 +136,7 @@ cdef int add_parse(Sentence* sent, list word_ids, list heads, list labels,
 cdef free_sent(Sentence* s):
     free(s.words)
     free(s.owords)
+    free(s.pauses)
     free(s.pos)
     free(s.alt_pos)
     free(s.clusters)
@@ -160,6 +164,7 @@ cdef class PySentence:
         n = len(tokens) + 2
         words = ['<start>']
         tags = ['OOB']
+        pauses = [-1]
         heads = [0]
         labels = ['ERR']
         ids = [None]
@@ -167,6 +172,7 @@ cdef class PySentence:
         for i, token in enumerate(tokens):
             words.append(token.word)
             tags.append(token.pos)
+            pauses.append(token.pause)
             edits.append(token.is_edit)
             if token.head == -1:
                 heads.append(n - 1)
@@ -177,12 +183,13 @@ cdef class PySentence:
         ids.append(None)
         words.append('<root>')
         tags.append('ROOT')
+        pauses.append(-1)
         heads.append(0)
         labels.append('ERR')
         edits.append(False)
 
         self.id = id_
-        cdef Sentence* sent = init_c_sent(id_, n, words, tags, 0)
+        cdef Sentence* sent = init_c_sent(id_, n, words, tags, pauses, 0)
         add_parse(sent, ids, heads, labels, edits)
         self.c_sent = sent
         self.length = n
@@ -227,10 +234,12 @@ cdef class PySentence:
 
 
 class Token(object):
-    def __init__(self, id_, word, pos, head, label, is_edit):
+    def __init__(self, id_, word, pos, length, pause, head, label, is_edit):
         self.id = id_
         self.word = word
         self.pos = pos
+        self.length = length
+        self.pause = pause
         self.head = int(head)
         self.label = label
         self.is_edit = is_edit
@@ -248,8 +257,10 @@ class Token(object):
             head = int(head)
             is_edit = head == i or label == 'erased'
             sbd = sbd == 'True'
+            pause = 0.0
+            duration = 0.0
         else:
-            word_id, word, _, pos, pos2, feats, head, label, _, _ = fields
+            word_id, word, _, pos, pos2, feats, head, label, timings, _ = fields
             word_id = int(word_id)
             feats = feats.split('|')
             head = int(head) - 1
@@ -257,8 +268,25 @@ class Token(object):
                 is_edit = True
             else:
                 is_edit = False
+            pause, duration = _parse_timing(*timings.split('|'))
         # For SWBD
         if pos.startswith('^'):
             pos = pos[1:]
             pos = pos.split('^')[0]
         return cls(i, word, pos, head, label, is_edit)
+
+
+def _parse_timing(start, end, pause):
+    if start != 'None' and start != 'n/a':
+        start = float(start)
+    else:
+        start = -1
+    if end != 'None' and end != 'n/a':
+        end = float(end)
+    else:
+        end = -1
+    if pause != 'None' and pause != 'n/a':
+        pause = float(pause)
+    else:
+        pause = -1
+    return end - start, pause

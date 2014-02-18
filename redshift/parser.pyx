@@ -413,16 +413,15 @@ cdef class BeamParser(BaseParser):
         else:
             print 'NM None'
 
-
-
     cdef double* _predict(self, Sentence* sent, Kernel* kernel) except NULL:
         cdef bint cache_hit = False
         scores = self.guide.cache.lookup(sizeof(Kernel), kernel, &cache_hit)
         if not cache_hit:
-            fill_context(self._context, self.moves.n_labels, sent.words,
-                         sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
-                         sent.prefix, sent.parens, sent.quotes, kernel,
-                         &kernel.s0l, &kernel.s0r, &kernel.n0l)
+            fill_context(self._context, self.moves.n_labels, sent, kernel)
+            #fill_context(self._context, self.moves.n_labels, sent.words,
+            #             sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
+            #             sent.prefix, sent.parens, sent.quotes, kernel,
+            #             &kernel.s0l, &kernel.s0r, &kernel.n0l)
             self.extractor.extract(self._features, self._context)
             self.guide.fill_scores(self._features, scores)
         return scores
@@ -464,10 +463,11 @@ cdef class BeamParser(BaseParser):
         return counts
 
     cdef int _inc_feats(self, dict counts, Sentence* sent, Kernel* k, double inc) except -1:
-        fill_context(self._context, self.moves.n_labels, sent.words,
-                     sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
-                     sent.prefix, sent.parens, sent.quotes, k,
-                     &k.s0l, &k.s0r, &k.n0l)
+        fill_context(self._context, self.moves.n_labels, sent, k)
+        #fill_context(self._context, self.moves.n_labels, sent.words,
+        #             sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
+        #             sent.prefix, sent.parens, sent.quotes, k,
+        #             &k.s0l, &k.s0r, &k.n0l)
         self.extractor.extract(self._features, self._context)
  
         cdef size_t f = 0
@@ -579,10 +579,11 @@ cdef class GreedyParser(BaseParser):
             print 'NM D'
 
     cdef uint64_t* _extract(self, Sentence* sent, Kernel* kernel):
-        fill_context(self._context, self.moves.n_labels, sent.words,
-                     sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
-                     sent.prefix, sent.parens, sent.quotes, kernel,
-                     &kernel.s0l, &kernel.s0r, &kernel.n0l)
+        fill_context(self._context, self.moves.n_labels, sent, kernel)
+        #fill_context(self._context, self.moves.n_labels, sent.words,
+        #             sent.pos, sent.clusters, sent.cprefix6s, sent.cprefix4s,
+        #             sent.prefix, sent.parens, sent.quotes, kernel,
+        #             &kernel.s0l, &kernel.s0r, &kernel.n0l)
         self.extractor.extract(self._features, self._context)
         return self._features
    

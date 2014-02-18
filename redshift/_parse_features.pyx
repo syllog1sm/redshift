@@ -215,11 +215,16 @@ def get_kernel_tokens():
             S0re_w, N0w, N0lw, N0l2w, N0l0w, N0le_w, N1w, N2w]
 
 
-cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
-                       size_t* tags,
-                       size_t* clusters, size_t* cprefix6s, size_t* cprefix4s,
-                       size_t* orths, int* parens, int* quotes,
-                       Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
+cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel* k):
+    cdef size_t* words = sent.words
+    cdef size_t* tags = sent.pos
+    cdef int* pauses = sent.pauses
+    cdef size_t* clusters = sent.clusters
+    cdef size_t* cprefix6s = sent.cprefix6s
+    cdef size_t* cprefix4s = sent.cprefix4s
+    cdef size_t* orths = sent.prefix
+    cdef int* parens = sent.parens
+    cdef int* quotes = sent.quotes
     context[N0w] = words[k.i]
     context[N0p] = k.n0p
     context[N0c] = clusters[k.i]
@@ -289,81 +294,81 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S2c] = clusters[k.s2]
     context[S2c6] = cprefix6s[k.s2]
     context[S2c4] = cprefix4s[k.s2]
-    context[S0lv] = s0l.val + 1
-    context[S0rv] = s0r.val + 1
-    context[N0lv] = n0l.val + 1
-    context[S0lw] = words[s0l.idx[0]]
-    context[S0lp] = s0l.tags[0]
-    context[S0lc] = clusters[s0l.idx[0]]
-    context[S0lc6] = cprefix6s[s0l.idx[0]]
-    context[S0lc4] = cprefix4s[s0l.idx[0]]
+    context[S0lv] = k.s0l.val + 1
+    context[S0rv] = k.s0r.val + 1
+    context[N0lv] = k.n0l.val + 1
+    context[S0lw] = words[k.s0l.idx[0]]
+    context[S0lp] = k.s0l.tags[0]
+    context[S0lc] = clusters[k.s0l.idx[0]]
+    context[S0lc6] = cprefix6s[k.s0l.idx[0]]
+    context[S0lc4] = cprefix4s[k.s0l.idx[0]]
 
-    context[S0rw] = words[s0r.idx[0]]
-    context[S0rp] = s0r.tags[0]
-    context[S0rc] = clusters[s0r.idx[0]]
-    context[S0rc6] = cprefix6s[s0r.idx[0]]
-    context[S0rc4] = cprefix4s[s0r.idx[0]]
+    context[S0rw] = words[k.s0r.idx[0]]
+    context[S0rp] = k.s0r.tags[0]
+    context[S0rc] = clusters[k.s0r.idx[0]]
+    context[S0rc6] = cprefix6s[k.s0r.idx[0]]
+    context[S0rc4] = cprefix4s[k.s0r.idx[0]]
 
-    context[S0l2w] = words[s0l.idx[1]]
-    context[S0l2p] = s0l.tags[1]
-    context[S0l2c] = clusters[s0l.idx[1]]
-    context[S0l2c6] = cprefix6s[s0l.idx[1]]
-    context[S0l2c4] = cprefix4s[s0l.idx[1]]
+    context[S0l2w] = words[k.s0l.idx[1]]
+    context[S0l2p] = k.s0l.tags[1]
+    context[S0l2c] = clusters[k.s0l.idx[1]]
+    context[S0l2c6] = cprefix6s[k.s0l.idx[1]]
+    context[S0l2c4] = cprefix4s[k.s0l.idx[1]]
 
-    context[S0r2w] = words[s0r.idx[1]]
-    context[S0r2p] = s0r.tags[1]
-    context[S0r2c] = clusters[s0r.idx[1]]
-    context[S0r2c6] = cprefix6s[s0r.idx[1]]
-    context[S0r2c4] = cprefix4s[s0r.idx[1]]
+    context[S0r2w] = words[k.s0r.idx[1]]
+    context[S0r2p] = k.s0r.tags[1]
+    context[S0r2c] = clusters[k.s0r.idx[1]]
+    context[S0r2c6] = cprefix6s[k.s0r.idx[1]]
+    context[S0r2c4] = cprefix4s[k.s0r.idx[1]]
 
-    context[S0l0w] = words[s0l.idx[2]]
-    context[S0l0p] = s0l.tags[2]
-    context[S0l0c] = clusters[s0l.idx[2]]
-    context[S0l0c6] = cprefix6s[s0l.idx[2]]
-    context[S0l0c4] = cprefix4s[s0l.idx[2]]
+    context[S0l0w] = words[k.s0l.idx[2]]
+    context[S0l0p] = k.s0l.tags[2]
+    context[S0l0c] = clusters[k.s0l.idx[2]]
+    context[S0l0c6] = cprefix6s[k.s0l.idx[2]]
+    context[S0l0c4] = cprefix4s[k.s0l.idx[2]]
 
-    context[S0r0w] = words[s0r.idx[2]]
-    context[S0r0p] = s0r.tags[2]
-    context[S0r0c] = clusters[s0r.idx[2]]
-    context[S0r0c6] = cprefix6s[s0r.idx[2]]
-    context[S0r0c4] = cprefix6s[s0r.idx[2]]
+    context[S0r0w] = words[k.s0r.idx[2]]
+    context[S0r0p] = k.s0r.tags[2]
+    context[S0r0c] = clusters[k.s0r.idx[2]]
+    context[S0r0c6] = cprefix6s[k.s0r.idx[2]]
+    context[S0r0c4] = cprefix6s[k.s0r.idx[2]]
 
-    context[N0lw] = words[n0l.idx[0]]
-    context[N0lp] = n0l.tags[0]
-    context[N0lc] = clusters[n0l.idx[0]]
-    context[N0lc6] = cprefix6s[n0l.idx[0]]
-    context[N0lc4] = cprefix6s[n0l.idx[0]]
+    context[N0lw] = words[k.n0l.idx[0]]
+    context[N0lp] = k.n0l.tags[0]
+    context[N0lc] = clusters[k.n0l.idx[0]]
+    context[N0lc6] = cprefix6s[k.n0l.idx[0]]
+    context[N0lc4] = cprefix6s[k.n0l.idx[0]]
 
-    context[N0l2w] = words[n0l.idx[1]]
-    context[N0l2p] = n0l.tags[1]
-    context[N0l2c] = clusters[n0l.idx[1]]
-    context[N0l2c6] = cprefix6s[n0l.idx[1]]
-    context[N0l2c4] = cprefix4s[n0l.idx[1]]
+    context[N0l2w] = words[k.n0l.idx[1]]
+    context[N0l2p] = k.n0l.tags[1]
+    context[N0l2c] = clusters[k.n0l.idx[1]]
+    context[N0l2c6] = cprefix6s[k.n0l.idx[1]]
+    context[N0l2c4] = cprefix4s[k.n0l.idx[1]]
 
-    context[N0l0w] = words[n0l.idx[2]]
-    context[N0l0p] = n0l.tags[2]
-    context[N0l0c] = clusters[n0l.idx[2]]
-    context[N0l0c6] = cprefix6s[n0l.idx[2]]
-    context[N0l0c4] = cprefix4s[n0l.idx[2]]
+    context[N0l0w] = words[k.n0l.idx[2]]
+    context[N0l0p] = k.n0l.tags[2]
+    context[N0l0c] = clusters[k.n0l.idx[2]]
+    context[N0l0c6] = cprefix6s[k.n0l.idx[2]]
+    context[N0l0c4] = cprefix4s[k.n0l.idx[2]]
 
-    context[S0ll] = s0l.lab[0]
-    context[S0l2l] = s0l.lab[1]
-    context[S0l0l] = s0l.lab[2]
-    context[S0rl] = s0r.lab[0]
-    context[S0r2l] = s0r.lab[1]
-    context[S0r0l] = s0r.lab[2]
-    context[N0ll] = n0l.lab[0]
-    context[N0l2l] = n0l.lab[1]
-    context[N0l0l] = n0l.lab[2]
+    context[S0ll] = k.s0l.lab[0]
+    context[S0l2l] = k.s0l.lab[1]
+    context[S0l0l] = k.s0l.lab[2]
+    context[S0rl] = k.s0r.lab[0]
+    context[S0r2l] = k.s0r.lab[1]
+    context[S0r0l] = k.s0r.lab[2]
+    context[N0ll] = k.n0l.lab[0]
+    context[N0l2l] = k.n0l.lab[1]
+    context[N0l0l] = k.n0l.lab[2]
 
     context[S0llabs] = 0
     context[S0rlabs] = 0
     context[N0llabs] = 0
     cdef size_t i
     for i in range(4):
-        context[S0llabs] += s0l.lab[i] << (nr_label - s0l.lab[i])
-        context[S0rlabs] += s0r.lab[i] << (nr_label - s0r.lab[i])
-        context[N0llabs] += n0l.lab[i] << (nr_label - n0l.lab[i])
+        context[S0llabs] += k.s0l.lab[i] << (nr_label - k.s0l.lab[i])
+        context[S0rlabs] += k.s0r.lab[i] << (nr_label - k.s0r.lab[i])
+        context[N0llabs] += k.n0l.lab[i] << (nr_label - k.n0l.lab[i])
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
     if k.s0 != 0:
