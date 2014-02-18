@@ -172,6 +172,7 @@ cdef class TransitionSystem:
             else:
                 raise StandardError
             s.segment = True
+            s.sbd[s.top] = 1
             pop_stack(s)
         elif move == EDIT:
             if s.heads[s.top] != 0:

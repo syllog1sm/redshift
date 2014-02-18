@@ -122,8 +122,8 @@ cdef int add_parse(Sentence* sent, list word_ids, list heads, list labels,
         sent.parse.heads[i] = <size_t>heads[i]
         sent.parse.labels[i] = index.hashes.encode_label(labels[i])
         if i >= 1 and word_ids[i] is not None and word_ids[i - 1] >= word_ids[i]:
-            segment += 1
-        sent.parse.sbd[i] = segment
+            sent.parse.sbd[i-1] = 1
+        sent.parse.sbd[i] = 0
         if edits:
             sent.parse.edits[i] = <bint>edits[i]
             if sent.parse.edits[i] and not edits[sent.parse.heads[i]]:
@@ -220,7 +220,8 @@ cdef class PySentence:
             label = label_idx.get(self.c_sent.parse.labels[i+1], 'ERR')
             if self.c_sent.parse.edits[i + 1]:
                 label = 'erased'
-            fields = (token.word, pos, head, label)
+            sbd = 'T' if self.c_sent.parse.sbd[i + 1] else 'F'
+            fields = (token.word, pos, head, label, sbd)
             tokens.append('\t'.join([str(f) for f in fields]))
         return '\n'.join(tokens)
 
@@ -241,11 +242,12 @@ class Token(object):
     @classmethod
     def from_str(cls, i, token_str):
         fields = token_str.split()
-        if len(fields) == 4:
-            word, pos, head, label = fields
+        if len(fields) == 5:
+            word, pos, head, label, sbd = fields
             word_id = int(i)
             head = int(head)
             is_edit = head == i or label == 'erased'
+            sbd = sbd == 'True'
         else:
             word_id, word, _, pos, pos2, feats, head, label, _, _ = fields
             word_id = int(word_id)
