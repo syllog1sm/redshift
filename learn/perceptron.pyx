@@ -57,8 +57,9 @@ cdef void free_dense_feat(DenseFeature* feat):
 cdef inline void score_dense_feat(double* scores, size_t nr_class, DenseFeature* feat):
     feat.nr_seen += 1
     cdef size_t c
+    cdef double* w = feat.w
     for c in range(feat.s, feat.e):
-        scores[c] += feat.w[c]
+        scores[c] += w[c]
 
 
 cdef void update_dense(size_t now, double w, size_t clas, DenseFeature* raw):
