@@ -61,7 +61,8 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
                               allow_reduce=allow_reduce, allow_reattach=allow_reattach,
                               use_edit=use_edit, sbd_strat=sbd_strat,
                               auto_pos=auto_pos)
-    train_sent_strs = open(train_loc).read().strip().split('\n\n')
+    train_sent_strs = [s for s in open(train_loc).read().strip().split('\n\n')
+                       if s.strip()]
     if n_sents != 0:
         print "Using %d sents for training" % n_sents
         random.shuffle(train_sent_strs)
