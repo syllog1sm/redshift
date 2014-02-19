@@ -197,6 +197,39 @@ cdef enum:
     wsexact
     psexact
 
+    S0pause0
+    S0pause1
+    S0pause2
+    S0pause3
+    S0pause4
+    S0pause5
+    S0pause6
+    S0pause7
+    S0pause8
+    S0pause9
+
+    N0pause0
+    N0pause1
+    N0pause2
+    N0pause3
+    N0pause4
+    N0pause5
+    N0pause6
+    N0pause7
+    N0pause8
+    N0pause9
+
+    N1pause0
+    N1pause1
+    N1pause2
+    N1pause3
+    N1pause4
+    N1pause5
+    N1pause6
+    N1pause7
+    N1pause8
+    N1pause9
+
     m1
     m2
     m3
@@ -215,11 +248,16 @@ def get_kernel_tokens():
             S0re_w, N0w, N0lw, N0l2w, N0l0w, N0le_w, N1w, N2w]
 
 
-cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
-                       size_t* tags,
-                       size_t* clusters, size_t* cprefix6s, size_t* cprefix4s,
-                       size_t* orths, int* parens, int* quotes,
-                       Kernel* k, Subtree* s0l, Subtree* s0r, Subtree* n0l):
+cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel* k):
+    cdef size_t* words = sent.words
+    cdef size_t* tags = sent.pos
+    cdef double* pauses = sent.pauses
+    cdef size_t* clusters = sent.clusters
+    cdef size_t* cprefix6s = sent.cprefix6s
+    cdef size_t* cprefix4s = sent.cprefix4s
+    cdef size_t* orths = sent.prefix
+    cdef int* parens = sent.parens
+    cdef int* quotes = sent.quotes
     context[N0w] = words[k.i]
     context[N0p] = k.n0p
     context[N0c] = clusters[k.i]
@@ -289,81 +327,81 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[S2c] = clusters[k.s2]
     context[S2c6] = cprefix6s[k.s2]
     context[S2c4] = cprefix4s[k.s2]
-    context[S0lv] = s0l.val + 1
-    context[S0rv] = s0r.val + 1
-    context[N0lv] = n0l.val + 1
-    context[S0lw] = words[s0l.idx[0]]
-    context[S0lp] = s0l.tags[0]
-    context[S0lc] = clusters[s0l.idx[0]]
-    context[S0lc6] = cprefix6s[s0l.idx[0]]
-    context[S0lc4] = cprefix4s[s0l.idx[0]]
+    context[S0lv] = k.s0l.val + 1
+    context[S0rv] = k.s0r.val + 1
+    context[N0lv] = k.n0l.val + 1
+    context[S0lw] = words[k.s0l.idx[0]]
+    context[S0lp] = k.s0l.tags[0]
+    context[S0lc] = clusters[k.s0l.idx[0]]
+    context[S0lc6] = cprefix6s[k.s0l.idx[0]]
+    context[S0lc4] = cprefix4s[k.s0l.idx[0]]
 
-    context[S0rw] = words[s0r.idx[0]]
-    context[S0rp] = s0r.tags[0]
-    context[S0rc] = clusters[s0r.idx[0]]
-    context[S0rc6] = cprefix6s[s0r.idx[0]]
-    context[S0rc4] = cprefix4s[s0r.idx[0]]
+    context[S0rw] = words[k.s0r.idx[0]]
+    context[S0rp] = k.s0r.tags[0]
+    context[S0rc] = clusters[k.s0r.idx[0]]
+    context[S0rc6] = cprefix6s[k.s0r.idx[0]]
+    context[S0rc4] = cprefix4s[k.s0r.idx[0]]
 
-    context[S0l2w] = words[s0l.idx[1]]
-    context[S0l2p] = s0l.tags[1]
-    context[S0l2c] = clusters[s0l.idx[1]]
-    context[S0l2c6] = cprefix6s[s0l.idx[1]]
-    context[S0l2c4] = cprefix4s[s0l.idx[1]]
+    context[S0l2w] = words[k.s0l.idx[1]]
+    context[S0l2p] = k.s0l.tags[1]
+    context[S0l2c] = clusters[k.s0l.idx[1]]
+    context[S0l2c6] = cprefix6s[k.s0l.idx[1]]
+    context[S0l2c4] = cprefix4s[k.s0l.idx[1]]
 
-    context[S0r2w] = words[s0r.idx[1]]
-    context[S0r2p] = s0r.tags[1]
-    context[S0r2c] = clusters[s0r.idx[1]]
-    context[S0r2c6] = cprefix6s[s0r.idx[1]]
-    context[S0r2c4] = cprefix4s[s0r.idx[1]]
+    context[S0r2w] = words[k.s0r.idx[1]]
+    context[S0r2p] = k.s0r.tags[1]
+    context[S0r2c] = clusters[k.s0r.idx[1]]
+    context[S0r2c6] = cprefix6s[k.s0r.idx[1]]
+    context[S0r2c4] = cprefix4s[k.s0r.idx[1]]
 
-    context[S0l0w] = words[s0l.idx[2]]
-    context[S0l0p] = s0l.tags[2]
-    context[S0l0c] = clusters[s0l.idx[2]]
-    context[S0l0c6] = cprefix6s[s0l.idx[2]]
-    context[S0l0c4] = cprefix4s[s0l.idx[2]]
+    context[S0l0w] = words[k.s0l.idx[2]]
+    context[S0l0p] = k.s0l.tags[2]
+    context[S0l0c] = clusters[k.s0l.idx[2]]
+    context[S0l0c6] = cprefix6s[k.s0l.idx[2]]
+    context[S0l0c4] = cprefix4s[k.s0l.idx[2]]
 
-    context[S0r0w] = words[s0r.idx[2]]
-    context[S0r0p] = s0r.tags[2]
-    context[S0r0c] = clusters[s0r.idx[2]]
-    context[S0r0c6] = cprefix6s[s0r.idx[2]]
-    context[S0r0c4] = cprefix6s[s0r.idx[2]]
+    context[S0r0w] = words[k.s0r.idx[2]]
+    context[S0r0p] = k.s0r.tags[2]
+    context[S0r0c] = clusters[k.s0r.idx[2]]
+    context[S0r0c6] = cprefix6s[k.s0r.idx[2]]
+    context[S0r0c4] = cprefix6s[k.s0r.idx[2]]
 
-    context[N0lw] = words[n0l.idx[0]]
-    context[N0lp] = n0l.tags[0]
-    context[N0lc] = clusters[n0l.idx[0]]
-    context[N0lc6] = cprefix6s[n0l.idx[0]]
-    context[N0lc4] = cprefix6s[n0l.idx[0]]
+    context[N0lw] = words[k.n0l.idx[0]]
+    context[N0lp] = k.n0l.tags[0]
+    context[N0lc] = clusters[k.n0l.idx[0]]
+    context[N0lc6] = cprefix6s[k.n0l.idx[0]]
+    context[N0lc4] = cprefix6s[k.n0l.idx[0]]
 
-    context[N0l2w] = words[n0l.idx[1]]
-    context[N0l2p] = n0l.tags[1]
-    context[N0l2c] = clusters[n0l.idx[1]]
-    context[N0l2c6] = cprefix6s[n0l.idx[1]]
-    context[N0l2c4] = cprefix4s[n0l.idx[1]]
+    context[N0l2w] = words[k.n0l.idx[1]]
+    context[N0l2p] = k.n0l.tags[1]
+    context[N0l2c] = clusters[k.n0l.idx[1]]
+    context[N0l2c6] = cprefix6s[k.n0l.idx[1]]
+    context[N0l2c4] = cprefix4s[k.n0l.idx[1]]
 
-    context[N0l0w] = words[n0l.idx[2]]
-    context[N0l0p] = n0l.tags[2]
-    context[N0l0c] = clusters[n0l.idx[2]]
-    context[N0l0c6] = cprefix6s[n0l.idx[2]]
-    context[N0l0c4] = cprefix4s[n0l.idx[2]]
+    context[N0l0w] = words[k.n0l.idx[2]]
+    context[N0l0p] = k.n0l.tags[2]
+    context[N0l0c] = clusters[k.n0l.idx[2]]
+    context[N0l0c6] = cprefix6s[k.n0l.idx[2]]
+    context[N0l0c4] = cprefix4s[k.n0l.idx[2]]
 
-    context[S0ll] = s0l.lab[0]
-    context[S0l2l] = s0l.lab[1]
-    context[S0l0l] = s0l.lab[2]
-    context[S0rl] = s0r.lab[0]
-    context[S0r2l] = s0r.lab[1]
-    context[S0r0l] = s0r.lab[2]
-    context[N0ll] = n0l.lab[0]
-    context[N0l2l] = n0l.lab[1]
-    context[N0l0l] = n0l.lab[2]
+    context[S0ll] = k.s0l.lab[0]
+    context[S0l2l] = k.s0l.lab[1]
+    context[S0l0l] = k.s0l.lab[2]
+    context[S0rl] = k.s0r.lab[0]
+    context[S0r2l] = k.s0r.lab[1]
+    context[S0r0l] = k.s0r.lab[2]
+    context[N0ll] = k.n0l.lab[0]
+    context[N0l2l] = k.n0l.lab[1]
+    context[N0l0l] = k.n0l.lab[2]
 
     context[S0llabs] = 0
     context[S0rlabs] = 0
     context[N0llabs] = 0
     cdef size_t i
     for i in range(4):
-        context[S0llabs] += s0l.lab[i] << (nr_label - s0l.lab[i])
-        context[S0rlabs] += s0r.lab[i] << (nr_label - s0r.lab[i])
-        context[N0llabs] += n0l.lab[i] << (nr_label - n0l.lab[i])
+        context[S0llabs] += k.s0l.lab[i] << (nr_label - k.s0l.lab[i])
+        context[S0rlabs] += k.s0r.lab[i] << (nr_label - k.s0r.lab[i])
+        context[N0llabs] += k.n0l.lab[i] << (nr_label - k.n0l.lab[i])
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
     if k.s0 != 0:
@@ -377,6 +415,10 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
     context[N1paren] = parens[k.i + 1]
     context[N0quote] = quotes[k.i]
     context[N1quote] = quotes[k.i + 1]
+    for i in range(10):
+        context[S0pause0 + i] = pauses[k.s0] >= (i * 0.1)
+        context[N0pause0 + i] = pauses[k.i] >= (i * 0.1)
+        context[N1pause0 + i] = pauses[k.i+1] >= (i * 0.1)
 
     context[S0le_w] = words[k.s0ledge]
     context[S0le_p] = tags[k.s0ledge]
@@ -431,6 +473,7 @@ cdef void fill_context(size_t* context, size_t nr_label, size_t* words,
         context[next_next_edit] = 0
         context[next_edit_word] = 0
         context[next_edit_pos] = 0
+
  
     # These features find how much of S0's span matches N0's span, starting from
     # the left.
@@ -731,7 +774,47 @@ suffix_disfl = (
     (wsexact, pscopy),
     (wscopy, psexact),
 )
- 
+
+pauses = (
+    (S0pause0,),
+    (S0pause2,),
+    (S0pause9,),
+    (N0pause0,),
+    (N0pause2,),
+    (N0pause9,),
+    (N1pause0,),
+    (N1pause2,),
+    (N1pause9,),
+    (S0pause0, S0p),
+    (S0pause2, S0p),
+    (S0pause9, S0p),
+    (N0pause0, S0p),
+    (N0pause2, S0p),
+    (N0pause9, S0p),
+    (N1pause0, S0p),
+    (N1pause2, S0p),
+    (N1pause9, S0p),
+)
+"""
+    #(S0pause0, N0pause0, S0p),
+    #(S0pause0, N0pause2, S0p),
+    #(S0pause0, N0pause9, S0p),
+    #(S0pause2, N0pause0, S0p),
+    #(S0pause2, N0pause2, S0p),
+    #(S0pause2, N0pause9, S0p),
+    #(S0pause9, N0pause0, S0p),
+    #(S0pause9, N0pause2, S0p),
+    #(S0pause9, N0pause9, S0p),
+""" 
+#(S0pause0, N0pause0),
+#(S0pause0, N0pause2),
+#(S0pause0, N0pause9),
+#(S0pause2, N0pause0),
+#(S0pause2, N0pause2),
+#(S0pause2, N0pause9),
+#(S0pause9, N0pause0),
+#(S0pause9, N0pause2),
+#(S0pause9, N0pause9),
 
 def cluster_bigrams():
     kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]
