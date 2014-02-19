@@ -123,6 +123,8 @@ cdef class BaseParser:
             templates += _parse_features.history
         if 'bitags' in self.feat_set:
             templates += _parse_features.pos_bigrams()
+        if 'pauses' in self.feat_set:
+            templates += _parse_features.pauses
         self.extractor = Extractor(templates, match_feats)
         self._features = <uint64_t*>calloc(self.extractor.nr_feat, sizeof(uint64_t))
         self._context = <size_t*>calloc(_parse_features.context_size(), sizeof(size_t))

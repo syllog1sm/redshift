@@ -197,6 +197,39 @@ cdef enum:
     wsexact
     psexact
 
+    S0pause0
+    S0pause1
+    S0pause2
+    S0pause3
+    S0pause4
+    S0pause5
+    S0pause6
+    S0pause7
+    S0pause8
+    S0pause9
+
+    N0pause0
+    N0pause1
+    N0pause2
+    N0pause3
+    N0pause4
+    N0pause5
+    N0pause6
+    N0pause7
+    N0pause8
+    N0pause9
+
+    N1pause0
+    N1pause1
+    N1pause2
+    N1pause3
+    N1pause4
+    N1pause5
+    N1pause6
+    N1pause7
+    N1pause8
+    N1pause9
+
     m1
     m2
     m3
@@ -218,7 +251,7 @@ def get_kernel_tokens():
 cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel* k):
     cdef size_t* words = sent.words
     cdef size_t* tags = sent.pos
-    cdef int* pauses = sent.pauses
+    cdef double* pauses = sent.pauses
     cdef size_t* clusters = sent.clusters
     cdef size_t* cprefix6s = sent.cprefix6s
     cdef size_t* cprefix4s = sent.cprefix4s
@@ -382,6 +415,10 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
     context[N1paren] = parens[k.i + 1]
     context[N0quote] = quotes[k.i]
     context[N1quote] = quotes[k.i + 1]
+    for i in range(10):
+        context[S0pause0 + i] = pauses[k.s0] >= (i * 0.1)
+        context[N0pause0 + i] = pauses[k.i] >= (i * 0.1)
+        context[N1pause0 + i] = pauses[k.i+1] >= (i * 0.1)
 
     context[S0le_w] = words[k.s0ledge]
     context[S0le_p] = tags[k.s0ledge]
@@ -436,6 +473,7 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
         context[next_next_edit] = 0
         context[next_edit_word] = 0
         context[next_edit_pos] = 0
+
  
     # These features find how much of S0's span matches N0's span, starting from
     # the left.
@@ -736,7 +774,47 @@ suffix_disfl = (
     (wsexact, pscopy),
     (wscopy, psexact),
 )
- 
+
+pauses = (
+    (S0pause0,),
+    (S0pause2,),
+    (S0pause9,),
+    (N0pause0,),
+    (N0pause2,),
+    (N0pause9,),
+    (N1pause0,),
+    (N1pause2,),
+    (N1pause9,),
+    (S0pause0, S0p),
+    (S0pause2, S0p),
+    (S0pause9, S0p),
+    (N0pause0, S0p),
+    (N0pause2, S0p),
+    (N0pause9, S0p),
+    (N1pause0, S0p),
+    (N1pause2, S0p),
+    (N1pause9, S0p),
+)
+"""
+    #(S0pause0, N0pause0, S0p),
+    #(S0pause0, N0pause2, S0p),
+    #(S0pause0, N0pause9, S0p),
+    #(S0pause2, N0pause0, S0p),
+    #(S0pause2, N0pause2, S0p),
+    #(S0pause2, N0pause9, S0p),
+    #(S0pause9, N0pause0, S0p),
+    #(S0pause9, N0pause2, S0p),
+    #(S0pause9, N0pause9, S0p),
+""" 
+#(S0pause0, N0pause0),
+#(S0pause0, N0pause2),
+#(S0pause0, N0pause9),
+#(S0pause2, N0pause0),
+#(S0pause2, N0pause2),
+#(S0pause2, N0pause9),
+#(S0pause9, N0pause0),
+#(S0pause9, N0pause2),
+#(S0pause9, N0pause9),
 
 def cluster_bigrams():
     kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]
