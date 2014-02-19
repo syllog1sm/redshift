@@ -262,27 +262,33 @@ cdef class Perceptron:
                               self.now, -1.0, pred_i, <SquareFeature*>feat_addr)
    
     cdef inline int fill_scores(self, uint64_t* features, double* scores) except -1:
-        cdef size_t i, f, j, k, c
-        cdef size_t feat_addr
-        cdef SquareFeature* feat
-        cdef DenseFeature* raw_feat
-        cdef size_t part_idx
-        for c in range(self.nr_class):
+        cdef size_t i, c
+        cdef size_t nr_class = self.nr_class
+        cdef size_t nr_raws = self.nr_raws
+        for c in range(nr_class):
             scores[c] = 0
-        i = 0
-        while True:
-            f = features[i]
-            if f == 0:
-                break
-            i += 1
+        cdef size_t read = 0
+        cdef size_t write = 0
+        cdef size_t div = self.div
+        cdef uint64_t f = features[read]
+        cdef size_t feat_addr
+        cdef DenseFeature** raws = self.raws
+        cdef DenseFeature** active_raws = <DenseFeature**>calloc(500, sizeof(size_t))
+        while f != 0:
             feat_addr = self.W[f]
-            if feat_addr == 0:
-                continue
-            elif feat_addr < self.nr_raws:
-                score_dense_feat(scores, self.nr_class, self.raws[feat_addr])
-            else:
-                score_square_feat(scores, self.div, self.nr_class,
+            if feat_addr >= nr_raws:
+                score_square_feat(scores, div, nr_class,
                                   <SquareFeature*>feat_addr)
+            elif feat_addr > 0:
+                active_raws[write] = raws[feat_addr]
+                write += 1
+            read += 1
+            f = features[read]
+
+        for i in range(write):
+            score_dense_feat(scores, nr_class, active_raws[i])
+        free(active_raws)
+
 
     cdef uint64_t predict_best_class(self, uint64_t* features):
         cdef uint64_t i
