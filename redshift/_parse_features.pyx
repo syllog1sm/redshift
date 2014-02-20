@@ -580,17 +580,6 @@ edges = (
     (S0p, N0le_p)
 )
 
-sbd = (
-    (S0re_w, N0le_w,),
-    (S0re_p, N0le_p,),
-    (S0re_p, N0le_w),
-    (S0re_w, N0le_p),
-    (S0re_p, N1p),
-    (S0re_p, N2p),
-    (S0p, N2p),
-    (N1p, N2p),
-    (N2p, N3p),
-)
 
 stack_second = (
     (S1w,),
