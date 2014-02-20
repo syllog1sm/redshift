@@ -522,7 +522,7 @@ def _parse(model, data, out, gold=False):
 
 
 def _evaluate(test, gold):
-    return './scripts/evaluate.py %s %s > %s' % (test, gold, test.replace('parses', 'acc'))
+    return './scripts/new_evaluate.py %s %s > %s' % (gold, test, test.replace('parses', 'acc'))
 
 def _add_edits(test_dir, pos):
     in_loc = pjoin(test_dir, 'parses')
@@ -530,7 +530,7 @@ def _add_edits(test_dir, pos):
     return 'python scripts/add_edits.py %s %s > %s' % (in_loc, pos, out_loc)
 
 
-def _pbsify(repo, command_strs, size=6):
+def _pbsify(repo, command_strs, size=4):
     header = """#! /bin/bash
 #PBS -l walltime=20:00:00,mem=3gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate
