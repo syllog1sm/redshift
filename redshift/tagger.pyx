@@ -328,12 +328,6 @@ cdef enum:
     N3w
     N4w
 
-    N0_label
-    N0_head_w
-    N0_head_p
-    P1_label
-    P1_head_w
-
     CONTEXT_SIZE
 
 
@@ -374,17 +368,6 @@ case = (
     (P1upper, N0w),
     (P1title, N0w, N1title),
     (N0title, N0upper, N0c),
-)
-
-parse = (
-    (N0_label,),
-    (N0_head_w,),
-    (N0_head_p,),
-    (P1_head_w,),
-    (P1_label,),
-    (N0_label, P1_label),
-    #(N0_left_w,),
-    #(N0_left_p,),
 )
 
 orth = (
@@ -447,9 +430,6 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[N1upper] = sent.oft_upper[i+1]
     context[N1title] = sent.oft_title[i+1]
 
-    context[N0_label] = sent.parse.labels[i]
-    context[N0_head_w] = sent.words[sent.parse.heads[i]]
-    context[N0_head_p] = sent.pos[sent.parse.heads[i]]
     if (i + 2) < sent.length:
         context[N2w] = sent.words[i + 2]
         context[N2c] = sent.clusters[i + 2]
@@ -474,8 +454,6 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[P1alpha] = sent.non_alpha[i-1]
     context[P1title] = sent.oft_title[i-1]
 
-    context[P1_label] = sent.parse.labels[i-1]
-    context[P1_head_w] = sent.words[sent.parse.heads[i-1]]
     if i == 1:
         return 0
     context[P2w] = sent.words[i-2]
