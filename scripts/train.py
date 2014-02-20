@@ -13,7 +13,7 @@ except ImportError:
 from itertools import combinations
 
 import redshift.parser
-from redshift.parser import GreedyParser, BeamParser
+from redshift.parser import BeamParser
 from redshift import Sentence
 
 
@@ -55,12 +55,6 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
                             allow_reduce=allow_reduce, allow_reattach=allow_reattach,
                             use_edit=use_edit, use_sbd=use_sbd,
                             beam_width=beam_width, auto_pos=auto_pos)
-    else:
-        parser = GreedyParser(model_loc, clean=True, train_alg=train_alg,
-                              feat_set=feat_set, feat_thresh=feat_thresh,
-                              allow_reduce=allow_reduce, allow_reattach=allow_reattach,
-                              use_edit=use_edit, sbd_strat=sbd_strat,
-                              auto_pos=auto_pos)
     train_sent_strs = open(train_loc).read().strip().split('\n\n')
     if n_sents != 0:
         print "Using %d sents for training" % n_sents
