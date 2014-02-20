@@ -690,16 +690,6 @@ suffix_disfl = (
 )
 
 
-def cluster_bigrams():
-    kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]
-    clusters = []
-    for t1, t2 in combinations(kernels, 2):
-        feat = (t1 + 2, t1 + 1, t2 + 2, t2 + 1)
-        clusters.append(feat)
-    print "Adding %d cluster bigrams" % len(clusters)
-    return tuple(clusters)
-
-
 def pos_bigrams():
     kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]
     bitags = []
@@ -710,92 +700,6 @@ def pos_bigrams():
     return tuple(bitags)
 
 
-def get_best_bigrams(all_bigrams, n=0):
-    return []
-
-def get_best_trigrams(all_trigrams, n=0):
-    return []
-
-
-def unigram(word, add_clusters=False):
-    assert word >= 0
-    assert word < (CONTEXT_SIZE - 5)
- 
-    pos = word + 1
-    cluster = word + 2
-    cluster6 = word + 3
-    cluster4 = word + 4
-    basic = ((word, pos), (word,), (pos,))
-    clusters = ((cluster,), (cluster6,), (cluster4,),
-                (pos, cluster), (pos, cluster6), (pos, cluster4),
-                (word, cluster6), (word, cluster4))
-    if add_clusters:
-        return basic + clusters
-    else:
-        return basic
-
-
-def bigram(a, b, add_clusters=False):
-    assert a >= 0
-    assert b >= 0
-    assert a < (CONTEXT_SIZE - 5)
-    assert b < (CONTEXT_SIZE - 5)
-    w1 = a
-    p1 = a + 1
-    c1 = a + 2
-    c6_1 = a + 3
-    c4_1 = a + 4
-    w2 = b
-    p2 = b + 1
-    c2 = b + 2
-    c6_2 = b + 3
-    c4_2 = b + 4
-    basic = ((w1, w2), (p1, p2), (p1, w2), (w1, p2))
-    clusters = ((c1, c2), (c1, w2), (w1, c2), (c6_1, c6_2), (c4_1, c4_2),
-                (c6_1, p1, p2), (p1, c6_2, p2), (c4_1, p1, w2),
-                (w1, c4_2, p2))
-    if add_clusters:
-        return basic + clusters
-    else:
-        return basic
-
-
-def trigram(a, b, c, add_clusters=False):
-    assert a >= 0
-    assert b >= 0
-    assert c >= 0
-    assert a < (CONTEXT_SIZE - 5)
-    assert b < (CONTEXT_SIZE - 5)
-    assert c < (CONTEXT_SIZE - 5)
-
-    w1 = a
-    p1 = a + 1
-    c1 = a + 2
-    cp1 = a + 3
-    w2 = b
-    p2 = b + 1
-    c2 = b + 2
-    cp2 = b + 3
-    w3 = c
-    p3 = c + 1
-    c3 = c + 2
-    cp3 = c + 3
-
-    #basic = ((w1, w2, w3), (w1, p2, p3), (p1, w2, p3), (p1, p2, w3), (p1, p2, p3))
-    basic = ((w1, w2, w3), (w1, p2, p3), (p1, w2, p3), (p1, p2, w3),
-             (p1, p2, p3))
-    #clusters = ((c1, c2, p3), (c1, p2, w3), (p1, c2, c3), (c1, p2, p3),
-    #            (p1, c2, p3), (p1, c2, c3), (p1, p2, p3))
-    clusters = ((c1, c2, c3), (c1, p2, p3), (cp1, p2, p3), (p1, c2, p3), (p1, cp2, p3),
-                (p1, p2, c3), (p1, p2, cp3))
-
-    if add_clusters:
-        return basic + clusters
-    else:
-        return basic
-
-
-  
 def baseline_templates():
     return from_single + from_word_pairs + from_three_words + distance + \
            valency + zhang_unigrams + third_order + labels + label_sets
@@ -810,18 +714,3 @@ def match_templates():
         # POS match
         match_feats.append((w1 + 1, w2 + 1))
     return tuple(match_feats)
-
-
-def ngram_feats(ngrams, add_clusters=False):
-    kernel_tokens = get_kernel_tokens()
-    feats = []
-    for token in kernel_tokens:
-        feats.extend(unigram(token, add_clusters=add_clusters))
-    for ngram_feat in ngrams:
-        if len(ngram_feat) == 2:
-            feats += bigram(*ngram_feat, add_clusters=add_clusters)
-        elif len(ngram_feat) == 3:
-            feats += trigram(*ngram_feat, add_clusters=add_clusters)
-        else:
-            raise StandardError, ngram_feat
-    return tuple(feats)
