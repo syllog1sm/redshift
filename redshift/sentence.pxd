@@ -20,8 +20,6 @@ cdef struct Sentence:
     size_t* suffix
     size_t* prefix
     double* pauses
-    int* parens
-    int* quotes
     bint* oft_upper
     bint* oft_title
     bint* non_alpha

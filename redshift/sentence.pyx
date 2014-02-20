@@ -65,8 +65,6 @@ cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags, py_paus
     s.prefix = <size_t*>calloc(size, sizeof(size_t))
 
     s.pauses = <double*>calloc(size, sizeof(double))
-    s.parens = <int*>calloc(size, sizeof(int))
-    s.quotes = <int*>calloc(size, sizeof(int))
     s.non_alpha = <bint*>calloc(size, sizeof(bint))
     s.oft_upper = <bint*>calloc(size, sizeof(bint))
     s.oft_title = <bint*>calloc(size, sizeof(bint))
@@ -74,8 +72,6 @@ cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags, py_paus
     cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
     cdef dict case_dict = index.hashes.get_case_stats()
     mask_value = index.hashes.encode_word('<MASKED>')
-    cdef int paren_cnt = 0
-    cdef int quote_cnt = 0
     types = set()
     for i in range(length):
         s.owords[i] = index.hashes.encode_word(py_words[i])
@@ -101,18 +97,8 @@ cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags, py_paus
         if thresh != 0 and index.hashes.get_freq(py_words[i]) <= thresh:
             s.words[i] = mask_value
         # Use POS tag to semi-smartly get ' disambiguation
-        if py_tags[i] == "``":
-            quote_cnt += 1
-        elif py_tags[i] == "''":
-            quote_cnt -= 1
-        elif py_words[i] == "(" or py_words[i] == "[" or py_words[i] == "{":
-            paren_cnt += 1
-        elif py_words[i] == ")" or py_words[i] == "]" or py_words[i] == "}":
-            paren_cnt -= 1
         s.suffix[i] = index.hashes.encode_word(py_words[i][-3:])
         s.prefix[i] = index.hashes.encode_word(py_words[i][0])
-        s.parens[i] = paren_cnt
-        s.quotes[i] = quote_cnt
     s.words[0] = 0
     s.pos[0] = 0
     return s
@@ -144,8 +130,6 @@ cdef free_sent(Sentence* s):
     free(s.cprefix6s)
     free(s.suffix)
     free(s.prefix)
-    free(s.parens)
-    free(s.quotes)
     free(s.oft_upper)
     free(s.oft_title)
     free(s.non_alpha)
