@@ -189,45 +189,6 @@ cdef enum:
     wsexact
     psexact
 
-    S0pause0
-    S0pause1
-    S0pause2
-    S0pause3
-    S0pause4
-    S0pause5
-    S0pause6
-    S0pause7
-    S0pause8
-    S0pause9
-
-    N0pause0
-    N0pause1
-    N0pause2
-    N0pause3
-    N0pause4
-    N0pause5
-    N0pause6
-    N0pause7
-    N0pause8
-    N0pause9
-
-    N1pause0
-    N1pause1
-    N1pause2
-    N1pause3
-    N1pause4
-    N1pause5
-    N1pause6
-    N1pause7
-    N1pause8
-    N1pause9
-
-    m1
-    m2
-    m3
-    m4
-    m5
-
     CONTEXT_SIZE
 
 
@@ -243,7 +204,6 @@ def get_kernel_tokens():
 cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel* k):
     cdef size_t* words = sent.words
     cdef size_t* tags = sent.pos
-    cdef double* pauses = sent.pauses
     cdef size_t* clusters = sent.clusters
     cdef size_t* cprefix6s = sent.cprefix6s
     cdef size_t* cprefix4s = sent.cprefix4s
@@ -398,10 +358,6 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
         context[dist] = k.i - k.s0
     else:
         context[dist] = 0
-    for i in range(10):
-        context[S0pause0 + i] = pauses[k.s0] >= (i * 0.1)
-        context[N0pause0 + i] = pauses[k.i] >= (i * 0.1)
-        context[N1pause0 + i] = pauses[k.i+1] >= (i * 0.1)
 
     context[S0le_w] = words[k.s0ledge]
     context[S0le_p] = tags[k.s0ledge]
@@ -489,12 +445,6 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
                 context[pscopy] += 1
             else:
                 context[psexact] = 0
-
-    context[m1] = k.hist[0]
-    context[m2] = k.hist[1]
-    context[m3] = k.hist[2]
-    context[m4] = k.hist[3]
-    context[m5] = k.hist[4]
 
 
 from_single = (
@@ -663,11 +613,6 @@ stack_second = (
     #(S2p, N0w, N1w),
     (S2w, N0p, N1p),
 )
-history = (
-    (m1,),
-    (m1, m2),
-    (m1, m2, m3),
-)
 
 # Koo et al (2008) dependency features, using Brown clusters.
 clusters = (
@@ -755,17 +700,6 @@ suffix_disfl = (
     (wscopy, psexact),
 )
 
-pauses = (
-    (S0pause0,),
-    (S0pause2,),
-    (S0pause9,),
-    (N0pause0,),
-    (N0pause2,),
-    (N0pause9,),
-    (N1pause0,),
-    (N1pause2,),
-    (N1pause9,),
-)
 
 def cluster_bigrams():
     kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]
