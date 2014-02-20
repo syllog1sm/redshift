@@ -785,36 +785,7 @@ pauses = (
     (N1pause0,),
     (N1pause2,),
     (N1pause9,),
-    (S0pause0, S0p),
-    (S0pause2, S0p),
-    (S0pause9, S0p),
-    (N0pause0, S0p),
-    (N0pause2, S0p),
-    (N0pause9, S0p),
-    (N1pause0, S0p),
-    (N1pause2, S0p),
-    (N1pause9, S0p),
 )
-"""
-    #(S0pause0, N0pause0, S0p),
-    #(S0pause0, N0pause2, S0p),
-    #(S0pause0, N0pause9, S0p),
-    #(S0pause2, N0pause0, S0p),
-    #(S0pause2, N0pause2, S0p),
-    #(S0pause2, N0pause9, S0p),
-    #(S0pause9, N0pause0, S0p),
-    #(S0pause9, N0pause2, S0p),
-    #(S0pause9, N0pause9, S0p),
-""" 
-#(S0pause0, N0pause0),
-#(S0pause0, N0pause2),
-#(S0pause0, N0pause9),
-#(S0pause2, N0pause0),
-#(S0pause2, N0pause2),
-#(S0pause2, N0pause9),
-#(S0pause9, N0pause0),
-#(S0pause9, N0pause2),
-#(S0pause9, N0pause9),
 
 def cluster_bigrams():
     kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]
