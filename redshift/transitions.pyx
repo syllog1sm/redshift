@@ -52,8 +52,10 @@ cdef inline bint can_left(State* s, bint repairs):
 cdef inline bint can_edit(State* s, bint edit):
     return s.stack_len and not s.segment and edit
 
-cdef inline bint can_segment(State* s, size_t* moves, bint at_leaf):
-    if s.at_end_of_buffer:
+cdef inline bint can_segment(State* s, size_t* moves, bint sbd):
+    if not sbd:
+        return False
+    elif s.at_end_of_buffer:
         return False
     elif s.segment:
         return False
@@ -61,7 +63,7 @@ cdef inline bint can_segment(State* s, size_t* moves, bint at_leaf):
         return False
     elif not s.t:
         return False
-    elif at_leaf and moves[s.history[s.t-1]] != SHIFT and moves[s.history[s.t-1]] != RIGHT:
+    elif moves[s.history[s.t-1]] != SHIFT and moves[s.history[s.t-1]] != RIGHT:
         return False
     elif nr_headless(s) != 1:
         return False
@@ -70,10 +72,9 @@ cdef inline bint can_segment(State* s, size_t* moves, bint at_leaf):
 
 cdef class TransitionSystem:
     def __cinit__(self, allow_reattach=False, allow_reduce=False, use_edit=False,
-                  sbd_at_leaf=True):
+                  use_sbd=True):
         self.use_edit = use_edit
-        self.sbd_at_leaf = sbd_at_leaf
-        print 'SBD at leaf?', self.sbd_at_leaf
+        self.use_sbd = use_sbd
         self.n_labels = MAX_LABELS
         self.n_tags = MAX_TAGS
         self.allow_reattach = allow_reattach
@@ -258,7 +259,7 @@ cdef class TransitionSystem:
         valid[self.s_id] = 0 if can_shift(s) else -1
         valid[self.d_id] = 0 if can_reduce(s, self.allow_reduce) else -1
         valid[self.e_id] = 0 if can_edit(s, self.use_edit) else -1
-        valid[self.b_id] = 0 if can_segment(s, self.moves, self.sbd_at_leaf) else -1
+        valid[self.b_id] = 0 if can_segment(s, self.moves, self.use_sbd) else -1
         cdef int leftable = 0 if can_left(s, self.allow_reattach) else -1
         for i in range(self.l_start, self.l_end):
             valid[i] = leftable
@@ -295,7 +296,7 @@ cdef class TransitionSystem:
         cdef int cost = 0
         if s.stack_len < 1:
             return 0
-        if self.sbd_at_leaf and can_segment(s, self.moves, self.sbd_at_leaf):
+        if can_segment(s, self.moves, self.use_sbd):
             cost += sbd[s.top] != sbd[s.i]
         if self.use_edit and edits[s.i]:
             return cost
@@ -315,6 +316,8 @@ cdef class TransitionSystem:
             return cost
         if heads[s.i] == s.top:
             return cost
+        elif not self.use_sbd and heads[s.i] == s.heads[s.top] == self.root_label:
+            return cost
         cost += has_head_in_buffer(s, s.i, heads)
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
@@ -328,7 +331,7 @@ cdef class TransitionSystem:
         cdef int cost = 0
         if s.segment:
             return 0
-        if self.sbd_at_leaf and can_segment(s, self.moves, self.sbd_at_leaf):
+        if can_segment(s, self.moves, self.use_sbd):
             cost += sbd[s.top] != sbd[s.i]
         cost += has_child_in_buffer(s, s.top, heads)
         if self.allow_reattach:
@@ -342,7 +345,7 @@ cdef class TransitionSystem:
         if not can_left(s, self.allow_reattach):
             return -1
         cdef int cost = 0
-        if can_segment(s, self.moves, self.sbd_at_leaf):
+        if can_segment(s, self.moves, self.use_sbd):
             cost += sbd[s.top] != sbd[s.i]
         # This would form a dep between an edit and non-edit word
         if self.use_edit and edits[s.top] and not edits[s.i]:
@@ -350,6 +353,8 @@ cdef class TransitionSystem:
         elif self.use_edit and edits[s.i]:
             return cost
         if heads[s.top] == s.i:
+            return cost
+        elif not self.use_sbd and heads[s.top] == heads[s.i] == self.root_label:
             return cost
         cost += has_head_in_buffer(s, s.top, heads)
         cost += has_child_in_buffer(s, s.top, heads)
@@ -361,7 +366,7 @@ cdef class TransitionSystem:
 
     cdef int b_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
                     size_t* sbd):
-        if not can_segment(s, self.moves, self.sbd_at_leaf):
+        if not can_segment(s, self.moves, self.use_sbd):
             return -1
         if sbd[s.top] == sbd[s.i]:
             return 1
@@ -373,7 +378,7 @@ cdef class TransitionSystem:
         if not can_edit(s, self.use_edit):
             return -1
         cdef int cost = 0
-        if self.sbd_at_leaf and can_segment(s, self.moves, self.sbd_at_leaf):
+        if can_segment(s, self.moves, self.use_sbd):
             cost += sbd[s.top] != sbd[s.i]
         cost += not edits[s.top]
         return cost
