@@ -144,13 +144,6 @@ cdef enum:
     S0llabs
     S0rlabs
     N0llabs
-    N0orth
-    N0paren
-    N0quote
-    N1orth
-    N1paren
-    N1quote
-    S0re_orth
 
     S0le_w
     S0le_p
@@ -164,7 +157,6 @@ cdef enum:
     S0re_c6
     S0re_c4
     
-    N0le_orth
     N0le_w
     N0le_p
     N0le_c
@@ -255,9 +247,6 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
     cdef size_t* clusters = sent.clusters
     cdef size_t* cprefix6s = sent.cprefix6s
     cdef size_t* cprefix4s = sent.cprefix4s
-    cdef size_t* orths = sent.prefix
-    cdef int* parens = sent.parens
-    cdef int* quotes = sent.quotes
     context[N0w] = words[k.i]
     context[N0p] = k.n0p
     context[N0c] = clusters[k.i]
@@ -409,12 +398,6 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
         context[dist] = k.i - k.s0
     else:
         context[dist] = 0
-    context[N0orth] = orths[k.i]
-    context[N1orth] = orths[k.i + 1]
-    context[N0paren] = parens[k.i]
-    context[N1paren] = parens[k.i + 1]
-    context[N0quote] = quotes[k.i]
-    context[N1quote] = quotes[k.i + 1]
     for i in range(10):
         context[S0pause0 + i] = pauses[k.s0] >= (i * 0.1)
         context[N0pause0 + i] = pauses[k.i] >= (i * 0.1)
@@ -425,7 +408,6 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
     context[S0le_c] = clusters[k.s0ledge]
     context[S0le_c6] = cprefix6s[k.s0ledge]
     context[S0le_c4] = cprefix4s[k.s0ledge]
-    context[N0le_orth] = orths[k.n0ledge]
     context[N0le_w] = words[k.n0ledge]
     context[N0le_p] = k.n0ledgep
     context[N0le_c] = clusters[k.n0ledge]
@@ -434,7 +416,6 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
     
     context[S0re_p] = k.s0redgep
     if k.n0ledge > 0:
-        context[S0re_orth] = orths[k.n0ledge - 1]
         context[S0re_w] = words[k.n0ledge - 1]
         context[S0re_c] = clusters[k.n0ledge - 1]
         context[S0re_c6] = cprefix6s[k.n0ledge - 1]
@@ -444,7 +425,6 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
         context[S0re_c] = 0
         context[S0re_c6] = 0
         context[S0re_c4] = 0
-        context[S0re_orth] = 0
     if k.prev_edit and k.i != 0:
         context[prev_edit] = 1
         context[prev_edit_wmatch] = 1 if words[k.i - 1] == words[k.i] else 0
