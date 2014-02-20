@@ -280,8 +280,6 @@ cdef enum:
     N0suff
     N0pre
 
-    N0quo
-    N0paren
     N0title
     N0upper
     N0alpha
@@ -374,11 +372,6 @@ orth = (
     (N0pre,),
     (N1pre,),
     (P1pre,),
-    (N0quo,),
-    (N0w, N0quo),
-    (P1p, N0quo),
-    (N0w, N0paren),
-    (P1p, N0paren)
 )
 
 clusters = (
@@ -420,8 +413,6 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[N1suff] = sent.suffix[i + 1]
     context[N1pre] = sent.prefix[i + 1]
 
-    context[N0quo] = sent.quotes[i] != 0
-    context[N0paren] = sent.parens[i] != 0
     context[N0alpha] = sent.non_alpha[i]
     context[N0upper] = sent.oft_upper[i]
     context[N0title] = sent.oft_title[i]
