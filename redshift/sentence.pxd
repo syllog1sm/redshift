@@ -19,17 +19,13 @@ cdef struct Sentence:
     size_t* cprefix6s
     size_t* suffix
     size_t* prefix
-    double* pauses
-    int* parens
-    int* quotes
     bint* oft_upper
     bint* oft_title
     bint* non_alpha
     _Parse* parse
 
 
-cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags, py_pauses,
-                             size_t thresh)
+cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags)
 
 
 cdef int add_parse(Sentence* sent, list word_ids, list heads,

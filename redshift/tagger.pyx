@@ -139,77 +139,6 @@ cdef class BaseTagger:
         index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
 
 
-cdef class GreedyTagger(BaseTagger):
-    cdef int tag(self, Sentence* sent) except -1:
-        cdef size_t i, clas, lookup
-        cdef double incumbent, runner_up, score
-        cdef size_t prev = sent.pos[0]
-        cdef size_t alt = sent.pos[0]
-        cdef size_t prevprev = 0
-        for i in range(1, sent.length - 1):
-            lookup = self.tagdict[sent.words[i]]
-            if lookup != 0:
-                sent.pos[i] = lookup
-                sent.alt_pos[i] = 0
-                alt = 0
-                prevprev = prev
-                prev = lookup
-                continue 
-            sent.pos[i] = 0
-            sent.alt_pos[i] = 0
-            fill_context(self._context, sent, prev, prevprev, alt, i)
-            self.features.extract(self._features, self._context)
-            self.guide.fill_scores(self._features, self.guide.scores)
-            incumbent = -10000
-            runner_up = -10000
-            for clas in range(self.guide.nr_class):
-                score = self.guide.scores[clas]
-                if score >= incumbent:
-                    sent.alt_pos[i] = sent.pos[i]
-                    sent.pos[i] = clas
-                    runner_up = incumbent
-                    incumbent = score
-            prevprev = prev
-            prev = sent.pos[i]
-            alt = sent.alt_pos[i]
-
-    cdef int train_sent(self, Sentence* sent) except -1:
-        cdef size_t w, clas, second, pred, prev, prevprev, lookup
-        cdef double score, incumbent, runner_up
-        cdef double second_score
-        prev = sent.pos[0]
-        alt = sent.pos[0]
-        for w in range(1, sent.length - 1):
-            lookup = self.tagdict[sent.words[w]]
-            if lookup != 0:
-                alt = 0
-                prevprev = prev
-                prev = lookup
-                continue 
-            fill_context(self._context, sent, prev, prevprev, alt, w)
-            self.features.extract(self._features, self._context)
-            self.guide.fill_scores(self._features, self.guide.scores)
-            incumbent = 0
-            runner_up = 0
-            pred = 0
-            second = 0
-            for clas in range(self.nr_tag):
-                score = self.guide.scores[clas]
-                if score >= incumbent:
-                    runner_up = incumbent
-                    second = pred
-                    incumbent = score
-                    pred = clas
-            if pred != sent.pos[w]:
-                self.guide.update(pred, sent.pos[w], self._features, 1.0)
-            else:
-                self.guide.n_corr += 1
-            self.guide.total += 1
-            prevprev = prev
-            prev = pred
-            alt = second
-
-
 cdef class BeamTagger(BaseTagger):
     cdef int tag(self, Sentence* sent) except -1:
         cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.length, self.nr_tag)
@@ -351,8 +280,6 @@ cdef enum:
     N0suff
     N0pre
 
-    N0quo
-    N0paren
     N0title
     N0upper
     N0alpha
@@ -399,12 +326,6 @@ cdef enum:
     N3w
     N4w
 
-    N0_label
-    N0_head_w
-    N0_head_p
-    P1_label
-    P1_head_w
-
     CONTEXT_SIZE
 
 
@@ -447,26 +368,10 @@ case = (
     (N0title, N0upper, N0c),
 )
 
-parse = (
-    (N0_label,),
-    (N0_head_w,),
-    (N0_head_p,),
-    (P1_head_w,),
-    (P1_label,),
-    (N0_label, P1_label),
-    #(N0_left_w,),
-    #(N0_left_p,),
-)
-
 orth = (
     (N0pre,),
     (N1pre,),
     (P1pre,),
-    (N0quo,),
-    (N0w, N0quo),
-    (P1p, N0quo),
-    (N0w, N0paren),
-    (P1p, N0paren)
 )
 
 clusters = (
@@ -508,8 +413,6 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[N1suff] = sent.suffix[i + 1]
     context[N1pre] = sent.prefix[i + 1]
 
-    context[N0quo] = sent.quotes[i] != 0
-    context[N0paren] = sent.parens[i] != 0
     context[N0alpha] = sent.non_alpha[i]
     context[N0upper] = sent.oft_upper[i]
     context[N0title] = sent.oft_title[i]
@@ -518,9 +421,6 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[N1upper] = sent.oft_upper[i+1]
     context[N1title] = sent.oft_title[i+1]
 
-    context[N0_label] = sent.parse.labels[i]
-    context[N0_head_w] = sent.words[sent.parse.heads[i]]
-    context[N0_head_p] = sent.pos[sent.parse.heads[i]]
     if (i + 2) < sent.length:
         context[N2w] = sent.words[i + 2]
         context[N2c] = sent.clusters[i + 2]
@@ -545,8 +445,6 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
     context[P1alpha] = sent.non_alpha[i-1]
     context[P1title] = sent.oft_title[i-1]
 
-    context[P1_label] = sent.parse.labels[i-1]
-    context[P1_head_w] = sent.words[sent.parse.heads[i-1]]
     if i == 1:
         return 0
     context[P2w] = sent.words[i-2]

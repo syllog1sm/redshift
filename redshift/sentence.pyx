@@ -31,8 +31,7 @@ def normalize_word(word):
         return word.lower()
  
 
-cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags, py_pauses,
-                             size_t thresh):
+cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags):
     cdef:
         size_t i
         bytes py_word
@@ -64,9 +63,6 @@ cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags, py_paus
     s.suffix = <size_t*>calloc(size, sizeof(size_t))
     s.prefix = <size_t*>calloc(size, sizeof(size_t))
 
-    s.pauses = <double*>calloc(size, sizeof(double))
-    s.parens = <int*>calloc(size, sizeof(int))
-    s.quotes = <int*>calloc(size, sizeof(int))
     s.non_alpha = <bint*>calloc(size, sizeof(bint))
     s.oft_upper = <bint*>calloc(size, sizeof(bint))
     s.oft_title = <bint*>calloc(size, sizeof(bint))
@@ -74,15 +70,12 @@ cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags, py_paus
     cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
     cdef dict case_dict = index.hashes.get_case_stats()
     mask_value = index.hashes.encode_word('<MASKED>')
-    cdef int paren_cnt = 0
-    cdef int quote_cnt = 0
     types = set()
     for i in range(length):
         s.owords[i] = index.hashes.encode_word(py_words[i])
         word = normalize_word(py_words[i])
         s.words[i] = index.hashes.encode_word(word)
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
-        s.pauses[i] = <double>py_pauses[i]
         case_stats = case_dict.get(py_words[i])
         if case_stats is None:
             if not py_words[i].isalpha():
@@ -98,21 +91,9 @@ cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags, py_paus
             s.clusters[i] = brown_idx.table[s.owords[i]].full
             s.cprefix4s[i] = brown_idx.table[s.owords[i]].prefix4
             s.cprefix6s[i] = brown_idx.table[s.owords[i]].prefix6
-        if thresh != 0 and index.hashes.get_freq(py_words[i]) <= thresh:
-            s.words[i] = mask_value
         # Use POS tag to semi-smartly get ' disambiguation
-        if py_tags[i] == "``":
-            quote_cnt += 1
-        elif py_tags[i] == "''":
-            quote_cnt -= 1
-        elif py_words[i] == "(" or py_words[i] == "[" or py_words[i] == "{":
-            paren_cnt += 1
-        elif py_words[i] == ")" or py_words[i] == "]" or py_words[i] == "}":
-            paren_cnt -= 1
         s.suffix[i] = index.hashes.encode_word(py_words[i][-3:])
         s.prefix[i] = index.hashes.encode_word(py_words[i][0])
-        s.parens[i] = paren_cnt
-        s.quotes[i] = quote_cnt
     s.words[0] = 0
     s.pos[0] = 0
     return s
@@ -136,7 +117,6 @@ cdef int add_parse(Sentence* sent, list word_ids, list heads, list labels,
 cdef free_sent(Sentence* s):
     free(s.words)
     free(s.owords)
-    free(s.pauses)
     free(s.pos)
     free(s.alt_pos)
     free(s.clusters)
@@ -144,8 +124,6 @@ cdef free_sent(Sentence* s):
     free(s.cprefix6s)
     free(s.suffix)
     free(s.prefix)
-    free(s.parens)
-    free(s.quotes)
     free(s.oft_upper)
     free(s.oft_title)
     free(s.non_alpha)
@@ -164,7 +142,6 @@ cdef class PySentence:
         n = len(tokens) + 2
         words = ['<start>']
         tags = ['OOB']
-        pauses = [-1]
         heads = [0]
         labels = ['ERR']
         ids = [None]
@@ -172,7 +149,6 @@ cdef class PySentence:
         for i, token in enumerate(tokens):
             words.append(token.word)
             tags.append(token.pos)
-            pauses.append(token.pause)
             edits.append(token.is_edit)
             if token.head == -1:
                 heads.append(n - 1)
@@ -183,13 +159,12 @@ cdef class PySentence:
         ids.append(None)
         words.append('<root>')
         tags.append('ROOT')
-        pauses.append(-1)
         heads.append(0)
         labels.append('ERR')
         edits.append(False)
 
         self.id = id_
-        cdef Sentence* sent = init_c_sent(id_, n, words, tags, pauses, 0)
+        cdef Sentence* sent = init_c_sent(id_, n, words, tags)
         add_parse(sent, ids, heads, labels, edits)
         self.c_sent = sent
         self.length = n
@@ -205,7 +180,7 @@ cdef class PySentence:
 
     @classmethod
     def from_pos(cls, id_, object sent_str):
-        return cls(id_, [Token.from_pos(i, *t.rsplit('/', 2)) for i, t in
+        return cls(id_, [Token.from_pos(i, *t.rsplit('/', 1)) for i, t in
                    enumerate(sent_str.strip().split(' '))])
 
     property length:
@@ -234,34 +209,31 @@ cdef class PySentence:
 
 
 class Token(object):
-    def __init__(self, id_, word, pos, length, pause, head, label, is_edit):
+    def __init__(self, id_, word, pos, head, label, is_edit):
         self.id = id_
         self.word = word
         self.pos = pos
-        self.length = length
-        self.pause = pause
         self.head = int(head)
         self.label = label
         self.is_edit = is_edit
 
     @classmethod
-    def from_pos(cls, id_, word, pos, timings='na|na|na'):
-        duration, pause = _parse_timing(*timings.split('|'))
-        return cls(id_, word, pos, duration, pause, 0, 'ERR', False)
+    def from_pos(cls, id_, word, pos):
+        return cls(id_, word, pos, 0, 'ERR', False)
 
     @classmethod
     def from_str(cls, i, token_str):
         fields = token_str.split()
+        if len(fields) == 4:
+            fields.append(False)
         if len(fields) == 5:
             word, pos, head, label, sbd = fields
             word_id = int(i)
             head = int(head)
             is_edit = head == i or label == 'erased'
             sbd = sbd == 'True'
-            pause = 0.0
-            duration = 0.0
         else:
-            word_id, word, _, pos, pos2, feats, head, label, timings, _ = fields
+            word_id, word, _, pos, pos2, feats, head, label, _, _ = fields
             word_id = int(word_id)
             feats = feats.split('|')
             head = int(head) - 1
@@ -269,25 +241,8 @@ class Token(object):
                 is_edit = True
             else:
                 is_edit = False
-            pause, duration = _parse_timing(*timings.split('|'))
         # For SWBD
         if pos.startswith('^'):
             pos = pos[1:]
             pos = pos.split('^')[0]
-        return cls(i, word, pos, duration, pause, head, label, is_edit)
-
-
-def _parse_timing(start, end, pause):
-    try:
-        start = float(start)
-    except ValueError:
-        start = -1
-    try:
-        end = float(end)
-    except ValueError:
-        end = -1
-    try:
-        pause = float(pause)
-    except ValueError:
-        pause = -1
-    return end - start, pause
+        return cls(i, word, pos, head, label, is_edit)

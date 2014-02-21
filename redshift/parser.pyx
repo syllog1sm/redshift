@@ -17,7 +17,7 @@ from sentence import get_labels
 from sentence cimport PySentence, Sentence
 from transitions cimport TransitionSystem, transition_to_str 
 from beam cimport Beam
-from tagger cimport GreedyTagger, BeamTagger
+from tagger cimport BeamTagger
 
 from features.extractor cimport Extractor
 import _parse_features
@@ -48,7 +48,7 @@ def load_parser(model_dir, reuse_idx=False):
     allow_reattach = params['allow_reattach'] == 'True'
     allow_reduce = params['allow_reduce'] == 'True'
     use_edit = params['use_edit'] == 'True'
-    sbd_strat = params['sbd_strat']
+    use_sbd = params['use_sbd'] == 'True'
     l_labels = params['left_labels']
     r_labels = params['right_labels']
     beam_width = int(params['beam_width'])
@@ -61,7 +61,7 @@ def load_parser(model_dir, reuse_idx=False):
     params = {'clean': False, 'train_alg': train_alg,
               'feat_set': feat_set, 'feat_thresh': feat_thresh,
               'vocab_thresh': 1, 'allow_reattach': allow_reattach,
-              'use_edit': use_edit, 'sbd_strat': sbd_strat, 
+              'use_edit': use_edit, 'use_sbd': use_sbd, 
               'allow_reduce': allow_reduce,
               'reuse_idx': reuse_idx, 'beam_width': beam_width,
               'ngrams': ngrams,
@@ -69,7 +69,7 @@ def load_parser(model_dir, reuse_idx=False):
     if beam_width >= 2:
         parser = BeamParser(model_dir, **params)
     else:
-        parser = GreedyParser(model_dir, **params)
+        raise StandardError
     pos_tags = set([int(line.split()[-1]) for line in
                         open(pjoin(model_dir, 'pos'))])
     _, nr_label = parser.moves.set_labels(pos_tags, _parse_labels_str(l_labels),
@@ -92,7 +92,6 @@ cdef class BaseParser:
     cdef int feat_thresh
     cdef object feat_set
     cdef object ngrams
-    cdef object sbd_strat
     cdef uint64_t* _features
     cdef size_t* _context
 
@@ -100,7 +99,7 @@ cdef class BaseParser:
                   feat_set="zhang",
                   feat_thresh=0, vocab_thresh=5,
                   allow_reattach=False, allow_reduce=False,
-                  use_edit=False, sbd_strat='leaf',
+                  use_edit=False, use_sbd=False,
                   reuse_idx=False, beam_width=1,
                   ngrams=None, auto_pos=False):
         self.model_dir = self.setup_model_dir(model_dir, clean)
@@ -131,7 +130,6 @@ cdef class BaseParser:
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
         self.beam_width = beam_width
-        self.sbd_strat = sbd_strat
         if clean == True:
             self.new_idx(self.model_dir)
         else:
@@ -139,7 +137,7 @@ cdef class BaseParser:
         self.moves = TransitionSystem(allow_reattach=allow_reattach,
                                       allow_reduce=allow_reduce,
                                       use_edit=use_edit,
-                                      sbd_at_leaf=sbd_strat == 'leaf')
+                                      use_sbd=use_sbd)
         self.auto_pos = auto_pos
         self.say_config()
         self.guide = Perceptron(self.moves.max_class, pjoin(model_dir, 'model.gz'))
@@ -239,11 +237,11 @@ cdef class BaseParser:
             cfg.write(u'allow_reattach\t%s\n' % self.moves.allow_reattach)
             cfg.write(u'allow_reduce\t%s\n' % self.moves.allow_reduce)
             cfg.write(u'use_edit\t%s\n' % self.moves.use_edit)
+            cfg.write(u'use_sbd\t%s\n' % self.moves.use_edit)
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
             cfg.write(u'beam_width\t%d\n' % self.beam_width)
             cfg.write(u'auto_pos\t%s\n' % self.auto_pos)
-            cfg.write(u'sbd_strat\t%s\n' % self.sbd_strat)
             #if not self.features.ngrams:
             #    cfg.write(u'ngrams\t-1\n')
             #else:
@@ -470,140 +468,6 @@ cdef class BeamParser(BaseParser):
                 counts[self._features[f]] = 0
             counts[self._features[f]] += inc
             f += 1
-
-cdef double FOLLOW_ERR_PC = 0.90
-
-cdef class GreedyParser(BaseParser):
-    cdef int parse(self, Sentence* sent) except -1:
-        cdef State* s
-        cdef uint64_t* feats
-        s = init_state(sent.length)
-        sent.parse.n_moves = 0
-        if self.auto_pos:
-            self.tagger.tag(sent)
-        while not s.is_finished:
-            fill_kernel(s, sent.pos)
-            feats = self._extract(sent, &s.kernel)
-            self.moves.fill_valid(s, self.moves._costs)
-            clas = self._predict(feats, self.moves._costs,
-                                 &s.guess_labels[s.i])
-            self.moves.transition(clas, s)
-        # No need to copy heads for root and start symbols
-        cdef size_t i
-        for i in range(1, sent.length - 1):
-            sent.parse.heads[i] = s.heads[i]
-            sent.parse.labels[i] = s.labels[i]
-        for i in range(s.t):
-            sent.parse.moves[i] = s.history[i]
-        sent.parse.n_moves = s.t
-        sent.parse.score = s.score
-        fill_edits(s, sent.parse.edits)
-        free_state(s)
- 
-    cdef int dyn_train(self, int iter_num, Sentence* sent) except -1:
-        cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))
-        cdef State* s = init_state(sent.length)
-        cdef size_t pred
-        cdef uint64_t* feats
-        cdef size_t _ = 0
-
-        cdef size_t* bu_tags 
-        if self.auto_pos:
-            bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
-            memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
-            self.tagger.tag(sent)
-        while not s.is_finished:
-            fill_kernel(s, sent.pos)
-            self.moves.fill_valid(s, valid)
-            feats = self._extract(sent, &s.kernel)
-            pred = self._predict(feats, valid, &s.guess_labels[s.i])
-            costs = self.moves.get_costs(s, sent.pos, sent.parse.heads,
-                                         sent.parse.labels, sent.parse.edits,
-                                         sent.parse.sbd)
-            gold = pred if costs[pred] == 0 else self._predict(feats, costs, &_)
-            self.guide.update(pred, gold, feats, 1)
-            if iter_num >= 2 and random.random() < FOLLOW_ERR_PC:
-                self.moves.transition(pred, s)
-            else:
-                self.moves.transition(gold, s)
-            self.guide.n_corr += (gold == pred)
-            self.guide.total += 1
-        if self.auto_pos:
-            memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
-            free(bu_tags)
-        free_state(s)
-        free(valid)
-
-    cdef int static_train(self, int iter_num, Sentence* sent) except -1:
-        cdef int* valid = <int*>calloc(self.guide.nr_class, sizeof(int))
-        cdef State* s = init_state(sent.length)
-        cdef size_t pred
-        cdef uint64_t* feats
-        cdef size_t _ = 0
-        cdef size_t* bu_tags 
-        if self.auto_pos:
-            bu_tags = <size_t*>calloc(sent.length, sizeof(size_t))
-            memcpy(bu_tags, sent.pos, sent.length * sizeof(size_t))
-            self.tagger.tag(sent)
- 
-        while not s.is_finished:
-            fill_kernel(s, sent.pos)
-            feats = self._extract(sent, &s.kernel)
-            self.moves.fill_valid(s, valid)
-            pred = self._predict(feats, valid, &s.guess_labels[s.i])
-            gold = self.moves.break_tie(s, sent.pos, sent.parse.heads,
-                                         sent.parse.labels, sent.parse.edits,
-                                         sent.parse.sbd)
-            self.guide.update(pred, gold, feats, 1)
-            self.moves.transition(gold, s)
-            self.guide.n_corr += (gold == pred)
-            self.guide.total += 1
-        if self.auto_pos:
-            memcpy(sent.pos, bu_tags, sent.length * sizeof(size_t))
-            free(bu_tags) 
-        free_state(s)
-        free(valid)
-
-    def say_config(self):
-        if self.moves.allow_reattach and self.moves.allow_reduce:
-            print 'NM L+D'
-        elif self.moves.allow_reattach:
-            print 'NM L'
-        elif self.moves.allow_reduce:
-            print 'NM D'
-
-    cdef uint64_t* _extract(self, Sentence* sent, Kernel* kernel):
-        fill_context(self._context, self.moves.n_labels, sent, kernel)
-        self.extractor.extract(self._features, self._context)
-        return self._features
-   
-    cdef int _predict(self, uint64_t* feats, int* valid, size_t* rlabel) except -1:
-        cdef:
-            size_t i
-            double score
-            size_t clas, best_valid, best_right
-            double* scores
-
-        cdef size_t right_move = 0
-        cdef double valid_score = -10000
-        cdef double right_score = -10000
-        scores = self.guide.scores
-        self.guide.fill_scores(self._features, scores)
-        seen_valid = False
-        for clas in range(self.guide.nr_class):
-            score = scores[clas]
-            if valid[clas] == 0:
-                if score > valid_score:
-                    best_valid = clas
-                    valid_score = score
-                if not seen_valid:
-                    seen_valid = True
-            if self.moves.r_end > clas >= self.moves.r_start and score > right_score:
-                best_right = clas
-                right_score = score
-        assert seen_valid 
-        rlabel[0] = self.moves.labels[best_right]
-        return best_valid
 
 
 def print_train_msg(n, n_corr, n_move, n_hit, n_miss):

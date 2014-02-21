@@ -144,13 +144,6 @@ cdef enum:
     S0llabs
     S0rlabs
     N0llabs
-    N0orth
-    N0paren
-    N0quote
-    N1orth
-    N1paren
-    N1quote
-    S0re_orth
 
     S0le_w
     S0le_p
@@ -164,7 +157,6 @@ cdef enum:
     S0re_c6
     S0re_c4
     
-    N0le_orth
     N0le_w
     N0le_p
     N0le_c
@@ -197,45 +189,6 @@ cdef enum:
     wsexact
     psexact
 
-    S0pause0
-    S0pause1
-    S0pause2
-    S0pause3
-    S0pause4
-    S0pause5
-    S0pause6
-    S0pause7
-    S0pause8
-    S0pause9
-
-    N0pause0
-    N0pause1
-    N0pause2
-    N0pause3
-    N0pause4
-    N0pause5
-    N0pause6
-    N0pause7
-    N0pause8
-    N0pause9
-
-    N1pause0
-    N1pause1
-    N1pause2
-    N1pause3
-    N1pause4
-    N1pause5
-    N1pause6
-    N1pause7
-    N1pause8
-    N1pause9
-
-    m1
-    m2
-    m3
-    m4
-    m5
-
     CONTEXT_SIZE
 
 
@@ -251,13 +204,9 @@ def get_kernel_tokens():
 cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel* k):
     cdef size_t* words = sent.words
     cdef size_t* tags = sent.pos
-    cdef double* pauses = sent.pauses
     cdef size_t* clusters = sent.clusters
     cdef size_t* cprefix6s = sent.cprefix6s
     cdef size_t* cprefix4s = sent.cprefix4s
-    cdef size_t* orths = sent.prefix
-    cdef int* parens = sent.parens
-    cdef int* quotes = sent.quotes
     context[N0w] = words[k.i]
     context[N0p] = k.n0p
     context[N0c] = clusters[k.i]
@@ -409,23 +358,12 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
         context[dist] = k.i - k.s0
     else:
         context[dist] = 0
-    context[N0orth] = orths[k.i]
-    context[N1orth] = orths[k.i + 1]
-    context[N0paren] = parens[k.i]
-    context[N1paren] = parens[k.i + 1]
-    context[N0quote] = quotes[k.i]
-    context[N1quote] = quotes[k.i + 1]
-    for i in range(10):
-        context[S0pause0 + i] = pauses[k.s0] >= (i * 0.1)
-        context[N0pause0 + i] = pauses[k.i] >= (i * 0.1)
-        context[N1pause0 + i] = pauses[k.i+1] >= (i * 0.1)
 
     context[S0le_w] = words[k.s0ledge]
     context[S0le_p] = tags[k.s0ledge]
     context[S0le_c] = clusters[k.s0ledge]
     context[S0le_c6] = cprefix6s[k.s0ledge]
     context[S0le_c4] = cprefix4s[k.s0ledge]
-    context[N0le_orth] = orths[k.n0ledge]
     context[N0le_w] = words[k.n0ledge]
     context[N0le_p] = k.n0ledgep
     context[N0le_c] = clusters[k.n0ledge]
@@ -434,7 +372,6 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
     
     context[S0re_p] = k.s0redgep
     if k.n0ledge > 0:
-        context[S0re_orth] = orths[k.n0ledge - 1]
         context[S0re_w] = words[k.n0ledge - 1]
         context[S0re_c] = clusters[k.n0ledge - 1]
         context[S0re_c6] = cprefix6s[k.n0ledge - 1]
@@ -444,7 +381,6 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
         context[S0re_c] = 0
         context[S0re_c6] = 0
         context[S0re_c4] = 0
-        context[S0re_orth] = 0
     if k.prev_edit and k.i != 0:
         context[prev_edit] = 1
         context[prev_edit_wmatch] = 1 if words[k.i - 1] == words[k.i] else 0
@@ -509,12 +445,6 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
                 context[pscopy] += 1
             else:
                 context[psexact] = 0
-
-    context[m1] = k.hist[0]
-    context[m2] = k.hist[1]
-    context[m3] = k.hist[2]
-    context[m4] = k.hist[3]
-    context[m5] = k.hist[4]
 
 
 from_single = (
@@ -650,17 +580,6 @@ edges = (
     (S0p, N0le_p)
 )
 
-sbd = (
-    (S0re_w, N0le_w,),
-    (S0re_p, N0le_p,),
-    (S0re_p, N0le_w),
-    (S0re_w, N0le_p),
-    (S0re_p, N1p),
-    (S0re_p, N2p),
-    (S0p, N2p),
-    (N1p, N2p),
-    (N2p, N3p),
-)
 
 stack_second = (
     (S1w,),
@@ -682,11 +601,6 @@ stack_second = (
     (S2p, N0p, N1w),
     #(S2p, N0w, N1w),
     (S2w, N0p, N1p),
-)
-history = (
-    (m1,),
-    (m1, m2),
-    (m1, m2, m3),
 )
 
 # Koo et al (2008) dependency features, using Brown clusters.
@@ -775,56 +689,6 @@ suffix_disfl = (
     (wscopy, psexact),
 )
 
-pauses = (
-    (S0pause0,),
-    (S0pause2,),
-    (S0pause9,),
-    (N0pause0,),
-    (N0pause2,),
-    (N0pause9,),
-    (N1pause0,),
-    (N1pause2,),
-    (N1pause9,),
-    (S0pause0, S0p),
-    (S0pause2, S0p),
-    (S0pause9, S0p),
-    (N0pause0, S0p),
-    (N0pause2, S0p),
-    (N0pause9, S0p),
-    (N1pause0, S0p),
-    (N1pause2, S0p),
-    (N1pause9, S0p),
-)
-"""
-    #(S0pause0, N0pause0, S0p),
-    #(S0pause0, N0pause2, S0p),
-    #(S0pause0, N0pause9, S0p),
-    #(S0pause2, N0pause0, S0p),
-    #(S0pause2, N0pause2, S0p),
-    #(S0pause2, N0pause9, S0p),
-    #(S0pause9, N0pause0, S0p),
-    #(S0pause9, N0pause2, S0p),
-    #(S0pause9, N0pause9, S0p),
-""" 
-#(S0pause0, N0pause0),
-#(S0pause0, N0pause2),
-#(S0pause0, N0pause9),
-#(S0pause2, N0pause0),
-#(S0pause2, N0pause2),
-#(S0pause2, N0pause9),
-#(S0pause9, N0pause0),
-#(S0pause9, N0pause2),
-#(S0pause9, N0pause9),
-
-def cluster_bigrams():
-    kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]
-    clusters = []
-    for t1, t2 in combinations(kernels, 2):
-        feat = (t1 + 2, t1 + 1, t2 + 2, t2 + 1)
-        clusters.append(feat)
-    print "Adding %d cluster bigrams" % len(clusters)
-    return tuple(clusters)
-
 
 def pos_bigrams():
     kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]
@@ -836,92 +700,6 @@ def pos_bigrams():
     return tuple(bitags)
 
 
-def get_best_bigrams(all_bigrams, n=0):
-    return []
-
-def get_best_trigrams(all_trigrams, n=0):
-    return []
-
-
-def unigram(word, add_clusters=False):
-    assert word >= 0
-    assert word < (CONTEXT_SIZE - 5)
- 
-    pos = word + 1
-    cluster = word + 2
-    cluster6 = word + 3
-    cluster4 = word + 4
-    basic = ((word, pos), (word,), (pos,))
-    clusters = ((cluster,), (cluster6,), (cluster4,),
-                (pos, cluster), (pos, cluster6), (pos, cluster4),
-                (word, cluster6), (word, cluster4))
-    if add_clusters:
-        return basic + clusters
-    else:
-        return basic
-
-
-def bigram(a, b, add_clusters=False):
-    assert a >= 0
-    assert b >= 0
-    assert a < (CONTEXT_SIZE - 5)
-    assert b < (CONTEXT_SIZE - 5)
-    w1 = a
-    p1 = a + 1
-    c1 = a + 2
-    c6_1 = a + 3
-    c4_1 = a + 4
-    w2 = b
-    p2 = b + 1
-    c2 = b + 2
-    c6_2 = b + 3
-    c4_2 = b + 4
-    basic = ((w1, w2), (p1, p2), (p1, w2), (w1, p2))
-    clusters = ((c1, c2), (c1, w2), (w1, c2), (c6_1, c6_2), (c4_1, c4_2),
-                (c6_1, p1, p2), (p1, c6_2, p2), (c4_1, p1, w2),
-                (w1, c4_2, p2))
-    if add_clusters:
-        return basic + clusters
-    else:
-        return basic
-
-
-def trigram(a, b, c, add_clusters=False):
-    assert a >= 0
-    assert b >= 0
-    assert c >= 0
-    assert a < (CONTEXT_SIZE - 5)
-    assert b < (CONTEXT_SIZE - 5)
-    assert c < (CONTEXT_SIZE - 5)
-
-    w1 = a
-    p1 = a + 1
-    c1 = a + 2
-    cp1 = a + 3
-    w2 = b
-    p2 = b + 1
-    c2 = b + 2
-    cp2 = b + 3
-    w3 = c
-    p3 = c + 1
-    c3 = c + 2
-    cp3 = c + 3
-
-    #basic = ((w1, w2, w3), (w1, p2, p3), (p1, w2, p3), (p1, p2, w3), (p1, p2, p3))
-    basic = ((w1, w2, w3), (w1, p2, p3), (p1, w2, p3), (p1, p2, w3),
-             (p1, p2, p3))
-    #clusters = ((c1, c2, p3), (c1, p2, w3), (p1, c2, c3), (c1, p2, p3),
-    #            (p1, c2, p3), (p1, c2, c3), (p1, p2, p3))
-    clusters = ((c1, c2, c3), (c1, p2, p3), (cp1, p2, p3), (p1, c2, p3), (p1, cp2, p3),
-                (p1, p2, c3), (p1, p2, cp3))
-
-    if add_clusters:
-        return basic + clusters
-    else:
-        return basic
-
-
-  
 def baseline_templates():
     return from_single + from_word_pairs + from_three_words + distance + \
            valency + zhang_unigrams + third_order + labels + label_sets
@@ -936,18 +714,3 @@ def match_templates():
         # POS match
         match_feats.append((w1 + 1, w2 + 1))
     return tuple(match_feats)
-
-
-def ngram_feats(ngrams, add_clusters=False):
-    kernel_tokens = get_kernel_tokens()
-    feats = []
-    for token in kernel_tokens:
-        feats.extend(unigram(token, add_clusters=add_clusters))
-    for ngram_feat in ngrams:
-        if len(ngram_feat) == 2:
-            feats += bigram(*ngram_feat, add_clusters=add_clusters)
-        elif len(ngram_feat) == 3:
-            feats += trigram(*ngram_feat, add_clusters=add_clusters)
-        else:
-            raise StandardError, ngram_feat
-    return tuple(feats)

@@ -5,7 +5,7 @@ cdef transition_to_str(State* s, size_t move, label, object tokens)
 
 cdef class TransitionSystem:
     cdef bint use_edit
-    cdef bint sbd_at_leaf
+    cdef bint use_sbd
     cdef bint allow_reattach
     cdef bint allow_reduce
     cdef size_t n_labels
