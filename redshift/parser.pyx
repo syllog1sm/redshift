@@ -237,7 +237,7 @@ cdef class BaseParser:
             cfg.write(u'allow_reattach\t%s\n' % self.moves.allow_reattach)
             cfg.write(u'allow_reduce\t%s\n' % self.moves.allow_reduce)
             cfg.write(u'use_edit\t%s\n' % self.moves.use_edit)
-            cfg.write(u'use_sbd\t%s\n' % self.moves.use_edit)
+            cfg.write(u'use_sbd\t%s\n' % self.moves.use_sbd)
             cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
             cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
             cfg.write(u'beam_width\t%d\n' % self.beam_width)
