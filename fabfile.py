@@ -80,7 +80,7 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
     auto_pos = auto_pos and auto_pos != 'False'
     repairs = repairs and repairs != 'False'
     use_edit = False
-    sbd_strat = 'leaf'
+    use_sbd = True
     if tb == 'wsj':
         data = str(REMOTE_STANFORD)
         train_name = 'train.txt'
@@ -98,10 +98,6 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
         if train_alg == 'dynedit':
             use_edit = True
             train_alg = 'dyn'
-        elif train_alg == 'dyneditamb':
-            use_edit = True
-            sbd_strat = 'amb'
-            train_alg = 'dyn'
     elif tb == 'clean_swbd':
         data = str(REMOTE_SWBD)
         train_name = 'train.clean.conll'
@@ -112,7 +108,7 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
             data, k=k, i=iters, f=10, feat_str=feats, 
             n_sents=size, train_name=train_name, train_alg=train_alg,
             unlabelled=unlabelled, auto_pos=auto_pos, repairs=repairs,
-            use_edit=use_edit, sbd_strat=sbd_strat, dev_names=(eval_pos, eval_parse))
+            use_edit=use_edit, use_sbd=use_sbd, dev_names=(eval_pos, eval_parse))
  
 
 def conll_table(name):
@@ -405,7 +401,7 @@ def vocab_table(name):
 # 119_s0_s0r2_s0l2
 def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
             train_alg="online", n_sents=0, static=False, use_edit=False,
-            sbd_strat='leaf', repairs=False,
+            use_sbd=True, repairs=False,
             unlabelled=False, ngrams='', t=0, f=0, train_name='train.txt',
             dev_names=('devi.txt', 'devr.txt'), auto_pos=False):
     exp_dir = str(exp_dir)
@@ -416,7 +412,7 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
         run("mkdir -p %s" % model, quiet=True)
         train_str = _train(pjoin(data, train_name), model, k=k, i=i,
                            feat_str=feat_str, train_alg=train_alg, seed=seed,
-                           n_sents=n_sents, use_edit=use_edit, sbd_strat=sbd_strat,
+                           n_sents=n_sents, use_edit=use_edit, use_sbd=use_sbd,
                            unlabelled=unlabelled,
                            allow_reattach=repairs, allow_reduce=repairs,
                            vocab_thresh=t, feat_thresh=f, auto_pos=auto_pos)
@@ -496,19 +492,20 @@ def get_accs(exp_dir, eval_name='dev', term='U'):
 def _train(data, model, debug=False, k=1, feat_str='zhang', i=15,
            train_alg="static", seed=0, args='',
            n_sents=0, ngrams=0, vocab_thresh=0, feat_thresh=10,
-           use_edit=False, sbd_strat='leaf', unlabelled=False, auto_pos=False,
+           use_edit=False, use_sbd=True, unlabelled=False, auto_pos=False,
            allow_reattach=False, allow_reduce=False):
     use_edit = '-e' if use_edit else ''
+    use_sbd = '-b' if use_sbd else ''
     unlabelled = '-u' if unlabelled else ''
     auto_pos = '-p' if auto_pos else ''
     repairs = '-r' if allow_reattach else ''
     repairs += ' -d' if allow_reduce else ''
-    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -n {n_sents} -t {vocab_thresh} -f {feat_thresh} -b {sbd_strat} {use_edit} {repairs} {unlabelled} {auto_pos} {args}'
+    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -n {n_sents} -t {vocab_thresh} -f {feat_thresh} {use_sbd} {use_edit} {repairs} {unlabelled} {auto_pos} {args}'
     if debug:
         template += ' -debug'
     return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i,
                            vocab_thresh=vocab_thresh, feat_thresh=feat_thresh,
-                           alg=train_alg, use_edit=use_edit, sbd_strat=sbd_strat,
+                           alg=train_alg, use_edit=use_edit, use_sbd=use_sbd,
                            seed=seed, repairs=repairs,
                           args=args, n_sents=n_sents, ngrams=ngrams,
                           unlabelled=unlabelled, auto_pos=auto_pos)
@@ -530,7 +527,7 @@ def _add_edits(test_dir, pos):
     return 'python scripts/add_edits.py %s %s > %s' % (in_loc, pos, out_loc)
 
 
-def _pbsify(repo, command_strs, size=4):
+def _pbsify(repo, command_strs, size=5):
     header = """#! /bin/bash
 #PBS -l walltime=20:00:00,mem=3gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate
