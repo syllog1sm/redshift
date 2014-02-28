@@ -76,7 +76,7 @@ In more detail:
 
 * Ensure your PYTHONPATH variable includes the redshift directory
 * Most of the training-script flags refer to research settings.
-* the k parameter controls the speed-accuracy trade-off, via the beam-width. Run-time is roughly O(nk), where n is the number of words, and k is the beam-width. In practice it's slightly sub-linear in k due to some simple memoisation. Accuracy plateaus at about k=64. For k=1, use "-a dyn -r -d", to enable the Goldberg and Nivre (2012) dynamic oracle.
+* the k parameter controls the speed-accuracy trade-off, via the beam-width. Run-time is roughly O(nk), where n is the number of words, and k is the beam-width. In practice it's slightly sub-linear in k due to some simple memoisation. Accuracy plateaus at about k=64. For k=1, use "-a dyn -r -d", to enable some recent special-case wizardry that gives the k=1 case over 1% extra accuracy, at no run-time cost.
 * The -p flag tells train.py to train a POS tagger.
 * parse.py reads in the training configuration from "parser.cfg", which sits in the output model directory.
 * The parser currently expects one sentence per line, space-separated tokens, tokens of the form word/POS.
