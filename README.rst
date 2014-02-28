@@ -56,25 +56,34 @@ Example usage
 The command-line interfaces have a lot of probably-confusing options for my current research. The main scripts I use are
 scripts/train.py, scripts/parse.py, and scripts/evaluate.py . All print usage information, and require the plac library.
 
+
+The following commands will set up a virtualenv with Python 2.7.5, the parser, and its core dependencies from scratch::
+
+
 From a Unix/OSX terminal, after compilation, and within the "redshift" directory:
 
-    $ export PYTHONPATH=`pwd` # Ensure your PYTHONPATH env variable is set
+::
+
+    $ export PYTHONPATH=`pwd`
     $ ./scripts/train.py # Use -h or --help for more detailed info. Most of these are research flags.
-    usage: train.py [-h] [-a static] [-i 15] [-k 1] [-f 10] [-r] [-d] [-u] [-n 0]
-                [-s 0]
-                train_loc model_loc
+    usage: train.py [-h] [-a static] [-i 15] [-k 1] [-f 10] [-r] [-d] [-u] [-n 0] [-s 0] train_loc model_loc
     train.py: error: too few arguments
-    # The k, or beam-width, parameter controls speed/accuracy trade-off. The -p flag tells it to train a
-    # POS tagger too.
     $ ./scripts/train.py -k 16 -p <CoNLL formatted training data> <output model directory>
-    # parse.py currently expects one sentence per line, space separated tokens, where each token is
-    # of the form word/POS
-    # If -p was used for training, the POS tag is ignored. Support for more convenient file formats
-    # coming soon.
     $ ./scripts/parse.py <model directory produced by train.py> <input> <output_dir>
-    # Evaluation is separate from parsing, so that the parser never sees the answers, ensuring I can
-    # never accidentally cheat. I recommend this protocol for all ML experiments!
     $ ./scripts/evaluate.py output_dir/parses <gold file>
+    
+In more detail:
+
+* Ensure your PYTHONPATH variable includes the redshift directory
+* Most of the training-script flags refer to research settings.
+* the k parameter controls the speed-accuracy trade-off, via the beam-width. Run-time is roughly O(nk), where n is
+the number of words, and k is the beam-width. In practice it's slightly sub-linear in k due to some simple memoisation.
+Accuracy plateaus at about k=64. For k=1, use "-a dyn -r -d", to enable the Goldberg and Nivre (2012) dynamic oracle.
+It gives 1% better accuracy at no run-time cost.
+* The -p flag tells train.py to train a POS tagger.
+* parse.py reads in the training configuration from "parser.cfg", which sits in the output model directory.
+* The parser currently expects one sentence per line, space-separated tokens, tokens of the form word/POS.
+If trained with -p, the parser ignores the input POS tags. Friendlier training formats coming soon.
 
 Published results always refer to multiple runs (usually with 20 random seeds). These experiments are automated via fabric,
 which I also usually use for compilation (e.g. "fab make").
