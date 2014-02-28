@@ -80,9 +80,7 @@ In more detail:
 * The -p flag tells train.py to train a POS tagger.
 * parse.py reads in the training configuration from "parser.cfg", which sits in the output model directory.
 * The parser currently expects one sentence per line, space-separated tokens, tokens of the form word/POS.
-* evaluate.py runs as a separate script from parse.py so that the parser never sees the answers. Accidental cheating is a big problem in ML, and if you're a research student, you should take it seriously. I don't think I've _ever_ met a research student who hasn't come to a supervisor with fantastic results that proved to be due to such a bug. Don't let your run-time peek at the answers, and you'll never have this problem.
-Published results always refer to multiple runs (usually with 20 random seeds). These experiments are automated via fabric,
-which I also usually use for compilation (e.g. "fab make").
+* evaluate.py runs as a separate script from parse.py so that the parser never sees the answers, and cannot "accidentally cheat".
 
 Installation
 ------------
