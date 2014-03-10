@@ -47,7 +47,8 @@ def deploy():
 
 
 def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
-         unlabelled=False, auto_pos='False', iters=15, repairs='False'):
+         unlabelled=False, auto_pos='False', iters=15, repairs='False', 
+         use_sbd='True'):
     size = int(size)
     k = int(k)
     n = int(n)
@@ -56,7 +57,7 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
     auto_pos = auto_pos and auto_pos != 'False'
     repairs = repairs and repairs != 'False'
     use_edit = False
-    use_sbd = True
+    use_sbd = use_sbd == 'True'
     if tb == 'wsj':
         data = str(REMOTE_STANFORD)
         train_name = 'train.txt'

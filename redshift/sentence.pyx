@@ -237,7 +237,7 @@ class Token(object):
             word_id = int(word_id)
             feats = feats.split('|')
             head = int(head) - 1
-            if feats and feats[2] == '1':
+            if len(feats) >= 3 and feats[2] == '1':
                 is_edit = True
             else:
                 is_edit = False
@@ -245,4 +245,4 @@ class Token(object):
         if pos.startswith('^'):
             pos = pos[1:]
             pos = pos.split('^')[0]
-        return cls(i, word, pos, head, label, is_edit)
+        return cls(word_id, word, pos, head, label, is_edit)

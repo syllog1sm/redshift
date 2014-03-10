@@ -78,10 +78,10 @@ class Token(object):
             new_attrs.append(attrs[3])
             new_attrs.append(str(int(attrs[6]) - 1))
             dfl_feats = attrs[5].split('|')
-            self.dfl_tag = dfl_feats[2]
+            self.dfl_tag = dfl_feats[2] if len(dfl_feats) >= 3 else '-'
             new_attrs.append(attrs[7])
             attrs = new_attrs
-            attrs.append(str(dfl_feats[2] == '1'))
+            attrs.append(str(len(dfl_feats) >= 3 and dfl_feats[2] == '1'))
         self.is_edit = attrs.pop() == 'True'
         self.label = attrs.pop()
         if self.label.lower() == 'root':
@@ -123,6 +123,8 @@ def main(test_loc, gold_loc, eval_punct=False):
         tags_corr += t.pos == g.pos
         tags_tot += 1
         if g.label in ["P", 'punct', 'discourse'] and not eval_punct:
+            continue
+        elif g.pos == 'ADD' and not eval_punct:
             continue
         ed_tp += t.is_edit and g.is_edit
         ed_fp += t.is_edit and not g.is_edit
