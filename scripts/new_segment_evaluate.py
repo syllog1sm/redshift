@@ -20,6 +20,8 @@ def main(test_loc, gold_loc):
     for test, gold in zip(test_sents, gold_sents):
         assert len(test) == len(gold)
         for t, g in zip(test, gold):
+            print 'g', g
+            print 't', t
             if g[2] == 'T' and t[2] == 'T':
                 tp += 1
             elif g[2] == 'T' and t[2] == 'F':

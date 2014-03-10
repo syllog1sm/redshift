@@ -60,7 +60,7 @@ def main(train_loc, model_loc, train_alg="static", n_iter=15,
         print "Using %d sents for training" % n_sents
         random.shuffle(train_sent_strs)
         train_sent_strs = train_sent_strs[:n_sents]
-    train_str = '\n\n'.join(train_sent_strs)
+    train_str = '\n\n'.join(s for s in train_sent_strs if s.strip())
     train = [Sentence.from_conll(i, s) for i, s in
              enumerate(train_str.strip().split('\n\n'))]
     if profile:
