@@ -116,6 +116,8 @@ cdef class BaseParser:
             templates += _parse_features.clusters
             templates += _parse_features.edges
             match_feats = _parse_features.match_templates()
+        elif 'clusters' in self.feat_set:
+            templates += _parse_features.clusters
         if 'stack' in self.feat_set:
             templates += _parse_features.stack_second
         if 'hist' in self.feat_set:
