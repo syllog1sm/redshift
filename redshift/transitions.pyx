@@ -317,12 +317,12 @@ cdef class TransitionSystem:
         cdef int cost = 0
         if self.use_edit and edits[s.top] and not edits[s.i]:
             return 1
+        if can_segment(s, self.moves, self.use_sbd):
+            cost += sbd[s.top] != sbd[s.i]
         if self.use_edit and edits[s.i]:
             return cost
         if heads[s.i] == s.top:
             return cost
-        if can_segment(s, self.moves, self.use_sbd):
-            cost += sbd[s.top] != sbd[s.i]
 
         if heads[s.i] == s.heads[s.top] == self.root_label:
             return cost
