@@ -21,7 +21,11 @@ def gen_toks(loc):
     for sent_str in sent_strs:
         if not sent_str.strip():
             continue
-        tokens = [Token(i, tok_str.split()) for i, tok_str in enumerate(sent_str.split('\n'))]
+        try:
+            tokens = [Token(i, tok_str.split()) for i, tok_str in enumerate(sent_str.split('\n'))]
+        except:
+            print sent_str
+            raise
         move_root_deps(tokens)
         flatten_edits(tokens)
         tokens[-1].sbd = True
@@ -65,7 +69,7 @@ class Token(object):
         self.sbd = False
         # CoNLL format
         is_edit = False
-        if len(attrs) == 6 or len(attrs) == 5 or len(attrs) == 4:
+        if len(attrs) == 4: 
             attrs.append('False')
             self.dfl_tag = '-'
         elif len(attrs) == 10:
@@ -115,6 +119,7 @@ def main(test_loc, gold_loc, eval_punct=False):
     prev_g = None
     prev_t = None
     for (sst, t), (ss, g) in zip(gen_toks(test_loc), gen_toks(gold_loc)):
+        assert g.word == t.word
         tags_corr += t.pos == g.pos
         tags_tot += 1
         if g.label in ["P", 'punct', 'discourse'] and not eval_punct:
