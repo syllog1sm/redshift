@@ -245,4 +245,4 @@ class Token(object):
         if pos.startswith('^'):
             pos = pos[1:]
             pos = pos.split('^')[0]
-        return cls(i, word, pos, head, label, is_edit)
+        return cls(word_id, word, pos, head, label, is_edit)

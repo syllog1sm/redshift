@@ -70,6 +70,7 @@ cdef inline bint can_segment(State* s, size_t* moves, bint sbd):
     else:
         return True
 
+
 cdef class TransitionSystem:
     def __cinit__(self, allow_reattach=False, allow_reduce=False, use_edit=False,
                   use_sbd=True):
@@ -236,6 +237,11 @@ cdef class TransitionSystem:
             print l_cost
             print nr_headless(s)
             print costs[self.b_id]
+
+            print self.moves[s.history[s.t-1]] != SHIFT
+            print self.moves[s.history[s.t-1]] != RIGHT
+            print can_segment(s, self.moves, self.use_sbd)
+            print nr_headless(s)
             raise StandardError
         return costs
 
@@ -309,19 +315,20 @@ cdef class TransitionSystem:
         if not can_right(s):
             return -1
         cdef int cost = 0
-        cost += sbd[s.top] != sbd[s.i]
         if self.use_edit and edits[s.top] and not edits[s.i]:
             return 1
         if self.use_edit and edits[s.i]:
             return cost
         if heads[s.i] == s.top:
             return cost
-        elif not self.use_sbd and heads[s.i] == s.heads[s.top] == self.root_label:
+        if can_segment(s, self.moves, self.use_sbd):
+            cost += sbd[s.top] != sbd[s.i]
+
+        if heads[s.i] == s.heads[s.top] == self.root_label:
             return cost
         cost += has_head_in_buffer(s, s.i, heads)
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
-        cost += sbd[s.top] != sbd[s.i]
         return cost
 
     cdef int d_cost(self, State *s, size_t* heads, size_t* labels, bint* edits,
