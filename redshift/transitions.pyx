@@ -302,10 +302,11 @@ cdef class TransitionSystem:
         cdef int cost = 0
         if s.stack_len < 1:
             return 0
-        if can_segment(s, self.moves, self.use_sbd):
-            cost += sbd[s.top] != sbd[s.i]
+        # Be flexible about sentence boundaries around disfluencies
         if self.use_edit and edits[s.i]:
             return cost
+        if can_segment(s, self.moves, self.use_sbd):
+            cost += sbd[s.top] != sbd[s.i]
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
         return cost
@@ -317,15 +318,15 @@ cdef class TransitionSystem:
         cdef int cost = 0
         if self.use_edit and edits[s.top] and not edits[s.i]:
             return 1
-        if can_segment(s, self.moves, self.use_sbd):
-            cost += sbd[s.top] != sbd[s.i]
         if self.use_edit and edits[s.i]:
             return cost
+        if can_segment(s, self.moves, self.use_sbd):
+            cost += sbd[s.top] != sbd[s.i]
         if heads[s.i] == s.top:
             return cost
-
-        if heads[s.i] == s.heads[s.top] == self.root_label:
-            return cost
+        # TODO: ???
+        #if heads[s.i] == s.heads[s.top] == self.root_label:
+        #    return cost
         cost += has_head_in_buffer(s, s.i, heads)
         cost += has_child_in_stack(s, s.i, heads)
         cost += has_head_in_stack(s, s.i, heads)
@@ -361,8 +362,9 @@ cdef class TransitionSystem:
             return cost
         if heads[s.top] == s.i:
             return cost
-        elif not self.use_sbd and heads[s.top] == heads[s.i] == self.root_label:
-            return cost
+        # TODO: ????
+        #elif not self.use_sbd and heads[s.top] == heads[s.i] == self.root_label:
+        #    return cost
         cost += has_head_in_buffer(s, s.top, heads)
         cost += has_child_in_buffer(s, s.top, heads)
         if self.allow_reattach and heads[s.top] == s.heads[s.top]:
@@ -385,7 +387,7 @@ cdef class TransitionSystem:
         if not can_edit(s, self.use_edit):
             return -1
         cdef int cost = 0
-        if can_segment(s, self.moves, self.use_sbd):
-            cost += sbd[s.top] != sbd[s.i]
+        #if can_segment(s, self.moves, self.use_sbd):
+        #    cost += sbd[s.top] != sbd[s.i]
         cost += not edits[s.top]
         return cost
