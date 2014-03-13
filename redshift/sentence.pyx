@@ -2,6 +2,7 @@ from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport strcpy, memcpy
 import index.hashes
 cimport index.hashes
+cimport index.vocab
 
 
 def get_labels(sents):
@@ -31,7 +32,7 @@ def normalize_word(word):
         return word.lower()
  
 
-cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags):
+cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags) except NULL:
     cdef:
         size_t i
         bytes py_word
@@ -67,33 +68,22 @@ cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags):
     s.oft_upper = <bint*>calloc(size, sizeof(bint))
     s.oft_title = <bint*>calloc(size, sizeof(bint))
 
-    cdef index.hashes.ClusterIndex brown_idx = index.hashes.get_clusters()
-    cdef dict case_dict = index.hashes.get_case_stats()
-    mask_value = index.hashes.encode_word('<MASKED>')
     types = set()
+    cdef index.vocab.Word* lex_type
     for i in range(length):
-        s.owords[i] = index.hashes.encode_word(py_words[i])
-        word = normalize_word(py_words[i])
-        s.words[i] = index.hashes.encode_word(word)
+        lex_type = index.vocab.lookup(py_words[i])
+        s.owords[i] = lex_type.orig
+        s.words[i] = lex_type.norm
         s.pos[i] = index.hashes.encode_pos(py_tags[i])
-        case_stats = case_dict.get(py_words[i])
-        if case_stats is None:
-            if not py_words[i].isalpha():
-                s.non_alpha[i] = True
-        else:
-            upper_pc, title_pc = case_stats
-            # Cut points determined by maximum information gain
-            if upper_pc >= 0.05:
-                s.oft_upper[i] = True
-            if title_pc >= 0.3:
-                s.oft_title[i] = True
-        if s.owords[i] < brown_idx.n:
-            s.clusters[i] = brown_idx.table[s.owords[i]].full
-            s.cprefix4s[i] = brown_idx.table[s.owords[i]].prefix4
-            s.cprefix6s[i] = brown_idx.table[s.owords[i]].prefix6
+        s.oft_upper[i] = lex_type.oft_upper
+        s.oft_title[i] = lex_type.oft_title
+        s.clusters[i] = lex_type.cluster
+        # TODO: Fix this!
+        s.cprefix4s[i] = 0
+        s.cprefix6s[i] = 0
         # Use POS tag to semi-smartly get ' disambiguation
-        s.suffix[i] = index.hashes.encode_word(py_words[i][-3:])
-        s.prefix[i] = index.hashes.encode_word(py_words[i][0])
+        s.suffix[i] = lex_type.suffix
+        s.prefix[i] = lex_type.prefix 
     s.words[0] = 0
     s.pos[0] = 0
     return s

@@ -25,7 +25,7 @@ cdef struct Sentence:
     _Parse* parse
 
 
-cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags)
+cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags) except NULL
 
 
 cdef int add_parse(Sentence* sent, list word_ids, list heads,

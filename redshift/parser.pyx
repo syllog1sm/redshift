@@ -222,12 +222,14 @@ cdef class BaseParser:
         self.tagger.guide.load(pjoin(self.model_dir, 'tagger.gz'), thresh=self.feat_thresh)
 
     def new_idx(self, model_dir):
-        index.hashes.init_word_idx(pjoin(model_dir, 'words'))
+        index.vocab.load_vocab()
+        #index.hashes.init_word_idx(pjoin(model_dir, 'words'))
         index.hashes.init_pos_idx(pjoin(model_dir, 'pos'))
         index.hashes.init_label_idx(pjoin(model_dir, 'labels'))
 
     def load_idx(self, model_dir):
-        index.hashes.load_word_idx(pjoin(model_dir, 'words'))
+        index.vocab.load_vocab()
+        #index.hashes.load_word_idx(pjoin(model_dir, 'words'))
         index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
         index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
    
