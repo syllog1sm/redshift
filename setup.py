@@ -57,6 +57,10 @@ exts = [
     Extension("index.hashes", ["index/hashes.pyx", "ext/MurmurHash2.cpp",
                                "ext/MurmurHash3.cpp"], language="c++",
               include_dirs=includes),
+    Extension("index.vocab", ["index/vocab.pyx", "ext/MurmurHash2.cpp",
+                               "ext/MurmurHash3.cpp"], language="c++",
+              include_dirs=includes),
+
     Extension("features.extractor", ["features/extractor.pyx", "ext/MurmurHash2.cpp",
               "ext/MurmurHash3.cpp"], language="c++", include_dirs=includes),
     Extension("redshift.tagger", ["redshift/tagger.pyx", "ext/MurmurHash2.cpp",
