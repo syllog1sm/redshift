@@ -71,66 +71,50 @@ cdef int push_stack(State *s) except -1:
     s.i += 1
 
 
-cdef int fill_subtree(size_t val, size_t* kids, size_t* labs, size_t* tags,  Subtree* tree):
-    cdef size_t i
-    for i in range(4):
-        tree.idx[i] = 0
-        tree.lab[i] = 0
-        tree.tags[i] = 0
-    tree.val = val
-    if val == 0:
-        return 0
-    # Set 0 to be the rightmost/leftmost child, i.e. last
-    tree.idx[0] = kids[val - 1]
-    tree.lab[0] = labs[kids[val - 1]]
-    tree.tags[0] = tags[kids[val - 1]]
-    # Set 2 to be first child
-    tree.idx[2] = kids[0]
-    tree.lab[2] = labs[kids[0]]
-    tree.tags[2] = tags[kids[0]]
-    if val == 1:
-        return 0
-    # Set 1 to be the 2nd rightmost/leftmost, i.e. second last 
-    tree.idx[1] = kids[val - 2]
-    tree.lab[1] = labs[kids[val - 2]]
-    tree.tags[1] = tags[kids[val - 2]]
-    # Set 3 to be second child
-    tree.idx[3] = kids[1]
-    tree.lab[3] = labs[kids[1]]
-    tree.tags[3] = tags[kids[1]]
-
-
 cdef uint64_t hash_kernel(Kernel* k):
     return MurmurHash64A(k, sizeof(Kernel), 0)
 
 
 cdef int fill_kernel(State *s, size_t* tags) except -1:
     cdef size_t i, val
-    s.kernel.segment = s.segment
+    cdef size_t* slots = s.kernel.slots
+
+    assert s.ledges[s.i] != 0
     s.kernel.i = s.i
-    s.kernel.n0p = tags[s.i]
-    s.kernel.n1p = tags[s.i + 1]
-    s.kernel.n2p = tags[s.i + 2]
-    s.kernel.n3p = tags[s.i + 3]
-    s.kernel.s0 = s.top
-    if s.heads[s.top] != 0 and s.heads[s.top] == s.second:
-        assert s.labels[s.top] != 0
-    s.kernel.s0p = tags[s.top]
-    s.kernel.s1 = s.second
-    s.kernel.s1p = tags[s.kernel.s1]
-    s.kernel.s2 = s.stack[s.stack_len - 3] if s.stack_len >= 3 else 0
-    s.kernel.s2p = tags[s.kernel.s2]
-    s.kernel.Ls0 = s.labels[s.top]
-    s.kernel.Ls1 = s.labels[s.kernel.s1]
-    s.kernel.Ls2 = s.labels[s.kernel.s2]
-    s.kernel.s0ledge = s.ledges[s.top]
-    s.kernel.s0ledgep = tags[s.ledges[s.top]]
-    s.kernel.n0ledge = s.ledges[s.i]
-    s.kernel.n0ledgep = tags[s.ledges[s.i]]
-    if s.ledges[s.i] != 0:
-        s.kernel.s0redgep = tags[s.ledges[s.i] - 1]
-    else:
-        s.kernel.s0redgep = 0
+    s.kernel.segment = s.segment
+
+    # S2, S1 
+    slots[0] = s.stack[s.stack_len - 3] if s.stack_len >= 3 else 0
+    slots[1] = s.second
+
+    # S0le, S0l, S0l2, S0l0
+    slots[2] = s.ledges[s.top]
+    slots[3] = get_l(s, s.top)
+    slots[4] = get_l2(s, s.top)
+    slots[5] = s.l_children[s.top][0]
+
+    # S0
+    slots[6] = s.top
+
+    # S0r0, S0r2, S0r, S0re
+    slots[7] = s.r_children[s.top][0]
+    slots[8] = get_r2(s, s.top)
+    slots[9] = get_r(s, s.top)
+    slots[10] = s.ledges[s.i] - 1 # IE S0re is the word before N0le
+
+    # N0le, N0l, N0l2, N0l0
+    slots[11] = s.ledges[s.i]
+    slots[12] = get_l(s, s.i)
+    slots[13] = get_l2(s, s.i)
+    slots[14] = s.l_children[s.i][0]
+    # N0
+    slots[15] = s.i
+
+    for i in range(14):
+        s.kernel.tags[i] = s.tags[slots[i]]
+        s.kernel.labels[i] = s.labels[slots[i]]
+        s.kernel.l_vals[i] = s.l_valencies[slots[i]]
+        s.kernel.r_vals[i] = s.r_valencies[slots[i]]
     cdef size_t prev
     cdef size_t prev_prev
     if s.i > 0:
@@ -140,6 +124,9 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
         if s.i > 1:
             prev_prev = s.i - 2
             s.kernel.prev_prev_edit = True if s.heads[prev_prev] == prev_prev else False
+        else:
+            # TODO: Test this bug fix
+            s.kernel.prev_prev_edit = False
     else:
         s.kernel.prev_edit = False
         s.kernel.prev_prev_edit = False
@@ -152,75 +139,11 @@ cdef int fill_kernel(State *s, size_t* tags) except -1:
         s.kernel.next_tag = tags[next_]
         next_next = s.top + 2
         s.kernel.next_next_edit = True if s.heads[next_next] == next_next else False
-    fill_subtree(s.l_valencies[s.top], s.l_children[s.top],
-                 s.labels, tags, &s.kernel.s0l)
-    fill_subtree(s.r_valencies[s.top], s.r_children[s.top],
-                 s.labels, tags, &s.kernel.s0r)
-    fill_subtree(s.l_valencies[s.i], s.l_children[s.i],
-                 s.labels, tags, &s.kernel.n0l)
-    if s.t >= 5:
-        s.kernel.hist[0] = s.history[s.t - 1]
-        s.kernel.hist[1] = s.history[s.t - 2]
-        s.kernel.hist[2] = s.history[s.t - 3]
-        s.kernel.hist[3] = s.history[s.t - 4]
-        s.kernel.hist[4] = s.history[s.t - 5]
     else:
-        for i in range(s.t):
-            s.kernel.hist[i] = s.history[s.t - (i + 1)]
-        for i in range(s.t, 5):
-            s.kernel.hist[i] = 0
+        # TODO: Test this bug fix
+        s.kernel.next_edit = False
+        s.kernel.next_next_edit = False
 
-
-#cdef Kernel* kernel_from_s(Kernel* parent) except NULL:
-#    k = <Kernel*>malloc(sizeof(Kernel))
-#    memset(k, 0, sizeof(Kernel))
-#    k.i = parent.i + 1
-#    k.s0 = parent.i
-#    k.s0ledge = parent.n0ledge
-#    k.n0ledge = k.i
-#    # Parents of s0, e.g. hs0, h2s0, Lhs0 etc all null in Shift
-#    memcpy(&k.s0l, &parent.n0l, sizeof(Subtree))
-#    return k
-
-
-#cdef Kernel* kernel_from_r(Kernel* parent, size_t label) except NULL:
-#    cdef Kernel* k = kernel_from_s(parent)
-#    k.s0ledge = parent.s0ledge
-#    k.n0ledge = k.i
-#    k.Ls0 = label
-#    k.hs0 = parent.s0
-#    k.h2s0 = parent.hs0
-#    k.Lhs0 = parent.Ls0
-#    k.Lh2s0 = parent.Lhs0
-#    return k
-
-
-#cdef Kernel* kernel_from_d(Kernel* parent, Kernel* grandparent) except NULL:
-#    assert parent.s0 >= grandparent.s0
-#    k = <Kernel*>malloc(sizeof(Kernel))
-#    memcpy(k, grandparent, sizeof(Kernel))
-#    memcpy(&k.n0l, &parent.n0l, sizeof(Subtree))
-#    k.i = parent.i
-#    return k
-
-
-#cdef Kernel* kernel_from_l(Kernel* parent, Kernel* grandparent, size_t label) except NULL:
-#    assert parent.s0 >= grandparent.s0
-#    k = <Kernel*>malloc(sizeof(Kernel))
-#    memcpy(k, grandparent, sizeof(Kernel))
-#    k.i = parent.i
-#    k.n0ledge = parent.s0ledge
-#    k.s0ledge = grandparent.s0ledge
-#    k.n0l.val = parent.n0l.val + 1
-#    k.n0l.idx[0] = parent.s0
-#    k.n0l.idx[1] = parent.n0l.idx[0]
-#    k.n0l.idx[2] = 0
-#    k.n0l.idx[3] = 0
-#    k.n0l.lab[0] = label
-#    k.n0l.lab[1] = parent.n0l.idx[0]
-#    k.n0l.lab[2] = parent.n0l.idx[1]
-#    k.n0l.lab[3] = parent.n0l.idx[2]
-#    return k
 
 cdef size_t get_l(State *s, size_t head):
     if s.l_valencies[head] == 0:

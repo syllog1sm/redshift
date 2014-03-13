@@ -1,41 +1,109 @@
+"""
+Fill an array, context, with every _atomic_ value our features reference.
+We then write the _actual features_ as tuples of the atoms. The machinery
+that translates from the tuples to feature-extractors (which pick the values
+out of "context") is in features/extractor.pyx
+
+The atomic feature names are listed in a big enum, so that the feature tuples
+can refer to them.
+"""
+
 from redshift._state cimport Kernel, Subtree
 from itertools import combinations
 # Context elements
 # Ensure _context_size is always last; it ensures our compile-time setting
 # is in synch with the enum
-# Ensure each token's attributes are listed: w, p, c, cp
+# Ensure each token's attributes are listed: w, p, c, c6, c4. The order
+# is referenced by incrementing the enum...
+# Tokens are listed in left-to-right order.
+#cdef size_t* SLOTS = [
+#    S2w, S1w,
+#    S0l0w, S0l2w, S0lw,
+#    S0w,
+#    S0r0w, S0r2w, S0rw,
+#    N0l0w, N0l2w, N0lw,
+#    N0w, N1w, N2w, N3w, 0
+#]
+# NB: The order of the enum is _not arbitrary!!_
 cdef enum:
-    N0w
-    N0p
-    N0c
-    N0c6
-    N0c4
+    S2w
+    S2p
+    S2c
+    S2c6
+    S2c4
 
-    N0lw
-    N0lp
-    N0lc
-    N0lc6
-    N0lc4
-    
-    N0ll
-    N0lv
-    
+    S1w
+    S1p
+    S1c
+    S1c6
+    S1c4
+
+    S0l0w
+    S0l0p
+    S0l0c
+    S0l0c6
+    S0l0c4
+
+    S0l2w
+    S0l2p
+    S0l2c
+    S0l2c6
+    S0l2c4
+
+    S0lw
+    S0lp
+    S0lc
+    S0lc6
+    S0lc4
+
+    S0w
+    S0p
+    S0c
+    S0c6
+    S0c4
+
+    S0r0w
+    S0r0p
+    S0r0c
+    S0r0c6
+    S0r0c4
+
+    S0r2w
+    S0r2p
+    S0r2c
+    S0r2c6
+    S0r2c4
+
+    S0rw
+    S0rp
+    S0rc
+    S0rc6
+    S0rc4
+
+    N0l0w
+    N0l0p
+    N0l0c
+    N0l0c6
+    N0l0c4
+
     N0l2w
     N0l2p
     N0l2c
     N0l2c6
     N0l2c4
 
-    N0l2l
-    
-    N0l0w
-    N0l0p
-    N0l0c
-    N0l0c6
-    N0l0c4
-   
-    N0l0l
-    
+    N0lw
+    N0lp
+    N0lc
+    N0lc6
+    N0lc4
+
+    N0w
+    N0p
+    N0c
+    N0c6
+    N0c4
+ 
     N1w
     N1p
     N1c
@@ -53,98 +121,19 @@ cdef enum:
     N3c
     N3c6
     N3c4
-    
-    S0w
-    S0p
-    S0c
-    S0c6
-    S0c4
-    
-    S0l
-    
+
     S0hw
     S0hp
     S0hc
     S0hc6
     S0hc4
-    
-    S0hl
-
-    S0lw
-    S0lp
-    S0lc
-    S0lc6
-    S0lc4
-    
-    S0ll
-    
-    S0rw
-    S0rp
-    S0rc
-    S0rc6
-    S0rc4
-    
-    S0rl
-    
-    S0l2w
-    S0l2p
-    S0l2c
-    S0l2c6
-    S0l2c4
-    
-    S0l2l
-
-    S0r2w
-    S0r2p
-    S0r2c
-    S0r2c6
-    S0r2c4
-    
-    S0r2l
-
-    S0l0w
-    S0l0p
-    S0l0c
-    S0l0c6
-    S0l0c4
-
-    S0l0l
-
-    S0r0w
-    S0r0p
-    S0r0c
-    S0r0c6
-    S0r0c4
-
-    S0r0l
-
+ 
     S0h2w
     S0h2p
     S0h2c
     S0h2c6
     S0h2c4
     
-    S0h2l
-
-    S1w
-    S1p
-    S1c
-    S1c6
-    S1c4
-
-    S2w
-    S2p
-    S2c
-    S2c6
-    S2c4
-    
-    S0lv
-    S0rv
-    dist
-    S0llabs
-    S0rlabs
-    N0llabs
-
     S0le_w
     S0le_p
     S0le_c
@@ -163,6 +152,40 @@ cdef enum:
     N0le_c6
     N0le_c4
 
+    S2l
+    S1l
+    
+    S0l0l
+    S0l2l
+    S0ll
+
+    S0l
+
+    S0r0l
+    S0r2l
+    S0rl
+    
+    N0l0l
+    N0l2l
+    N0ll
+
+    S0hl
+    S0h2l
+    
+    S0le_l
+    S0re_l
+    N0le_l
+    
+    S0lv
+    S0rv
+    N0lv
+    
+    dist
+    
+    S0llabs
+    S0rlabs
+    N0llabs
+    
     prev_edit
     prev_edit_wmatch
     prev_edit_pmatch
@@ -192,147 +215,69 @@ cdef enum:
     CONTEXT_SIZE
 
 
+# Listed in left-to-right order
+cdef size_t* SLOTS = [
+    S2w, S1w,
+    S0le_w, S0l0w, S0l2w, S0lw,
+    S0w,
+    S0r0w, S0r2w, S0rw, S0re_w,
+    N0le_w, N0l0w, N0l2w, N0lw,
+    N0w
+]
+
+cdef size_t NR_SLOT = sizeof(SLOTS) / sizeof(SLOTS[0])
+
 def context_size():
     return CONTEXT_SIZE
 
+cdef inline void fill_token(size_t* context, size_t slot, Token* token,
+                            size_t tag, size_t label,
+                            size_t left_valency, size_t right_valency):
+    context[slot] = token.word
+    # TODO: Implement 4 and 6 bit cluster prefixes
+    context[slot+1] = token.cluster
+    context[slot+2] = token.cluster
+    context[slot+3] = token.cluster
+    context[slot+4] = tag
+    context[slot+5] = label
+    context[slot+6] = left_valency
+    context[slot+7] = right_valency
 
-def get_kernel_tokens():
-    return [S0hw, S0h2w, S0w, S0lw, S0l2w, S0l0w, S0le_w, S0rw, S0r2w, S0r0w,
-            S0re_w, N0w, N0lw, N0l2w, N0l0w, N0le_w, N1w, N2w]
 
+cdef void fill_context(size_t* context, size_t nr_label, Token** tokens, Kernel* k):
+    # This fills in the basic properties of each of our "slot" tokens, e.g.
+    # word on top of the stack, word at the front of the buffer, etc.
+    cdef size_t i
+    cdef size_t slot
+    cdef Token* token
+    for i in range(NR_SLOT):
+        fill_token(context, SLOTS[i], tokens[i], k.tags[i], k.labels[i],
+                   k.l_vals[i], k.r_vals[i])
 
-cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel* k):
-    cdef size_t* words = sent.words
-    cdef size_t* tags = sent.pos
-    cdef size_t* clusters = sent.clusters
-    cdef size_t* cprefix6s = sent.cprefix6s
-    cdef size_t* cprefix4s = sent.cprefix4s
-    context[N0w] = words[k.i]
-    context[N0p] = k.n0p
-    context[N0c] = clusters[k.i]
-    context[N0c6] = cprefix6s[k.i]
-    context[N0c4] = cprefix4s[k.i]
+    fill_token(context, N1w, tokens[k.i + 1], 0, 0, 0, 0)
+    fill_token(context, N2w, tokens[k.i + 2], 0, 0, 0, 0)
+    fill_token(context, N3w, tokens[k.i + 3], 0, 0, 0, 0)
+        
+    fill_token(context, S0hw, tokens[k.s1 if k.Ls0 else 0], k.s1p)
+    fill_token(context, S0hw, tokens[k.s2 if k.Ls0 and k.Ls1 else 0], k.s2p)
+    # Edge features for disfluencies 
+    fill_token(context, S0le_w, tokens[k.s0ledge], k.s0ledgep)
+    fill_token(context, N0le_w, tokens[k.n0ledge], k.s0ledgep)
+    # Get rightward edge of S0 via the leftward edge of N0
+    fill_token(context, S0re_w, tokens[k.n0ledge-1 if k.n0ledge else 0], k.s0redgep)
+    
 
-    context[N1w] = words[k.i + 1]
-    context[N1p] = k.n1p
-    context[N1c] = clusters[k.i + 1]
-    context[N1c6] = cprefix6s[k.i + 1]
-    context[N1c4] = cprefix4s[k.i + 1]
-
-    context[N2w] = words[k.i + 2]
-    context[N2p] = tags[k.i + 2]
-    context[N2c] = clusters[k.i + 2]
-    context[N2c6] = cprefix6s[k.i + 2]
-    context[N2c4] = cprefix4s[k.i + 2]
-
-    context[N3w] = words[k.i + 3]
-    context[N3p] = k.n3p
-    context[N3c] = clusters[k.i + 3]
-    context[N3c6] = cprefix6s[k.i + 3]
-    context[N3c4] = cprefix4s[k.i + 3]
-
-    context[S0w] = words[k.s0]
-    context[S0p] = k.s0p
-    context[S0c] = clusters[k.s0]
-    context[S0c6] = cprefix6s[k.s0]
-    context[S0c4] = cprefix4s[k.s0]
+    # Label features for stack
     context[S0l] = k.Ls0
-    # If there's a label set for s0, then S1 is the head of S0
-    if k.Ls0:
-        context[S0hw] = words[k.s1]
-        context[S0hp] = k.s1p
-        context[S0hc] = clusters[k.s1]
-        context[S0hc6] = cprefix6s[k.s1]
-        context[S0hc4] = cprefix4s[k.s1]
-        context[S0hl] = k.Ls1
-    else:
-        context[S0hw] = 0
-        context[S0hp] = 0
-        context[S0hc] = 0
-        context[S0hc6] = 0
-        context[S0hc4] = 0
-        context[S0hl] = 0
-    # Likewise, if both S0 and S1 have labels, then S2 must be S0's grandparent
-    if k.Ls0 and k.Ls1:
-        context[S0h2w] = words[k.s2]
-        context[S0h2p] = k.s2p
-        context[S0h2c] = clusters[k.s2]
-        context[S0h2c6] = cprefix6s[k.s2]
-        context[S0h2c4] = cprefix4s[k.s2]
-        context[S0h2l] = k.Ls2
-    else:
-        context[S0h2w] = 0
-        context[S0h2p] = 0
-        context[S0h2c] = 0
-        context[S0h2c6] = 0
-        context[S0h2c4] = 0
-    context[S1w] = words[k.s1]
-    context[S1p] = k.s1p
-    context[S1c] = clusters[k.s1]
-    context[S1c6] = cprefix6s[k.s1]
-    context[S1c4] = cprefix4s[k.s1]
-    context[S2w] = words[k.s2]
-    context[S2p] = k.s2p
-    context[S2c] = clusters[k.s2]
-    context[S2c6] = cprefix6s[k.s2]
-    context[S2c4] = cprefix4s[k.s2]
+    context[S0hl] = k.Ls1
+    context[S0h2l] = k.Ls2
+    
+    # Valency features
     context[S0lv] = k.s0l.val + 1
     context[S0rv] = k.s0r.val + 1
     context[N0lv] = k.n0l.val + 1
-    context[S0lw] = words[k.s0l.idx[0]]
-    context[S0lp] = k.s0l.tags[0]
-    context[S0lc] = clusters[k.s0l.idx[0]]
-    context[S0lc6] = cprefix6s[k.s0l.idx[0]]
-    context[S0lc4] = cprefix4s[k.s0l.idx[0]]
 
-    context[S0rw] = words[k.s0r.idx[0]]
-    context[S0rp] = k.s0r.tags[0]
-    context[S0rc] = clusters[k.s0r.idx[0]]
-    context[S0rc6] = cprefix6s[k.s0r.idx[0]]
-    context[S0rc4] = cprefix4s[k.s0r.idx[0]]
-
-    context[S0l2w] = words[k.s0l.idx[1]]
-    context[S0l2p] = k.s0l.tags[1]
-    context[S0l2c] = clusters[k.s0l.idx[1]]
-    context[S0l2c6] = cprefix6s[k.s0l.idx[1]]
-    context[S0l2c4] = cprefix4s[k.s0l.idx[1]]
-
-    context[S0r2w] = words[k.s0r.idx[1]]
-    context[S0r2p] = k.s0r.tags[1]
-    context[S0r2c] = clusters[k.s0r.idx[1]]
-    context[S0r2c6] = cprefix6s[k.s0r.idx[1]]
-    context[S0r2c4] = cprefix4s[k.s0r.idx[1]]
-
-    context[S0l0w] = words[k.s0l.idx[2]]
-    context[S0l0p] = k.s0l.tags[2]
-    context[S0l0c] = clusters[k.s0l.idx[2]]
-    context[S0l0c6] = cprefix6s[k.s0l.idx[2]]
-    context[S0l0c4] = cprefix4s[k.s0l.idx[2]]
-
-    context[S0r0w] = words[k.s0r.idx[2]]
-    context[S0r0p] = k.s0r.tags[2]
-    context[S0r0c] = clusters[k.s0r.idx[2]]
-    context[S0r0c6] = cprefix6s[k.s0r.idx[2]]
-    context[S0r0c4] = cprefix6s[k.s0r.idx[2]]
-
-    context[N0lw] = words[k.n0l.idx[0]]
-    context[N0lp] = k.n0l.tags[0]
-    context[N0lc] = clusters[k.n0l.idx[0]]
-    context[N0lc6] = cprefix6s[k.n0l.idx[0]]
-    context[N0lc4] = cprefix6s[k.n0l.idx[0]]
-
-    context[N0l2w] = words[k.n0l.idx[1]]
-    context[N0l2p] = k.n0l.tags[1]
-    context[N0l2c] = clusters[k.n0l.idx[1]]
-    context[N0l2c6] = cprefix6s[k.n0l.idx[1]]
-    context[N0l2c4] = cprefix4s[k.n0l.idx[1]]
-
-    context[N0l0w] = words[k.n0l.idx[2]]
-    context[N0l0p] = k.n0l.tags[2]
-    context[N0l0c] = clusters[k.n0l.idx[2]]
-    context[N0l0c6] = cprefix6s[k.n0l.idx[2]]
-    context[N0l0c4] = cprefix4s[k.n0l.idx[2]]
-
+    # Label features for subtrees
     context[S0ll] = k.s0l.lab[0]
     context[S0l2l] = k.s0l.lab[1]
     context[S0l0l] = k.s0l.lab[2]
@@ -343,6 +288,7 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
     context[N0l2l] = k.n0l.lab[1]
     context[N0l0l] = k.n0l.lab[2]
 
+    # Label "set" features. Are these necessary??
     context[S0llabs] = 0
     context[S0rlabs] = 0
     context[N0llabs] = 0
@@ -359,28 +305,7 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
     else:
         context[dist] = 0
 
-    context[S0le_w] = words[k.s0ledge]
-    context[S0le_p] = tags[k.s0ledge]
-    context[S0le_c] = clusters[k.s0ledge]
-    context[S0le_c6] = cprefix6s[k.s0ledge]
-    context[S0le_c4] = cprefix4s[k.s0ledge]
-    context[N0le_w] = words[k.n0ledge]
-    context[N0le_p] = k.n0ledgep
-    context[N0le_c] = clusters[k.n0ledge]
-    context[N0le_c6] = cprefix6s[k.n0ledge]
-    context[N0le_c4] = cprefix4s[k.n0ledge]
-    
-    context[S0re_p] = k.s0redgep
-    if k.n0ledge > 0:
-        context[S0re_w] = words[k.n0ledge - 1]
-        context[S0re_c] = clusters[k.n0ledge - 1]
-        context[S0re_c6] = cprefix6s[k.n0ledge - 1]
-        context[S0re_c4] = cprefix4s[k.n0ledge - 1]
-    else:
-        context[S0re_w] = 0
-        context[S0re_c] = 0
-        context[S0re_c6] = 0
-        context[S0re_c4] = 0
+    # Disfluency match features
     if k.prev_edit and k.i != 0:
         context[prev_edit] = 1
         context[prev_edit_wmatch] = 1 if words[k.i - 1] == words[k.i] else 0
@@ -410,7 +335,6 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
         context[next_edit_word] = 0
         context[next_edit_pos] = 0
 
- 
     # These features find how much of S0's span matches N0's span, starting from
     # the left.
     # 
