@@ -86,7 +86,7 @@ cdef class Beam:
     cdef bint is_full
     cdef bint is_finished
 
-    cdef Kernel* next_state(self, size_t i, size_t* tags)
+    cdef State* next_state(self, size_t i, size_t* tags)
     cdef int extend_states(self, double** scores) except -1
     cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
                         size_t* labels, size_t* sbd, bint* edits) except -1

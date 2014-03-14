@@ -39,10 +39,10 @@ cdef class Beam:
             self.valid[i] = <int*>calloc(self.trans.nr_class, sizeof(int*))
             self.costs[i] = <int*>calloc(self.trans.nr_class, sizeof(int*))
 
-    cdef Kernel* next_state(self, size_t idx, size_t* tags):
+    cdef State* next_state(self, size_t idx, size_t* tags):
         self.trans.fill_valid(self.beam[idx], self.valid[idx])
-        fill_kernel(self.beam[idx], tags)
-        return &self.beam[idx].kernel
+        fill_slots(self.beam[idx])
+        return self.beam[idx]
 
     @cython.cdivision(True)
     cdef int extend_states(self, double** ext_scores) except -1:
@@ -67,16 +67,11 @@ cdef class Beam:
                 next_moves.push(pair[double, size_t](parent.score + mean_score, move_id))
                 continue
             scores = ext_scores[parent_idx]
-            r_score = scores[self.trans.r_start]
-            parent.guess_labels[parent.i] = self.trans.labels[self.trans.r_start]
             for clas in range(self.trans.nr_class):
                 if self.valid[parent_idx][clas] != -1:
                     score = parent.score + scores[clas]
                     move_id = (parent_idx * self.trans.nr_class) + clas
                     next_moves.push(pair[double, size_t](score, move_id))
-                if scores[clas] >= r_score and self.trans.r_start < clas < self.trans.r_end:
-                    r_score = scores[clas]
-                    parent.guess_labels[parent.i] = self.trans.labels[clas]
         cdef pair[double, size_t] data
         # Apply extensions for best continuations
         cdef State* s
@@ -111,11 +106,11 @@ cdef class Beam:
         cdef size_t i
         # No need to copy heads for root and start symbols
         for i in range(1, self.length - 1):
-            assert self.beam[0].heads[i] != 0
-            #tags[i] = self.beam[0].tags[i]
-            heads[i] = self.beam[0].heads[i]
-            labels[i] = self.beam[0].labels[i]
-            sbd[i] = self.beam[0].sbd[i]
+            assert self.beam[0].parse[i].head != 0
+            tags[i] = self.beam[0].parse[i].tag
+            heads[i] = self.beam[0].parse[i].head
+            labels[i] = self.beam[0].parse[i].label
+            sbd[i] = self.beam[0].parse[i].is_break
             # TODO: Do sentence boundary detection here
         fill_edits(self.beam[0], edits)
  
@@ -156,5 +151,3 @@ cdef class Violation:
     def __dealloc__(self):
         free(self.ghist)
         free(self.phist)
-
-

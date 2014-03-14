@@ -8,7 +8,9 @@ The atomic feature names are listed in a big enum, so that the feature tuples
 can refer to them.
 """
 
-from redshift._state cimport Kernel, Subtree
+from redshift._state cimport SlotTokens
+from redshift.sentence cimport AnswerToken
+from index.vocab cimport Word
 from itertools import combinations
 # Context elements
 # Ensure _context_size is always last; it ensures our compile-time setting
@@ -31,126 +33,189 @@ cdef enum:
     S2c
     S2c6
     S2c4
+    S2L
+    S2lv
+    S2rv
 
     S1w
     S1p
     S1c
     S1c6
     S1c4
+    S1L
+    S1lv
+    S1rv
 
     S0l0w
     S0l0p
     S0l0c
     S0l0c6
     S0l0c4
+    S0l0L
+    S0l0lv
+    S0l0rv
 
     S0l2w
     S0l2p
     S0l2c
     S0l2c6
     S0l2c4
+    S0l2L
+    S0l2lv
+    S0l2rv
 
     S0lw
     S0lp
     S0lc
     S0lc6
     S0lc4
+    S0lL
+    S0llv
+    S0lrv
 
     S0w
     S0p
     S0c
     S0c6
     S0c4
+    S0L
+    S0lv
+    S0rv
 
     S0r0w
     S0r0p
     S0r0c
     S0r0c6
     S0r0c4
+    S0r0L
+    S0r0lv
+    S0r0rv
 
     S0r2w
     S0r2p
     S0r2c
     S0r2c6
     S0r2c4
+    S0r2L
+    S0r2lv
+    S0r2rv
 
     S0rw
     S0rp
     S0rc
     S0rc6
     S0rc4
+    S0rL
+    S0rlv
+    S0rrv
 
     N0l0w
     N0l0p
     N0l0c
     N0l0c6
     N0l0c4
+    N0l0L
+    N0l0lv
+    N0l0rv
 
     N0l2w
     N0l2p
     N0l2c
     N0l2c6
     N0l2c4
+    N0l2L
+    N0l2lv
+    N0l2rv
 
     N0lw
     N0lp
     N0lc
     N0lc6
     N0lc4
+    N0lL
+    N0llv
+    N0lrv
 
     N0w
     N0p
     N0c
     N0c6
     N0c4
+    N0L
+    N0lv
+    N0rv
  
     N1w
     N1p
     N1c
     N1c6
     N1c4
+    N1L
+    N1lv
+    N1rv
     
     N2w
     N2p
     N2c
     N2c6
     N2c4
+    N2L
+    N2lv
+    N2rv
     
     N3w
     N3p
     N3c
     N3c6
     N3c4
+    N3L
+    N3lv
+    N3rv
 
     S0hw
     S0hp
     S0hc
     S0hc6
     S0hc4
+    S0hL
+    S0hlv
+    S0hrv
  
     S0h2w
     S0h2p
     S0h2c
     S0h2c6
     S0h2c4
+    S0h2L
+    S0h2lv
+    S0h2rv
     
     S0le_w
     S0le_p
     S0le_c
     S0le_c6
     S0le_c4
+    S0le_L
+    S0le_lv
+    S0le_rv
     
     S0re_w
     S0re_p
     S0re_c
     S0re_c6
     S0re_c4
+    S0re_L
+    S0re_lv
+    S0re_rv
     
     N0le_w
     N0le_p
     N0le_c
     N0le_c6
     N0le_c4
+    N0le_L
+    N0le_lv
+    N0le_rv
 
     S2l
     S1l
@@ -159,27 +224,6 @@ cdef enum:
     S0l2l
     S0ll
 
-    S0l
-
-    S0r0l
-    S0r2l
-    S0rl
-    
-    N0l0l
-    N0l2l
-    N0ll
-
-    S0hl
-    S0h2l
-    
-    S0le_l
-    S0re_l
-    N0le_l
-    
-    S0lv
-    S0rv
-    N0lv
-    
     dist
     
     S0llabs
@@ -216,87 +260,76 @@ cdef enum:
 
 
 # Listed in left-to-right order
-cdef size_t* SLOTS = [
-    S2w, S1w,
-    S0le_w, S0l0w, S0l2w, S0lw,
-    S0w,
-    S0r0w, S0r2w, S0rw, S0re_w,
-    N0le_w, N0l0w, N0l2w, N0lw,
-    N0w
-]
+cdef size_t[16] SLOTS
+SLOTS[0] = S2w; SLOTS[1] = S1w
+SLOTS[2] = S0le_w; SLOTS[3] = S0l0w; SLOTS[4] = S0l2w; SLOTS[5] = S0lw
+SLOTS[6] = S0w
+SLOTS[7] = S0r0w; SLOTS[8] = S0r2w; SLOTS[9] = S0rw; SLOTS[10] = S0re_w
+SLOTS[11] = N0le_w; SLOTS[12] = N0l0w; SLOTS[13] = N0l2w; SLOTS[14] = N0lw
+SLOTS[15] = N0w
+
 
 cdef size_t NR_SLOT = sizeof(SLOTS) / sizeof(SLOTS[0])
+
+
+def get_kernel_tokens():
+    kernel = []
+    for i in range(NR_SLOT):
+        kernel.append(SLOTS[i])
+    return kernel
 
 def context_size():
     return CONTEXT_SIZE
 
-cdef inline void fill_token(size_t* context, size_t slot, Token* token,
-                            size_t tag, size_t label,
-                            size_t left_valency, size_t right_valency):
-    context[slot] = token.word
+cdef inline void fill_token(size_t* context, size_t slot, AnswerToken* token):
+    context[slot] = token.word.orig
     # TODO: Implement 4 and 6 bit cluster prefixes
-    context[slot+1] = token.cluster
-    context[slot+2] = token.cluster
-    context[slot+3] = token.cluster
-    context[slot+4] = tag
-    context[slot+5] = label
-    context[slot+6] = left_valency
-    context[slot+7] = right_valency
+    context[slot+1] = token.word.cluster
+    context[slot+2] = token.word.cluster
+    context[slot+3] = token.word.cluster
+    context[slot+4] = token.tag
+    context[slot+5] = token.label
+    context[slot+6] = token.l_valency
+    context[slot+7] = token.r_valency
 
-
-cdef void fill_context(size_t* context, size_t nr_label, Token** tokens, Kernel* k):
+# TODO: Switch back to fill_context simply from kernel
+cdef void fill_context(size_t* context, SlotTokens* tokens, AnswerToken* parse):
     # This fills in the basic properties of each of our "slot" tokens, e.g.
     # word on top of the stack, word at the front of the buffer, etc.
-    cdef size_t i
-    cdef size_t slot
-    cdef Token* token
-    for i in range(NR_SLOT):
-        fill_token(context, SLOTS[i], tokens[i], k.tags[i], k.labels[i],
-                   k.l_vals[i], k.r_vals[i])
+    fill_token(context, S2w, &parse[tokens.s2])
+    fill_token(context, S1w, &parse[tokens.s1])
+    fill_token(context, S0le_w, &parse[tokens.s0le])
+    fill_token(context, S0lw, &parse[tokens.s0l])
+    fill_token(context, S0l2w, &parse[tokens.s0l2])
+    fill_token(context, S0l0w, &parse[tokens.s0l0])
+    fill_token(context, S0w, &parse[tokens.s0])
+    fill_token(context, S0r0w, &parse[tokens.s0r0])
+    fill_token(context, S0r2w, &parse[tokens.s0r2])
+    fill_token(context, S0rw, &parse[tokens.s0r])
+    fill_token(context, S0re_w, &parse[tokens.s0re])
+    fill_token(context, N0le_w, &parse[tokens.n0le])
+    fill_token(context, N0lw, &parse[tokens.n0l])
+    fill_token(context, N0l2w, &parse[tokens.n0l2])
+    fill_token(context, N0l0w, &parse[tokens.n0l0])
+    fill_token(context, N0w, &parse[tokens.n0])
+    fill_token(context, N1w, &parse[tokens.n1])
 
-    fill_token(context, N1w, tokens[k.i + 1], 0, 0, 0, 0)
-    fill_token(context, N2w, tokens[k.i + 2], 0, 0, 0, 0)
-    fill_token(context, N3w, tokens[k.i + 3], 0, 0, 0, 0)
-        
-    fill_token(context, S0hw, tokens[k.s1 if k.Ls0 else 0], k.s1p)
-    fill_token(context, S0hw, tokens[k.s2 if k.Ls0 and k.Ls1 else 0], k.s2p)
-    # Edge features for disfluencies 
-    fill_token(context, S0le_w, tokens[k.s0ledge], k.s0ledgep)
-    fill_token(context, N0le_w, tokens[k.n0ledge], k.s0ledgep)
-    # Get rightward edge of S0 via the leftward edge of N0
-    fill_token(context, S0re_w, tokens[k.n0ledge-1 if k.n0ledge else 0], k.s0redgep)
-    
-
-    # Label features for stack
-    context[S0l] = k.Ls0
-    context[S0hl] = k.Ls1
-    context[S0h2l] = k.Ls2
-    
-    # Valency features
-    context[S0lv] = k.s0l.val + 1
-    context[S0rv] = k.s0r.val + 1
-    context[N0lv] = k.n0l.val + 1
-
-    # Label features for subtrees
-    context[S0ll] = k.s0l.lab[0]
-    context[S0l2l] = k.s0l.lab[1]
-    context[S0l0l] = k.s0l.lab[2]
-    context[S0rl] = k.s0r.lab[0]
-    context[S0r2l] = k.s0r.lab[1]
-    context[S0r0l] = k.s0r.lab[2]
-    context[N0ll] = k.n0l.lab[0]
-    context[N0l2l] = k.n0l.lab[1]
-    context[N0l0l] = k.n0l.lab[2]
-
+    cdef size_t s0h = tokens.s1 if tokens.s0.label else 0
+    fill_token(context, S0hw, &parse[s0h])
+    cdef size_t s0h2 = tokens.s2 if tokens.s0.label and tokens.s1.label else 0
+    fill_token(context, S0h2w, &parse[s0h2])
+    """
     # Label "set" features. Are these necessary??
     context[S0llabs] = 0
     context[S0rlabs] = 0
     context[N0llabs] = 0
+
     cdef size_t i
     for i in range(4):
         context[S0llabs] += k.s0l.lab[i] << (nr_label - k.s0l.lab[i])
         context[S0rlabs] += k.s0r.lab[i] << (nr_label - k.s0r.lab[i])
         context[N0llabs] += k.n0l.lab[i] << (nr_label - k.n0l.lab[i])
+
     # TODO: Seems hard to believe we want to keep d non-zero when there's no
     # stack top. Experiment with this futrther.
     if k.s0 != 0:
@@ -369,6 +402,7 @@ cdef void fill_context(size_t* context, size_t nr_label, Token** tokens, Kernel*
                 context[pscopy] += 1
             else:
                 context[psexact] = 0
+    """
 
 
 from_single = (
@@ -458,14 +492,14 @@ third_order = (
 
 
 labels = (
-   (S0l,),
-   (S0ll,),
-   (S0rl,),
-   (N0ll,),
-   (S0hl,),
-   (S0l2l,),
-   (S0r2l,),
-   (N0l2l,),
+   (S0L,),
+   (S0lL,),
+   (S0rL,),
+   (N0lL,),
+   (S0hL,),
+   (S0l2L,),
+   (S0r2L,),
+   (N0l2L,),
 )
 
 
@@ -479,15 +513,15 @@ label_sets = (
 )
 
 extra_labels = (
-    (S0p, S0ll, S0lp),
-    (S0p, S0ll, S0l2l),
-    (S0p, S0rl, S0rp),
-    (S0p, S0rl, S0r2l),
-    (S0p, S0ll, S0rl),
-    (S0p, S0ll, S0l2l, S0l0l),
-    (S0p, S0rl, S0r2l, S0r0l),
-    (S0hp, S0l, S0rl),
-    (S0hp, S0l, S0ll),
+    (S0p, S0lL, S0lp),
+    (S0p, S0lL, S0l2L),
+    (S0p, S0rL, S0rp),
+    (S0p, S0rL, S0r2L),
+    (S0p, S0lL, S0rL),
+    (S0p, S0lL, S0l2L, S0l0L),
+    (S0p, S0rL, S0r2L, S0r0L),
+    (S0hp, S0L, S0rL),
+    (S0hp, S0L, S0lL),
 )
 
 edges = (
