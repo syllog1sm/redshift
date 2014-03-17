@@ -22,12 +22,15 @@ cdef struct Sentence:
     AnswerToken* answer
     double score
     
-cdef Sentence* init_sent(list words_cn, object tags, object parse)
+cdef Sentence* init_sent(list words_cn, object tags, object parse) except NULL
 
 cdef void free_sent(Sentence* s)
 
-cdef class PySentence:
-    cdef size_t id
+cdef class Input:
     cdef Sentence* c_sent
-    cdef size_t length
-    cdef list sausage
+
+
+cdef class Token:
+    cdef size_t i
+    cdef Word* c_word
+    cdef AnswerToken* c_parse

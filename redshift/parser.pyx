@@ -11,10 +11,8 @@ from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
 
 from _state cimport *
-from sentence cimport Sentence
-from sentence cimport PySentence
 from sentence import get_labels
-from sentence cimport PySentence, Sentence, AnswerToken
+from sentence cimport Input, Sentence, AnswerToken
 from transitions cimport TransitionSystem, transition_to_str 
 from beam cimport Beam
 #from tagger cimport BeamTagger
@@ -166,7 +164,7 @@ cdef class BaseParser:
         if self.beam_width >= 2:
             self.guide.use_cache = True
         indices = list(range(len(sents)))
-        cdef PySentence py_sent
+        cdef Input py_sent
         if not DEBUG:
             # Extra trick: sort by sentence length for first iteration
             indices.sort(key=lambda i: sents[i].length)
@@ -206,7 +204,7 @@ cdef class BaseParser:
     def add_parses(self, list sents):
         self.guide.nr_class = self.moves.nr_class
         cdef size_t i
-        cdef PySentence sent
+        cdef Input sent
         for sent in sents:
             self.parse(sent.c_sent)
 
