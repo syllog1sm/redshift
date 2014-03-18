@@ -5,37 +5,18 @@ from libc.stdint cimport uint64_t
 import os.path
 
 
-cdef Word* OOV = init_word(b"OOV", 0, 0.0, 0.0)
 
 cdef Vocab _VOCAB = None
+
+def load(): # Called in index/__init__.py
+    global _VOCAB
+    if _VOCAB is None:
+        _VOCAB = Vocab()
 
 
 cpdef size_t lookup(bytes word):
     global _VOCAB
-    if _VOCAB is None:
-        _VOCAB = Vocab()
-    cdef uint64_t hashed = _hash_str(word)
-    cdef size_t addr = _VOCAB.words[hashed]
-    if addr == 0:
-        return <size_t>OOV
-    else:
-        return addr
-
-
-cpdef int add(bytes word) except -1:
-    global _VOCAB
-    if _VOCAB is None:
-        _VOCAB = Vocab()
-
-    cdef size_t addr = lookup(word)
-    cdef size_t w
-    if addr == <size_t>OOV:
-        w = <size_t>init_word(word, 0, 0.0, 0.0)
-        _VOCAB.words[_hash_str(word)] = w
-        _VOCAB.strings[<size_t>w] = word
-        return 1
-    else:
-        return 0
+    return _VOCAB.lookup(word)
 
 
 cpdef bytes get_str(size_t word):
@@ -46,15 +27,9 @@ cpdef bytes get_str(size_t word):
 
 
 cdef class Vocab:
-    def __cinit__(self):
+    def __cinit__(self, loc=None):
         self.words.set_empty_key(0)
         self.strings = {}
-
-    def __init__(self):
-        self.load()
-
-    def load(self, loc=None):
-        self.words.set_empty_key(0)
         cdef object line
         cdef size_t i, word_id, freq
         cdef float upper_pc, title_pc
@@ -80,6 +55,15 @@ cdef class Vocab:
         cdef size_t word_addr
         for word_addr in self.values():
             free(<Word*>word_addr)
+
+    cdef size_t lookup(self, bytes word):
+        cdef uint64_t hashed = _hash_str(word)
+        cdef size_t addr = self.words[hashed]
+        if addr == 0:
+            addr = <size_t>init_word(word, 0, 0.0, 0.0)
+            self.words[hashed] = addr
+            self.strings[addr] = word
+        return addr
 
 
 cpdef bytes normalize_word(word):

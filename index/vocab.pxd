@@ -6,8 +6,6 @@ cpdef size_t lookup(bytes word)
 
 cpdef bytes get_str(size_t word)
 
-cpdef int add(bytes word) except -1
-
 cdef struct Word:
     size_t orig
     size_t norm
@@ -22,3 +20,4 @@ cdef struct Word:
 cdef class Vocab:
     cdef dense_hash_map[uint64_t, size_t] words
     cdef dict strings
+    cdef size_t lookup(self, bytes word)
