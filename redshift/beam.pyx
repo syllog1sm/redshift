@@ -101,18 +101,12 @@ cdef class Beam:
         else:
             self.is_finished = True
 
-    cdef int fill_parse(self, size_t* hist, size_t* tags, size_t* heads,
-                        size_t* labels, size_t* sbd, bint* edits) except -1:
+    cdef int fill_parse(self, AnswerToken* parse) except -1:
         cdef size_t i
         # No need to copy heads for root and start symbols
         for i in range(1, self.length - 1):
-            assert self.beam[0].parse[i].head != 0
-            tags[i] = self.beam[0].parse[i].tag
-            heads[i] = self.beam[0].parse[i].head
-            labels[i] = self.beam[0].parse[i].label
-            sbd[i] = self.beam[0].parse[i].is_break
-            # TODO: Do sentence boundary detection here
-        fill_edits(self.beam[0], edits)
+            parse[i] = self.beam[0].parse[i]
+        #fill_edits(self.beam[0], edits)
  
     def __dealloc__(self):
         for i in range(self.k):

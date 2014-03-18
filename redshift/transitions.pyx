@@ -117,6 +117,7 @@ cdef class TransitionSystem:
         self.moves[self.e_id] = <size_t>EDIT
         self.moves[self.b_id] = <size_t>BOUNDARY
         clas = self.l_start
+        assert left_labels
         for label in left_labels:
             self.moves[clas] = <size_t>LEFT
             self.labels[clas] = label
@@ -124,6 +125,7 @@ cdef class TransitionSystem:
             clas += 1
         self.l_end = clas
         self.r_start = clas
+        assert right_labels
         for label in right_labels:
             self.moves[clas] = <size_t>RIGHT
             self.labels[clas] = label
@@ -146,8 +148,7 @@ cdef class TransitionSystem:
         if move == SHIFT:
             push_stack(s)
         elif move == REDUCE:
-            if s.parse[s.top].head == 0:
-                raise StandardError
+            #if s.parse[s.top].head == 0:
             #    assert self.allow_reduce
             #    assert s.second != 0
             #    assert s.second < s.top
@@ -213,37 +214,22 @@ cdef class TransitionSystem:
             costs[i] = -1
         if s.is_finished:
             return costs
+        costs[self.s_id] = self.s_cost(s, parse)
+        costs[self.d_id] = self.d_cost(s, parse)
+        costs[self.e_id] = self.e_cost(s, parse)
+        costs[self.b_id] = self.b_cost(s, parse)
+        cdef int r_cost = self.r_cost(s, parse)
+        self._label_costs(self.r_start, self.r_end, parse[s.i].label,
+                           parse[s.i].head == s.top, r_cost, costs)
+        cdef int l_cost = self.l_cost(s, parse)
+        self._label_costs(self.l_start, self.l_end, parse[s.top].label,
+                          parse[s.top].head == s.i, l_cost, costs)
+        for i in range(self.nr_class):
+            if costs[i] == 0:
+                break
+        else:
+            raise StandardError
         return costs
-        #costs[self.s_id] = self.s_cost(s, heads, labels, edits, sbd)
-        #costs[self.d_id] = self.d_cost(s, heads, labels, edits, sbd)
-        #costs[self.e_id] = self.e_cost(s, heads, labels, edits, sbd)
-        #costs[self.b_id] = self.b_cost(s, heads, labels, edits, sbd)
-        #cdef int r_cost = self.r_cost(s, heads, labels, edits, sbd)
-        #self._label_costs(self.r_start, self.r_end, labels[s.i], heads[s.i] == s.top,
-        #                  r_cost, costs)
-        #cdef int l_cost = self.l_cost(s, heads, labels, edits, sbd)
-        #self._label_costs(self.l_start, self.l_end, labels[s.top],
-        #                  heads[s.top] == s.i, l_cost, costs)
-        #for i in range(self.nr_class):
-        #    if costs[i] == 0:
-        #        break
-        #else:
-        #    print 'Conditions:', s.stack_len, s.n, s.at_end_of_buffer, s.segment
-        #    print 'Top, i', s.top - 1, s.i - 1
-        #    print 'Head set:', s.heads[s.top] - 1 if s.heads[s.top] != 0 else 0
-        #    print 'Gold heads:', heads[s.top] - 1, heads[s.i] - 1
-        #    print 'SBD', sbd[s.top], sbd[s.i]
-        #    print 'Edits', edits[s.top], edits[s.i]
-        #    print l_cost
-        #    print nr_headless(s)
-        #    print costs[self.b_id]
-
-        #    print self.moves[s.history[s.t-1]] != SHIFT
-        #    print self.moves[s.history[s.t-1]] != RIGHT
-        #    print can_segment(s, self.moves, self.use_sbd)
-        #    print nr_headless(s)
-        #    raise StandardError
-        #return costs
 
     cdef int _label_costs(self, size_t start, size_t end, size_t label, bint add,
                           int c, int* costs) except -1:
@@ -276,6 +262,12 @@ cdef class TransitionSystem:
             if valid[i] == 0:
                 break
         else:
+            print s.i
+            print s.top
+            print s.parse[s.top].head
+            print s.n
+            print s.at_end_of_buffer
+
             raise StandardError
 
     #cdef int break_tie(self, State* s, size_t* tags, size_t* heads,

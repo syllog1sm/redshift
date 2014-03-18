@@ -7,23 +7,51 @@ import os.path
 
 cdef Word* OOV = init_word(b"OOV", 0, 0.0, 0.0)
 
-cdef Vocab _VOCAB = Vocab()
+cdef Vocab _VOCAB = None
 
-cdef Word* lookup(bytes word):
+
+cpdef size_t lookup(bytes word):
+    global _VOCAB
+    if _VOCAB is None:
+        _VOCAB = Vocab()
     cdef uint64_t hashed = _hash_str(word)
     cdef size_t addr = _VOCAB.words[hashed]
     if addr == 0:
-        return OOV
+        return <size_t>OOV
     else:
-        return <Word*>addr
+        return addr
 
 
-def load_vocab():
-    _VOCAB.load()
+cpdef int add(bytes word) except -1:
+    global _VOCAB
+    if _VOCAB is None:
+        _VOCAB = Vocab()
+
+    cdef size_t addr = lookup(word)
+    cdef size_t w
+    if addr == <size_t>OOV:
+        w = <size_t>init_word(word, 0, 0.0, 0.0)
+        _VOCAB.words[_hash_str(word)] = w
+        _VOCAB.strings[<size_t>w] = word
+        return 1
+    else:
+        return 0
+
+
+cpdef bytes get_str(size_t word):
+    global _VOCAB
+    if _VOCAB is None:
+        _VOCAB = Vocab()
+    return _VOCAB.strings.get(word, '')
+
 
 cdef class Vocab:
     def __cinit__(self):
         self.words.set_empty_key(0)
+        self.strings = {}
+
+    def __init__(self):
+        self.load()
 
     def load(self, loc=None):
         self.words.set_empty_key(0)
@@ -32,6 +60,8 @@ cdef class Vocab:
         cdef float upper_pc, title_pc
         if loc is None:
             loc = os.path.join(os.path.dirname(__file__), 'browns.txt')
+        print "Loading vocab from ", loc 
+        cdef size_t w
         for line in open(loc):
             if not line.strip():
                 continue
@@ -42,7 +72,9 @@ cdef class Vocab:
             word = pieces[1]
             freq = int(pieces[2])
             #self[word] = <size_t>init_word(word, cluster, upper_pc, title_pc)
-            self.words[_hash_str(word)] = <size_t>init_word(word, cluster, 0.0, 0.0)
+            w = <size_t>init_word(word, cluster, 0.0, 0.0)
+            self.words[_hash_str(word)] = w
+            self.strings[<size_t>w] = word
 
     def __dealloc__(self):
         cdef size_t word_addr

@@ -281,43 +281,47 @@ def get_kernel_tokens():
 def context_size():
     return CONTEXT_SIZE
 
-cdef inline void fill_token(size_t* context, size_t slot, AnswerToken* token):
-    context[slot] = token.word.orig
+cdef inline void fill_token(size_t* context, size_t i, size_t p,
+                            AnswerToken* parse, Step* steps):
+    cdef AnswerToken* token = &parse[p]
+    cdef Word* word = steps[p].nodes[token.word] 
+    context[i] = word.orig
+    context[i+1] = token.tag
     # TODO: Implement 4 and 6 bit cluster prefixes
-    context[slot+1] = token.word.cluster
-    context[slot+2] = token.word.cluster
-    context[slot+3] = token.word.cluster
-    context[slot+4] = token.tag
-    context[slot+5] = token.label
-    context[slot+6] = token.l_valency
-    context[slot+7] = token.r_valency
+    context[i+2] = word.cluster
+    context[i+3] = word.cluster
+    context[i+4] = word.cluster
+    context[i+5] = token.label
+    context[i+7] = token.l_valency
+    context[i+8] = token.r_valency
 
-# TODO: Switch back to fill_context simply from kernel
-cdef void fill_context(size_t* context, SlotTokens* tokens, AnswerToken* parse):
+
+cdef int fill_context(size_t* context, SlotTokens* tokens, AnswerToken* parse,
+                      Step* steps) except -1:
     # This fills in the basic properties of each of our "slot" tokens, e.g.
     # word on top of the stack, word at the front of the buffer, etc.
-    fill_token(context, S2w, &parse[tokens.s2])
-    fill_token(context, S1w, &parse[tokens.s1])
-    fill_token(context, S0le_w, &parse[tokens.s0le])
-    fill_token(context, S0lw, &parse[tokens.s0l])
-    fill_token(context, S0l2w, &parse[tokens.s0l2])
-    fill_token(context, S0l0w, &parse[tokens.s0l0])
-    fill_token(context, S0w, &parse[tokens.s0])
-    fill_token(context, S0r0w, &parse[tokens.s0r0])
-    fill_token(context, S0r2w, &parse[tokens.s0r2])
-    fill_token(context, S0rw, &parse[tokens.s0r])
-    fill_token(context, S0re_w, &parse[tokens.s0re])
-    fill_token(context, N0le_w, &parse[tokens.n0le])
-    fill_token(context, N0lw, &parse[tokens.n0l])
-    fill_token(context, N0l2w, &parse[tokens.n0l2])
-    fill_token(context, N0l0w, &parse[tokens.n0l0])
-    fill_token(context, N0w, &parse[tokens.n0])
-    fill_token(context, N1w, &parse[tokens.n1])
+    fill_token(context, S2w, tokens.s2, parse, steps)
+    fill_token(context, S1w, tokens.s1, parse, steps)
+    fill_token(context, S0le_w, tokens.s0le, parse, steps)
+    fill_token(context, S0lw, tokens.s0l, parse, steps)
+    fill_token(context, S0l2w, tokens.s0l2, parse, steps)
+    fill_token(context, S0l0w, tokens.s0l0, parse, steps)
+    fill_token(context, S0w, tokens.s0, parse, steps)
+    fill_token(context, S0r0w, tokens.s0r0, parse, steps)
+    fill_token(context, S0r2w, tokens.s0r2, parse, steps)
+    fill_token(context, S0rw, tokens.s0r, parse, steps)
+    fill_token(context, S0re_w, tokens.s0re, parse, steps)
+    fill_token(context, N0le_w, tokens.n0le, parse, steps)
+    fill_token(context, N0lw, tokens.n0l, parse, steps)
+    fill_token(context, N0l2w, tokens.n0l2, parse, steps)
+    fill_token(context, N0l0w, tokens.n0l0, parse, steps)
+    fill_token(context, N0w, tokens.n0, parse, steps)
+    fill_token(context, N1w, tokens.n1, parse, steps)
 
-    cdef size_t s0h = tokens.s1 if tokens.s0.label else 0
-    fill_token(context, S0hw, &parse[s0h])
-    cdef size_t s0h2 = tokens.s2 if tokens.s0.label and tokens.s1.label else 0
-    fill_token(context, S0h2w, &parse[s0h2])
+    #cdef size_t s0h = tokens.s1 if tokens.s0.label else 0
+    #fill_token(context, S0hw, &parse[s0h])
+    #cdef size_t s0h2 = tokens.s2 if tokens.s0.label and tokens.s1.label else 0
+    #fill_token(context, S0h2w, &parse[s0h2])
     """
     # Label "set" features. Are these necessary??
     context[S0llabs] = 0

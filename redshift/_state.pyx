@@ -5,6 +5,7 @@ from libc.string cimport memcpy, memset
 DEF MAX_VALENCY = 100
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
+    #print "Set %d head to %d" % (child, head)
     s.parse[child].head = head
     s.parse[child].label = label
     if child < head:
@@ -215,6 +216,7 @@ cdef State* init_state(size_t n):
 
     s.parse = <AnswerToken*>calloc(n, sizeof(AnswerToken))
     for i in range(n):
+        s.parse[i].word = 0
         s.parse[i].left_edge = i
         s.l_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
         s.r_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))

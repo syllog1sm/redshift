@@ -220,13 +220,11 @@ cdef class BaseParser:
         #self.tagger.guide.load(pjoin(self.model_dir, 'tagger.gz'), thresh=self.feat_thresh)
 
     def new_idx(self, model_dir):
-        index.vocab.load_vocab()
         #index.hashes.init_word_idx(pjoin(model_dir, 'words'))
         index.hashes.init_pos_idx(pjoin(model_dir, 'pos'))
         index.hashes.init_label_idx(pjoin(model_dir, 'labels'))
 
     def load_idx(self, model_dir):
-        index.vocab.load_vocab()
         #index.hashes.load_word_idx(pjoin(model_dir, 'words'))
         index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
         index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
@@ -268,11 +266,11 @@ cdef class BeamParser(BaseParser):
             for p_idx in range(beam.bsize):
                 pred = <State*>beam.beam[p_idx]
                 self.moves.fill_valid(pred, beam.valid[p_idx])
-                beam_scores[p_idx] = self._predict(pred)
+                beam_scores[p_idx] = self._predict(pred, sent.steps)
             beam.extend_states(beam_scores)
         s = <State*>beam.beam[0]
         #sent.parse.n_moves = s.t
-        #beam.fill_parse(sent.answer)
+        beam.fill_parse(sent.answer)
         sent.score = beam.beam[0].score
         free(beam_scores)
 
@@ -296,14 +294,14 @@ cdef class BeamParser(BaseParser):
                 pred = <State*>beam.beam[i]
                 self.moves.fill_valid(pred, beam.valid[i])
                 fill_slots(pred)
-                beam_scores[i] = self._predict(pred)
+                beam_scores[i] = self._predict(pred, sent.steps)
             beam.extend_states(beam_scores)
             oracle = 0
             #oracle = self.moves.break_tie(gold, sent.pos, sent.parse.heads,
             #                              sent.parse.labels, sent.parse.edits,
             #                              sent.parse.sbd)
             fill_slots(gold)
-            scores = self._predict(gold)
+            scores = self._predict(gold, sent.steps)
             gold.score += scores[oracle]
             self.moves.transition(oracle, gold)
             pred = <State*>beam.beam[0]
@@ -351,7 +349,7 @@ cdef class BeamParser(BaseParser):
                 p = <State*>p_beam.beam[i]
                 self.moves.fill_valid(p, p_beam.valid[i])
                 fill_slots(p)
-                p_scores[i] = self._predict(p)
+                p_scores[i] = self._predict(p, sent.steps)
                 costs = self.moves.get_costs(p, gold_parse)
                 # TODO: Check this, as have had memcpy woes before
                 memcpy(p_beam.costs[i], costs, sizeof(int) * self.moves.nr_class)
@@ -359,7 +357,7 @@ cdef class BeamParser(BaseParser):
             for i in range(g_beam.bsize):
                 g = <State*>g_beam.beam[i]
                 self.moves.fill_valid(g, g_beam.valid[i])
-                g_scores[i] = self._predict(g)
+                g_scores[i] = self._predict(g, sent.steps)
                 costs = self.moves.get_costs(<State*>g_beam.beam[i], gold_parse)
                 for clas in range(self.moves.nr_class):
                     if costs[clas] != 0:
@@ -397,12 +395,12 @@ cdef class BeamParser(BaseParser):
         else:
             print 'NM None'
 
-    cdef double* _predict(self, State* s) except NULL:
+    cdef double* _predict(self, State* s, Step* steps) except NULL:
         cdef bint cache_hit = False
         fill_slots(s)
         scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
         if not cache_hit:
-            fill_context(self._context, &s.slots, s.parse)
+            fill_context(self._context, &s.slots, s.parse, steps)
             self.extractor.extract(self._features, self._context)
             self.guide.fill_scores(self._features, scores)
         return scores
@@ -432,18 +430,18 @@ cdef class BeamParser(BaseParser):
                 continue
             seen_diff = True
             if i < gt:
-                self._inc_feats(counts[ghist[i]], gold_state, g_inc)
+                self._inc_feats(counts[ghist[i]], gold_state, sent.steps, g_inc)
                 self.moves.transition(ghist[i], gold_state)
             if i < pt:
-                self._inc_feats(counts[phist[i]], pred_state, p_inc)
+                self._inc_feats(counts[phist[i]], pred_state, sent.steps, p_inc)
                 self.moves.transition(phist[i], pred_state)
         free_state(gold_state)
         free_state(pred_state)
         return counts
 
-    cdef int _inc_feats(self, dict counts, State* s, double inc) except -1:
+    cdef int _inc_feats(self, dict counts, State* s, Step* steps, double inc) except -1:
         fill_slots(s)
-        fill_context(self._context, &s.slots, s.parse)
+        fill_context(self._context, &s.slots, s.parse, steps)
         self.extractor.extract(self._features, self._context)
  
         cdef size_t f = 0

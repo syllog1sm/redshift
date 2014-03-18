@@ -2,7 +2,11 @@ from libc.stdint cimport uint64_t
 from ext.sparsehash cimport * 
 
 
-cdef Word* lookup(bytes word)
+cpdef size_t lookup(bytes word)
+
+cpdef bytes get_str(size_t word)
+
+cpdef int add(bytes word) except -1
 
 cdef struct Word:
     size_t orig
@@ -17,3 +21,4 @@ cdef struct Word:
 
 cdef class Vocab:
     cdef dense_hash_map[uint64_t, size_t] words
+    cdef dict strings
