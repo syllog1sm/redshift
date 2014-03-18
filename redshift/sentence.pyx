@@ -5,6 +5,11 @@ cimport index.hashes
 import index.lexicon
 from index.lexicon cimport Lexeme
 
+from index.hashes import encode_pos
+from index.hashes import encode_label
+from index.hashes import decode_pos
+from index.hashes import decode_label
+
 cdef Sentence* init_sent(list words_cn) except NULL:
     cdef Sentence* s = <Sentence*>malloc(sizeof(Sentence))
     s.n = len(words_cn)
@@ -86,7 +91,8 @@ cdef class Input:
 
     property tags:
         def __get__(self):
-            return [self.c_sent.answer[i].tag for i in range(self.c_sent.n)]
+            return [decode_pos(self.c_sent.answer[i].tag)
+                    for i in range(self.c_sent.n)]
 
     property heads:
         def __get__(self):
@@ -94,7 +100,8 @@ cdef class Input:
 
     property labels:
         def __get__(self):
-            return [self.c_sent.answer[i].label for i in range(self.c_sent.n)]
+            return [decode_label(self.c_sent.answer[i].label)
+                    for i in range(self.c_sent.n)]
 
     property edits:
         def __get__(self):
@@ -134,22 +141,19 @@ cdef class Input:
 
     def to_conll(self):
         lines = []
-        pos_idx = index.hashes.reverse_pos_index()
-        label_idx = index.hashes.reverse_label_index()
         for i in range(1, self.length - 1):
             lines.append(conll_line_from_answer(i, &self.c_sent.answer[i],
-                         self.c_sent.steps, pos_idx, label_idx))
+                         self.c_sent.steps))
         return '\n'.join(lines)
 
 
-cdef bytes conll_line_from_answer(size_t i, AnswerToken* a, Step* lattice,
-                                  dict pos_idx, dict label_idx):
+cdef bytes conll_line_from_answer(size_t i, AnswerToken* a, Step* lattice):
     cdef bytes word = index.lexicon.get_str(<size_t>lattice[i].nodes[a.word])
     if not word:
         word = b'-OOV-'
     feats = '-|-|-|-'
     return '\t'.join((str(i), word, '_', 'NN', 'NN', feats, 
-                     str(a.head), label_idx[a.label], '_', '_'))
+                     str(a.head), decode_label(a.label), '_', '_'))
 
 
 cdef class Token:
@@ -158,11 +162,11 @@ cdef class Token:
         self.c_word = <Lexeme*>index.lexicon.lookup(word)
         self.c_parse = <AnswerToken*>malloc(sizeof(AnswerToken))
         if pos is not None:
-            self.c_parse.tag = index.hashes.encode_pos(pos)
+            self.c_parse.tag = encode_pos(pos)
         if head is not None:
             self.c_parse.head = head
         if label is not None:
-            self.c_parse.label = index.hashes.encode_label(label)
+            self.c_parse.label = encode_label(label)
         self.c_parse.is_edit = is_edit
         self.c_parse.is_break = is_break
 
@@ -194,4 +198,6 @@ def get_labels(sents):
                 left_labels.add(sent.c_sent.answer[j].label)
             else:
                 right_labels.add(sent.c_sent.answer[j].label)
+    print left_labels
+    print right_labels
     return tags, list(sorted(left_labels)), list(sorted(right_labels))

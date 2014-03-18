@@ -1,7 +1,7 @@
 # cython: profile=True
 from _state cimport *
 from libc.stdlib cimport malloc, calloc, free
-import index.hashes
+from index.hashes import decode_label, encode_label
 
 # TODO: Link these with other compile constants
 DEF MAX_TAGS = 100
@@ -97,17 +97,16 @@ cdef class TransitionSystem:
         self.r_start = self.l_start + 1
         self.r_end = 0
         self.counter = 0
-        self.erase_label = index.hashes.encode_label('erased')
-        self.root_label = index.hashes.encode_label('ROOT')
+        self.erase_label = encode_label('erased')
+        self.root_label = encode_label('ROOT')
         # TODO: Clean this up, or rename them or something
         self.left_labels = []
         self.right_labels = []
 
     def set_labels(self, tags, left_labels, right_labels):
         self.n_tags = <size_t>max(tags)
-        label_idx = index.hashes.reverse_label_index()
-        self.left_labels = [label_idx[label] for label in sorted(left_labels)]
-        self.right_labels = [label_idx[label] for label in sorted(right_labels)]
+        self.left_labels = [decode_label(label) for label in sorted(left_labels)]
+        self.right_labels = [decode_label(label) for label in sorted(right_labels)]
         self.labels[self.s_id] = 0
         self.labels[self.d_id] = 0
         self.labels[self.e_id] = 0

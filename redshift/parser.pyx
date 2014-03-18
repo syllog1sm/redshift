@@ -68,7 +68,7 @@ def load_parser(model_dir, reuse_idx=False):
         parser = BeamParser(model_dir, **params)
     else:
         raise StandardError
-    pos_tags = set([int(line.split()[-1]) for line in
+    pos_tags = set([int(line.split()[0]) for line in
                         open(pjoin(model_dir, 'pos'))])
     _, nr_label = parser.moves.set_labels(pos_tags, _parse_labels_str(l_labels),
                             _parse_labels_str(r_labels))
@@ -130,10 +130,6 @@ cdef class BaseParser:
         self.feat_thresh = feat_thresh
         self.train_alg = train_alg
         self.beam_width = beam_width
-        if clean == True:
-            self.new_idx(self.model_dir)
-        else:
-            self.load_idx(self.model_dir)
         self.moves = TransitionSystem(allow_reattach=allow_reattach,
                                       allow_reduce=allow_reduce,
                                       use_edit=use_edit,
@@ -213,21 +209,15 @@ cdef class BaseParser:
 
     def save(self):
         self.guide.save(pjoin(self.model_dir, 'model.gz'))
+        index.hashes.save_pos_idx(pjoin(self.model_dir, 'pos'))
+        index.hashes.save_label_idx(pjoin(self.model_dir, 'labels'))
         #self.tagger.save()
 
     def load(self):
         self.guide.load(pjoin(self.model_dir, 'model.gz'), thresh=self.feat_thresh)
         #self.tagger.guide.load(pjoin(self.model_dir, 'tagger.gz'), thresh=self.feat_thresh)
-
-    def new_idx(self, model_dir):
-        #index.hashes.init_word_idx(pjoin(model_dir, 'words'))
-        index.hashes.init_pos_idx(pjoin(model_dir, 'pos'))
-        index.hashes.init_label_idx(pjoin(model_dir, 'labels'))
-
-    def load_idx(self, model_dir):
-        #index.hashes.load_word_idx(pjoin(model_dir, 'words'))
-        index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
-        index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
+        index.hashes.load_pos_idx(pjoin(self.model_dir, 'pos'))
+        index.hashes.load_label_idx(pjoin(self.model_dir, 'labels'))
    
     def write_cfg(self, loc):
         with open(loc, 'w') as cfg:
