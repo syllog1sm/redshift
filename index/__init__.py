@@ -1,3 +1,3 @@
-import index.vocab
+import index.lexicon
 
-index.vocab.load()
+index.lexicon.load()

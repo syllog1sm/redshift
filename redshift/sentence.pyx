@@ -1,8 +1,9 @@
 from libc.stdlib cimport malloc, calloc, free
 
-cimport index.vocab
+cimport index.lexicon
 cimport index.hashes
-import index.vocab
+import index.lexicon
+from index.lexicon cimport Lexeme
 
 cdef Sentence* init_sent(list words_cn) except NULL:
     cdef Sentence* s = <Sentence*>malloc(sizeof(Sentence))
@@ -24,7 +25,7 @@ cdef Sentence* init_sent(list words_cn) except NULL:
     # We used to have to do this to ensure that the zero-position evaluated
     # to 0, for the feature calculation (0 is a special value indicating absent)
     # There's probably a better way, but for now...
-    cdef Word* w
+    cdef Lexeme* w
     for i in range(s.steps[0].n):
         s.steps[0].nodes[i].orig = 0
     # For the output
@@ -33,7 +34,7 @@ cdef Sentence* init_sent(list words_cn) except NULL:
 
 cdef int init_step(list cn_step, Step* step) except -1:
     step.n = len(cn_step)
-    step.nodes = <Word**>calloc(step.n, sizeof(Word*))
+    step.nodes = <Lexeme**>calloc(step.n, sizeof(Lexeme*))
     step.probs = <double*>calloc(step.n, sizeof(double))
     cdef Token token
     for i, (p, token) in enumerate(cn_step):
@@ -80,7 +81,7 @@ cdef class Input:
 
     property words:
         def __get__(self):
-            return [index.vocab.get_str(<size_t>self.c_sent.steps[i].nodes[self.c_sent.answer[i].word])
+            return [index.lexicon.get_str(<size_t>self.c_sent.steps[i].nodes[self.c_sent.answer[i].word])
                     for i in range(self.c_sent.n)]
 
     property tags:
@@ -128,7 +129,6 @@ cdef class Input:
             is_break = len(fields) >= 4 and fields[3] == '1'
             head = int(fields[6])
             label = fields[7]
-            index.vocab.add(word)
             tokens.append(Token(word, pos, head, label, is_edit, is_break))
         return cls.from_tokens(tokens)
 
@@ -144,7 +144,7 @@ cdef class Input:
 
 cdef bytes conll_line_from_answer(size_t i, AnswerToken* a, Step* lattice,
                                   dict pos_idx, dict label_idx):
-    cdef bytes word = index.vocab.get_str(<size_t>lattice[i].nodes[a.word])
+    cdef bytes word = index.lexicon.get_str(<size_t>lattice[i].nodes[a.word])
     if not word:
         word = b'-OOV-'
     feats = '-|-|-|-'
@@ -155,7 +155,7 @@ cdef bytes conll_line_from_answer(size_t i, AnswerToken* a, Step* lattice,
 cdef class Token:
     def __init__(self, word, pos=None, head=None, label=None,
                  is_edit=False, is_break=False):
-        self.c_word = <Word*>index.vocab.lookup(word)
+        self.c_word = <Lexeme*>index.lexicon.lookup(word)
         self.c_parse = <AnswerToken*>malloc(sizeof(AnswerToken))
         if pos is not None:
             self.c_parse.tag = index.hashes.encode_pos(pos)
@@ -170,7 +170,7 @@ cdef class Token:
         free(self.c_parse)
 
     def __repr__(self):
-        return 'Token(%s)' % (index.vocab.get_str(<size_t>self.c_word))
+        return 'Token(%s)' % (index.lexicon.get_str(<size_t>self.c_word))
 
     @classmethod
     def from_str(cls, token_str):

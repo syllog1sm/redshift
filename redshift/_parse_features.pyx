@@ -10,7 +10,7 @@ can refer to them.
 
 from redshift._state cimport SlotTokens
 from redshift.sentence cimport AnswerToken
-from index.vocab cimport Word
+from index.lexicon cimport Lexeme
 from itertools import combinations
 # Context elements
 # Ensure _context_size is always last; it ensures our compile-time setting
@@ -284,7 +284,7 @@ def context_size():
 cdef inline void fill_token(size_t* context, size_t i, size_t p,
                             AnswerToken* parse, Step* steps):
     cdef AnswerToken* token = &parse[p]
-    cdef Word* word = steps[p].nodes[token.word] 
+    cdef Lexeme* word = steps[p].nodes[token.word] 
     context[i] = word.orig
     context[i+1] = token.tag
     # TODO: Implement 4 and 6 bit cluster prefixes

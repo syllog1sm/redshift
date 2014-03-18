@@ -6,27 +6,27 @@ import os.path
 
 
 
-cdef Vocab _VOCAB = None
+cdef Lexicon _LEXICON = None
 
 def load(): # Called in index/__init__.py
-    global _VOCAB
-    if _VOCAB is None:
-        _VOCAB = Vocab()
+    global _LEXICON
+    if _LEXICON is None:
+        _LEXICON = Lexicon()
 
 
 cpdef size_t lookup(bytes word):
-    global _VOCAB
-    return _VOCAB.lookup(word)
+    global _LEXICON
+    return _LEXICON.lookup(word)
 
 
 cpdef bytes get_str(size_t word):
-    global _VOCAB
-    if _VOCAB is None:
-        _VOCAB = Vocab()
-    return _VOCAB.strings.get(word, '')
+    global _LEXICON
+    if _LEXICON is None:
+        _LEXICON = Lexicon()
+    return _LEXICON.strings.get(word, '')
 
 
-cdef class Vocab:
+cdef class Lexicon:
     def __cinit__(self, loc=None):
         self.words.set_empty_key(0)
         self.strings = {}
@@ -54,7 +54,7 @@ cdef class Vocab:
     def __dealloc__(self):
         cdef size_t word_addr
         for word_addr in self.values():
-            free(<Word*>word_addr)
+            free(<Lexeme*>word_addr)
 
     cdef size_t lookup(self, bytes word):
         cdef uint64_t hashed = _hash_str(word)
@@ -77,9 +77,9 @@ cpdef bytes normalize_word(word):
         return word.lower()
     
 
-cdef Word* init_word(bytes py_word, size_t cluster,
+cdef Lexeme* init_word(bytes py_word, size_t cluster,
                      float upper_pc, float title_pc) except NULL:
-    cdef Word* word = <Word*>malloc(sizeof(Word))
+    cdef Lexeme* word = <Lexeme*>malloc(sizeof(Lexeme))
     word.orig = _hash_str(py_word)
     word.norm = _hash_str(normalize_word(py_word))
     word.suffix = _hash_str(py_word[-3:])

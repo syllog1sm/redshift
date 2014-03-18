@@ -1,4 +1,4 @@
-from index.vocab cimport Word
+from index.lexicon cimport Lexeme
 
 cdef struct AnswerToken:
     size_t word # Supports confusion network
@@ -14,7 +14,7 @@ cdef struct AnswerToken:
 cdef struct Step:
     size_t n
     double* probs
-    Word** nodes
+    Lexeme** nodes
 
 cdef struct Sentence:
     size_t n
@@ -31,5 +31,5 @@ cdef class Input:
 
 
 cdef class Token:
-    cdef Word* c_word
+    cdef Lexeme* c_word
     cdef AnswerToken* c_parse

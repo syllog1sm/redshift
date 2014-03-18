@@ -1,7 +1,7 @@
 from _state cimport *
 
 from redshift.sentence cimport AnswerToken
-from index.vocab cimport Word
+from index.lexicon cimport Lexeme
 
 cdef transition_to_str(State* s, size_t move, label, object tokens)
 
