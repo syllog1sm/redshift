@@ -210,17 +210,15 @@ cdef State* init_state(size_t n):
     s.at_end_of_buffer = n == 2
     n = n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
-    
     s.l_children = <size_t**>malloc(n * sizeof(size_t*))
     s.r_children = <size_t**>malloc(n * sizeof(size_t*))
-
     s.parse = <AnswerToken*>calloc(n, sizeof(AnswerToken))
     for i in range(n):
         s.parse[i].word = 0
         s.parse[i].left_edge = i
         s.l_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
         s.r_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
-    s.history = <Transition*>calloc(n * 3, sizeof(size_t))
+    s.history = <Transition*>calloc(n * 3, sizeof(Transition))
     return s
 
 

@@ -9,7 +9,7 @@ from libc.stdint cimport uint64_t, int64_t
 
 
 cdef class Beam:
-    def __cinit__(self, size_t k, size_t length, size_t nr_class):
+    def __cinit__(self, size_t k, size_t length, size_t moves_addr, size_t nr_class):
         self.length = length
         self.nr_class = nr_class
         self.k = k
@@ -19,12 +19,16 @@ cdef class Beam:
         self.parents = <State**>malloc(k * sizeof(State*))
         self.beam = <State**>malloc(k * sizeof(State*))
         self.moves = <Transition**>malloc(k * sizeof(Transition*))
+        cdef Transition* moves = <Transition*>moves_addr
         for i in range(k):
             self.parents[i] = init_state(length)
             self.beam[i] = init_state(length)
             self.moves[i] = <Transition*>calloc(self.nr_class, sizeof(Transition))
             for j in range(self.nr_class):
-                self.moves[i][j] = self.trans.moves[j]
+                assert moves[j].clas < nr_class
+                self.moves[i][j].clas = moves[j].clas
+                self.moves[i][j].move = moves[j].move
+                self.moves[i][j].label = moves[j].label
         self.bsize = 1
         self.psize = 0
         self.t = 0
@@ -37,12 +41,16 @@ cdef class Beam:
             self.queue.append((s.score + (s.score / self.t), i, -1))
             return 0
         cdef Transition* t
-        for j in range(self.trans.nr_class):
+        nr_valid = 0
+        for j in range(self.nr_class):
             t = &self.moves[i][j]
             if t.is_valid and (t.cost == 0 or not force_gold):
                 self.queue.append((s.score + t.score, i, j))
+                nr_valid += 1
+        return nr_valid
 
     cdef int extend(self):
+        assert self.queue
         self.queue.sort()
         self.queue.reverse()
         # Former states are now parents, beam will hold the extensions
@@ -55,19 +63,20 @@ cdef class Beam:
         cdef State* s
         cdef Transition* t
         for score, parent_idx, move_idx in self.queue[:self.k]:
-            t = &self.moves[parent_idx][move_idx]
-            parent = self.parents[parent_idx]
             # We've got two arrays of states, and we swap beam-for-parents.
             # So, s here will get manipulated, then copied into parents later.
             s = self.beam[self.bsize]
-            copy_state(s, parent)
+            copy_state(s, self.parents[parent_idx])
             s.score = score
+            t = &self.moves[parent_idx][move_idx]
             if not s.is_finished:
                 s.cost += t.cost
                 transition(t, s)
-                self.bsize += 1
+                assert s.m != 0
+            self.bsize += 1
         self.t += 1
         self.is_full = self.bsize >= self.k
+        assert self.beam[0].m != 0
         self.queue = []
         for i in range(self.bsize):
             if not self.beam[i].is_finished:

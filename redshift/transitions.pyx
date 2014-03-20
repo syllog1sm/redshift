@@ -39,6 +39,7 @@ cdef inline bint can_edit(State* s):
 
 
 cdef inline bint can_break(State* s):
+    return False
     #if not sbd:
     #    return False
     if s.at_end_of_buffer:
@@ -148,21 +149,36 @@ cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
     valid[LEFT] = can_left(s)
     valid[RIGHT] = can_right(s)
     valid[EDIT] = can_edit(s)
-    #valid[BREAK] = can_break(s)
+    valid[BREAK] = can_break(s)
     for i in range(n):
         classes[i].is_valid = valid[classes[i].move]
+    for i in range(n):
+        if classes[i].is_valid:
+            break
+    else:
+        print s.top
+        print s.i
+        print s.parse[s.top].head
+        print s.n
+        print s.at_end_of_buffer
+        print s.is_finished
+        raise StandardError
 
 
 cdef int fill_costs(State* s, Transition* classes, size_t n, AnswerToken* gold) except -1:
     cdef int[N_MOVES] costs
-    costs[SHIFT] = can_shift(s) and shift_cost(s, gold) == 0
-    costs[REDUCE] = can_reduce(s) and reduce_cost(s, gold) == 0
-    costs[LEFT] = can_left(s) and left_cost(s, gold) == 0
-    costs[RIGHT] = can_right(s) and right_cost(s, gold) == 0
-    costs[EDIT] = can_edit(s) and edit_cost(s, gold) == 0
-    #costs[BREAK] = can_break(s) and break_cost(s, gold) == 0
+    costs[SHIFT] = shift_cost(s, gold) if can_shift(s) else -1
+    costs[REDUCE] = reduce_cost(s, gold) if can_reduce(s) else -1
+    costs[LEFT] = left_cost(s, gold) if can_left(s) else -1
+    costs[RIGHT] = right_cost(s, gold) if can_right(s) else -1
+    costs[EDIT] = edit_cost(s, gold) if can_edit(s) else -1
+    costs[BREAK] = break_cost(s, gold) if can_break(s) else -1
     for i in range(n):
         classes[i].cost = costs[classes[i].move]
+        if classes[i].move == LEFT and classes[i].cost == 0:
+            classes[i].cost += gold[s.top].label != classes[i].label
+        elif classes[i].move == RIGHT and costs[RIGHT] == 0:
+            classes[i].cost = gold[s.i].label != classes[i].label
 
 
 cdef int transition(Transition* t, State *s) except -1:
@@ -239,8 +255,9 @@ cdef int fill_moves(list left_labels, list right_labels, Transition* moves):
     for label in left_labels:
         moves[i].move = LEFT; moves[i].label = label; i += 1
     for label in right_labels:
-        moves[i].move = LEFT; moves[i].label = label; i += 1
-    for clas in range(i):
+        moves[i].move = RIGHT; moves[i].label = label; i += 1
+    cdef size_t clas
+    for clas in range(i+1):
         moves[clas].clas = clas
         moves[clas].score = 0
         moves[clas].cost = 0

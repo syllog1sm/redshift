@@ -22,11 +22,13 @@ cdef Sentence* init_sent(list words_cn) except NULL:
         s.answer[i].word = 0
         t = words_cn[i][0][1]
         s.answer[i].tag = t.c_parse.tag
-        s.answer[i].head = t.c_parse.head
+
+        s.answer[i].head = t.c_parse.head if t.c_parse.head != 0 else s.n - 1
         s.answer[i].label = t.c_parse.label
         s.answer[i].is_edit = t.c_parse.is_edit
         s.answer[i].is_break = t.c_parse.is_break
-
+    s.answer[0].head = 0
+    s.answer[s.n - 1].head = 0
     # We used to have to do this to ensure that the zero-position evaluated
     # to 0, for the feature calculation (0 is a special value indicating absent)
     # There's probably a better way, but for now...

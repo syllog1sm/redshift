@@ -7,6 +7,8 @@ cdef class Beam:
     cdef State** beam
 
     cdef Transition** moves
+
+    cdef list queue
     
     cdef size_t k
     cdef size_t i

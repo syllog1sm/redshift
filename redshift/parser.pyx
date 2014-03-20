@@ -15,6 +15,7 @@ from sentence import get_labels
 from sentence cimport Input, Sentence, AnswerToken
 from transitions cimport Transition, transition, fill_valid, fill_costs
 from transitions cimport get_nr_moves, fill_moves
+from transitions cimport *
 from beam cimport Beam
 #from tagger cimport BeamTagger
 
@@ -58,6 +59,7 @@ def load_parser(model_dir, reuse_idx=False):
               'vocab_thresh': 1, 
               'beam_width': beam_width,
               'ngrams': ngrams,
+              'labels': (_parse_labels_str(l_labels), _parse_labels_str(r_labels)),
               'auto_pos': auto_pos}
     if beam_width >= 2:
         parser = Parser(model_dir, **params)
@@ -87,9 +89,13 @@ cdef class Parser:
     cdef Transition* moves
     cdef uint64_t* _features
     cdef size_t* _context
+    cdef size_t nr_moves
+    cdef list left_labels
+    cdef list right_labels
 
     def __cinit__(self, model_dir, clean=False, train_alg='static',
                   feat_set="zhang",
+                  labels=None,
                   feat_thresh=0, vocab_thresh=5,
                   beam_width=1,
                   ngrams=None, auto_pos=False):
@@ -125,7 +131,19 @@ cdef class Parser:
         self.beam_width = beam_width
         self.auto_pos = auto_pos
         self.guide = Perceptron(500, pjoin(model_dir, 'model.gz'))
+        self.left_labels = []
+        self.right_labels = []
+        self.nr_moves = 0
+        if labels is not None:
+            self.setup_labels(labels[0], labels[1])
         #self.tagger = BeamTagger(model_dir, clean=False, reuse_idx=True)
+
+    def setup_labels(self, left_labels, right_labels):
+        self.left_labels = [index.hashes.decode_label(l) for l in left_labels]
+        self.right_labels = [index.hashes.decode_label(l) for l in right_labels]
+        self.nr_moves = get_nr_moves(left_labels, right_labels)
+        self.moves = <Transition*>calloc(self.nr_moves, sizeof(Transition))
+        fill_moves(left_labels, right_labels, self.moves)
 
     def setup_model_dir(self, loc, clean):
         if clean and os.path.exists(loc):
@@ -141,9 +159,8 @@ cdef class Parser:
         #self.tagger.setup_classes(sents)
         #self.features.set_nr_label(nr_label)
         tags, left_labels, right_labels = get_labels(sents)
-        self.nr_moves = get_nr_moves(left_labels, right_labels)
-        self.moves = <Transition*>calloc(self.nr_moves, sizeof(Transition))
-        self.guide.set_classes(range(self.nr_class))
+        self.setup_labels(left_labels, right_labels)
+        self.guide.set_classes(range(self.nr_moves))
         self.write_cfg(pjoin(self.model_dir, 'parser.cfg'))
         if self.beam_width >= 2:
             self.guide.use_cache = True
@@ -158,7 +175,7 @@ cdef class Parser:
                 #if self.auto_pos:
                 #    self.tagger.train_sent(py_sent.c_sent)
                 self.train_sent(py_sent.c_sent, py_sent.c_sent.answer)
-            self.guide.end_train_iter()
+            self.guide.end_train_iter(n, self.feat_thresh)
             random.shuffle(indices)
         #if self.auto_pos:
         #    self.tagger.guide.finalize()
@@ -169,31 +186,32 @@ cdef class Parser:
         cdef size_t nr_move = sent.n * 3
         cdef Transition[500] g_hist
         cdef Transition[500] p_hist
-        for i in range(sent.n * 3):
-            g_hist[i] = self.nr_class
-            p_hist[i] = self.nr_class
-        p_beam = Beam(self.beam_width, sent.n, self.nr_class)
-        g_beam = Beam(self.beam_width, sent.n, self.nr_class)
+        p_beam = Beam(self.beam_width, sent.n, <size_t>self.moves, self.nr_moves)
+        g_beam = Beam(self.beam_width, sent.n, <size_t>self.moves, self.nr_moves)
         cdef double delta = 0
         cdef double max_violn = -1
         cdef size_t pt = 0
         cdef size_t gt = 0
         cdef State* p
         cdef State* g
+        cdef Transition* moves
         self.guide.cache.flush()
         while not p_beam.is_finished and not g_beam.is_finished:
             for i in range(p_beam.bsize):
                 self._predict(p_beam.beam[i], p_beam.moves[i], sent.steps)
                 # Fill costs so we can see whether the prediction is gold-standard
-                fill_costs(p_beam.beam[i], p_beam.moves[i], self.nr_class, gold_parse)
+                fill_costs(p_beam.beam[i], p_beam.moves[i], self.nr_moves, gold_parse)
                 # The False flag tells it to allow non-gold predictions
                 p_beam.enqueue(i, False)
             p_beam.extend()
             for i in range(g_beam.bsize):
-                self._predict(g_beam.beam[i], g_beam.moves[i], sent.steps)
+                g = g_beam.beam[i]
+                moves = g_beam.moves[i]
+                self._predict(g, moves, sent.steps)
                 # Constrain this beam to only gold candidates
-                fill_costs(g_beam.beam[i], g_beam.moves[i], self.nr_class, gold_parse)
-                g_beam.enqueue(i, True)
+                fill_costs(g, moves, self.nr_moves, gold_parse)
+                nr_valid = g_beam.enqueue(i, True)
+            assert g_beam.queue
             g_beam.extend()
             g = g_beam.beam[0]; p = p_beam.beam[0] 
             delta = p.score - g.score
@@ -201,16 +219,18 @@ cdef class Parser:
                 max_violn = delta
                 pt = p.m
                 gt = g.m
-                memcpy(p_hist, p.history, pt * sizeof(size_t))
-                memcpy(g_hist, g.history, gt * sizeof(size_t))
+                memcpy(p_hist, p.history, pt * sizeof(Transition))
+                memcpy(g_hist, g.history, gt * sizeof(Transition))
             self.guide.n_corr += p.history[p.m-1].clas == g.history[g.m-1].clas
             self.guide.total += 1
         if max_violn >= 0:
             counted = self._count_feats(sent, pt, gt, p_hist, g_hist)
             self.guide.batch_update(counted)
             # TODO: We should tick the epoch here if max_violn == 0, right?
+        else:
+            self.guide.now += 1
 
-    cdef int _predict(self, State* s, Transition* classes, Step* steps):
+    cdef int _predict(self, State* s, Transition* classes, Step* steps) except -1:
         cdef bint cache_hit = False
         fill_slots(s)
         scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
@@ -218,9 +238,14 @@ cdef class Parser:
             fill_context(self._context, &s.slots, s.parse, steps)
             self.extractor.extract(self._features, self._context)
             self.guide.fill_scores(self._features, scores)
-        fill_valid(s, classes, self.nr_class)
+        fill_valid(s, classes, self.nr_moves)
         cdef size_t i
-        for i in range(self.nr_class):
+        for i in range(self.nr_moves):
+            if classes[i].is_valid:
+                break
+        else:
+            raise StandardError
+        for i in range(self.nr_moves):
             classes[i].score = scores[i]
 
     cdef dict _count_feats(self, Sentence* sent, size_t pt, size_t gt,
@@ -232,7 +257,7 @@ cdef class Parser:
         cdef State* pred_state = init_state(sent.n)
         # Find where the states diverge
         cdef dict counts = {}
-        for clas in range(self.nr_class):
+        for clas in range(self.nr_moves):
             counts[clas] = {}
         cdef bint seen_diff = False
         g_inc = 1.0
@@ -246,10 +271,10 @@ cdef class Parser:
                 continue
             seen_diff = True
             if i < gt:
-                self._inc_feats(counts[ghist[i]], gold_state, sent.steps, g_inc)
+                self._inc_feats(counts[ghist[i].clas], gold_state, sent.steps, g_inc)
                 transition(&ghist[i], gold_state)
             if i < pt:
-                self._inc_feats(counts[phist[i]], pred_state, sent.steps, p_inc)
+                self._inc_feats(counts[phist[i].clas], pred_state, sent.steps, p_inc)
                 transition(&phist[i], pred_state)
         free_state(gold_state)
         free_state(pred_state)
@@ -268,23 +293,24 @@ cdef class Parser:
             f += 1
 
     def add_parses(self, list sents):
-        self.guide.nr_class = self.nr_class
+        self.guide.nr_class = self.nr_moves
         cdef size_t i
         cdef Input sent
         for sent in sents:
             self.parse(sent.c_sent)
 
     cdef int parse(self, Sentence* sent) except -1:
-        cdef Beam beam = Beam(self.nr_class, self.beam_width, sent.n)
+        cdef Beam beam = Beam(self.beam_width, sent.n, <size_t>self.moves, self.nr_moves)
         cdef size_t p_idx
         #if self.auto_pos:
         #    self.tagger.tag(sent)
         self.guide.cache.flush()
         while not beam.is_finished:
             for i in range(beam.bsize):
-                self._predict(beam.beam[i], beam.moves[i], sent.steps)
-                # The False flag tells it to allow non-gold predictions
-                beam.enqueue(i, False)
+                if not beam.beam[i].is_finished:
+                    self._predict(beam.beam[i], beam.moves[i], sent.steps)
+                    # The False flag tells it to allow non-gold predictions
+                    beam.enqueue(i, False)
             beam.extend()
         beam.fill_parse(sent.answer)
         sent.score = beam.beam[0].score
@@ -306,8 +332,8 @@ cdef class Parser:
             cfg.write(u'model_dir\t%s\n' % self.model_dir)
             cfg.write(u'train_alg\t%s\n' % self.train_alg)
             cfg.write(u'feat_thresh\t%d\n' % self.feat_thresh)
-            #cfg.write(u'left_labels\t%s\n' % ','.join(self.moves.left_labels))
-            #cfg.write(u'right_labels\t%s\n' % ','.join(self.moves.right_labels))
+            cfg.write(u'left_labels\t%s\n' % ','.join(self.left_labels))
+            cfg.write(u'right_labels\t%s\n' % ','.join(self.right_labels))
             cfg.write(u'beam_width\t%d\n' % self.beam_width)
             cfg.write(u'auto_pos\t%s\n' % self.auto_pos)
             #if not self.features.ngrams:
