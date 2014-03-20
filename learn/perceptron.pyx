@@ -199,6 +199,21 @@ cdef class Perceptron:
             free_dense_feat(self.raws[i])
         free(self.raws)
 
+    def end_train_iter(self, iter_num, feat_thresh):
+        pc = lambda a, b: '%.1f' % ((float(a) / (b + 1e-100)) * 100)
+        acc = pc(self.n_corr, self.total)
+        cache_use = pc(self.cache.n_hit, self.cache.n_hit + self.cache.n_miss + 1e-100)
+        msg = "#%d: Moves %d/%d=%s" % (iter_num, self.n_corr, self.total, acc)
+        if cache_use != 0:
+            msg += '. Cache use %s' % cache_use
+        print msg
+        if iter_num % 2 == 1 and feat_thresh > 1:
+            self.prune(feat_thresh)
+        if iter_num < 3:
+            self.reindex()
+        self.n_corr = 0.0
+        self.total = 0.0
+
     def set_classes(self, labels):
         self.nr_class = len(labels)
         self.div = <size_t>math.sqrt(self.nr_class) + 1

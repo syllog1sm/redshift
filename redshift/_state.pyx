@@ -198,7 +198,7 @@ cdef State* init_state(size_t n):
     cdef size_t i, j
     cdef State* s = <State*>calloc(1, sizeof(State))
     s.n = n
-    s.t = 0
+    s.m = 0
     s.i = 1
     s.cost = 0
     s.score = 0
@@ -220,7 +220,7 @@ cdef State* init_state(size_t n):
         s.parse[i].left_edge = i
         s.l_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
         s.r_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
-    s.history = <size_t*>calloc(n * 3, sizeof(size_t))
+    s.history = <Transition*>calloc(n * 3, sizeof(size_t))
     return s
 
 
@@ -231,7 +231,7 @@ cdef int copy_state(State* s, State* old) except -1:
     else:
         nbytes = (old.i + 1) * sizeof(size_t)
     s.n = old.n
-    s.t = old.t
+    s.m = old.m
     s.i = old.i
     s.segment = old.segment
     s.cost = old.cost
@@ -244,7 +244,7 @@ cdef int copy_state(State* s, State* old) except -1:
     memcpy(s.stack, old.stack, old.n * sizeof(size_t))
     memcpy(s.parse, old.parse, old.n * sizeof(AnswerToken))
 
-    memcpy(s.history, old.history, old.t * sizeof(size_t))
+    memcpy(s.history, old.history, old.m * sizeof(Transition))
     for i in range(old.i + 2):
         memcpy(s.l_children[i], old.l_children[i], old.parse[i].l_valency * sizeof(size_t))
         memcpy(s.r_children[i], old.r_children[i], old.parse[i].r_valency * sizeof(size_t))

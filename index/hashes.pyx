@@ -55,6 +55,8 @@ cdef class ScoresCache:
         self.i = 0
         self.pool_size = pool_size
         self.scores_size = scores_size
+        self.n_hit = 0
+        self.n_miss = 0
         
     cdef double* lookup(self, size_t size, void* kernel, bint* is_hit):
         cdef double** resized

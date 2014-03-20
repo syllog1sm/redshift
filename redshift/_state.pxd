@@ -3,6 +3,7 @@ from libc.stdint cimport uint64_t, int64_t
 
 from ext.murmurhash cimport *
 from sentence cimport AnswerToken
+from transitions cimport Transition
 
 # From left-to-right in the string, the slot tokens are:
 # S2, S1, S0le, S0l, S0l2, S0l0, S0, S0r0, S0r2, S0r, S0re
@@ -31,7 +32,7 @@ cdef struct SlotTokens:
 cdef struct State:
     double score
     size_t i
-    size_t t
+    size_t m
     size_t n
     size_t stack_len
     size_t top
@@ -46,7 +47,7 @@ cdef struct State:
     size_t** l_children
     size_t** r_children
     AnswerToken* parse
-    size_t* history
+    Transition* history
     SlotTokens slots
 
 
