@@ -212,8 +212,7 @@ cdef class Parser:
                 self._predict(g, moves, sent.steps)
                 # Constrain this beam to only gold candidates
                 fill_costs(g, moves, self.nr_moves, gold_parse)
-                nr_valid = g_beam.enqueue(i, True)
-            assert g_beam.queue
+                g_beam.enqueue(i, True)
             g_beam.extend()
             g = g_beam.beam[0]; p = p_beam.beam[0] 
             delta = p.score - g.score

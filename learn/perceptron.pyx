@@ -1,6 +1,8 @@
 # cython: profile=True
+import os.path
 import math
 import gzip
+
 from libc.stdlib cimport *
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
@@ -209,8 +211,8 @@ cdef class Perceptron:
         print msg
         if iter_num % 2 == 1 and feat_thresh > 1:
             self.prune(feat_thresh)
-        if iter_num < 3:
-            self.reindex()
+        #if iter_num < 3:
+        #    self.reindex()
         self.n_corr = 0.0
         self.total = 0.0
 
@@ -328,7 +330,7 @@ cdef class Perceptron:
                 best = self.scores[i]
         return best_i
 
-    cdef int64_t finalize(self) except -1:
+    def end_training(self, loc):
         cdef uint64_t f
         cdef double tmp
         cdef SquareFeature* feat
@@ -360,6 +362,7 @@ cdef class Perceptron:
                 accs[c] += (self.now - last_upd[c]) * weights[c]
                 weights[c] = accs[c] / self.now
                 accs[c] = tmp
+        self._save(loc)
     
     cdef int unfinalize(self) except -1:
         cdef double tmp
@@ -383,7 +386,7 @@ cdef class Perceptron:
                 self.raws[i].w[c] = self.raws[i].acc[c]
                 self.raws[i].acc[c] = tmp
 
-    def save(self, out_loc):
+    def _save(self, out_loc):
         cdef size_t i
         cdef uint64_t feat_id
         # Break LibSVM compatibility for now to be a bit more disk-friendly
