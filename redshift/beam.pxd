@@ -2,14 +2,18 @@ from _state cimport *
 from transitions cimport Transition
 
 
+from libcpp.queue cimport priority_queue
+from libcpp.pair cimport pair
+
+ctypedef pair[double, size_t] ScoredMove
+
 cdef class Beam:
     cdef State** parents
     cdef State** beam
 
+    cdef priority_queue[ScoredMove] queue
     cdef Transition** moves
 
-    cdef list queue
-    
     cdef size_t k
     cdef size_t i
     cdef size_t t

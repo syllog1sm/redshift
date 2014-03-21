@@ -7,6 +7,9 @@ from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport memcpy
 from libc.stdint cimport uint64_t, int64_t
 
+from libcpp.queue cimport priority_queue
+from libcpp.pair cimport pair
+
 cimport cython
 
 
@@ -35,27 +38,26 @@ cdef class Beam:
         self.psize = 0
         self.t = 0
         self.is_full = self.bsize >= self.k
-        self.queue = []
+        self.queue = priority_queue[ScoredMove]()
 
     cdef int enqueue(self, size_t i, bint force_gold) except -1:
         cdef State* s = self.beam[i]
+        cdef size_t move_id = i * self.nr_class
         if s.is_finished:
-            self.queue.append((s.score + (s.score / self.t), i * self.nr_class))
+            self.queue.push(ScoredMove(s.score + (s.score / self.t), move_id))
+            #self.queue.append((s.score + (s.score / self.t), i * self.nr_class))
             return 0
         cdef Transition* t
         nr_valid = 0
         for j in range(self.nr_class):
             t = &self.moves[i][j]
             if t.is_valid and (t.cost == 0 or not force_gold):
-                self.queue.append((s.score + t.score, (i * self.nr_class) + j))
+                self.queue.push(ScoredMove(s.score + t.score, move_id + j))
                 nr_valid += 1
         return nr_valid
 
     @cython.cdivision(True)
     cdef int extend(self):
-        assert self.queue
-        self.queue.sort()
-        self.queue.reverse()
         # Former states are now parents, beam will hold the extensions
         cdef State** parents = self.parents
         self.parents = self.beam
@@ -65,30 +67,37 @@ cdef class Beam:
         cdef State* parent
         cdef State* s
         cdef Transition* t
-        for score, move_id in self.queue[:self.k]:
-            parent_idx = move_id / self.nr_class
-            move_idx = move_id % self.nr_class
+        cdef ScoredMove data
+        cdef size_t move_idx
+        cdef size_t parent_idx
+        while not self.queue.empty() and self.bsize < self.k:
+            data = self.queue.top()
+            parent_idx = data.second / self.nr_class
+            move_idx = data.second % self.nr_class
             # We've got two arrays of states, and we swap beam-for-parents.
-            # So, s here will get manipulated, then copied into parents later.
+            # So, s here will get manipulated, then its beam will replace
+            # parents later.
+            copy_state(self.beam[self.bsize], self.parents[parent_idx])
             s = self.beam[self.bsize]
-            copy_state(s, self.parents[parent_idx])
-            s.score = score
+            s.score = data.first
             t = &self.moves[parent_idx][move_idx]
             if not s.is_finished:
                 s.cost += t.cost
                 transition(t, s)
                 assert s.m != 0
             self.bsize += 1
+            self.queue.pop()
         self.t += 1
         self.is_full = self.bsize >= self.k
         assert self.beam[0].m != 0
-        self.queue = []
         for i in range(self.bsize):
             if not self.beam[i].is_finished:
                 self.is_finished = False
                 break
         else:
             self.is_finished = True
+        while not self.queue.empty():
+            self.queue.pop()
 
     cdef int fill_parse(self, AnswerToken* parse) except -1:
         cdef size_t i
