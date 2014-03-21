@@ -662,9 +662,12 @@ def pos_bigrams():
     return tuple(bitags)
 
 
+debug = ((S0w,), (N0w,))
+
 def baseline_templates():
-    return from_single + from_word_pairs + from_three_words + distance + \
-           valency + zhang_unigrams + third_order + labels + label_sets
+    return debug
+    #return from_single + from_word_pairs + from_three_words + distance + \
+    #       valency + zhang_unigrams + third_order + labels + label_sets
 
 
 def match_templates():

@@ -38,14 +38,14 @@ cdef class Beam:
     cdef int enqueue(self, size_t i, bint force_gold) except -1:
         cdef State* s = self.beam[i]
         if s.is_finished:
-            self.queue.append((s.score + (s.score / self.t), i, -1))
+            self.queue.append((s.score + (s.score / self.t), i * self.nr_class))
             return 0
         cdef Transition* t
         nr_valid = 0
         for j in range(self.nr_class):
             t = &self.moves[i][j]
             if t.is_valid and (t.cost == 0 or not force_gold):
-                self.queue.append((s.score + t.score, i, j))
+                self.queue.append((s.score + t.score, (i * self.nr_class) + j))
                 nr_valid += 1
         return nr_valid
 
@@ -62,7 +62,9 @@ cdef class Beam:
         cdef State* parent
         cdef State* s
         cdef Transition* t
-        for score, parent_idx, move_idx in self.queue[:self.k]:
+        for score, move_id in self.queue[:self.k]:
+            parent_idx = move_id / self.nr_class
+            move_idx = move_id % self.nr_class
             # We've got two arrays of states, and we swap beam-for-parents.
             # So, s here will get manipulated, then copied into parents later.
             s = self.beam[self.bsize]

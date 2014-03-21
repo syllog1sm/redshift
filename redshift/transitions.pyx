@@ -35,7 +35,8 @@ cdef inline bint can_left(State* s):
 
 
 cdef inline bint can_edit(State* s):
-    return s.stack_len and not s.segment
+    return False
+    #return s.stack_len and not s.segment
 
 
 cdef inline bint can_break(State* s):
@@ -243,15 +244,18 @@ cdef int transition(Transition* t, State *s) except -1:
 
 
 cdef size_t get_nr_moves(list left_labels, list right_labels):
-    return SHIFT + REDUCE + EDIT + BREAK + len(left_labels) + len(right_labels)
+    return 1 + 1 + 1 + 1 + len(left_labels) + len(right_labels)
 
 
 cdef int fill_moves(list left_labels, list right_labels, Transition* moves):
+    print left_labels
+    print right_labels
     cdef size_t i = 0
     moves[i].move = SHIFT; i += 1
     moves[i].move = REDUCE; i += 1
     moves[i].move = EDIT; i += 1
     moves[i].move = BREAK; i += 1
+    cdef size_t label
     for label in left_labels:
         moves[i].move = LEFT; moves[i].label = label; i += 1
     for label in right_labels:

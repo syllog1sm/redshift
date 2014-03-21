@@ -200,6 +200,4 @@ def get_labels(sents):
                 left_labels.add(sent.c_sent.answer[j].label)
             else:
                 right_labels.add(sent.c_sent.answer[j].label)
-    print left_labels
-    print right_labels
     return tags, list(sorted(left_labels)), list(sorted(right_labels))

@@ -59,7 +59,6 @@ def load_parser(model_dir, reuse_idx=False):
               'vocab_thresh': 1, 
               'beam_width': beam_width,
               'ngrams': ngrams,
-              'labels': (_parse_labels_str(l_labels), _parse_labels_str(r_labels)),
               'auto_pos': auto_pos}
     if beam_width >= 2:
         parser = Parser(model_dir, **params)
@@ -70,7 +69,7 @@ def load_parser(model_dir, reuse_idx=False):
     #_, nr_label = parser.moves.set_labels(pos_tags, _parse_labels_str(l_labels),
     #                        _parse_labels_str(r_labels))
     
-    parser.load()
+    parser.load(l_labels, r_labels) 
     return parser
 
 
@@ -95,7 +94,6 @@ cdef class Parser:
 
     def __cinit__(self, model_dir, clean=False, train_alg='static',
                   feat_set="zhang",
-                  labels=None,
                   feat_thresh=0, vocab_thresh=5,
                   beam_width=1,
                   ngrams=None, auto_pos=False):
@@ -134,11 +132,11 @@ cdef class Parser:
         self.left_labels = []
         self.right_labels = []
         self.nr_moves = 0
-        if labels is not None:
-            self.setup_labels(labels[0], labels[1])
         #self.tagger = BeamTagger(model_dir, clean=False, reuse_idx=True)
 
     def setup_labels(self, left_labels, right_labels):
+        left_labels.sort()
+        right_labels.sort()
         self.left_labels = [index.hashes.decode_label(l) for l in left_labels]
         self.right_labels = [index.hashes.decode_label(l) for l in right_labels]
         self.nr_moves = get_nr_moves(left_labels, right_labels)
@@ -166,17 +164,18 @@ cdef class Parser:
             self.guide.use_cache = True
         indices = list(range(len(sents)))
         cdef Input py_sent
-        if not DEBUG:
+        #if not DEBUG:
             # Extra trick: sort by sentence length for first iteration
-            indices.sort(key=lambda i: sents[i].length)
+        #indices.sort(key=lambda i: sents[i].length)
         for n in range(n_iter):
             for i in indices:
                 py_sent = sents[i]
+                print py_sent.words
                 #if self.auto_pos:
                 #    self.tagger.train_sent(py_sent.c_sent)
                 self.train_sent(py_sent.c_sent, py_sent.c_sent.answer)
             self.guide.end_train_iter(n, self.feat_thresh)
-            random.shuffle(indices)
+            #random.shuffle(indices)
         #if self.auto_pos:
         #    self.tagger.guide.finalize()
         self.guide.finalize()
@@ -227,13 +226,14 @@ cdef class Parser:
             counted = self._count_feats(sent, pt, gt, p_hist, g_hist)
             self.guide.batch_update(counted)
             # TODO: We should tick the epoch here if max_violn == 0, right?
-        else:
-            self.guide.now += 1
+        #else:
+        #    self.guide.now += 1
 
     cdef int _predict(self, State* s, Transition* classes, Step* steps) except -1:
         cdef bint cache_hit = False
         fill_slots(s)
         scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
+        cache_hit = False
         if not cache_hit:
             fill_context(self._context, &s.slots, s.parse, steps)
             self.extractor.extract(self._features, self._context)
@@ -321,11 +321,12 @@ cdef class Parser:
         index.hashes.save_label_idx(pjoin(self.model_dir, 'labels'))
         #self.tagger.save()
 
-    def load(self):
+    def load(self, l_labels, r_labels):
         self.guide.load(pjoin(self.model_dir, 'model.gz'), thresh=self.feat_thresh)
         #self.tagger.guide.load(pjoin(self.model_dir, 'tagger.gz'), thresh=self.feat_thresh)
         index.hashes.load_pos_idx(pjoin(self.model_dir, 'pos'))
         index.hashes.load_label_idx(pjoin(self.model_dir, 'labels'))
+        self.setup_labels(_parse_labels_str(l_labels), _parse_labels_str(r_labels))
    
     def write_cfg(self, loc):
         with open(loc, 'w') as cfg:
