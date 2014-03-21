@@ -1,3 +1,4 @@
+# cython: profile=True
 """
 Fill an array, context, with every _atomic_ value our features reference.
 We then write the _actual features_ as tuples of the atoms. The machinery
