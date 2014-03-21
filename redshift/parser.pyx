@@ -154,8 +154,8 @@ cdef class Parser:
 
     def train(self, list sents, n_iter=15):
         cdef size_t i, j, n
-        #self.tagger.setup_classes(sents)
-        #self.features.set_nr_label(nr_label)
+        if self.auto_pos:
+            self.tagger.setup_classes(sents)
         tags, left_labels, right_labels = get_labels(sents)
         self.setup_labels(left_labels, right_labels)
         self.guide.set_classes(range(self.nr_moves))
@@ -164,18 +164,17 @@ cdef class Parser:
             self.guide.use_cache = True
         indices = list(range(len(sents)))
         cdef Input py_sent
-        #if not DEBUG:
+        if not DEBUG:
             # Extra trick: sort by sentence length for first iteration
-        #indices.sort(key=lambda i: sents[i].length)
+            indices.sort(key=lambda i: sents[i].length)
         for n in range(n_iter):
             for i in indices:
                 py_sent = sents[i]
-                print py_sent.words
                 #if self.auto_pos:
                 #    self.tagger.train_sent(py_sent.c_sent)
                 self.train_sent(py_sent.c_sent, py_sent.c_sent.answer)
             self.guide.end_train_iter(n, self.feat_thresh)
-            #random.shuffle(indices)
+            random.shuffle(indices)
         #if self.auto_pos:
         #    self.tagger.guide.finalize()
         self.guide.finalize()
@@ -187,6 +186,10 @@ cdef class Parser:
         cdef Transition[500] p_hist
         p_beam = Beam(self.beam_width, sent.n, <size_t>self.moves, self.nr_moves)
         g_beam = Beam(self.beam_width, sent.n, <size_t>self.moves, self.nr_moves)
+        for i in range(self.beam_width):
+            for j in range(sent.n):
+                p_beam.beam[i].parse[j].tag = gold_parse[j].tag
+                g_beam.beam[i].parse[j].tag = gold_parse[j].tag
         cdef double delta = 0
         cdef double max_violn = -1
         cdef size_t pt = 0
@@ -232,21 +235,15 @@ cdef class Parser:
     cdef int _predict(self, State* s, Transition* classes, Step* steps) except -1:
         cdef bint cache_hit = False
         fill_slots(s)
-        scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
-        cache_hit = False
-        if not cache_hit:
-            fill_context(self._context, &s.slots, s.parse, steps)
-            self.extractor.extract(self._features, self._context)
-            self.guide.fill_scores(self._features, scores)
+        # TODO: This is broken, because of labels.
+        #scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
+        #if not cache_hit:
+        fill_context(self._context, &s.slots, s.parse, steps)
+        self.extractor.extract(self._features, self._context)
+        self.guide.fill_scores(self._features, self.guide.scores)
         fill_valid(s, classes, self.nr_moves)
-        cdef size_t i
         for i in range(self.nr_moves):
-            if classes[i].is_valid:
-                break
-        else:
-            raise StandardError
-        for i in range(self.nr_moves):
-            classes[i].score = scores[i]
+            classes[i].score = self.guide.scores[i]
 
     cdef dict _count_feats(self, Sentence* sent, size_t pt, size_t gt,
                            Transition* phist, Transition* ghist):
@@ -255,6 +252,9 @@ cdef class Parser:
         cdef size_t clas
         cdef State* gold_state = init_state(sent.n)
         cdef State* pred_state = init_state(sent.n)
+        for i in range(sent.n):
+            gold_state.parse[i].tag = sent.answer[i].tag
+            pred_state.parse[i].tag = sent.answer[i].tag
         # Find where the states diverge
         cdef dict counts = {}
         for clas in range(self.nr_moves):
@@ -301,9 +301,13 @@ cdef class Parser:
 
     cdef int parse(self, Sentence* sent) except -1:
         cdef Beam beam = Beam(self.beam_width, sent.n, <size_t>self.moves, self.nr_moves)
-        cdef size_t p_idx
+        cdef size_t p_idx, i
         #if self.auto_pos:
         #    self.tagger.tag(sent)
+        for p_idx in range(self.beam_width):
+            for i in range(sent.n):
+                beam.beam[p_idx].parse[i].tag = sent.answer[i].tag
+
         self.guide.cache.flush()
         while not beam.is_finished:
             for i in range(beam.bsize):

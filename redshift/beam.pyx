@@ -7,6 +7,8 @@ from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport memcpy
 from libc.stdint cimport uint64_t, int64_t
 
+cimport cython
+
 
 cdef class Beam:
     def __cinit__(self, size_t k, size_t length, size_t moves_addr, size_t nr_class):
@@ -49,6 +51,7 @@ cdef class Beam:
                 nr_valid += 1
         return nr_valid
 
+    @cython.cdivision(True)
     cdef int extend(self):
         assert self.queue
         self.queue.sort()

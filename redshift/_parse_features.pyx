@@ -46,14 +46,14 @@ cdef enum:
     S1lv
     S1rv
 
-    S0l0w
-    S0l0p
-    S0l0c
-    S0l0c6
-    S0l0c4
-    S0l0L
-    S0l0lv
-    S0l0rv
+    S0lw
+    S0lp
+    S0lc
+    S0lc6
+    S0lc4
+    S0lL
+    S0llv
+    S0lrv
 
     S0l2w
     S0l2p
@@ -64,14 +64,14 @@ cdef enum:
     S0l2lv
     S0l2rv
 
-    S0lw
-    S0lp
-    S0lc
-    S0lc6
-    S0lc4
-    S0lL
-    S0llv
-    S0lrv
+    S0l0w
+    S0l0p
+    S0l0c
+    S0l0c6
+    S0l0c4
+    S0l0L
+    S0l0lv
+    S0l0rv
 
     S0w
     S0p
@@ -217,18 +217,7 @@ cdef enum:
     N0le_lv
     N0le_rv
 
-    S2l
-    S1l
-    
-    S0l0l
-    S0l2l
-    S0ll
-
     dist
-    
-    S0llabs
-    S0rlabs
-    N0llabs
     
     prev_edit
     prev_edit_wmatch
@@ -262,7 +251,7 @@ cdef enum:
 # Listed in left-to-right order
 cdef size_t[16] SLOTS
 SLOTS[0] = S2w; SLOTS[1] = S1w
-SLOTS[2] = S0le_w; SLOTS[3] = S0l0w; SLOTS[4] = S0l2w; SLOTS[5] = S0lw
+SLOTS[2] = S0le_w; SLOTS[3] = S0lw; SLOTS[4] = S0l2w; SLOTS[5] = S0l0w
 SLOTS[6] = S0w
 SLOTS[7] = S0r0w; SLOTS[8] = S0r2w; SLOTS[9] = S0rw; SLOTS[10] = S0re_w
 SLOTS[11] = N0le_w; SLOTS[12] = N0l0w; SLOTS[13] = N0l2w; SLOTS[14] = N0lw
@@ -285,19 +274,27 @@ cdef inline void fill_token(size_t* context, size_t i, size_t p,
                             AnswerToken* parse, Step* steps):
     cdef AnswerToken* token = &parse[p]
     cdef Lexeme* word = steps[p].nodes[token.word] 
-    context[i] = word.orig
+    context[i] = word.norm
     context[i+1] = token.tag
     # TODO: Implement 4 and 6 bit cluster prefixes
     context[i+2] = word.cluster
     context[i+3] = word.cluster
     context[i+4] = word.cluster
     context[i+5] = token.label
-    context[i+7] = token.l_valency
-    context[i+8] = token.r_valency
+    context[i+6] = token.l_valency
+    context[i+7] = token.r_valency
+
+cdef inline void zero_token(size_t* context, size_t i):
+    cdef size_t j
+    for j in range(9):
+        context[i+j] = 0
 
 
 cdef int fill_context(size_t* context, SlotTokens* tokens, AnswerToken* parse,
                       Step* steps) except -1:
+    cdef size_t c
+    for c in range(CONTEXT_SIZE):
+        context[c] = 0
     # This fills in the basic properties of each of our "slot" tokens, e.g.
     # word on top of the stack, word at the front of the buffer, etc.
     fill_token(context, S2w, tokens.s2, parse, steps)
@@ -317,31 +314,22 @@ cdef int fill_context(size_t* context, SlotTokens* tokens, AnswerToken* parse,
     fill_token(context, N0l0w, tokens.n0l0, parse, steps)
     fill_token(context, N0w, tokens.n0, parse, steps)
     fill_token(context, N1w, tokens.n1, parse, steps)
+    fill_token(context, N2w, tokens.n2, parse, steps)
 
-    #cdef size_t s0h = tokens.s1 if tokens.s0.label else 0
-    #fill_token(context, S0hw, &parse[s0h])
-    #cdef size_t s0h2 = tokens.s2 if tokens.s0.label and tokens.s1.label else 0
-    #fill_token(context, S0h2w, &parse[s0h2])
-    """
-    # Label "set" features. Are these necessary??
-    context[S0llabs] = 0
-    context[S0rlabs] = 0
-    context[N0llabs] = 0
-
-    cdef size_t i
-    for i in range(4):
-        context[S0llabs] += k.s0l.lab[i] << (nr_label - k.s0l.lab[i])
-        context[S0rlabs] += k.s0r.lab[i] << (nr_label - k.s0r.lab[i])
-        context[N0llabs] += k.n0l.lab[i] << (nr_label - k.n0l.lab[i])
-
-    # TODO: Seems hard to believe we want to keep d non-zero when there's no
-    # stack top. Experiment with this futrther.
-    if k.s0 != 0:
-        assert k.i > k.s0
-        context[dist] = k.i - k.s0
+    if parse[tokens.s0].label != 0:
+        fill_token(context, S0hw, tokens.s1, parse, steps)
+    else:
+        zero_token(context, S0hw)
+    if parse[tokens.s0].label != 0 and parse[tokens.s1].label != 0:
+        fill_token(context, S0h2w, tokens.s2, parse, steps)
+    else:
+        zero_token(context, S0h2w)
+    if tokens.s0 != 0:
+        assert tokens.n0 > tokens.s0
+        context[dist] = tokens.n0 - tokens.s0
     else:
         context[dist] = 0
-
+    """
     # Disfluency match features
     if k.prev_edit and k.i != 0:
         context[prev_edit] = 1
@@ -508,12 +496,12 @@ labels = (
 
 
 label_sets = (
-   (S0w, S0rlabs),
-   (S0p, S0rlabs),
-   (S0w, S0llabs),
-   (S0p, S0llabs),
-   (N0w, N0llabs),
-   (N0p, N0llabs),
+   (S0w, S0lL, S0l0L, S0l2L),
+   (S0p, S0rL, S0r0L, S0r2L),
+   (S0p, S0lL, S0l0L, S0l2L),
+   (S0p, S0rL, S0r0L, S0r2L),
+   (N0w, N0lL, N0l0L, N0l2L),
+   (N0p, N0lL, N0l0L, N0l2L),
 )
 
 extra_labels = (
@@ -662,12 +650,9 @@ def pos_bigrams():
     return tuple(bitags)
 
 
-debug = ((S0w,), (N0w,))
-
 def baseline_templates():
-    return debug
-    #return from_single + from_word_pairs + from_three_words + distance + \
-    #       valency + zhang_unigrams + third_order + labels + label_sets
+    return from_single + from_word_pairs + from_three_words + distance + \
+           valency + zhang_unigrams + third_order + labels + label_sets
 
 
 def match_templates():

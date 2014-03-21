@@ -244,7 +244,7 @@ cdef int transition(Transition* t, State *s) except -1:
 
 
 cdef size_t get_nr_moves(list left_labels, list right_labels):
-    return 1 + 1 + 1 + 1 + len(left_labels) + len(right_labels)
+    return 1 + 1 + len(left_labels) + len(right_labels)
 
 
 cdef int fill_moves(list left_labels, list right_labels, Transition* moves):
@@ -253,15 +253,15 @@ cdef int fill_moves(list left_labels, list right_labels, Transition* moves):
     cdef size_t i = 0
     moves[i].move = SHIFT; i += 1
     moves[i].move = REDUCE; i += 1
-    moves[i].move = EDIT; i += 1
-    moves[i].move = BREAK; i += 1
+    #moves[i].move = EDIT; i += 1
+    #moves[i].move = BREAK; i += 1
     cdef size_t label
     for label in left_labels:
         moves[i].move = LEFT; moves[i].label = label; i += 1
     for label in right_labels:
         moves[i].move = RIGHT; moves[i].label = label; i += 1
     cdef size_t clas
-    for clas in range(i+1):
+    for clas in range(i):
         moves[clas].clas = clas
         moves[clas].score = 0
         moves[clas].cost = 0

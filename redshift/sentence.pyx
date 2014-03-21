@@ -35,6 +35,8 @@ cdef Sentence* init_sent(list words_cn) except NULL:
     cdef Lexeme* w
     for i in range(s.steps[0].n):
         s.steps[0].nodes[i].orig = 0
+        s.steps[0].nodes[i].norm = 0
+    s.answer[0].tag = 0
     # For the output
     return s
 

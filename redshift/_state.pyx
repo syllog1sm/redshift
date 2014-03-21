@@ -5,7 +5,6 @@ from libc.string cimport memcpy, memset
 DEF MAX_VALENCY = 100
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
-    #print "Set %d head to %d" % (child, head)
     s.parse[child].head = head
     s.parse[child].label = label
     if child < head:
@@ -81,16 +80,18 @@ cdef int fill_slots(State *s) except -1:
     s.slots.s0l2 = get_l2(s, s.top)
     s.slots.s0l0 = s.l_children[s.top][0]
     s.slots.s0 = s.top
-    s.slots.s0r = s.r_children[s.top][0]
+    s.slots.s0r = get_r(s, s.top)
     s.slots.s0r2 = get_r2(s, s.top)
-    s.slots.s0r0 = get_r(s, s.top)
+    s.slots.s0r0 = s.r_children[s.top][0]
+    assert s.parse[s.i].left_edge != 0
     s.slots.s0re = s.parse[s.i].left_edge - 1 # IE S0re is the word before N0le
     s.slots.n0le = s.parse[s.i].left_edge
     s.slots.n0l = get_l(s, s.i)
     s.slots.n0l2 = get_l2(s, s.i)
     s.slots.n0l0 = s.l_children[s.i][0]
     s.slots.n0 = s.i
-
+    s.slots.n1 = s.i + 1 if s.i < (s.n - 1) else 0
+    s.slots.n2 = s.i + 2 if s.i < (s.n - 2) else 0
 
 
 cdef size_t get_l(State *s, size_t head):
@@ -228,24 +229,25 @@ cdef int copy_state(State* s, State* old) except -1:
         nbytes = (s.i + 1) * sizeof(size_t)
     else:
         nbytes = (old.i + 1) * sizeof(size_t)
-    s.n = old.n
-    s.m = old.m
-    s.i = old.i
-    s.segment = old.segment
-    s.cost = old.cost
     s.score = old.score
+    s.i = old.i
+    s.m = old.m
+    s.n = old.n
+    s.stack_len = old.stack_len
     s.top = old.top
     s.second = old.second
-    s.stack_len = old.stack_len
+    s.segment = old.segment
     s.is_finished = old.is_finished
     s.at_end_of_buffer = old.at_end_of_buffer
+    s.cost = old.cost
+    
     memcpy(s.stack, old.stack, old.n * sizeof(size_t))
+    
+    for i in range(old.n):
+        memcpy(s.l_children[i], old.l_children[i], MAX_VALENCY * sizeof(size_t))
+        memcpy(s.r_children[i], old.r_children[i], MAX_VALENCY * sizeof(size_t))
     memcpy(s.parse, old.parse, old.n * sizeof(AnswerToken))
-
     memcpy(s.history, old.history, old.m * sizeof(Transition))
-    for i in range(old.i + 2):
-        memcpy(s.l_children[i], old.l_children[i], old.parse[i].l_valency * sizeof(size_t))
-        memcpy(s.r_children[i], old.r_children[i], old.parse[i].r_valency * sizeof(size_t))
 
 
 cdef free_state(State* s):

@@ -27,6 +27,7 @@ cdef struct SlotTokens:
     size_t n0l0
     size_t n0
     size_t n1
+    size_t n2
 
 
 cdef struct State:
