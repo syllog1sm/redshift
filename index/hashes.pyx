@@ -63,6 +63,7 @@ cdef class ScoresCache:
         cdef uint64_t hashed = MurmurHash64A(kernel, size, 0)
         # Mix with a second hash for extra security -- collisions hurt here!!
         hashed += MurmurHash64B(kernel, size, 1)
+        print hashed
         cdef size_t addr = self._cache[hashed]
         if addr != 0:
             self.n_hit += 1
