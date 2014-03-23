@@ -6,12 +6,12 @@ import random
 import os.path
 from os.path import join as pjoin
 import shutil
+import json
 
 from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
 
 from _state cimport *
-from sentence import get_labels
 from sentence cimport Input, Sentence, AnswerToken
 from transitions cimport Transition, transition, fill_valid, fill_costs
 from transitions cimport get_nr_moves, fill_moves
@@ -41,143 +41,161 @@ def set_debug(val):
     DEBUG = val
 
 
-def load_parser(model_dir, reuse_idx=False):
-    params = dict([line.split() for line in open(pjoin(model_dir, 'parser.cfg'))])
-    train_alg = params['train_alg']
-    feat_thresh = int(params['feat_thresh'])
-    l_labels = params['left_labels']
-    r_labels = params['right_labels']
-    beam_width = int(params['beam_width'])
-    feat_set = params['feat_set']
-    ngrams = []
-    for ngram_str in params.get('ngrams', '-1').split(','):
-        if ngram_str == '-1': continue
-        ngrams.append(tuple([int(i) for i in ngram_str.split('_')]))
-    auto_pos = params['auto_pos'] == 'True'
-    params = {'clean': False, 'train_alg': train_alg,
-              'feat_set': feat_set, 'feat_thresh': feat_thresh,
-              'vocab_thresh': 1, 
-              'beam_width': beam_width,
-              'ngrams': ngrams,
-              'auto_pos': auto_pos}
-    if beam_width >= 2:
-        parser = Parser(model_dir, **params)
-    else:
-        raise StandardError
-    pos_tags = set([int(line.split()[0]) for line in
-                        open(pjoin(model_dir, 'pos'))])
-    #_, nr_label = parser.moves.set_labels(pos_tags, _parse_labels_str(l_labels),
-    #                        _parse_labels_str(r_labels))
-    
-    parser.load(l_labels, r_labels) 
+def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
+          feat_set='basic', feat_thresh=10):
+    if os.path.exists(model_dir):
+        shutil.rmtree(model_dir)
+    os.mkdir(model_dir)
+    cdef list sents = [Input.from_conll(i, s) for i, s in
+                       enumerate(train_str.strip().split('\n\n'))]
+    left_labels, right_labels = get_labels(sents)
+    Config.write(model_dir, beam_width=beam_width, features=feat_set,
+                 feat_thresh=feat_thresh, left_labels=left_labels,
+                 right_labels=right_labels)
+    parser = Parser(model_dir)
+    #parser.tagger.setup_classes(sents)
+    indices = list(range(len(sents)))
+    cdef Input py_sent
+    for n in range(n_iter):
+        for i in indices:
+            py_sent = sents[i]
+            #parser.tagger.train_sent(py_sent.c_sent)
+            parser.train_sent(py_sent.c_sent, py_sent.c_sent.answer)
+        parser.guide.end_train_iter(n, feat_thresh)
+        #parser.tagger.guide.end_train_iter(n)
+        random.shuffle(indices)
+    parser.guide.end_training(pjoin(model_dir, 'model.gz'))
+    #parser.tagger.guide.finalize()
+    #parser.tagger.guide.save(pjoin(model_dir, 'tagger.gz'))
+    index.hashes.save_pos_idx(pjoin(model_dir, 'pos'))
+    index.hashes.save_label_idx(pjoin(model_dir, 'labels'))
     return parser
 
 
+def get_labels(sents):
+    left_labels = set()
+    right_labels = set()
+    cdef Input sent
+    for i, sent in enumerate(sents):
+        for j in range(sent.length):
+            if sent.c_sent.answer[j].head > j:
+                left_labels.add(sent.c_sent.answer[j].label)
+            else:
+                right_labels.add(sent.c_sent.answer[j].label)
+    return list(sorted(left_labels)), list(sorted(right_labels))
+
+
+class Config(object):
+    def __init__(self, **kwargs):
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+    @classmethod
+    def write(cls, model_dir, **kwargs):
+        open(pjoin(model_dir, 'config.json'), 'w').write(json.dumps(kwargs))
+
+    @classmethod
+    def read(cls, model_dir):
+        return cls(**json.load(open(pjoin(model_dir, 'config.json'))))
+
+
+def get_templates(feats_str):
+    templates = _parse_features.baseline_templates()
+    match_feats = []
+    #templates += _parse_features.ngram_feats(self.ngrams)
+    if 'disfl' in feats_str:
+        templates += _parse_features.disfl
+        templates += _parse_features.new_disfl
+        templates += _parse_features.suffix_disfl
+        templates += _parse_features.extra_labels
+        templates += _parse_features.clusters
+        templates += _parse_features.edges
+        match_feats = _parse_features.match_templates()
+    elif 'clusters' in feats_str:
+        templates += _parse_features.clusters
+    if 'stack' in feats_str:
+        templates += _parse_features.stack_second
+    if 'hist' in feats_str:
+        templates += _parse_features.history
+    if 'bitags' in feats_str:
+        templates += _parse_features.pos_bigrams()
+    if 'pauses' in feats_str:
+        templates += _parse_features.pauses
+    return templates, match_feats
+
+
 cdef class Parser:
+    cdef object cfg
     cdef Extractor extractor
     cdef Perceptron guide
     #cdef BeamTagger tagger
-    cdef object model_dir
-    cdef bint auto_pos
+    cdef object tagger
     cdef size_t beam_width
-    cdef object add_extra
-    cdef object train_alg
     cdef int feat_thresh
-    cdef object feat_set
-    cdef object ngrams
     cdef Transition* moves
     cdef uint64_t* _features
     cdef size_t* _context
     cdef size_t nr_moves
-    cdef list left_labels
-    cdef list right_labels
 
-    def __cinit__(self, model_dir, clean=False, train_alg='static',
-                  feat_set="zhang",
-                  feat_thresh=0, vocab_thresh=5,
-                  beam_width=1,
-                  ngrams=None, auto_pos=False):
-        self.model_dir = self.setup_model_dir(model_dir, clean)
-        self.feat_set = feat_set
-        self.ngrams = ngrams if ngrams is not None else []
-        templates = _parse_features.baseline_templates()
-        match_feats = []
-        #templates += _parse_features.ngram_feats(self.ngrams)
-        if 'disfl' in self.feat_set:
-            templates += _parse_features.disfl
-            templates += _parse_features.new_disfl
-            templates += _parse_features.suffix_disfl
-            templates += _parse_features.extra_labels
-            templates += _parse_features.clusters
-            templates += _parse_features.edges
-            match_feats = _parse_features.match_templates()
-        elif 'clusters' in self.feat_set:
-            templates += _parse_features.clusters
-        if 'stack' in self.feat_set:
-            templates += _parse_features.stack_second
-        if 'hist' in self.feat_set:
-            templates += _parse_features.history
-        if 'bitags' in self.feat_set:
-            templates += _parse_features.pos_bigrams()
-        if 'pauses' in self.feat_set:
-            templates += _parse_features.pauses
-        self.extractor = Extractor(templates, match_feats)
+    def __cinit__(self, model_dir):
+        assert os.path.exists(model_dir) and os.path.isdir(model_dir)
+        self.cfg = Config.read(model_dir)
+        self.extractor = Extractor(*get_templates(self.cfg.features))
         self._features = <uint64_t*>calloc(self.extractor.nr_feat, sizeof(uint64_t))
         self._context = <size_t*>calloc(_parse_features.context_size(), sizeof(size_t))
-        self.feat_thresh = feat_thresh
-        self.train_alg = train_alg
-        self.beam_width = beam_width
-        self.auto_pos = auto_pos
-        self.guide = Perceptron(500, pjoin(model_dir, 'model.gz'))
-        self.left_labels = []
-        self.right_labels = []
-        self.nr_moves = 0
-        #self.tagger = BeamTagger(model_dir, clean=False, reuse_idx=True)
 
-    def setup_labels(self, left_labels, right_labels):
-        left_labels.sort()
-        right_labels.sort()
-        self.left_labels = [index.hashes.decode_label(l) for l in left_labels]
-        self.right_labels = [index.hashes.decode_label(l) for l in right_labels]
-        self.nr_moves = get_nr_moves(left_labels, right_labels)
+        self.feat_thresh = self.cfg.feat_thresh
+        self.beam_width = self.cfg.beam_width
+
+        if os.path.exists(pjoin(model_dir, 'labels')):
+            index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
+        self.nr_moves = get_nr_moves(self.cfg.left_labels, self.cfg.right_labels)
         self.moves = <Transition*>calloc(self.nr_moves, sizeof(Transition))
-        fill_moves(left_labels, right_labels, self.moves)
+        fill_moves(self.cfg.left_labels, self.cfg.right_labels, self.moves)
+        
+        self.guide = Perceptron(self.nr_moves, pjoin(model_dir, 'model.gz'))
+        self.tagger = None
+        #self.tagger = BeamTagger(model_dir, clean=False, reuse_idx=True)
+        if os.path.exists(pjoin(model_dir, 'model.gz')):
+            self.guide.load(pjoin(model_dir, 'model.gz'), thresh=int(self.cfg.feat_thresh))
+        #self.tagger.guide.load(pjoin(self.model_dir, 'tagger.gz'), thresh=self.feat_thresh)
+        if os.path.exists(pjoin(model_dir, 'pos')):
+            index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
 
-    def setup_model_dir(self, loc, clean):
-        if clean and os.path.exists(loc):
-            shutil.rmtree(loc)
-        if os.path.exists(loc):
-            assert os.path.isdir(loc)
+    cpdef int parse(self, Input py_sent) except -1:
+        cdef Sentence* sent = py_sent.c_sent
+        cdef Beam beam = Beam(self.beam_width, sent.n, <size_t>self.moves,
+                              self.nr_moves)
+        cdef size_t p_idx, i
+        if self.tagger:
+            self.tagger.tag(input.c_sent)
         else:
-            os.mkdir(loc)
-        return loc
+            for p_idx in range(self.beam_width):
+                for i in range(sent.n):
+                    beam.beam[p_idx].parse[i].tag = sent.answer[i].tag
+        self.guide.cache.flush()
+        while not beam.is_finished:
+            for i in range(beam.bsize):
+                if not beam.beam[i].is_finished:
+                    self._predict(beam.beam[i], beam.moves[i], sent.steps)
+                    # The False flag tells it to allow non-gold predictions
+                    beam.enqueue(i, False)
+            beam.extend()
+        beam.fill_parse(sent.answer)
+        sent.score = beam.beam[0].score
 
-    def train(self, list sents, n_iter=15):
-        cdef size_t i, j, n
-        if self.auto_pos:
-            self.tagger.setup_classes(sents)
-        tags, left_labels, right_labels = get_labels(sents)
-        self.setup_labels(left_labels, right_labels)
-        self.guide.set_classes(range(self.nr_moves))
-        self.write_cfg(pjoin(self.model_dir, 'parser.cfg'))
-        if self.beam_width >= 2:
-            self.guide.use_cache = True
-        indices = list(range(len(sents)))
-        cdef Input py_sent
-        if not DEBUG:
-            # Extra trick: sort by sentence length for first iteration
-            indices.sort(key=lambda i: sents[i].length)
-        for n in range(n_iter):
-            for i in indices:
-                py_sent = sents[i]
-                #if self.auto_pos:
-                #    self.tagger.train_sent(py_sent.c_sent)
-                self.train_sent(py_sent.c_sent, py_sent.c_sent.answer)
-            self.guide.end_train_iter(n, self.feat_thresh)
-            random.shuffle(indices)
-        #if self.auto_pos:
-        #    self.tagger.guide.finalize()
-        self.guide.finalize()
+    cdef int _predict(self, State* s, Transition* classes, Step* steps) except -1:
+        cdef bint cache_hit = False
+        fill_slots(s)
+        # TODO: This is broken, because of labels.
+        #scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
+        #if not cache_hit:
+        fill_context(self._context, &s.slots, s.parse, steps)
+        self.extractor.extract(self._features, self._context)
+        self.guide.fill_scores(self._features, self.guide.scores)
+        fill_valid(s, classes, self.nr_moves)
+        for i in range(self.nr_moves):
+            classes[i].score = self.guide.scores[i]
 
     cdef int train_sent(self, Sentence* sent, AnswerToken* gold_parse) except -1:
         cdef size_t i
@@ -231,19 +249,6 @@ cdef class Parser:
         #else:
         #    self.guide.now += 1
 
-    cdef int _predict(self, State* s, Transition* classes, Step* steps) except -1:
-        cdef bint cache_hit = False
-        fill_slots(s)
-        # TODO: This is broken, because of labels.
-        #scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
-        #if not cache_hit:
-        fill_context(self._context, &s.slots, s.parse, steps)
-        self.extractor.extract(self._features, self._context)
-        self.guide.fill_scores(self._features, self.guide.scores)
-        fill_valid(s, classes, self.nr_moves)
-        for i in range(self.nr_moves):
-            classes[i].score = self.guide.scores[i]
-
     cdef dict _count_feats(self, Sentence* sent, size_t pt, size_t gt,
                            Transition* phist, Transition* ghist):
         cdef size_t d, i, f
@@ -290,64 +295,3 @@ cdef class Parser:
                 counts[self._features[f]] = 0
             counts[self._features[f]] += inc
             f += 1
-
-    def add_parses(self, list sents):
-        self.guide.nr_class = self.nr_moves
-        cdef size_t i
-        cdef Input sent
-        for sent in sents:
-            self.parse(sent.c_sent)
-
-    cdef int parse(self, Sentence* sent) except -1:
-        cdef Beam beam = Beam(self.beam_width, sent.n, <size_t>self.moves, self.nr_moves)
-        cdef size_t p_idx, i
-        #if self.auto_pos:
-        #    self.tagger.tag(sent)
-        for p_idx in range(self.beam_width):
-            for i in range(sent.n):
-                beam.beam[p_idx].parse[i].tag = sent.answer[i].tag
-
-        self.guide.cache.flush()
-        while not beam.is_finished:
-            for i in range(beam.bsize):
-                if not beam.beam[i].is_finished:
-                    self._predict(beam.beam[i], beam.moves[i], sent.steps)
-                    # The False flag tells it to allow non-gold predictions
-                    beam.enqueue(i, False)
-            beam.extend()
-        beam.fill_parse(sent.answer)
-        sent.score = beam.beam[0].score
-
-    def save(self):
-        self.guide.save(pjoin(self.model_dir, 'model.gz'))
-        index.hashes.save_pos_idx(pjoin(self.model_dir, 'pos'))
-        index.hashes.save_label_idx(pjoin(self.model_dir, 'labels'))
-        #self.tagger.save()
-
-    def load(self, l_labels, r_labels):
-        self.guide.load(pjoin(self.model_dir, 'model.gz'), thresh=self.feat_thresh)
-        #self.tagger.guide.load(pjoin(self.model_dir, 'tagger.gz'), thresh=self.feat_thresh)
-        index.hashes.load_pos_idx(pjoin(self.model_dir, 'pos'))
-        index.hashes.load_label_idx(pjoin(self.model_dir, 'labels'))
-        self.setup_labels(_parse_labels_str(l_labels), _parse_labels_str(r_labels))
-   
-    def write_cfg(self, loc):
-        with open(loc, 'w') as cfg:
-            cfg.write(u'model_dir\t%s\n' % self.model_dir)
-            cfg.write(u'train_alg\t%s\n' % self.train_alg)
-            cfg.write(u'feat_thresh\t%d\n' % self.feat_thresh)
-            cfg.write(u'left_labels\t%s\n' % ','.join(self.left_labels))
-            cfg.write(u'right_labels\t%s\n' % ','.join(self.right_labels))
-            cfg.write(u'beam_width\t%d\n' % self.beam_width)
-            cfg.write(u'auto_pos\t%s\n' % self.auto_pos)
-            #if not self.features.ngrams:
-            #    cfg.write(u'ngrams\t-1\n')
-            #else:
-            #    ngram_strs = ['_'.join([str(i) for i in ngram])
-            #                  for ngram in self.features.ngrams]
-            #    cfg.write(u'ngrams\t%s\n' % u','.join(ngram_strs))
-            cfg.write(u'feat_set\t%s\n' % self.feat_set)
-
-
-def _parse_labels_str(labels_str):
-    return [index.hashes.encode_label(l) for l in labels_str.split(',')]

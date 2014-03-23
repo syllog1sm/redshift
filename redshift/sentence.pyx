@@ -189,17 +189,3 @@ cdef class Token:
         return cls(word, pos=pos)
 
 
-def get_labels(sents):
-    tags = set()
-    left_labels = set()
-    right_labels = set()
-    cdef size_t i
-    cdef Input sent
-    for i, sent in enumerate(sents):
-        for j in range(sent.length):
-            tags.add(sent.c_sent.answer[j].tag)
-            if sent.c_sent.answer[j].head > j:
-                left_labels.add(sent.c_sent.answer[j].label)
-            else:
-                right_labels.add(sent.c_sent.answer[j].label)
-    return tags, list(sorted(left_labels)), list(sorted(right_labels))
