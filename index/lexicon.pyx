@@ -5,6 +5,7 @@ from libc.stdint cimport uint64_t
 import os.path
 
 
+BLANK_WORD = Lexeme(0, 0, 0, 0, False, False, False)
 
 cdef Lexicon _LEXICON = None
 

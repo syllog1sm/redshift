@@ -59,7 +59,7 @@ cdef inline bint can_break(State* s):
         return True
 
 
-cdef int shift_cost(State *s, AnswerToken* gold):
+cdef int shift_cost(State *s, Token* gold):
     cdef int cost = 0
     if s.stack_len < 1:
         return 0
@@ -73,7 +73,7 @@ cdef int shift_cost(State *s, AnswerToken* gold):
     return cost
 
 
-cdef int right_cost(State *s, AnswerToken* gold):
+cdef int right_cost(State *s, Token* gold):
     cdef int cost = 0
     if gold[s.top].is_edit and not gold[s.i].is_edit:
         return 1
@@ -93,7 +93,7 @@ cdef int right_cost(State *s, AnswerToken* gold):
     return cost
 
 
-cdef int reduce_cost(State *s, AnswerToken* gold):
+cdef int reduce_cost(State *s, Token* gold):
     cdef int cost = 0
     if s.segment:
         return 0
@@ -107,7 +107,7 @@ cdef int reduce_cost(State *s, AnswerToken* gold):
     return cost
 
 
-cdef int left_cost(State *s, AnswerToken* gold) except -9000:
+cdef int left_cost(State *s, Token* gold) except -9000:
     cdef int cost = 0
     if can_break(s):
         cost += gold[s.top].is_break
@@ -131,11 +131,11 @@ cdef int left_cost(State *s, AnswerToken* gold) except -9000:
     return cost
 
 
-cdef int break_cost(State *s, AnswerToken* gold):
+cdef int break_cost(State *s, Token* gold):
     return not gold[s.top].is_break
 
 
-cdef int edit_cost(State *s, AnswerToken* gold):
+cdef int edit_cost(State *s, Token* gold):
     cdef int cost = 0
     #if can_segment(s, self.moves, self.use_sbd):
     #    cost += sbd[s.top] != sbd[s.i]
@@ -166,7 +166,7 @@ cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
         raise StandardError
 
 
-cdef int fill_costs(State* s, Transition* classes, size_t n, AnswerToken* gold) except -1:
+cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except -1:
     cdef int[N_MOVES] costs
     costs[SHIFT] = shift_cost(s, gold) if can_shift(s) else -1
     costs[REDUCE] = reduce_cost(s, gold) if can_reduce(s) else -1

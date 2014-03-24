@@ -1,5 +1,6 @@
 # cython: profile=True
 from _state cimport *
+from redshift.sentence cimport Input, Sentence, Token
 
 from transitions cimport Transition, transition
 
@@ -14,8 +15,8 @@ cimport cython
 
 
 cdef class Beam:
-    def __cinit__(self, size_t k, size_t length, size_t moves_addr, size_t nr_class):
-        self.length = length
+    def __cinit__(self, size_t k, size_t moves_addr, size_t nr_class, Input py_sent):
+        self.length = py_sent.length
         self.nr_class = nr_class
         self.k = k
         self.i = 0
@@ -26,8 +27,8 @@ cdef class Beam:
         self.moves = <Transition**>malloc(k * sizeof(Transition*))
         cdef Transition* moves = <Transition*>moves_addr
         for i in range(k):
-            self.parents[i] = init_state(length)
-            self.beam[i] = init_state(length)
+            self.parents[i] = init_state(py_sent.c_sent)
+            self.beam[i] = init_state(py_sent.c_sent)
             self.moves[i] = <Transition*>calloc(self.nr_class, sizeof(Transition))
             for j in range(self.nr_class):
                 assert moves[j].clas < nr_class
@@ -97,7 +98,7 @@ cdef class Beam:
         while not self.queue.empty():
             self.queue.pop()
 
-    cdef int fill_parse(self, AnswerToken* parse) except -1:
+    cdef int fill_parse(self, Token* parse) except -1:
         cdef size_t i
         # No need to copy heads for root and start symbols
         for i in range(1, self.length - 1):

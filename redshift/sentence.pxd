@@ -1,7 +1,8 @@
 from index.lexicon cimport Lexeme
 
-cdef struct AnswerToken:
-    size_t word # Supports confusion network
+
+cdef struct Token:
+    Lexeme* word # Supports confusion network
     size_t tag
     size_t head
     size_t label
@@ -11,25 +12,23 @@ cdef struct AnswerToken:
     bint is_break
     bint is_edit
 
+
 cdef struct Step:
     size_t n
     double* probs
     Lexeme** nodes
 
+
 cdef struct Sentence:
     size_t n
-    Step* steps
-    AnswerToken* answer
+    Step* lattice
+    Token* tokens
     double score
     
-cdef Sentence* init_sent(list words_cn) except NULL
+
+cdef Sentence* init_sent(list words_lattice, list parse) except NULL
 
 cdef void free_sent(Sentence* s)
 
 cdef class Input:
     cdef Sentence* c_sent
-
-
-cdef class Token:
-    cdef Lexeme* c_word
-    cdef AnswerToken* c_parse

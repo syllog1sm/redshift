@@ -17,6 +17,8 @@ cdef struct Lexeme:
     bint non_alpha
 
 
+cdef Lexeme BLANK_WORD
+
 cdef class Lexicon:
     cdef dense_hash_map[uint64_t, size_t] words
     cdef dict strings

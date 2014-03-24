@@ -1,5 +1,6 @@
 from _state cimport *
 from transitions cimport Transition
+from sentence cimport Token
 
 
 from libcpp.queue cimport priority_queue
@@ -26,4 +27,4 @@ cdef class Beam:
 
     cdef int enqueue(self, size_t i, bint force_gold) except -1
     cdef int extend(self) except -1
-    cdef int fill_parse(self, AnswerToken* parse) except -1
+    cdef int fill_parse(self, Token* parse) except -1

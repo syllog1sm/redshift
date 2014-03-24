@@ -10,7 +10,7 @@ can refer to them.
 """
 
 from redshift._state cimport SlotTokens
-from redshift.sentence cimport AnswerToken
+from redshift.sentence cimport Token
 from index.lexicon cimport Lexeme
 from itertools import combinations
 # Context elements
@@ -271,10 +271,8 @@ def get_kernel_tokens():
 def context_size():
     return CONTEXT_SIZE
 
-cdef inline void fill_token(size_t* context, size_t i, size_t p,
-                            AnswerToken* parse, Step* steps):
-    cdef AnswerToken* token = &parse[p]
-    cdef Lexeme* word = steps[p].nodes[token.word] 
+cdef inline void fill_token(size_t* context, size_t i, Token token):
+    cdef Lexeme* word = token.word
     context[i] = word.norm
     context[i+1] = token.tag
     # TODO: Implement 4 and 6 bit cluster prefixes
@@ -291,45 +289,46 @@ cdef inline void zero_token(size_t* context, size_t i):
         context[i+j] = 0
 
 
-cdef int fill_context(size_t* context, SlotTokens* tokens, AnswerToken* parse,
+cdef int fill_context(size_t* context, SlotTokens* tokens, Token* parse,
                       Step* steps) except -1:
     cdef size_t c
     for c in range(CONTEXT_SIZE):
         context[c] = 0
     # This fills in the basic properties of each of our "slot" tokens, e.g.
     # word on top of the stack, word at the front of the buffer, etc.
-    fill_token(context, S2w, tokens.s2, parse, steps)
-    fill_token(context, S1w, tokens.s1, parse, steps)
-    fill_token(context, S0le_w, tokens.s0le, parse, steps)
-    fill_token(context, S0lw, tokens.s0l, parse, steps)
-    fill_token(context, S0l2w, tokens.s0l2, parse, steps)
-    fill_token(context, S0l0w, tokens.s0l0, parse, steps)
-    fill_token(context, S0w, tokens.s0, parse, steps)
-    fill_token(context, S0r0w, tokens.s0r0, parse, steps)
-    fill_token(context, S0r2w, tokens.s0r2, parse, steps)
-    fill_token(context, S0rw, tokens.s0r, parse, steps)
-    fill_token(context, S0re_w, tokens.s0re, parse, steps)
-    fill_token(context, N0le_w, tokens.n0le, parse, steps)
-    fill_token(context, N0lw, tokens.n0l, parse, steps)
-    fill_token(context, N0l2w, tokens.n0l2, parse, steps)
-    fill_token(context, N0l0w, tokens.n0l0, parse, steps)
-    fill_token(context, N0w, tokens.n0, parse, steps)
-    fill_token(context, N1w, tokens.n1, parse, steps)
-    fill_token(context, N2w, tokens.n2, parse, steps)
+    fill_token(context, S2w, tokens.s2)
+    fill_token(context, S1w, tokens.s1)
+    fill_token(context, S0le_w, tokens.s0le)
+    fill_token(context, S0lw, tokens.s0l)
+    fill_token(context, S0l2w, tokens.s0l2)
+    fill_token(context, S0l0w, tokens.s0l0)
+    fill_token(context, S0w, tokens.s0)
+    fill_token(context, S0r0w, tokens.s0r0)
+    fill_token(context, S0r2w, tokens.s0r2)
+    fill_token(context, S0rw, tokens.s0r)
+    fill_token(context, S0re_w, tokens.s0re)
+    fill_token(context, N0le_w, tokens.n0le)
+    fill_token(context, N0lw, tokens.n0l)
+    fill_token(context, N0l2w, tokens.n0l2)
+    fill_token(context, N0l0w, tokens.n0l0)
+    fill_token(context, N0w, tokens.n0)
+    fill_token(context, N1w, tokens.n1)
+    fill_token(context, N2w, tokens.n2)
 
-    if parse[tokens.s0].label != 0:
-        fill_token(context, S0hw, tokens.s1, parse, steps)
+    if tokens.s0.label != 0:
+        fill_token(context, S0hw, tokens.s1)
     else:
         zero_token(context, S0hw)
-    if parse[tokens.s0].label != 0 and parse[tokens.s1].label != 0:
-        fill_token(context, S0h2w, tokens.s2, parse, steps)
+    if tokens.s0.label != 0 and tokens.s1.label != 0:
+        fill_token(context, S0h2w, tokens.s2)
     else:
         zero_token(context, S0h2w)
-    if tokens.s0 != 0:
-        assert tokens.n0 > tokens.s0
-        context[dist] = tokens.n0 - tokens.s0
-    else:
-        context[dist] = 0
+    # TODO: Distance
+    #if tokens.s0.word.orig != 0:
+    #    assert tokens.n0 > tokens.s0
+    #    context[dist] = tokens.n0 - tokens.s0
+    #else:
+    #    context[dist] = 0
     """
     # Disfluency match features
     if k.prev_edit and k.i != 0:

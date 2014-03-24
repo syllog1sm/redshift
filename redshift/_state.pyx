@@ -71,27 +71,26 @@ cdef uint64_t hash_state(State* s):
 
 
 cdef int fill_slots(State *s) except -1:
-    cdef size_t i, val
-
-    s.slots.s2 = s.stack[s.stack_len - 3] if s.stack_len >= 3 else 0
-    s.slots.s1 = s.second
-    s.slots.s0le = s.parse[s.top].left_edge
-    s.slots.s0l = get_l(s, s.top)
-    s.slots.s0l2 = get_l2(s, s.top)
-    s.slots.s0l0 = s.l_children[s.top][0]
-    s.slots.s0 = s.top
-    s.slots.s0r = get_r(s, s.top)
-    s.slots.s0r2 = get_r2(s, s.top)
-    s.slots.s0r0 = s.r_children[s.top][0]
+    s.slots.s2 = s.parse[s.stack[s.stack_len - 3] if s.stack_len >= 3 else 0]
+    s.slots.s1 = s.parse[s.second]
+    s.slots.s0le = s.parse[s.parse[s.top].left_edge]
+    s.slots.s0l = s.parse[get_l(s, s.top)]
+    s.slots.s0l2 = s.parse[get_l2(s, s.top)]
+    s.slots.s0l0 = s.parse[s.l_children[s.top][0]]
+    s.slots.s0 = s.parse[s.top]
+    s.slots.s0r = s.parse[get_r(s, s.top)]
+    s.slots.s0r2 = s.parse[get_r2(s, s.top)]
+    s.slots.s0r0 = s.parse[s.r_children[s.top][0]]
     assert s.parse[s.i].left_edge != 0
-    s.slots.s0re = s.parse[s.i].left_edge - 1 # IE S0re is the word before N0le
-    s.slots.n0le = s.parse[s.i].left_edge
-    s.slots.n0l = get_l(s, s.i)
-    s.slots.n0l2 = get_l2(s, s.i)
-    s.slots.n0l0 = s.l_children[s.i][0]
-    s.slots.n0 = s.i
-    s.slots.n1 = s.i + 1 if s.i < (s.n - 1) else 0
-    s.slots.n2 = s.i + 2 if s.i < (s.n - 2) else 0
+    # IE S0re is the word before N0le
+    s.slots.s0re = s.parse[s.parse[s.i].left_edge - 1]
+    s.slots.n0le = s.parse[s.parse[s.i].left_edge]
+    s.slots.n0l = s.parse[get_l(s, s.i)]
+    s.slots.n0l2 = s.parse[get_l2(s, s.i)]
+    s.slots.n0l0 = s.parse[s.l_children[s.i][0]]
+    s.slots.n0 = s.parse[s.i]
+    s.slots.n1 = s.parse[s.i + 1 if s.i < (s.n - 1) else 0]
+    s.slots.n2 = s.parse[s.i + 2 if s.i < (s.n - 2) else 0]
 
 
 cdef size_t get_l(State *s, size_t head):
@@ -114,7 +113,7 @@ cdef size_t get_r2(State *s, size_t head):
         return 0
     return s.r_children[head][s.parse[head].r_valency - 2]
 
-cdef int has_child_in_buffer(State *s, size_t word, AnswerToken* gold) except -1:
+cdef int has_child_in_buffer(State *s, size_t word, Token* gold) except -1:
     assert word != 0
     cdef size_t buff_i
     cdef int n = 0
@@ -124,7 +123,7 @@ cdef int has_child_in_buffer(State *s, size_t word, AnswerToken* gold) except -1
     return n
 
 
-cdef int has_head_in_buffer(State *s, size_t word, AnswerToken* gold) except -1:
+cdef int has_head_in_buffer(State *s, size_t word, Token* gold) except -1:
     assert word != 0
     cdef size_t buff_i
     for buff_i in range(s.i, s.n):
@@ -133,7 +132,7 @@ cdef int has_head_in_buffer(State *s, size_t word, AnswerToken* gold) except -1:
     return 0
 
 
-cdef int has_child_in_stack(State *s, size_t word, AnswerToken* gold) except -1:
+cdef int has_child_in_stack(State *s, size_t word, Token* gold) except -1:
     assert word != 0
     cdef size_t i, stack_i
     cdef int n = 0
@@ -145,7 +144,7 @@ cdef int has_child_in_stack(State *s, size_t word, AnswerToken* gold) except -1:
     return n
 
 
-cdef int has_head_in_stack(State *s, size_t word, AnswerToken* gold) except -1:
+cdef int has_head_in_stack(State *s, size_t word, Token* gold) except -1:
     assert word != 0
     cdef size_t i, stack_i
     for i in range(s.stack_len):
@@ -195,10 +194,10 @@ cdef bint has_root_child(State *s, size_t token):
 DEF PADDING = 5
 
 
-cdef State* init_state(size_t n):
-    cdef size_t i, j
+cdef State* init_state(Sentence* sent):
+    cdef size_t i
     cdef State* s = <State*>calloc(1, sizeof(State))
-    s.n = n
+    s.n = sent.n
     s.m = 0
     s.i = 1
     s.cost = 0
@@ -208,14 +207,16 @@ cdef State* init_state(size_t n):
     s.stack_len = 0
     s.segment = False
     s.is_finished = False
-    s.at_end_of_buffer = n == 2
-    n = n + PADDING
+    s.at_end_of_buffer = sent.n == 2
+    n = sent.n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
     s.l_children = <size_t**>malloc(n * sizeof(size_t*))
     s.r_children = <size_t**>malloc(n * sizeof(size_t*))
-    s.parse = <AnswerToken*>calloc(n, sizeof(AnswerToken))
+    s.parse = <Token*>calloc(n, sizeof(Token))
     for i in range(n):
-        s.parse[i].word = 0
+        # TODO: Control whether these get filled
+        s.parse[i].word = sent.tokens[i].word
+        s.parse[i].tag = sent.tokens[i].tag
         s.parse[i].left_edge = i
         s.l_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
         s.r_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
@@ -246,7 +247,7 @@ cdef int copy_state(State* s, State* old) except -1:
     for i in range(old.n):
         memcpy(s.l_children[i], old.l_children[i], MAX_VALENCY * sizeof(size_t))
         memcpy(s.r_children[i], old.r_children[i], MAX_VALENCY * sizeof(size_t))
-    memcpy(s.parse, old.parse, old.n * sizeof(AnswerToken))
+    memcpy(s.parse, old.parse, old.n * sizeof(Token))
     memcpy(s.history, old.history, old.m * sizeof(Transition))
 
 

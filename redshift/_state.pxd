@@ -2,7 +2,7 @@ from libc.string cimport const_void
 from libc.stdint cimport uint64_t, int64_t
 
 from ext.murmurhash cimport *
-from sentence cimport AnswerToken
+from sentence cimport Sentence, Token
 from transitions cimport Transition
 
 # From left-to-right in the string, the slot tokens are:
@@ -10,24 +10,24 @@ from transitions cimport Transition
 # N0le, N0l, N0l2, N0l0
 
 cdef struct SlotTokens:
-    size_t s2
-    size_t s1
-    size_t s0le
-    size_t s0l
-    size_t s0l2
-    size_t s0l0
-    size_t s0
-    size_t s0r0
-    size_t s0r2
-    size_t s0r
-    size_t s0re
-    size_t n0le
-    size_t n0l
-    size_t n0l2
-    size_t n0l0
-    size_t n0
-    size_t n1
-    size_t n2
+    Token s2
+    Token s1
+    Token s0le
+    Token s0l
+    Token s0l2
+    Token s0l0
+    Token s0
+    Token s0r0
+    Token s0r2
+    Token s0r
+    Token s0re
+    Token n0le
+    Token n0l
+    Token n0l2
+    Token n0l0
+    Token n0
+    Token n1
+    Token n2
 
 
 cdef struct State:
@@ -47,7 +47,7 @@ cdef struct State:
     
     size_t** l_children
     size_t** r_children
-    AnswerToken* parse
+    Token* parse
     Transition* history
     SlotTokens slots
 
@@ -67,14 +67,14 @@ cdef size_t get_l2(State *s, size_t head)
 cdef size_t get_r(State *s, size_t head)
 cdef size_t get_r2(State *s, size_t head)
 
-cdef int has_child_in_buffer(State *s, size_t word, AnswerToken* gold) except -1
-cdef int has_head_in_buffer(State *s, size_t word, AnswerToken* gold) except -1
-cdef int has_child_in_stack(State *s, size_t word, AnswerToken* gold) except -1
-cdef int has_head_in_stack(State *s, size_t word, AnswerToken* gold) except -1
+cdef int has_child_in_buffer(State *s, size_t word, Token* gold) except -1
+cdef int has_head_in_buffer(State *s, size_t word, Token* gold) except -1
+cdef int has_child_in_stack(State *s, size_t word, Token* gold) except -1
+cdef int has_head_in_stack(State *s, size_t word, Token* gold) except -1
 cdef bint has_root_child(State *s, size_t token)
 cdef int nr_headless(State *s) except -1
 
 cdef int fill_edits(State *s, bint* edits) except -1
-cdef State* init_state(size_t n)
+cdef State* init_state(Sentence* sent)
 cdef free_state(State* s)
 cdef int copy_state(State* s, State* old) except -1
