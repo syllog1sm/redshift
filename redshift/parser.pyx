@@ -17,7 +17,8 @@ from transitions cimport Transition, transition, fill_valid, fill_costs
 from transitions cimport get_nr_moves, fill_moves
 from transitions cimport *
 from beam cimport Beam
-#from tagger cimport BeamTagger
+from tagger cimport Tagger
+from tagger import write_tagger_config
 
 from features.extractor cimport Extractor
 import _parse_features
@@ -52,21 +53,20 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
     Config.write(model_dir, beam_width=beam_width, features=feat_set,
                  feat_thresh=feat_thresh, left_labels=left_labels,
                  right_labels=right_labels)
+    write_tagger_config(model_dir, beam_width=4, features='basic', feat_thresh=feat_thresh)
     parser = Parser(model_dir)
-    #parser.tagger.setup_classes(sents)
     indices = list(range(len(sents)))
     cdef Input py_sent
     for n in range(n_iter):
         for i in indices:
             py_sent = sents[i]
-            #parser.tagger.train_sent(py_sent.c_sent)
+            parser.tagger.train_sent(py_sent)
             parser.train_sent(py_sent)
         parser.guide.end_train_iter(n, feat_thresh)
-        #parser.tagger.guide.end_train_iter(n)
+        parser.tagger.guide.end_train_iter(n, feat_thresh)
         random.shuffle(indices)
     parser.guide.end_training(pjoin(model_dir, 'model.gz'))
-    #parser.tagger.guide.finalize()
-    #parser.tagger.guide.save(pjoin(model_dir, 'tagger.gz'))
+    parser.tagger.guide.end_training(pjoin(model_dir, 'tagger.gz'))
     index.hashes.save_pos_idx(pjoin(model_dir, 'pos'))
     index.hashes.save_label_idx(pjoin(model_dir, 'labels'))
     return parser
@@ -128,8 +128,7 @@ cdef class Parser:
     cdef object cfg
     cdef Extractor extractor
     cdef Perceptron guide
-    #cdef BeamTagger tagger
-    cdef object tagger
+    cdef Tagger tagger
     cdef size_t beam_width
     cdef int feat_thresh
     cdef Transition* moves
@@ -154,25 +153,20 @@ cdef class Parser:
         fill_moves(self.cfg.left_labels, self.cfg.right_labels, self.moves)
         
         self.guide = Perceptron(self.nr_moves, pjoin(model_dir, 'model.gz'))
-        self.tagger = None
-        #self.tagger = BeamTagger(model_dir, clean=False, reuse_idx=True)
         if os.path.exists(pjoin(model_dir, 'model.gz')):
             self.guide.load(pjoin(model_dir, 'model.gz'), thresh=int(self.cfg.feat_thresh))
-        #self.tagger.guide.load(pjoin(self.model_dir, 'tagger.gz'), thresh=self.feat_thresh)
         if os.path.exists(pjoin(model_dir, 'pos')):
             index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
+        self.tagger = Tagger(model_dir)
 
     cpdef int parse(self, Input py_sent) except -1:
         cdef Sentence* sent = py_sent.c_sent
-        cdef Beam beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves,
-                              py_sent)
         cdef size_t p_idx, i
         if self.tagger:
-            self.tagger.tag(input.c_sent)
-        else:
-            for p_idx in range(self.beam_width):
-                for i in range(sent.n):
-                    beam.beam[p_idx].parse[i].tag = sent.tokens[i].tag
+            self.tagger.tag(py_sent)
+        cdef Beam beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves,
+                              py_sent)
+
         self.guide.cache.flush()
         while not beam.is_finished:
             for i in range(beam.bsize):
@@ -201,9 +195,15 @@ cdef class Parser:
         cdef size_t nr_move = sent.n * 3
         cdef Transition[500] g_hist
         cdef Transition[500] p_hist
-        p_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
-        g_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
         cdef Sentence* sent = py_sent.c_sent
+        
+        cdef size_t* gold_tags = <size_t*>calloc(sent.n, sizeof(size_t))
+        for i in range(sent.n):
+            gold_tags[i] = sent.tokens[i].tag
+        if self.tagger:
+            self.tagger.tag(py_sent)
+        g_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+        p_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
         cdef Token* gold_parse = sent.tokens
         cdef double delta = 0
         cdef double max_violn = -1
@@ -245,6 +245,9 @@ cdef class Parser:
             # TODO: We should tick the epoch here if max_violn == 0, right?
         #else:
         #    self.guide.now += 1
+        for i in range(sent.n):
+            sent.tokens[i].tag = gold_tags[i]
+        free(gold_tags)
 
     cdef dict _count_feats(self, Sentence* sent, size_t pt, size_t gt,
                            Transition* phist, Transition* ghist):
