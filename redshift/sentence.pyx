@@ -166,5 +166,6 @@ cdef bytes conll_line_from_token(size_t i, Token* a, Step* lattice):
     if not word:
         word = b'-OOV-'
     feats = '-|-|-|-'
-    return '\t'.join((str(i), word, '_', 'NN', 'NN', feats, 
+    cdef bytes tag = index.hashes.decode_pos(a.tag)
+    return '\t'.join((str(i), word, '_', tag, tag, feats, 
                      str(a.head), decode_label(a.label), '_', '_'))
