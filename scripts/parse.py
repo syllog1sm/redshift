@@ -11,6 +11,11 @@ import redshift.parser
 from redshift.sentence import Input
 
 
+def parse(parser, sentences):
+    for sent in sentences:
+        parser.parse(sent)
+
+
 @plac.annotations(
     profile=("Do profiling", "flag", "p", bool),
     debug=("Set debug", "flag", "d", bool)
@@ -25,14 +30,13 @@ def main(parser_dir, text_loc, out_dir, profile=False, debug=False):
     sentences = [Input.from_pos(p.strip().split()) for i, p in
                  enumerate(open(text_loc).read().strip().split('\n'))]
     if profile:
-        cProfile.runctx("parser.add_parses(sentences)",
+        cProfile.runctx("parse(parser, sentences)",
                         globals(), locals(), "Profile.prof")
         s = pstats.Stats("Profile.prof")
         s.strip_dirs().sort_stats("time").print_stats()
     else:
         t1 = time.time()
-        for sent in sentences:
-            parser.parse(sent)
+        parse(parser, sentences)
         t2 = time.time()
         print '%d sents took %0.3f ms' % (len(sentences), (t2-t1)*1000.0)
 
