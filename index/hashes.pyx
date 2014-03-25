@@ -133,6 +133,10 @@ def decode_pos(size_t i):
     global _pos_idx
     return _pos_idx.get_str(i)
 
+def get_nr_pos():
+    global _pos_idx
+    cdef Index idx = _pos_idx
+    return idx.i + 1
 
 def encode_label(object label):
     global _label_idx
@@ -147,7 +151,6 @@ def encode_label(object label):
 def decode_label(size_t i):
     global _label_idx
     return _label_idx.get_str(i)
-
 
 def is_root_label(label):
     global _label_idx
