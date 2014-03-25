@@ -187,15 +187,14 @@ cdef class Parser:
     cdef int _predict(self, State* s, Transition* classes, Step* lattice) except -1:
         cdef bint cache_hit = False
         fill_slots(s)
-        # TODO: This is broken, because of labels.
-        #scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
-        #if not cache_hit:
-        fill_context(self._context, &s.slots, s.parse, lattice)
-        self.extractor.extract(self._features, self._context)
-        self.guide.fill_scores(self._features, self.guide.scores)
+        scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
+        if not cache_hit:
+            fill_context(self._context, &s.slots, s.parse, lattice)
+            self.extractor.extract(self._features, self._context)
+            self.guide.fill_scores(self._features, scores)
         fill_valid(s, classes, self.nr_moves)
         for i in range(self.nr_moves):
-            classes[i].score = self.guide.scores[i]
+            classes[i].score = scores[i]
 
     cdef int train_sent(self, Input py_sent) except -1:
         cdef size_t i
