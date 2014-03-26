@@ -2,6 +2,7 @@ from index.lexicon cimport Lexeme
 
 
 cdef struct Token:
+    size_t i
     Lexeme* word # Supports confusion network
     size_t tag
     size_t head

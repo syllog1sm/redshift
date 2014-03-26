@@ -289,76 +289,61 @@ cdef inline void zero_token(size_t* context, size_t i):
         context[i+j] = 0
 
 
-cdef int fill_context(size_t* context, SlotTokens* tokens, Token* parse,
+cdef int fill_context(size_t* context, SlotTokens* t, Token* parse,
                       Step* steps) except -1:
     cdef size_t c
     for c in range(CONTEXT_SIZE):
         context[c] = 0
     # This fills in the basic properties of each of our "slot" tokens, e.g.
     # word on top of the stack, word at the front of the buffer, etc.
-    fill_token(context, S2w, tokens.s2)
-    fill_token(context, S1w, tokens.s1)
-    fill_token(context, S0le_w, tokens.s0le)
-    fill_token(context, S0lw, tokens.s0l)
-    fill_token(context, S0l2w, tokens.s0l2)
-    fill_token(context, S0l0w, tokens.s0l0)
-    fill_token(context, S0w, tokens.s0)
-    fill_token(context, S0r0w, tokens.s0r0)
-    fill_token(context, S0r2w, tokens.s0r2)
-    fill_token(context, S0rw, tokens.s0r)
-    fill_token(context, S0re_w, tokens.s0re)
-    fill_token(context, N0le_w, tokens.n0le)
-    fill_token(context, N0lw, tokens.n0l)
-    fill_token(context, N0l2w, tokens.n0l2)
-    fill_token(context, N0l0w, tokens.n0l0)
-    fill_token(context, N0w, tokens.n0)
-    fill_token(context, N1w, tokens.n1)
-    fill_token(context, N2w, tokens.n2)
+    fill_token(context, S2w, t.s2)
+    fill_token(context, S1w, t.s1)
+    fill_token(context, S0le_w, t.s0le)
+    fill_token(context, S0lw, t.s0l)
+    fill_token(context, S0l2w, t.s0l2)
+    fill_token(context, S0l0w, t.s0l0)
+    fill_token(context, S0w, t.s0)
+    fill_token(context, S0r0w, t.s0r0)
+    fill_token(context, S0r2w, t.s0r2)
+    fill_token(context, S0rw, t.s0r)
+    fill_token(context, S0re_w, t.s0re)
+    fill_token(context, N0le_w, t.n0le)
+    fill_token(context, N0lw, t.n0l)
+    fill_token(context, N0l2w, t.n0l2)
+    fill_token(context, N0l0w, t.n0l0)
+    fill_token(context, N0w, t.n0)
+    fill_token(context, N1w, t.n1)
+    fill_token(context, N2w, t.n2)
 
-    if tokens.s0.label != 0:
-        fill_token(context, S0hw, tokens.s1)
+    if t.s0.label != 0:
+        fill_token(context, S0hw, t.s1)
     else:
         zero_token(context, S0hw)
-    if tokens.s0.label != 0 and tokens.s1.label != 0:
-        fill_token(context, S0h2w, tokens.s2)
+    if t.s0.label != 0 and t.s1.label != 0:
+        fill_token(context, S0h2w, t.s2)
     else:
         zero_token(context, S0h2w)
     # TODO: Distance
-    #if tokens.s0.word.orig != 0:
-    #    assert tokens.n0 > tokens.s0
-    #    context[dist] = tokens.n0 - tokens.s0
-    #else:
-    #    context[dist] = 0
-    """
+    if t.s0.i != 0:
+        assert t.n0.i > t.s0.i
+        context[dist] = t.n0.i - t.s0.i
+    else:
+        context[dist] = 0
     # Disfluency match features
-    if k.prev_edit and k.i != 0:
-        context[prev_edit] = 1
-        context[prev_edit_wmatch] = 1 if words[k.i - 1] == words[k.i] else 0
-        context[prev_edit_pmatch] = 1 if k.prev_tag == tags[k.i] else 0
-        context[prev_prev_edit] = 1 if k.prev_prev_edit else 0
-        context[prev_edit_word] = words[k.i - 1]
-        context[prev_edit_pos] = k.prev_tag
-    else:
-        context[prev_edit] = 0
-        context[prev_edit_wmatch] = 0
-        context[prev_edit_pmatch] = 0
-        context[prev_prev_edit] = 0
-        context[prev_edit_word] = 0
-        context[prev_edit_pos] = 0
-    if k.next_edit and k.s0 != 0:
-        context[next_edit] = 1
-        context[next_edit_wmatch] = 1 if words[k.s0 + 1] == words[k.s0] else 0
-        context[next_edit_pmatch] = 1 if tags[k.s0 + 1] == tags[k.s0] else 0
-        context[next_next_edit] = 1 if k.next_next_edit else 0
-        context[next_edit_word] = words[k.s0 + 1]
-        context[next_edit_pos] = k.next_tag
-    else:
-        context[next_edit] = 0
-        context[next_edit_wmatch] = 0
-        context[next_edit_pmatch] = 0
-        context[next_next_edit] = 0
-        context[next_edit_word] = 0
-        context[next_edit_pos] = 0
+    context[prev_edit] = t.p1.is_edit
+    context[prev_edit_wmatch] = t.p1.is_edit and t.p1.word == t.n0.word
+    context[prev_edit_pmatch] = t.p1.is_edit and t.p1.tag == t.n0.tag
+    context[prev_prev_edit] = t.p1.is_edit and t.p2.is_edit
+    context[prev_edit_word] = t.p1.word.norm if t.p1.is_edit else 0
+    context[prev_edit_pos] = t.p1.tag if t.p1.is_edit else 0
+    
+    
+    context[next_edit] = t.s0n.is_edit
+    context[next_edit_wmatch] = t.s0n.is_edit and t.s0n.word == t.s0.word
+    context[next_edit_pmatch] = t.s0n.is_edit and t.s0n.tag == t.s0.tag
+    context[next_next_edit] = t.s0n.is_edit and t.s0nn.is_edit
+    context[next_edit_word] = t.s0n.is_edit and t.s0n.word.norm
+    context[next_edit_pos] = t.s0n.is_edit and t.s0n.tag
 
     # These features find how much of S0's span matches N0's span, starting from
     # the left.
@@ -371,30 +356,31 @@ cdef int fill_context(size_t* context, SlotTokens* tokens, Token* parse,
     context[wsexact] = 1
     context[pscopy] = 0
     context[psexact] = 1
+    cdef size_t n0ledge = t.n0.left_edge
+    cdef size_t s0ledge = t.s0.left_edge
     for i in range(5):
-        if ((k.n0ledge + i) > k.i) or ((k.s0ledge + i) > k.s0):
+        if ((n0ledge + i) > t.n0.i) or ((s0ledge + i) > t.s0.i):
             break
         if context[wexact]:
-            if words[k.n0ledge + i] == words[k.s0ledge + i]:
+            if parse[n0ledge + i].word.orig == parse[s0ledge + i].word.orig:
                 context[wcopy] += 1
             else:
                 context[wexact] = 0
         if context[pexact]:
-            if tags[k.n0ledge + i] == tags[k.s0ledge + i]:
+            if parse[n0ledge + i].tag == parse[s0ledge + i].tag:
                 context[pcopy] += 1
             else:
                 context[pexact] = 0
         if context[wsexact]:
-            if words[k.s0 - i] == words[k.i - i]:
+            if parse[t.s0.i - i].word.orig == parse[t.n0.i - i].word.orig:
                 context[wscopy] += 1
             else:
                 context[wsexact] = 0
         if context[psexact]:
-            if tags[k.s0 - i] == tags[k.i - i]:
+            if parse[t.s0.i - i].tag == parse[t.n0.i - i].tag:
                 context[pscopy] += 1
             else:
                 context[psexact] = 0
-    """
 
 
 from_single = (

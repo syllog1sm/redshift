@@ -92,6 +92,11 @@ cdef int fill_slots(State *s) except -1:
     s.slots.n1 = s.parse[s.i + 1 if s.i < (s.n - 1) else 0]
     s.slots.n2 = s.parse[s.i + 2 if s.i < (s.n - 2) else 0]
 
+    s.slots.p1 = s.parse[s.i - 1 if s.i >= 1 else 0]
+    s.slots.p2 = s.parse[s.i - 2 if s.i >= 2 else 0]
+    s.slots.s0n = s.parse[s.top + 1 if s.top and s.top < (s.n - 1) else 0]
+    s.slots.s0nn = s.parse[s.top + 1 if s.top and s.top < (s.n - 2) else 0]
+
 
 cdef size_t get_l(State *s, size_t head):
     if s.parse[head].l_valency == 0:
@@ -214,6 +219,7 @@ cdef State* init_state(Sentence* sent):
     s.r_children = <size_t**>malloc(n * sizeof(size_t*))
     s.parse = <Token*>calloc(n, sizeof(Token))
     for i in range(n):
+        s.parse[i].i = i
         # TODO: Control whether these get filled
         s.parse[i].word = sent.tokens[i].word
         s.parse[i].tag = sent.tokens[i].tag
