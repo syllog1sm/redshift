@@ -27,7 +27,6 @@ def main(train_loc, model_loc, n_iter=15,
          train_tagger=False):
     if debug:
         redshift.parser.set_debug(True)
-    #if beam_width >= 2:
     train_str = open(train_loc).read()
     if n_sents != 0:
         print "Using %d sents for training" % n_sents
