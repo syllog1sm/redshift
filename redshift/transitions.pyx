@@ -1,6 +1,7 @@
 # cython: profile=True
 from _state cimport *
 from libc.stdlib cimport malloc, calloc, free
+import index.hashes
 
 # TODO: Link these with other compile constants
 DEF MAX_TAGS = 100
@@ -187,6 +188,7 @@ cdef int transition(Transition* t, State *s) except -1:
     assert not s.is_finished
     s.history[s.m] = t[0]
     s.m += 1 
+    cdef size_t erase_label
     if t.move == SHIFT:
         push_stack(s)
     elif t.move == REDUCE:
@@ -222,13 +224,14 @@ cdef int transition(Transition* t, State *s) except -1:
             s.stack[s.stack_len] = child
             s.stack_len += 1
         end = edited
+        erase_label = index.hashes.encode_label('erased')
         while s.parse[end].r_valency:
             end = get_r(s, end)
         
         for i in range(edited, end + 1):
             s.parse[i].head = i
             # TODO
-            #s.parse[i].label = self.erase_label
+            s.parse[i].label = erase_label
             s.parse[i].is_edit = True
     else:
         print t.clas
