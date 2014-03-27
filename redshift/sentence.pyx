@@ -19,6 +19,8 @@ cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
     cdef Token t
     for i in range(s.n):
         init_lattice_step(words_lattice[i], &s.lattice[i])
+    cdef bint is_edit
+    cdef bint is_break
     for i, (word_idx, tag, head, label, is_edit, is_break) in enumerate(parse):
         s.tokens[i].word = s.lattice[i].nodes[word_idx]
         if tag is not None:
@@ -101,8 +103,8 @@ cdef class Input:
             word = fields[1]
             pos = fields[3]
             feats = fields[5].split('|')
-            is_edit = len(fields) >= 3 and fields[2] == '1'
-            is_break = len(fields) >= 4 and fields[3] == '1'
+            is_edit = len(feats) >= 3 and feats[2] == '1'
+            is_break = len(feats) >= 4 and feats[3] == '1'
             head = int(fields[6])
             label = fields[7]
             tokens.append((word, pos, head, label, is_edit, is_break))
@@ -165,7 +167,7 @@ cdef bytes conll_line_from_token(size_t i, Token* a, Step* lattice):
     cdef bytes word = index.lexicon.get_str(<size_t>a.word)
     if not word:
         word = b'-OOV-'
-    feats = '-|-|-|-'
+    feats = '-|-|%d|-' % a.is_edit
     cdef bytes tag = index.hashes.decode_pos(a.tag)
     return '\t'.join((str(i), word, '_', tag, tag, feats, 
                      str(a.head), decode_label(a.label), '_', '_'))
