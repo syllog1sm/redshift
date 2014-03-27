@@ -10,7 +10,7 @@ cdef struct Token:
     size_t left_edge
     size_t l_valency
     size_t r_valency
-    bint is_break
+    size_t sent_id
     bint is_edit
 
 

@@ -20,8 +20,7 @@ cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
     for i in range(s.n):
         init_lattice_step(words_lattice[i], &s.lattice[i])
     cdef bint is_edit
-    cdef bint is_break
-    for i, (word_idx, tag, head, label, is_edit, is_break) in enumerate(parse):
+    for i, (word_idx, tag, head, label, sent_id, is_edit) in enumerate(parse):
         s.tokens[i].word = s.lattice[i].nodes[word_idx]
         if tag is not None:
             s.tokens[i].tag = index.hashes.encode_pos(tag) 
@@ -31,8 +30,8 @@ cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
             s.tokens[i].label = index.hashes.encode_label(label)
         if is_edit is not None:
             s.tokens[i].is_edit = is_edit
-        if is_break is not None:
-            s.tokens[i].is_break = is_break
+        if sent_id is not None:
+            s.tokens[i].sent_id = sent_id
     # Set position 0 to be blank
     s.lattice[0].nodes[0] = &BLANK_WORD
     assert s.tokens[0].tag == 0
@@ -76,14 +75,14 @@ cdef class Input:
     def from_tokens(cls, tokens):
         """
         Create sentence from a flat list of unambiguous tokens, instead of a lattice.
-        Tokens should be a list of (word, tag, head, label, is_edit, is_break)
+        Tokens should be a list of (word, tag, head, label, sent_id, is_edit)
         tuples
         """
         lattice = []
         parse = []
-        for word, tag, head, label, is_edit, is_break in tokens:
+        for word, tag, head, label, sent_id, is_edit in tokens:
             lattice.append([(1.0, word)])
-            parse.append((0, tag, head, label, is_edit, is_break))
+            parse.append((0, tag, head, label, sent_id, is_edit))
         return cls(lattice, parse)
 
     @classmethod
@@ -104,10 +103,10 @@ cdef class Input:
             pos = fields[3]
             feats = fields[5].split('|')
             is_edit = len(feats) >= 3 and feats[2] == '1'
-            is_break = len(feats) >= 4 and feats[3] == '1'
+            sent_id = int(feats[0].split('.')[1]) if '.' in fields[0] else 0
             head = int(fields[6])
             label = fields[7]
-            tokens.append((word, pos, head, label, is_edit, is_break))
+            tokens.append((word, pos, head, label, sent_id, is_edit))
         return cls.from_tokens(tokens)
 
     def __init__(self, list lattice, list parse):
@@ -151,10 +150,6 @@ cdef class Input:
         def __get__(self):
             return [self.c_sent.tokens[i].is_edit for i in range(self.c_sent.n)]
 
-    property breaks:
-        def __get__(self):
-            return [self.c_sent.tokens[i].is_break for i in range(self.c_sent.n)]
-
     def to_conll(self):
         lines = []
         for i in range(1, self.length - 1):
@@ -167,7 +162,7 @@ cdef bytes conll_line_from_token(size_t i, Token* a, Step* lattice):
     cdef bytes word = index.lexicon.get_str(<size_t>a.word)
     if not word:
         word = b'-OOV-'
-    feats = '-|-|%d|-' % a.is_edit
+    feats = '%d|-|%d|-' % (a.sent_id, a.is_edit)
     cdef bytes tag = index.hashes.decode_pos(a.tag)
     return '\t'.join((str(i), word, '_', tag, tag, feats, 
                      str(a.head), decode_label(a.label), '_', '_'))

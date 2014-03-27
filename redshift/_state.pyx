@@ -2,7 +2,7 @@
 from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
 
-DEF MAX_VALENCY = 100
+DEF MAX_VALENCY = 200
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
     s.parse[child].head = head
@@ -52,8 +52,6 @@ cdef size_t pop_stack(State *s) except 0:
     assert s.top <= s.n, s.top
     assert popped != 0
     cdef size_t child
-    if s.stack_len == 0:
-        s.segment = False
     return popped
 
 
@@ -210,7 +208,6 @@ cdef State* init_state(Sentence* sent):
     s.top = 0
     s.second = 0
     s.stack_len = 0
-    s.segment = False
     s.is_finished = False
     s.at_end_of_buffer = sent.n == 2
     n = sent.n + PADDING
@@ -243,7 +240,6 @@ cdef int copy_state(State* s, State* old) except -1:
     s.stack_len = old.stack_len
     s.top = old.top
     s.second = old.second
-    s.segment = old.segment
     s.is_finished = old.is_finished
     s.at_end_of_buffer = old.at_end_of_buffer
     s.cost = old.cost

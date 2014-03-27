@@ -48,7 +48,7 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
         shutil.rmtree(model_dir)
     os.mkdir(model_dir)
     cdef list sents = [Input.from_conll(s) for s in
-                       train_str.strip().split('\n\n')]
+                       train_str.strip().split('\n\n') if s.strip()]
     left_labels, right_labels = get_labels(sents)
     Config.write(model_dir, beam_width=beam_width, features=feat_set,
                  feat_thresh=feat_thresh, left_labels=left_labels,
@@ -197,8 +197,8 @@ cdef class Parser:
     cdef int train_sent(self, Input py_sent) except -1:
         cdef size_t i
         cdef size_t nr_move = sent.n * 3
-        cdef Transition[500] g_hist
-        cdef Transition[500] p_hist
+        cdef Transition[1000] g_hist
+        cdef Transition[1000] p_hist
         cdef Sentence* sent = py_sent.c_sent
         
         cdef size_t* gold_tags = <size_t*>calloc(sent.n, sizeof(size_t))

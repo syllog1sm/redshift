@@ -45,7 +45,6 @@ cdef struct State:
     size_t stack_len
     size_t top
     size_t second
-    bint segment
     bint is_finished
     bint at_end_of_buffer
     int cost
