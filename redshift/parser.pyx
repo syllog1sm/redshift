@@ -182,6 +182,8 @@ cdef class Parser:
 
     cdef int _predict(self, State* s, Transition* classes, Step* lattice) except -1:
         cdef bint cache_hit = False
+        if s.is_finished:
+            return 0
         fill_slots(s)
         scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
         if not cache_hit:
