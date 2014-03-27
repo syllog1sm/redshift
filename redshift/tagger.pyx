@@ -367,10 +367,21 @@ clusters = (
 
 cdef inline void fill_token(size_t* context, size_t i, Lexeme* word):
     context[i] = word.norm
-    # TODO: Implement 4 and 6 bit cluster prefixes
+    # We've read in the string little-endian, so now we can take & (2**n)-1
+    # to get the first n bits of the cluster.
+    # e.g. s = "1110010101"
+    # s = ''.join(reversed(s))
+    # first_4_bits = int(s, 2)
+    # print first_4_bits
+    # 5
+    # print "{0:b}".format(prefix).ljust(4, '0')
+    # 1110
+    # What we're doing here is picking a number where all bits are 1, e.g.
+    # 15 is 1111, 63 is 111111 and doing bitwise AND, so getting all bits in
+    # the source that are set to 1.
     context[i+1] = word.cluster
-    context[i+2] = word.cluster
-    context[i+3] = word.cluster
+    context[i+2] = word.cluster & 63
+    context[i+3] = word.cluster & 15
     context[i+4] = word.prefix
     context[i+5] = word.suffix
     context[i+6] = word.oft_title

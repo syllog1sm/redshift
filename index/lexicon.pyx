@@ -42,7 +42,9 @@ cdef class Lexicon:
             if not line.strip():
                 continue
             pieces = line.split()
-            cluster = int(pieces[0])
+            # Decode as a little-endian string, so that we can do & 15 to get
+            # the first 4 bits. See _parse_features.pyx
+            cluster = int(''.join(reversed(pieces[0])), 2)
             #upper_pc = float(pieces[1])
             #title_pc = float(pieces[2])
             word = pieces[1]
