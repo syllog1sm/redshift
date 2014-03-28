@@ -48,8 +48,10 @@ cdef inline bint can_break(State* s):
         return False
     elif not s.m:
         return False
-    elif s.history[s.m-1].move != SHIFT and s.history[s.m-1].move != RIGHT:
+    elif s.parse[s.i].l_valency != 0 or s.parse[s.top].r_valency != 0:
         return False
+    #elif s.history[s.m-1].move != SHIFT and s.history[s.m-1].move != RIGHT:
+    #    return False
     elif nr_headless(s) != 1:
         return False
     else:
