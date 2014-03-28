@@ -217,6 +217,8 @@ cdef class Parser:
         cdef State* g
         cdef Transition* moves
         self.guide.cache.flush()
+        words = py_sent.words
+        #print words
         while not p_beam.is_finished and not g_beam.is_finished:
             for i in range(p_beam.bsize):
                 self._predict(p_beam.beam[i], p_beam.moves[i], sent.lattice)
@@ -230,6 +232,9 @@ cdef class Parser:
                 moves = g_beam.moves[i]
                 self._predict(g, moves, sent.lattice)
                 # Constrain this beam to only gold candidates
+                #print words[g.top], words[gold_parse[g.top].head]
+                #print words[g.i], words[gold_parse[g.i].head]
+                #print sent.tokens[g.top].sent_id, sent.tokens[g.i].sent_id
                 fill_costs(g, moves, self.nr_moves, gold_parse)
                 g_beam.enqueue(i, True)
             g_beam.extend()
