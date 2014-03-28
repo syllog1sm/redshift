@@ -57,14 +57,14 @@ cdef inline bint can_break(State* s):
 
 
 cdef int shift_cost(State *s, Token* gold):
+    global USE_BREAK
     cdef int cost = 0
     if s.stack_len < 1:
         return 0
-    # Be flexible about sentence boundaries around disfluencies
-    if gold[s.i].is_edit:
-        return cost
     if can_break(s):
         cost += gold[s.top].sent_id != gold[s.i].sent_id
+    if gold[s.i].is_edit:
+        return cost
     cost += has_child_in_stack(s, s.i, gold)
     cost += has_head_in_stack(s, s.i, gold)
     return cost
@@ -74,13 +74,13 @@ cdef int right_cost(State *s, Token* gold):
     cdef int cost = 0
     if gold[s.top].is_edit and not gold[s.i].is_edit:
         return 1
-    if gold[s.i].is_edit:
-        return cost
     if can_break(s):
         cost += gold[s.top].sent_id != gold[s.i].sent_id
+    if gold[s.i].is_edit:
+        return cost
     if gold[s.i].head == s.top:
         return cost
-    if gold[s.top].head == gold[s.i].head == s.n:
+    if not USE_BREAK and gold[s.top].head == gold[s.i].head == (s.n - 1):
         return cost
     cost += has_head_in_buffer(s, s.i, gold)
     cost += has_child_in_stack(s, s.i, gold)
@@ -89,6 +89,7 @@ cdef int right_cost(State *s, Token* gold):
 
 
 cdef int reduce_cost(State *s, Token* gold):
+    global USE_BREAK
     cdef int cost = 0
     if can_break(s):
         cost += gold[s.top].sent_id != gold[s.i].sent_id
@@ -109,7 +110,7 @@ cdef int left_cost(State *s, Token* gold) except -9000:
         return cost
     if gold[s.top].head == s.i:
         return cost
-    if gold[s.top].head == gold[s.i].head == s.n:
+    if not USE_BREAK and gold[s.top].head == gold[s.i].head == (s.n - 1):
         return cost
     cost += has_head_in_buffer(s, s.top, gold)
     cost += has_child_in_buffer(s, s.top, gold)
@@ -164,6 +165,7 @@ cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except
     costs[RIGHT] = right_cost(s, gold) if can_right(s) else -1
     costs[EDIT] = edit_cost(s, gold) if can_edit(s) else -1
     costs[BREAK] = break_cost(s, gold) if can_break(s) else -1
+    #print costs[SHIFT], costs[REDUCE], costs[LEFT], costs[RIGHT], costs[EDIT], costs[BREAK]
     for i in range(n):
         classes[i].cost = costs[classes[i].move]
         if classes[i].move == LEFT and classes[i].cost == 0:
@@ -189,7 +191,6 @@ cdef int transition(Transition* t, State *s) except -1:
     elif t.move == RIGHT:
         add_dep(s, s.top, s.i, t.label)
         push_stack(s)
-    # Left-structured boundaries atm.
     elif t.move == BREAK:
         assert s.stack_len != 0
         assert s.top != 0
