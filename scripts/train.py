@@ -1,77 +1,45 @@
 #!/usr/bin/env python
 
-import random
-import os
-import sys
 import plac
-import time
-try:
-    import pstats
-    import cProfile
-except ImportError:
-    pass
-from itertools import combinations
 
 import redshift.parser
-from redshift.parser import BeamParser
-from redshift import Sentence
-
-
-USE_HELD_OUT = False
 
 
 @plac.annotations(
     train_loc=("Training location", "positional"),
-    train_alg=("Learning algorithm [static, dyn]", "option", "a", str),
     n_iter=("Number of Perceptron iterations", "option", "i", int),
-    vocab_thresh=("Vocab pruning threshold", "option", "t", int),
     feat_thresh=("Feature pruning threshold", "option", "f", int),
-    allow_reattach=("Allow left-clobber", "flag", "r", bool),
-    allow_reduce=("Allow reduce when no head is set", "flag", "d", bool),
-    use_edit=("Use edit transition", "flag", "e", bool),
-    use_sbd=("Use Boundary transition", "flag", "b", bool),
-    profile=("Run profiler (slow)", "flag", None, bool),
     debug=("Set debug flag to True.", "flag", None, bool),
-    seed=("Set random seed", "option", "s", int),
     beam_width=("Beam width", "option", "k", int),
     feat_set=("Name of feat set [zhang, iso, full]", "option", "x", str),
     n_sents=("Number of sentences to train from", "option", "n", int),
-    auto_pos=("Train tagger alongside parser", "flag", "p", bool)
+    train_tagger=("Train tagger alongside parser", "flag", "p", bool),
+    use_edit=("Use the Edit transition", "flag", "e", bool),
+    use_break=("Use the Break transition", "flag", "b", bool),
+    seed=("Random seed", "option", "s", int)
 )
-def main(train_loc, model_loc, train_alg="static", n_iter=15,
-         feat_set="zhang", vocab_thresh=0, feat_thresh=10,
-         allow_reattach=False, allow_reduce=False,
-         use_edit=False, use_sbd=False,
+def main(train_loc, model_loc, n_iter=15,
+         feat_set="zhang", feat_thresh=10,
          n_sents=0,
-         profile=False, debug=False, seed=0, beam_width=1,
-         auto_pos=False):
-    random.seed(seed)
+         use_edit=False,
+         use_break=False,
+         debug=False, seed=0, beam_width=4,
+         train_tagger=False):
     if debug:
         redshift.parser.set_debug(True)
-    if beam_width >= 2:
-        parser = BeamParser(model_loc, clean=True, 
-                            train_alg=train_alg, feat_set=feat_set,
-                            feat_thresh=feat_thresh,
-                            allow_reduce=allow_reduce, allow_reattach=allow_reattach,
-                            use_edit=use_edit, use_sbd=use_sbd,
-                            beam_width=beam_width, auto_pos=auto_pos)
-    train_sent_strs = open(train_loc).read().strip().split('\n\n')
+    train_str = open(train_loc).read()
     if n_sents != 0:
         print "Using %d sents for training" % n_sents
-        random.shuffle(train_sent_strs)
-        train_sent_strs = train_sent_strs[:n_sents]
-    train_str = '\n\n'.join(s for s in train_sent_strs if s.strip())
-    train = [Sentence.from_conll(i, s) for i, s in
-             enumerate(train_str.strip().split('\n\n'))]
-    if profile:
-        print 'profiling'
-        cProfile.runctx("parser.train(train, n_iter=n_iter)", globals(),
-                        locals(), "Profile.prof")
-        s = pstats.Stats("Profile.prof")
-        s.strip_dirs().sort_stats("time").print_stats()
-    else:
-        parser.train(train, n_iter=n_iter)
-    parser.save()
+        train_str = '\n\n'.join(train_str.split('\n\n')[:n_sents])
+    redshift.parser.train(train_str, model_loc,
+        n_iter=n_iter,
+        train_tagger=train_tagger,
+        beam_width=beam_width,
+        feat_set=feat_set,
+        feat_thresh=feat_thresh,
+        use_edit=use_edit,
+        use_break=use_break
+    )
 
 
 if __name__ == "__main__":

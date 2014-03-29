@@ -1,5 +1,6 @@
-from _state cimport Kernel, Subtree
-from sentence cimport Sentence
+from index.lexicon cimport Lexeme
+from redshift.sentence cimport Token, Step
+from redshift._state cimport SlotTokens
 
-
-cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel* k)
+cdef int fill_context(size_t* context, SlotTokens* tokens, Token* parse,
+                      Step* lattice) except -1

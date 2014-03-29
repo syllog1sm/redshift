@@ -1,13 +1,14 @@
 from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
-from redshift.sentence cimport PySentence, Sentence
+from redshift.sentence cimport Input, Sentence, Token
 from ext.sparsehash cimport dense_hash_map
 
 from libc.stdint cimport uint64_t, int64_t
 
 
-cdef class BaseTagger:
-    cdef Extractor features
+cdef class Tagger:
+    cdef object cfg
+    cdef Extractor extractor
     cdef Perceptron guide
     cdef object model_dir
     cdef size_t beam_width
@@ -20,14 +21,9 @@ cdef class BaseTagger:
     cdef size_t* _context
     cdef uint64_t* _features
     cdef double** beam_scores
-    cdef int tag(self, Sentence* s) except -1
-    cdef int train_sent(self, Sentence* sent) except -1
+    cpdef int tag(self, Input py_sent) except -1
+    cdef int train_sent(self, Input py_sent) except -1
 
-cdef class GreedyTagger(BaseTagger):
-    pass
-
-
-cdef class BeamTagger(BaseTagger):
     cdef TagState* extend_gold(self, TagState* s, Sentence* sent, size_t i) except NULL
     cdef int fill_beam_scores(self, TaggerBeam beam, Sentence* sent,
                               size_t word_i) except -1
@@ -48,7 +44,7 @@ cdef class TaggerBeam:
 
 cdef TagState* extend_state(TagState* s, size_t clas, double* scores, size_t n)
 
-cdef int fill_hist(size_t* hist, TagState* s, int t) except -1
+cdef int fill_hist(Token* hist, TagState* s, int t) except -1
 
 cdef size_t get_p(TagState* s)
 

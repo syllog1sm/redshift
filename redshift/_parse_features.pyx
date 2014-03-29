@@ -1,168 +1,225 @@
-from redshift._state cimport Kernel, Subtree
+# cython: profile=True
+"""
+Fill an array, context, with every _atomic_ value our features reference.
+We then write the _actual features_ as tuples of the atoms. The machinery
+that translates from the tuples to feature-extractors (which pick the values
+out of "context") is in features/extractor.pyx
+
+The atomic feature names are listed in a big enum, so that the feature tuples
+can refer to them.
+"""
+
+from redshift._state cimport SlotTokens
+from redshift.sentence cimport Token
+from index.lexicon cimport Lexeme
 from itertools import combinations
 # Context elements
 # Ensure _context_size is always last; it ensures our compile-time setting
 # is in synch with the enum
-# Ensure each token's attributes are listed: w, p, c, cp
+# Ensure each token's attributes are listed: w, p, c, c6, c4. The order
+# is referenced by incrementing the enum...
+# Tokens are listed in left-to-right order.
+#cdef size_t* SLOTS = [
+#    S2w, S1w,
+#    S0l0w, S0l2w, S0lw,
+#    S0w,
+#    S0r0w, S0r2w, S0rw,
+#    N0l0w, N0l2w, N0lw,
+#    N0w, N1w, N2w, N3w, 0
+#]
+# NB: The order of the enum is _not arbitrary!!_
 cdef enum:
-    N0w
-    N0p
-    N0c
-    N0c6
-    N0c4
-
-    N0lw
-    N0lp
-    N0lc
-    N0lc6
-    N0lc4
-    
-    N0ll
-    N0lv
-    
-    N0l2w
-    N0l2p
-    N0l2c
-    N0l2c6
-    N0l2c4
-
-    N0l2l
-    
-    N0l0w
-    N0l0p
-    N0l0c
-    N0l0c6
-    N0l0c4
-   
-    N0l0l
-    
-    N1w
-    N1p
-    N1c
-    N1c6
-    N1c4
-    
-    N2w
-    N2p
-    N2c
-    N2c6
-    N2c4
-    
-    N3w
-    N3p
-    N3c
-    N3c6
-    N3c4
-    
-    S0w
-    S0p
-    S0c
-    S0c6
-    S0c4
-    
-    S0l
-    
-    S0hw
-    S0hp
-    S0hc
-    S0hc6
-    S0hc4
-    
-    S0hl
-
-    S0lw
-    S0lp
-    S0lc
-    S0lc6
-    S0lc4
-    
-    S0ll
-    
-    S0rw
-    S0rp
-    S0rc
-    S0rc6
-    S0rc4
-    
-    S0rl
-    
-    S0l2w
-    S0l2p
-    S0l2c
-    S0l2c6
-    S0l2c4
-    
-    S0l2l
-
-    S0r2w
-    S0r2p
-    S0r2c
-    S0r2c6
-    S0r2c4
-    
-    S0r2l
-
-    S0l0w
-    S0l0p
-    S0l0c
-    S0l0c6
-    S0l0c4
-
-    S0l0l
-
-    S0r0w
-    S0r0p
-    S0r0c
-    S0r0c6
-    S0r0c4
-
-    S0r0l
-
-    S0h2w
-    S0h2p
-    S0h2c
-    S0h2c6
-    S0h2c4
-    
-    S0h2l
+    S2w
+    S2p
+    S2c
+    S2c6
+    S2c4
+    S2L
+    S2lv
+    S2rv
 
     S1w
     S1p
     S1c
     S1c6
     S1c4
+    S1L
+    S1lv
+    S1rv
 
-    S2w
-    S2p
-    S2c
-    S2c6
-    S2c4
-    
+    S0lw
+    S0lp
+    S0lc
+    S0lc6
+    S0lc4
+    S0lL
+    S0llv
+    S0lrv
+
+    S0l2w
+    S0l2p
+    S0l2c
+    S0l2c6
+    S0l2c4
+    S0l2L
+    S0l2lv
+    S0l2rv
+
+    S0l0w
+    S0l0p
+    S0l0c
+    S0l0c6
+    S0l0c4
+    S0l0L
+    S0l0lv
+    S0l0rv
+
+    S0w
+    S0p
+    S0c
+    S0c6
+    S0c4
+    S0L
     S0lv
     S0rv
-    dist
-    S0llabs
-    S0rlabs
-    N0llabs
 
+    S0r0w
+    S0r0p
+    S0r0c
+    S0r0c6
+    S0r0c4
+    S0r0L
+    S0r0lv
+    S0r0rv
+
+    S0r2w
+    S0r2p
+    S0r2c
+    S0r2c6
+    S0r2c4
+    S0r2L
+    S0r2lv
+    S0r2rv
+
+    S0rw
+    S0rp
+    S0rc
+    S0rc6
+    S0rc4
+    S0rL
+    S0rlv
+    S0rrv
+
+    N0l0w
+    N0l0p
+    N0l0c
+    N0l0c6
+    N0l0c4
+    N0l0L
+    N0l0lv
+    N0l0rv
+
+    N0l2w
+    N0l2p
+    N0l2c
+    N0l2c6
+    N0l2c4
+    N0l2L
+    N0l2lv
+    N0l2rv
+
+    N0lw
+    N0lp
+    N0lc
+    N0lc6
+    N0lc4
+    N0lL
+    N0llv
+    N0lrv
+
+    N0w
+    N0p
+    N0c
+    N0c6
+    N0c4
+    N0L
+    N0lv
+    N0rv
+ 
+    N1w
+    N1p
+    N1c
+    N1c6
+    N1c4
+    N1L
+    N1lv
+    N1rv
+    
+    N2w
+    N2p
+    N2c
+    N2c6
+    N2c4
+    N2L
+    N2lv
+    N2rv
+    
+    N3w
+    N3p
+    N3c
+    N3c6
+    N3c4
+    N3L
+    N3lv
+    N3rv
+
+    S0hw
+    S0hp
+    S0hc
+    S0hc6
+    S0hc4
+    S0hL
+    S0hlv
+    S0hrv
+ 
+    S0h2w
+    S0h2p
+    S0h2c
+    S0h2c6
+    S0h2c4
+    S0h2L
+    S0h2lv
+    S0h2rv
+    
     S0le_w
     S0le_p
     S0le_c
     S0le_c6
     S0le_c4
+    S0le_L
+    S0le_lv
+    S0le_rv
     
     S0re_w
     S0re_p
     S0re_c
     S0re_c6
     S0re_c4
+    S0re_L
+    S0re_lv
+    S0re_rv
     
     N0le_w
     N0le_p
     N0le_c
     N0le_c6
     N0le_c4
+    N0le_L
+    N0le_lv
+    N0le_rv
 
+    dist
+    
     prev_edit
     prev_edit_wmatch
     prev_edit_pmatch
@@ -192,225 +249,113 @@ cdef enum:
     CONTEXT_SIZE
 
 
-def context_size():
-    return CONTEXT_SIZE
+# Listed in left-to-right order
+cdef size_t[16] SLOTS
+SLOTS[0] = S2w; SLOTS[1] = S1w
+SLOTS[2] = S0le_w; SLOTS[3] = S0lw; SLOTS[4] = S0l2w; SLOTS[5] = S0l0w
+SLOTS[6] = S0w
+SLOTS[7] = S0r0w; SLOTS[8] = S0r2w; SLOTS[9] = S0rw; SLOTS[10] = S0re_w
+SLOTS[11] = N0le_w; SLOTS[12] = N0l0w; SLOTS[13] = N0l2w; SLOTS[14] = N0lw
+SLOTS[15] = N0w
+
+
+cdef size_t NR_SLOT = sizeof(SLOTS) / sizeof(SLOTS[0])
 
 
 def get_kernel_tokens():
-    return [S0hw, S0h2w, S0w, S0lw, S0l2w, S0l0w, S0le_w, S0rw, S0r2w, S0r0w,
-            S0re_w, N0w, N0lw, N0l2w, N0l0w, N0le_w, N1w, N2w]
+    kernel = []
+    for i in range(NR_SLOT):
+        kernel.append(SLOTS[i])
+    return kernel
+
+def context_size():
+    return CONTEXT_SIZE
+
+cdef inline void fill_token(size_t* context, size_t i, Token token):
+    cdef Lexeme* word = token.word
+    context[i] = word.norm
+    context[i+1] = token.tag
+    # We've read in the string little-endian, so now we can take & (2**n)-1
+    # to get the first n bits of the cluster.
+    # e.g. s = "1110010101"
+    # s = ''.join(reversed(s))
+    # first_4_bits = int(s, 2)
+    # print first_4_bits
+    # 5
+    # print "{0:b}".format(prefix).ljust(4, '0')
+    # 1110
+    # What we're doing here is picking a number where all bits are 1, e.g.
+    # 15 is 1111, 63 is 111111 and doing bitwise AND, so getting all bits in
+    # the source that are set to 1.
+    context[i+2] = word.cluster
+    context[i+3] = word.cluster & 63
+    context[i+4] = word.cluster & 15
+    context[i+5] = token.label
+    context[i+6] = token.l_valency
+    context[i+7] = token.r_valency
+
+cdef inline void zero_token(size_t* context, size_t i):
+    cdef size_t j
+    for j in range(9):
+        context[i+j] = 0
 
 
-cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel* k):
-    cdef size_t* words = sent.words
-    cdef size_t* tags = sent.pos
-    cdef size_t* clusters = sent.clusters
-    cdef size_t* cprefix6s = sent.cprefix6s
-    cdef size_t* cprefix4s = sent.cprefix4s
-    context[N0w] = words[k.i]
-    context[N0p] = k.n0p
-    context[N0c] = clusters[k.i]
-    context[N0c6] = cprefix6s[k.i]
-    context[N0c4] = cprefix4s[k.i]
+cdef int fill_context(size_t* context, SlotTokens* t, Token* parse,
+                      Step* steps) except -1:
+    cdef size_t c
+    for c in range(CONTEXT_SIZE):
+        context[c] = 0
+    # This fills in the basic properties of each of our "slot" tokens, e.g.
+    # word on top of the stack, word at the front of the buffer, etc.
+    fill_token(context, S2w, t.s2)
+    fill_token(context, S1w, t.s1)
+    fill_token(context, S0le_w, t.s0le)
+    fill_token(context, S0lw, t.s0l)
+    fill_token(context, S0l2w, t.s0l2)
+    fill_token(context, S0l0w, t.s0l0)
+    fill_token(context, S0w, t.s0)
+    fill_token(context, S0r0w, t.s0r0)
+    fill_token(context, S0r2w, t.s0r2)
+    fill_token(context, S0rw, t.s0r)
+    fill_token(context, S0re_w, t.s0re)
+    fill_token(context, N0le_w, t.n0le)
+    fill_token(context, N0lw, t.n0l)
+    fill_token(context, N0l2w, t.n0l2)
+    fill_token(context, N0l0w, t.n0l0)
+    fill_token(context, N0w, t.n0)
+    fill_token(context, N1w, t.n1)
+    fill_token(context, N2w, t.n2)
 
-    context[N1w] = words[k.i + 1]
-    context[N1p] = k.n1p
-    context[N1c] = clusters[k.i + 1]
-    context[N1c6] = cprefix6s[k.i + 1]
-    context[N1c4] = cprefix4s[k.i + 1]
-
-    context[N2w] = words[k.i + 2]
-    context[N2p] = tags[k.i + 2]
-    context[N2c] = clusters[k.i + 2]
-    context[N2c6] = cprefix6s[k.i + 2]
-    context[N2c4] = cprefix4s[k.i + 2]
-
-    context[N3w] = words[k.i + 3]
-    context[N3p] = k.n3p
-    context[N3c] = clusters[k.i + 3]
-    context[N3c6] = cprefix6s[k.i + 3]
-    context[N3c4] = cprefix4s[k.i + 3]
-
-    context[S0w] = words[k.s0]
-    context[S0p] = k.s0p
-    context[S0c] = clusters[k.s0]
-    context[S0c6] = cprefix6s[k.s0]
-    context[S0c4] = cprefix4s[k.s0]
-    context[S0l] = k.Ls0
-    # If there's a label set for s0, then S1 is the head of S0
-    if k.Ls0:
-        context[S0hw] = words[k.s1]
-        context[S0hp] = k.s1p
-        context[S0hc] = clusters[k.s1]
-        context[S0hc6] = cprefix6s[k.s1]
-        context[S0hc4] = cprefix4s[k.s1]
-        context[S0hl] = k.Ls1
+    if t.s0.label != 0:
+        fill_token(context, S0hw, t.s1)
     else:
-        context[S0hw] = 0
-        context[S0hp] = 0
-        context[S0hc] = 0
-        context[S0hc6] = 0
-        context[S0hc4] = 0
-        context[S0hl] = 0
-    # Likewise, if both S0 and S1 have labels, then S2 must be S0's grandparent
-    if k.Ls0 and k.Ls1:
-        context[S0h2w] = words[k.s2]
-        context[S0h2p] = k.s2p
-        context[S0h2c] = clusters[k.s2]
-        context[S0h2c6] = cprefix6s[k.s2]
-        context[S0h2c4] = cprefix4s[k.s2]
-        context[S0h2l] = k.Ls2
+        zero_token(context, S0hw)
+    if t.s0.label != 0 and t.s1.label != 0:
+        fill_token(context, S0h2w, t.s2)
     else:
-        context[S0h2w] = 0
-        context[S0h2p] = 0
-        context[S0h2c] = 0
-        context[S0h2c6] = 0
-        context[S0h2c4] = 0
-    context[S1w] = words[k.s1]
-    context[S1p] = k.s1p
-    context[S1c] = clusters[k.s1]
-    context[S1c6] = cprefix6s[k.s1]
-    context[S1c4] = cprefix4s[k.s1]
-    context[S2w] = words[k.s2]
-    context[S2p] = k.s2p
-    context[S2c] = clusters[k.s2]
-    context[S2c6] = cprefix6s[k.s2]
-    context[S2c4] = cprefix4s[k.s2]
-    context[S0lv] = k.s0l.val + 1
-    context[S0rv] = k.s0r.val + 1
-    context[N0lv] = k.n0l.val + 1
-    context[S0lw] = words[k.s0l.idx[0]]
-    context[S0lp] = k.s0l.tags[0]
-    context[S0lc] = clusters[k.s0l.idx[0]]
-    context[S0lc6] = cprefix6s[k.s0l.idx[0]]
-    context[S0lc4] = cprefix4s[k.s0l.idx[0]]
-
-    context[S0rw] = words[k.s0r.idx[0]]
-    context[S0rp] = k.s0r.tags[0]
-    context[S0rc] = clusters[k.s0r.idx[0]]
-    context[S0rc6] = cprefix6s[k.s0r.idx[0]]
-    context[S0rc4] = cprefix4s[k.s0r.idx[0]]
-
-    context[S0l2w] = words[k.s0l.idx[1]]
-    context[S0l2p] = k.s0l.tags[1]
-    context[S0l2c] = clusters[k.s0l.idx[1]]
-    context[S0l2c6] = cprefix6s[k.s0l.idx[1]]
-    context[S0l2c4] = cprefix4s[k.s0l.idx[1]]
-
-    context[S0r2w] = words[k.s0r.idx[1]]
-    context[S0r2p] = k.s0r.tags[1]
-    context[S0r2c] = clusters[k.s0r.idx[1]]
-    context[S0r2c6] = cprefix6s[k.s0r.idx[1]]
-    context[S0r2c4] = cprefix4s[k.s0r.idx[1]]
-
-    context[S0l0w] = words[k.s0l.idx[2]]
-    context[S0l0p] = k.s0l.tags[2]
-    context[S0l0c] = clusters[k.s0l.idx[2]]
-    context[S0l0c6] = cprefix6s[k.s0l.idx[2]]
-    context[S0l0c4] = cprefix4s[k.s0l.idx[2]]
-
-    context[S0r0w] = words[k.s0r.idx[2]]
-    context[S0r0p] = k.s0r.tags[2]
-    context[S0r0c] = clusters[k.s0r.idx[2]]
-    context[S0r0c6] = cprefix6s[k.s0r.idx[2]]
-    context[S0r0c4] = cprefix6s[k.s0r.idx[2]]
-
-    context[N0lw] = words[k.n0l.idx[0]]
-    context[N0lp] = k.n0l.tags[0]
-    context[N0lc] = clusters[k.n0l.idx[0]]
-    context[N0lc6] = cprefix6s[k.n0l.idx[0]]
-    context[N0lc4] = cprefix6s[k.n0l.idx[0]]
-
-    context[N0l2w] = words[k.n0l.idx[1]]
-    context[N0l2p] = k.n0l.tags[1]
-    context[N0l2c] = clusters[k.n0l.idx[1]]
-    context[N0l2c6] = cprefix6s[k.n0l.idx[1]]
-    context[N0l2c4] = cprefix4s[k.n0l.idx[1]]
-
-    context[N0l0w] = words[k.n0l.idx[2]]
-    context[N0l0p] = k.n0l.tags[2]
-    context[N0l0c] = clusters[k.n0l.idx[2]]
-    context[N0l0c6] = cprefix6s[k.n0l.idx[2]]
-    context[N0l0c4] = cprefix4s[k.n0l.idx[2]]
-
-    context[S0ll] = k.s0l.lab[0]
-    context[S0l2l] = k.s0l.lab[1]
-    context[S0l0l] = k.s0l.lab[2]
-    context[S0rl] = k.s0r.lab[0]
-    context[S0r2l] = k.s0r.lab[1]
-    context[S0r0l] = k.s0r.lab[2]
-    context[N0ll] = k.n0l.lab[0]
-    context[N0l2l] = k.n0l.lab[1]
-    context[N0l0l] = k.n0l.lab[2]
-
-    context[S0llabs] = 0
-    context[S0rlabs] = 0
-    context[N0llabs] = 0
-    cdef size_t i
-    for i in range(4):
-        context[S0llabs] += k.s0l.lab[i] << (nr_label - k.s0l.lab[i])
-        context[S0rlabs] += k.s0r.lab[i] << (nr_label - k.s0r.lab[i])
-        context[N0llabs] += k.n0l.lab[i] << (nr_label - k.n0l.lab[i])
-    # TODO: Seems hard to believe we want to keep d non-zero when there's no
-    # stack top. Experiment with this futrther.
-    if k.s0 != 0:
-        assert k.i > k.s0
-        context[dist] = k.i - k.s0
+        zero_token(context, S0h2w)
+    # TODO: Distance
+    if t.s0.i != 0:
+        assert t.n0.i > t.s0.i
+        context[dist] = t.n0.i - t.s0.i
     else:
         context[dist] = 0
-
-    context[S0le_w] = words[k.s0ledge]
-    context[S0le_p] = tags[k.s0ledge]
-    context[S0le_c] = clusters[k.s0ledge]
-    context[S0le_c6] = cprefix6s[k.s0ledge]
-    context[S0le_c4] = cprefix4s[k.s0ledge]
-    context[N0le_w] = words[k.n0ledge]
-    context[N0le_p] = k.n0ledgep
-    context[N0le_c] = clusters[k.n0ledge]
-    context[N0le_c6] = cprefix6s[k.n0ledge]
-    context[N0le_c4] = cprefix4s[k.n0ledge]
+    # Disfluency match features
+    context[prev_edit] = t.p1.is_edit
+    context[prev_edit_wmatch] = t.p1.is_edit and t.p1.word == t.n0.word
+    context[prev_edit_pmatch] = t.p1.is_edit and t.p1.tag == t.n0.tag
+    context[prev_prev_edit] = t.p1.is_edit and t.p2.is_edit
+    context[prev_edit_word] = t.p1.word.norm if t.p1.is_edit else 0
+    context[prev_edit_pos] = t.p1.tag if t.p1.is_edit else 0
     
-    context[S0re_p] = k.s0redgep
-    if k.n0ledge > 0:
-        context[S0re_w] = words[k.n0ledge - 1]
-        context[S0re_c] = clusters[k.n0ledge - 1]
-        context[S0re_c6] = cprefix6s[k.n0ledge - 1]
-        context[S0re_c4] = cprefix4s[k.n0ledge - 1]
-    else:
-        context[S0re_w] = 0
-        context[S0re_c] = 0
-        context[S0re_c6] = 0
-        context[S0re_c4] = 0
-    if k.prev_edit and k.i != 0:
-        context[prev_edit] = 1
-        context[prev_edit_wmatch] = 1 if words[k.i - 1] == words[k.i] else 0
-        context[prev_edit_pmatch] = 1 if k.prev_tag == tags[k.i] else 0
-        context[prev_prev_edit] = 1 if k.prev_prev_edit else 0
-        context[prev_edit_word] = words[k.i - 1]
-        context[prev_edit_pos] = k.prev_tag
-    else:
-        context[prev_edit] = 0
-        context[prev_edit_wmatch] = 0
-        context[prev_edit_pmatch] = 0
-        context[prev_prev_edit] = 0
-        context[prev_edit_word] = 0
-        context[prev_edit_pos] = 0
-    if k.next_edit and k.s0 != 0:
-        context[next_edit] = 1
-        context[next_edit_wmatch] = 1 if words[k.s0 + 1] == words[k.s0] else 0
-        context[next_edit_pmatch] = 1 if tags[k.s0 + 1] == tags[k.s0] else 0
-        context[next_next_edit] = 1 if k.next_next_edit else 0
-        context[next_edit_word] = words[k.s0 + 1]
-        context[next_edit_pos] = k.next_tag
-    else:
-        context[next_edit] = 0
-        context[next_edit_wmatch] = 0
-        context[next_edit_pmatch] = 0
-        context[next_next_edit] = 0
-        context[next_edit_word] = 0
-        context[next_edit_pos] = 0
+    
+    context[next_edit] = t.s0n.is_edit
+    context[next_edit_wmatch] = t.s0n.is_edit and t.s0n.word == t.s0.word
+    context[next_edit_pmatch] = t.s0n.is_edit and t.s0n.tag == t.s0.tag
+    context[next_next_edit] = t.s0n.is_edit and t.s0nn.is_edit
+    context[next_edit_word] = t.s0n.is_edit and t.s0n.word.norm
+    context[next_edit_pos] = t.s0n.is_edit and t.s0n.tag
 
- 
     # These features find how much of S0's span matches N0's span, starting from
     # the left.
     # 
@@ -422,26 +367,28 @@ cdef void fill_context(size_t* context, size_t nr_label, Sentence* sent, Kernel*
     context[wsexact] = 1
     context[pscopy] = 0
     context[psexact] = 1
+    cdef size_t n0ledge = t.n0.left_edge
+    cdef size_t s0ledge = t.s0.left_edge
     for i in range(5):
-        if ((k.n0ledge + i) > k.i) or ((k.s0ledge + i) > k.s0):
+        if ((n0ledge + i) > t.n0.i) or ((s0ledge + i) > t.s0.i):
             break
         if context[wexact]:
-            if words[k.n0ledge + i] == words[k.s0ledge + i]:
+            if parse[n0ledge + i].word.orig == parse[s0ledge + i].word.orig:
                 context[wcopy] += 1
             else:
                 context[wexact] = 0
         if context[pexact]:
-            if tags[k.n0ledge + i] == tags[k.s0ledge + i]:
+            if parse[n0ledge + i].tag == parse[s0ledge + i].tag:
                 context[pcopy] += 1
             else:
                 context[pexact] = 0
         if context[wsexact]:
-            if words[k.s0 - i] == words[k.i - i]:
+            if parse[t.s0.i - i].word.orig == parse[t.n0.i - i].word.orig:
                 context[wscopy] += 1
             else:
                 context[wsexact] = 0
         if context[psexact]:
-            if tags[k.s0 - i] == tags[k.i - i]:
+            if parse[t.s0.i - i].tag == parse[t.n0.i - i].tag:
                 context[pscopy] += 1
             else:
                 context[psexact] = 0
@@ -534,36 +481,36 @@ third_order = (
 
 
 labels = (
-   (S0l,),
-   (S0ll,),
-   (S0rl,),
-   (N0ll,),
-   (S0hl,),
-   (S0l2l,),
-   (S0r2l,),
-   (N0l2l,),
+   (S0L,),
+   (S0lL,),
+   (S0rL,),
+   (N0lL,),
+   (S0hL,),
+   (S0l2L,),
+   (S0r2L,),
+   (N0l2L,),
 )
 
 
 label_sets = (
-   (S0w, S0rlabs),
-   (S0p, S0rlabs),
-   (S0w, S0llabs),
-   (S0p, S0llabs),
-   (N0w, N0llabs),
-   (N0p, N0llabs),
+   (S0w, S0lL, S0l0L, S0l2L),
+   (S0p, S0rL, S0r0L, S0r2L),
+   (S0p, S0lL, S0l0L, S0l2L),
+   (S0p, S0rL, S0r0L, S0r2L),
+   (N0w, N0lL, N0l0L, N0l2L),
+   (N0p, N0lL, N0l0L, N0l2L),
 )
 
 extra_labels = (
-    (S0p, S0ll, S0lp),
-    (S0p, S0ll, S0l2l),
-    (S0p, S0rl, S0rp),
-    (S0p, S0rl, S0r2l),
-    (S0p, S0ll, S0rl),
-    (S0p, S0ll, S0l2l, S0l0l),
-    (S0p, S0rl, S0r2l, S0r0l),
-    (S0hp, S0l, S0rl),
-    (S0hp, S0l, S0ll),
+    (S0p, S0lL, S0lp),
+    (S0p, S0lL, S0l2L),
+    (S0p, S0rL, S0rp),
+    (S0p, S0rL, S0r2L),
+    (S0p, S0lL, S0rL),
+    (S0p, S0lL, S0l2L, S0l0L),
+    (S0p, S0rL, S0r2L, S0r0L),
+    (S0hp, S0L, S0rL),
+    (S0hp, S0L, S0lL),
 )
 
 edges = (

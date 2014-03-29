@@ -4,7 +4,6 @@ Handle parser features
 """
 from libc.stdlib cimport malloc, free, calloc
 from libc.stdint cimport uint64_t
-import index.hashes
 
 from ext.murmurhash cimport *
 
@@ -19,7 +18,6 @@ cdef class Extractor:
     def __cinit__(self, templates, match_templates, bag_of_words=None):
         # Value that indicates the value has been "masked", e.g. it was pruned
         # as a rare word. If a feature contains any masked values, it is dropped.
-        self.mask_value = index.hashes.encode_word('<MASKED>')
         templates = tuple(sorted(set([tuple(sorted(f)) for f in templates])))
         self.nr_template = len(templates)
         self.templates = <Template**>malloc(self.nr_template * sizeof(Template*))
@@ -84,9 +82,6 @@ cdef class Extractor:
                 value = context[pred.args[j]]
                 # Extra trick: provide a way to exclude features that depend on
                 # rare vocabulary items
-                if value == self.mask_value:
-                    seen_masked = True
-                    break
                 if value != 0:
                     seen_non_zero = True
                 pred.raws[j] = value

@@ -1,41 +1,35 @@
-cdef struct _Parse:
-    size_t n_moves
-    double score
-    size_t* heads
-    size_t* labels
-    size_t* sbd
-    bint* edits
-    size_t* moves
+from index.lexicon cimport Lexeme
+
+
+cdef struct Token:
+    size_t i
+    Lexeme* word # Supports confusion network
+    size_t tag
+    size_t head
+    size_t label
+    size_t left_edge
+    size_t l_valency
+    size_t r_valency
+    size_t sent_id
+    bint is_edit
+
+
+cdef struct Step:
+    size_t n
+    double* probs
+    Lexeme** nodes
+
 
 cdef struct Sentence:
-    size_t id
-    size_t length
-    size_t* words
-    size_t* owords
-    size_t* pos
-    size_t* alt_pos
-    size_t* clusters
-    size_t* cprefix4s
-    size_t* cprefix6s
-    size_t* suffix
-    size_t* prefix
-    bint* oft_upper
-    bint* oft_title
-    bint* non_alpha
-    _Parse* parse
+    size_t n
+    Step* lattice
+    Token* tokens
+    double score
+    
 
+cdef Sentence* init_sent(list words_lattice, list parse) except NULL
 
-cdef Sentence* init_c_sent(size_t id_, size_t length, py_words, py_tags)
+cdef void free_sent(Sentence* s)
 
-
-cdef int add_parse(Sentence* sent, list word_ids, list heads,
-                   list labels, list edits) except -1
-
-cdef free_sent(Sentence* s)
-
-
-cdef class PySentence:
-    cdef size_t id
+cdef class Input:
     cdef Sentence* c_sent
-    cdef size_t length
-    cdef list tokens

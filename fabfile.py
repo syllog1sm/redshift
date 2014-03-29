@@ -87,7 +87,23 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
             unlabelled=unlabelled, auto_pos=auto_pos, repairs=repairs,
             use_edit=use_edit, use_sbd=use_sbd, dev_names=(eval_pos, eval_parse))
 
+
+def qdisfl(size='1000'):
+    train_str = r'./scripts/train.py -e -n {size} -a dyn -x disfl -k 8 -p {train} {model}'
+    parse_str = r'./scripts/parse.py {model} {pos} {out}'
+    eval_str = r'./scripts/evaluate.py {out}/parses {gold} | tee {out}/acc'
+
+    train = '~/data/tacl13_swbd/unseg/train.conll'
+    pos = '~/data/tacl13_swbd/unseg/dev.pos'
+    gold = '~/data/tacl13_swbd/unseg/dev.conll'
+    model = '~/data/parsers/tmp'
+    out = '~/data/parsers/tmp/dev'
+    with cd(str(REMOTE_REPO)):
+        run(train_str.format(size=size, train=train, model=model))
+        run(parse_str.format(model=model, pos=pos, out=out))
+        run(eval_str.format(out=out, gold=gold))
     
+
 def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
             train_alg="online", n_sents=0, static=False, use_edit=False,
             use_sbd=True, repairs=False,
@@ -208,7 +224,7 @@ def _parse(model, data, out, gold=False):
 
 
 def _evaluate(test, gold):
-    return './scripts/new_evaluate.py %s %s > %s' % (gold, test, test.replace('parses', 'acc'))
+    return './scripts/evaluate.py %s %s > %s' % (test, gold, test.replace('parses', 'acc'))
 
 def _add_edits(test_dir, pos):
     in_loc = pjoin(test_dir, 'parses')
@@ -216,9 +232,9 @@ def _add_edits(test_dir, pos):
     return 'python scripts/add_edits.py %s %s > %s' % (in_loc, pos, out_loc)
 
 
-def _pbsify(repo, command_strs, size=5):
+def _pbsify(repo, command_strs, size=6):
     header = """#! /bin/bash
-#PBS -l walltime=20:00:00,mem=3gb,nodes=1:ppn={n_procs}
+#PBS -l walltime=20:00:00,mem=4gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate
 export PYTHONPATH={repo}:{repo}/redshift:{repo}/svm
 export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:/usr/local/lib64:/lib64:/usr/lib64/:/usr/lib64/atlas:{repo}/redshift/svm/lib/
