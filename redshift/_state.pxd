@@ -48,6 +48,7 @@ cdef struct State:
     bint is_finished
     bint at_end_of_buffer
     int cost
+    bint breaking
 
     size_t* stack
     

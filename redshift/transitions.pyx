@@ -20,28 +20,30 @@ cdef enum:
 
 
 cdef inline bint can_shift(State* s):
-    return not s.at_end_of_buffer
+    return not s.at_end_of_buffer and not s.breaking
 
 
 cdef inline bint can_right(State* s):
-    return s.stack_len and not s.at_end_of_buffer
+    return s.stack_len and not s.at_end_of_buffer and not s.breaking
 
 
 cdef inline bint can_reduce(State* s):
-    return s.stack_len and s.parse[s.top].head
+    return s.stack_len and s.parse[s.top].head 
 
 
 cdef inline bint can_left(State* s):
-    return s.stack_len and s.parse[s.top].head == 0
+    return s.stack_len and s.parse[s.top].head == 0 and not s.breaking
 
 cdef bint USE_EDIT = False
 cdef inline bint can_edit(State* s):
-    return USE_EDIT and s.stack_len
+    return USE_EDIT and s.stack_len and not s.breaking
 
 cdef bint USE_BREAK = False
 cdef bint STRICT_BREAK = True
 cdef inline bint can_break(State* s):
     if not USE_BREAK:
+        return False
+    if s.breaking:
         return False
     if s.at_end_of_buffer:
         return False
@@ -206,10 +208,14 @@ cdef int transition(Transition* t, State *s) except -1:
         assert s.top != 0
         s.parse[s.i].sent_id = s.parse[s.top].sent_id + 1
         root_label = index.hashes.encode_label('ROOT')
-        while s.stack_len:
-            if s.parse[s.top].head == 0:
-                add_dep(s, s.n, s.top, root_label)
-            pop_stack(s)
+        s.breaking = True
+        if s.parse[s.top].head == 0:
+            add_dep(s, s.n, s.top, root_label)
+        elif s.parse[s.stack[0]].head == 0:
+            add_dep(s, s.n, s.stack[0], root_label)
+        else:
+            raise StandardError
+        pop_stack(s)
     elif t.move == EDIT:
         if s.parse[s.top].head != 0:
             del_r_child(s, s.parse[s.top].head)
