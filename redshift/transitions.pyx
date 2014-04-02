@@ -20,38 +20,37 @@ cdef enum:
 
 
 cdef inline bint can_shift(State* s):
-    return not s.at_end_of_buffer
+    return not s.at_end_of_buffer and not s.breaking
 
 
 cdef inline bint can_right(State* s):
-    return s.stack_len and not s.at_end_of_buffer
+    return s.stack_len and not s.at_end_of_buffer and not s.breaking
 
 
 cdef inline bint can_reduce(State* s):
-    return s.stack_len and s.parse[s.top].head
+    return s.stack_len and s.parse[s.top].head 
 
 
 cdef inline bint can_left(State* s):
-    return s.stack_len and s.parse[s.top].head == 0
+    return s.stack_len and s.parse[s.top].head == 0 and not s.breaking
 
 cdef bint USE_EDIT = False
 cdef inline bint can_edit(State* s):
-    return USE_EDIT and s.stack_len
+    return USE_EDIT and s.stack_len and not s.breaking
 
 cdef bint USE_BREAK = False
+cdef bint STRICT_BREAK = True
 cdef inline bint can_break(State* s):
     if not USE_BREAK:
+        return False
+    if s.breaking:
         return False
     if s.at_end_of_buffer:
         return False
     elif not s.stack_len:
         return False
-    elif not s.m:
+    elif STRICT_BREAK and (s.parse[s.i].l_valency != 0 or s.parse[s.top].r_valency != 0):
         return False
-    elif s.parse[s.i].l_valency != 0 or s.parse[s.top].r_valency != 0:
-        return False
-    #elif s.history[s.m-1].move != SHIFT and s.history[s.m-1].move != RIGHT:
-    #    return False
     elif nr_headless(s) != 1:
         return False
     else:
@@ -59,7 +58,6 @@ cdef inline bint can_break(State* s):
 
 
 cdef int shift_cost(State *s, Token* gold):
-    global USE_BREAK
     cdef int cost = 0
     if s.stack_len < 1:
         return 0
@@ -91,7 +89,6 @@ cdef int right_cost(State *s, Token* gold):
 
 
 cdef int reduce_cost(State *s, Token* gold):
-    global USE_BREAK
     cdef int cost = 0
     if can_break(s):
         cost += gold[s.top].sent_id != gold[s.i].sent_id
@@ -124,14 +121,27 @@ cdef int left_cost(State *s, Token* gold) except -9000:
 
 
 cdef int break_cost(State *s, Token* gold):
-    return gold[s.top].sent_id == gold[s.i].sent_id
+    # What happens if we're at a boundary, the word on top of the stack is
+    # disfluent, and its leftward children aren't? Note that the leftward childrens'
+    # cost _must_ be sunk; their head has to have been off to their left.
+    # But we have to choose between:
+    # - Get the Edit right, return the children to the stack. Subsequently,
+    # we will either Edit the children, or Left-Arc them, which would mean
+    # getting the utterance boundary wrong.
+    # - Get the Edit wrong, by applying Break here, but get the sentence
+    # boundary right
+    # In order to make the oracle work, we'll choose getting the Edit right.
+    # We'll not have the oracle refer to sentence boundaries specifically.
+    # If costs are sunk by having a word's head already incorrect, we don't
+    # try to enforce the boundary as well. We train for syntax first.
+    return gold[s.top].is_edit or gold[s.top].sent_id == gold[s.i].sent_id
 
 
 cdef int edit_cost(State *s, Token* gold):
     cdef int cost = 0
     # TODO: Is this good? I suspect not!
-    if can_break(s):
-        cost += gold[s.top].sent_id != gold[s.i].sent_id
+    #if can_break(s):
+    #    cost += gold[s.top].sent_id != gold[s.i].sent_id
     cost += not gold[s.top].is_edit
     return cost
 
@@ -198,10 +208,14 @@ cdef int transition(Transition* t, State *s) except -1:
         assert s.top != 0
         s.parse[s.i].sent_id = s.parse[s.top].sent_id + 1
         root_label = index.hashes.encode_label('ROOT')
-        while s.stack_len:
-            if s.parse[s.top].head == 0:
-                add_dep(s, s.n, s.top, root_label)
-            pop_stack(s)
+        s.breaking = True
+        if s.parse[s.top].head == 0:
+            add_dep(s, s.n, s.top, root_label)
+        elif s.parse[s.stack[0]].head == 0:
+            add_dep(s, s.n, s.stack[0], root_label)
+        else:
+            raise StandardError
+        pop_stack(s)
     elif t.move == EDIT:
         if s.parse[s.top].head != 0:
             del_r_child(s, s.parse[s.top].head)

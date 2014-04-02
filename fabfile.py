@@ -46,17 +46,15 @@ def deploy():
         run('git pull')
 
 
-def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
-         unlabelled=False, auto_pos='False', iters=15, repairs='False', 
+def beam(name, k=8, n=1, size=0, use_edit='False', feats="zhang", tb='wsj',
+         auto_pos='False', iters=15,
          use_sbd='True'):
     size = int(size)
     k = int(k)
     n = int(n)
     iters = int(iters)
-    unlabelled = unlabelled and unlabelled != 'False'
     auto_pos = auto_pos and auto_pos != 'False'
-    repairs = repairs and repairs != 'False'
-    use_edit = False
+    use_edit = use_edit == 'True'
     use_sbd = use_sbd == 'True'
     if tb == 'wsj':
         data = str(REMOTE_STANFORD)
@@ -72,9 +70,6 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
         train_name = 'train.conll'
         eval_pos = 'dev.pos'
         eval_parse = 'dev.conll'
-        if train_alg == 'dynedit':
-            use_edit = True
-            train_alg = 'dyn'
     elif tb == 'clean_swbd':
         data = str(REMOTE_SWBD)
         train_name = 'train.clean.conll'
@@ -83,19 +78,19 @@ def beam(name, k=8, n=1, size=0, train_alg="static", feats="zhang", tb='wsj',
     exp_dir = str(REMOTE_PARSERS)
     train_n(n, name, exp_dir,
             data, k=k, i=iters, f=10, feat_str=feats, 
-            n_sents=size, train_name=train_name, train_alg=train_alg,
-            unlabelled=unlabelled, auto_pos=auto_pos, repairs=repairs,
+            n_sents=size, train_name=train_name,
+            auto_pos=auto_pos,
             use_edit=use_edit, use_sbd=use_sbd, dev_names=(eval_pos, eval_parse))
 
 
 def qdisfl(size='1000'):
-    train_str = r'./scripts/train.py -e -n {size} -a dyn -x disfl -k 8 -p {train} {model}'
+    train_str = r'./scripts/train.py -e -n {size} -x disfl -k 4 -p {train} {model}'
     parse_str = r'./scripts/parse.py {model} {pos} {out}'
     eval_str = r'./scripts/evaluate.py {out}/parses {gold} | tee {out}/acc'
 
-    train = '~/data/tacl13_swbd/unseg/train.conll'
-    pos = '~/data/tacl13_swbd/unseg/dev.pos'
-    gold = '~/data/tacl13_swbd/unseg/dev.conll'
+    train = '/tmp/converted/unseg_train.conll'
+    pos = '/tmp/converted/unseg_dev.pos'
+    gold = '/tmp/converted/unseg_dev.conll'
     model = '~/data/parsers/tmp'
     out = '~/data/parsers/tmp/dev'
     with cd(str(REMOTE_REPO)):
@@ -105,7 +100,7 @@ def qdisfl(size='1000'):
     
 
 def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
-            train_alg="online", n_sents=0, static=False, use_edit=False,
+            n_sents=0, static=False, use_edit=False,
             use_sbd=True, repairs=False,
             unlabelled=False, ngrams='', t=0, f=0, train_name='train.txt',
             dev_names=('devi.txt', 'devr.txt'), auto_pos=False):
@@ -116,11 +111,9 @@ def train_n(n, name, exp_dir, data, k=1, feat_str="zhang", i=15, upd='max',
         model = pjoin(exp_dir, name, str(seed))
         run("mkdir -p %s" % model, quiet=True)
         train_str = _train(pjoin(data, train_name), model, k=k, i=i,
-                           feat_str=feat_str, train_alg=train_alg, seed=seed,
+                           feat_str=feat_str, seed=seed,
                            n_sents=n_sents, use_edit=use_edit, use_sbd=use_sbd,
-                           unlabelled=unlabelled,
-                           allow_reattach=repairs, allow_reduce=repairs,
-                           vocab_thresh=t, feat_thresh=f, auto_pos=auto_pos)
+                           feat_thresh=f, auto_pos=auto_pos)
         parse_str = _parse(model, pjoin(data, dev_names[0]), pjoin(model, 'dev'))
         eval_str = _evaluate(pjoin(model, 'dev', 'parses'), pjoin(data, dev_names[1]))
         grep_str = "grep 'U:' %s >> %s" % (pjoin(model, 'dev', 'acc'),
@@ -195,25 +188,21 @@ def get_accs(exp_dir, eval_name='dev', term='U'):
 
 
 def _train(data, model, debug=False, k=1, feat_str='zhang', i=15,
-           train_alg="static", seed=0, args='',
-           n_sents=0, ngrams=0, vocab_thresh=0, feat_thresh=10,
-           use_edit=False, use_sbd=True, unlabelled=False, auto_pos=False,
-           allow_reattach=False, allow_reduce=False):
+           seed=0, args='',
+           n_sents=0, ngrams=0, feat_thresh=10,
+           use_edit=False, use_sbd=True, auto_pos=False):
     use_edit = '-e' if use_edit else ''
     use_sbd = '-b' if use_sbd else ''
-    unlabelled = '-u' if unlabelled else ''
     auto_pos = '-p' if auto_pos else ''
-    repairs = '-r' if allow_reattach else ''
-    repairs += ' -d' if allow_reduce else ''
-    template = './scripts/train.py -i {i} -a {alg} -k {k} -x {feat_str} {data} {model} -s {seed} -n {n_sents} -t {vocab_thresh} -f {feat_thresh} {use_sbd} {use_edit} {repairs} {unlabelled} {auto_pos} {args}'
+    template = './scripts/train.py -i {i} -k {k} -x {feat_str} {data} {model} -s {seed} -n {n_sents} -f {feat_thresh} {use_sbd} {use_edit} {auto_pos} {args}'
     if debug:
         template += ' -debug'
     return template.format(data=data, model=model, k=k, feat_str=feat_str, i=i,
-                           vocab_thresh=vocab_thresh, feat_thresh=feat_thresh,
-                           alg=train_alg, use_edit=use_edit, use_sbd=use_sbd,
-                           seed=seed, repairs=repairs,
-                          args=args, n_sents=n_sents, ngrams=ngrams,
-                          unlabelled=unlabelled, auto_pos=auto_pos)
+                           feat_thresh=feat_thresh,
+                           use_edit=use_edit, use_sbd=use_sbd,
+                           seed=seed,
+                           args=args, n_sents=n_sents, ngrams=ngrams,
+                           auto_pos=auto_pos)
 
 
 def _parse(model, data, out, gold=False):
