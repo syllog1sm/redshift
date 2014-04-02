@@ -37,7 +37,7 @@ def make():
 
 def qstat():
     run("qstat -na | grep mhonn")
-:
+
 
 def deploy():
     clean()
