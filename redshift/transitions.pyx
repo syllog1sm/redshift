@@ -39,6 +39,7 @@ cdef inline bint can_edit(State* s):
     return USE_EDIT and s.stack_len
 
 cdef bint USE_BREAK = False
+cdef bint STRICT_BREAK = True
 cdef inline bint can_break(State* s):
     if not USE_BREAK:
         return False
@@ -46,12 +47,8 @@ cdef inline bint can_break(State* s):
         return False
     elif not s.stack_len:
         return False
-    elif not s.m:
+    elif STRICT_BREAK and (s.parse[s.i].l_valency != 0 or s.parse[s.top].r_valency != 0):
         return False
-    elif s.parse[s.i].l_valency != 0 or s.parse[s.top].r_valency != 0:
-        return False
-    #elif s.history[s.m-1].move != SHIFT and s.history[s.m-1].move != RIGHT:
-    #    return False
     elif nr_headless(s) != 1:
         return False
     else:
@@ -59,7 +56,6 @@ cdef inline bint can_break(State* s):
 
 
 cdef int shift_cost(State *s, Token* gold):
-    global USE_BREAK
     cdef int cost = 0
     if s.stack_len < 1:
         return 0
@@ -91,7 +87,6 @@ cdef int right_cost(State *s, Token* gold):
 
 
 cdef int reduce_cost(State *s, Token* gold):
-    global USE_BREAK
     cdef int cost = 0
     if can_break(s):
         cost += gold[s.top].sent_id != gold[s.i].sent_id
@@ -124,14 +119,27 @@ cdef int left_cost(State *s, Token* gold) except -9000:
 
 
 cdef int break_cost(State *s, Token* gold):
-    return gold[s.top].sent_id == gold[s.i].sent_id
+    # What happens if we're at a boundary, the word on top of the stack is
+    # disfluent, and its leftward children aren't? Note that the leftward childrens'
+    # cost _must_ be sunk; their head has to have been off to their left.
+    # But we have to choose between:
+    # - Get the Edit right, return the children to the stack. Subsequently,
+    # we will either Edit the children, or Left-Arc them, which would mean
+    # getting the utterance boundary wrong.
+    # - Get the Edit wrong, by applying Break here, but get the sentence
+    # boundary right
+    # In order to make the oracle work, we'll choose getting the Edit right.
+    # We'll not have the oracle refer to sentence boundaries specifically.
+    # If costs are sunk by having a word's head already incorrect, we don't
+    # try to enforce the boundary as well. We train for syntax first.
+    return gold[s.top].is_edit or gold[s.top].sent_id == gold[s.i].sent_id
 
 
 cdef int edit_cost(State *s, Token* gold):
     cdef int cost = 0
     # TODO: Is this good? I suspect not!
-    if can_break(s):
-        cost += gold[s.top].sent_id != gold[s.i].sent_id
+    #if can_break(s):
+    #    cost += gold[s.top].sent_id != gold[s.i].sent_id
     cost += not gold[s.top].is_edit
     return cost
 
