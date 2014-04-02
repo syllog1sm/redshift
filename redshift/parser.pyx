@@ -103,6 +103,8 @@ def get_templates(feats_str):
     templates = _parse_features.baseline_templates()
     match_feats = []
     #templates += _parse_features.ngram_feats(self.ngrams)
+    if 'hybrid' in feats_str:
+        templates = _parse_features.arc_hybrid
     if 'disfl' in feats_str:
         templates += _parse_features.disfl
         templates += _parse_features.new_disfl

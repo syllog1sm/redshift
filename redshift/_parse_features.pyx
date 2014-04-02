@@ -47,6 +47,15 @@ cdef enum:
     S1lv
     S1rv
 
+    S1rw
+    S1rp
+    S1rc
+    S1rc6
+    S1rc4
+    S1rL
+    S1rlv
+    S1rrv
+
     S0lw
     S0lp
     S0lc
@@ -309,6 +318,7 @@ cdef int fill_context(size_t* context, SlotTokens* t, Token* parse,
     # word on top of the stack, word at the front of the buffer, etc.
     fill_token(context, S2w, t.s2)
     fill_token(context, S1w, t.s1)
+    fill_token(context, S1rw, t.s1r)
     fill_token(context, S0le_w, t.s0le)
     fill_token(context, S0lw, t.s0l)
     fill_token(context, S0l2w, t.s0l2)
@@ -326,14 +336,14 @@ cdef int fill_context(size_t* context, SlotTokens* t, Token* parse,
     fill_token(context, N1w, t.n1)
     fill_token(context, N2w, t.n2)
 
-    if t.s0.label != 0:
-        fill_token(context, S0hw, t.s1)
-    else:
-        zero_token(context, S0hw)
-    if t.s0.label != 0 and t.s1.label != 0:
-        fill_token(context, S0h2w, t.s2)
-    else:
-        zero_token(context, S0h2w)
+    #if t.s0.label != 0:
+    fill_token(context, S0hw, t.s1)
+    #else:
+    #    zero_token(context, S0hw)
+    #if t.s0.label != 0 and t.s1.label != 0:
+    fill_token(context, S0h2w, t.s2)
+    #else:
+    #    zero_token(context, S0h2w)
     # TODO: Distance
     if t.s0.i != 0:
         assert t.n0.i > t.s0.i
@@ -394,6 +404,153 @@ cdef int fill_context(size_t* context, SlotTokens* t, Token* parse,
                 context[psexact] = 0
 
 
+arc_hybrid = (
+    # Single words
+    (S2w,),
+    (S1w,),
+    (S0lw,),
+    (S0l2w,),
+    (S0w,),
+    (S0r2w,),
+    (S0rw,),
+    (N0lw,),
+    (N0l2w,),
+    (N0w,),
+    (N1w,),
+    (N2w,),
+
+    # Single tags
+    (S2p,),
+    (S1p,),
+    (S0lp,),
+    (S0l2p,),
+    (S0p,),
+    (S0r2p,),
+    (S0rp,),
+    (N0lp,),
+    (N0l2p,),
+    (N0p,),
+    (N1p,),
+    (N2p,),
+
+    # Single word + single tag
+    (S2w, S2p,),
+    (S1w, S1p,),
+    (S0lw, S0lp,),
+    (S0l2w, S0l2p,),
+    (S0w, S0p,),
+    (S0r2w, S0r2p,),
+    (S0rw, S0rp,),
+    (N0lw, N0lp,),
+    (N0l2w, N0l2p,),
+    (N0w, N0p,),
+    (N1w, N1p,),
+    (N2w, N2p,),
+
+  # Word pairs 
+   (S0w, S0p, N0w, N0p),
+   (S0w, S0p, N0w),
+   (S0w, N0w, N0p),
+   (S0w, S0p, N0p),
+   (S0p, N0w, N0p),
+   (S0w, N0w),
+   (S0p, N0p),
+   (N0p, N1p),
+
+   # From three words
+   (N0p, N1p, N2p),
+   (S0p, N0p, N1p),
+   (S0hp, S0p, N0p),
+   (S0p, S0lp, N0p),
+   (S0p, S0rp, N0p),
+   (S0p, N0p, N0lp),
+
+   # Distance
+   (dist, S0w),
+   (dist, S0p),
+   (dist, N0w),
+   (dist, N0p),
+   (dist, S0w, N0w),
+   (dist, S0p, N0p),
+   
+   # Valency
+   (S0w, S0rv),
+   (S0p, S0rv),
+   (S0w, S0lv),
+   (S0p, S0lv),
+   (N0w, N0lv),
+   (N0p, N0lv),
+   
+   # Third order
+   (S0p, S0lp, S0l2p),
+   (S0p, S0rp, S0r2p),
+   (S0p, S0hp, S0h2p),
+   (N0p, N0lp, N0l2p),
+   
+   # Labels
+   (S0L,),
+   (S0lL,),
+   (S0rL,),
+   (N0lL,),
+   (S0l2L,),
+   (S0r2L,),
+   (N0l2L,),
+
+   # Label sets
+   (S0w, S0lL, S0l0L, S0l2L),
+   (S0p, S0rL, S0r0L, S0r2L),
+   (S0p, S0lL, S0l0L, S0l2L),
+   (S0p, S0rL, S0r0L, S0r2L),
+   (N0w, N0lL, N0l0L, N0l2L),
+   (N0p, N0lL, N0l0L, N0l2L),
+
+   # Stack-second
+    (S1w, N0w),
+    (S1w, N0p),
+    (S1p, N0w),
+    (S1p, N0p),
+    #(S1w, N1w),
+    (S1w, N1p),
+    (S1p, N1p),
+    (S1p, N1w),
+    (S1p, S0p, N0p),
+    #(S1w, S0w, N0w),
+    (S1w, S0p, N0p),
+    (S2w, N0w),
+    #(S2w, N1w),
+    (S2p, N0p, N1w),
+    (S2p, N0w, N1w),
+    (S2w, N0p, N1p),
+
+    # S1r
+    (S1rp, S0p),
+    (S1rp, S0w),
+    (S1rw, S0p),
+
+    (S1p, S1rL),
+    (S1w, S1rL),
+    (S1rp, S1rL),
+    (S1rw, S1rL),
+    (S1rL, S0w),
+    (S1rL, S0p),
+    (S1p, S1rL, S0p),
+    (S1rv, S0p),
+    (S1rv, S0w),
+
+    (S1lv, S1rv, S1p, S0p),
+)
+
+extra_labels = (
+    (S0p, S0lL, S0lp),
+    (S0p, S0lL, S0l2L),
+    (S0p, S0rL, S0rp),
+    (S0p, S0rL, S0r2L),
+    (S0p, S0lL, S0rL),
+    (S0p, S0lL, S0l2L, S0l0L),
+    (S0p, S0rL, S0r2L, S0r0L),
+    (S0hp, S0L, S0rL),
+    (S0hp, S0L, S0lL),
+)
 from_single = (
     (S0w, S0p),
     (S0w,),

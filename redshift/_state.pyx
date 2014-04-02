@@ -74,6 +74,7 @@ cdef uint64_t hash_state(State* s):
 cdef int fill_slots(State *s) except -1:
     s.slots.s2 = s.parse[s.stack[s.stack_len - 3] if s.stack_len >= 3 else 0]
     s.slots.s1 = s.parse[s.second]
+    s.slots.s1r = s.parse[get_r(s, s.second)]
     s.slots.s0le = s.parse[s.parse[s.top].left_edge]
     s.slots.s0l = s.parse[get_l(s, s.top)]
     s.slots.s0l2 = s.parse[get_l2(s, s.top)]
