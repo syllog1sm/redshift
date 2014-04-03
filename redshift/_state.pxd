@@ -12,6 +12,7 @@ from transitions cimport Transition
 cdef struct SlotTokens:
     Token s2
     Token s1
+    Token s1r
     Token s0le
     Token s0l
     Token s0l2

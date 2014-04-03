@@ -74,6 +74,7 @@ cdef uint64_t hash_state(State* s):
 cdef int fill_slots(State *s) except -1:
     s.slots.s2 = s.parse[s.stack[s.stack_len - 3] if s.stack_len >= 3 else 0]
     s.slots.s1 = s.parse[s.second]
+    s.slots.s1r = s.parse[get_r(s, s.second)]
     s.slots.s0le = s.parse[s.parse[s.top].left_edge]
     s.slots.s0l = s.parse[get_l(s, s.top)]
     s.slots.s0l2 = s.parse[get_l2(s, s.top)]
@@ -211,8 +212,8 @@ cdef State* init_state(Sentence* sent):
     s.top = 0
     s.second = 0
     s.stack_len = 0
-    s.is_finished = False
     s.at_end_of_buffer = sent.n == 2
+    s.is_finished = False
     n = sent.n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
     s.l_children = <size_t**>malloc(n * sizeof(size_t*))
