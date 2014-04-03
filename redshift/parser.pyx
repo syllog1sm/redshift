@@ -176,8 +176,8 @@ cdef class Parser:
             for i in range(beam.bsize):
                 if not beam.beam[i].is_finished:
                     self._predict(beam.beam[i], beam.moves[i], sent.lattice)
-                    # The False flag tells it to allow non-gold predictions
-                    beam.enqueue(i, False)
+                # The False flag tells it to allow non-gold predictions
+                beam.enqueue(i, False)
             beam.extend()
         beam.fill_parse(sent.tokens)
         sent.score = beam.beam[0].score
