@@ -221,10 +221,12 @@ cdef class Parser:
         self.guide.cache.flush()
         words = py_sent.words
         #print words
+        move_strs = ['?', 'S', 'L', 'R', 'E']
         while not p_beam.is_finished and not g_beam.is_finished:
             for i in range(p_beam.bsize):
                 self._predict(p_beam.beam[i], p_beam.moves[i], sent.lattice)
                 # Fill costs so we can see whether the prediction is gold-standard
+                #print 'ignore',
                 fill_costs(p_beam.beam[i], p_beam.moves[i], self.nr_moves, gold_parse)
                 # The False flag tells it to allow non-gold predictions
                 p_beam.enqueue(i, False)
@@ -234,13 +236,14 @@ cdef class Parser:
                 moves = g_beam.moves[i]
                 self._predict(g, moves, sent.lattice)
                 # Constrain this beam to only gold candidates
-                #print words[g.top], words[gold_parse[g.top].head]
-                #print words[g.i], words[gold_parse[g.i].head]
-                #print sent.tokens[g.top].sent_id, sent.tokens[g.i].sent_id
+                #print g.stack_len
+                #print words[g.second], words[g.top], '|', words[g.i]
+                #print sent.tokens[g.second].is_edit, sent.tokens[g.top].is_edit, sent.tokens[g.i].is_edit
                 fill_costs(g, moves, self.nr_moves, gold_parse)
                 g_beam.enqueue(i, True)
             g_beam.extend()
             g = g_beam.beam[0]; p = p_beam.beam[0] 
+            #print 'Move taken: ', move_strs[g.history[g.m-1].move]
             delta = p.score - g.score
             if delta >= max_violn and p.cost >= 1:
                 max_violn = delta

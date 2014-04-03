@@ -11,11 +11,11 @@ DEF MAX_LABELS = 200
 cdef enum:
     ERR
     SHIFT
-    REDUCE
+    #REDUCE
     LEFT
     RIGHT
     EDIT
-    BREAK
+    #BREAK
     N_MOVES
 
 
@@ -33,10 +33,6 @@ cdef enum:
 #cdef inline bint can_left(State* s):
 #    return s.stack_len and s.parse[s.top].head == 0 and not s.breaking
 
-
-cdef bint USE_EDIT = False
-cdef inline bint can_edit(State* s):
-    return USE_EDIT and s.stack_len and not s.breaking
 
 cdef bint USE_BREAK = False
 cdef bint STRICT_BREAK = True
@@ -65,10 +61,22 @@ cdef inline bint can_right(State* s):
 cdef inline bint can_left(State* s):
     return s.stack_len >= 1
 
+cdef bint USE_EDIT = False
+cdef inline bint can_edit(State* s):
+    return USE_EDIT and s.stack_len
+
+# Edit oracle:
+# - You can always LeftArc from an Edit word
+# - You can always RightArc between two Edit words
+# - You can never arc from a fluent word to a disfluent word
+# - You can't RightArc from a disfluent word to a fluent word
+# - You can always Shift an Edit word
 
 cdef int shift_cost(State* s, Token* gold):
     assert not s.at_end_of_buffer
     if gold[s.i].head == s.top:
+        return 0
+    if gold[s.i].is_edit:
         return 0
     cost = 0
     cost += has_head_in_stack(s, s.i, gold)
@@ -78,19 +86,36 @@ cdef int shift_cost(State* s, Token* gold):
 cdef int right_cost(State* s, Token* gold):
     assert s.stack_len >= 2
     cost = 0
+    if gold[s.second].is_edit and gold[s.top].is_edit:
+        return 0
+    elif gold[s.second].is_edit or gold[s.top].is_edit:
+        cost += 1
     cost += has_head_in_buffer(s, s.top, gold)
     cost += has_child_in_buffer(s, s.top, gold)
     return cost
 
 cdef int left_cost(State* s, Token* gold):
-    assert s.stack_len >= 1
+    assert s.stack_len
+    cost = 0
+    if gold[s.i].is_edit:
+        return 0
+    if not gold[s.i].is_edit and gold[s.top].is_edit:
+        return 1
     if gold[s.top].head == s.i:
         return 0
-    cost = 0
     cost += gold[s.top].head == s.second
     cost += has_head_in_buffer(s, s.top, gold)
     cost += has_child_in_buffer(s, s.top, gold)
     return cost
+
+cdef int edit_cost(State *s, Token* gold):
+    assert s.stack_len >= 1
+    return 0 if gold[s.top].is_edit else 1
+
+cdef int break_cost(State* s, Token* gold):
+    assert s.stack_len
+    assert not s.at_end_of_buffer
+    return gold[s.top].sent_id == gold[s.i].sent_id
 
 
 #cdef int shift_cost(State *s, Token* gold):
@@ -156,30 +181,30 @@ cdef int left_cost(State* s, Token* gold):
 #    return cost
 
 
-cdef int break_cost(State *s, Token* gold):
-    # What happens if we're at a boundary, the word on top of the stack is
-    # disfluent, and its leftward children aren't? Note that the leftward childrens'
-    # cost _must_ be sunk; their head has to have been off to their left.
-    # But we have to choose between:
-    # - Get the Edit right, return the children to the stack. Subsequently,
-    # we will either Edit the children, or Left-Arc them, which would mean
-    # getting the utterance boundary wrong.
-    # - Get the Edit wrong, by applying Break here, but get the sentence
-    # boundary right
-    # In order to make the oracle work, we'll choose getting the Edit right.
-    # We'll not have the oracle refer to sentence boundaries specifically.
-    # If costs are sunk by having a word's head already incorrect, we don't
-    # try to enforce the boundary as well. We train for syntax first.
-    return gold[s.top].is_edit or gold[s.top].sent_id == gold[s.i].sent_id
+#cdef int break_cost(State *s, Token* gold):
+#    # What happens if we're at a boundary, the word on top of the stack is
+#    # disfluent, and its leftward children aren't? Note that the leftward childrens'
+#    # cost _must_ be sunk; their head has to have been off to their left.
+#    # But we have to choose between:
+#    # - Get the Edit right, return the children to the stack. Subsequently,
+#    # we will either Edit the children, or Left-Arc them, which would mean
+#    # getting the utterance boundary wrong.
+#    # - Get the Edit wrong, by applying Break here, but get the sentence
+#    # boundary right
+#    # In order to make the oracle work, we'll choose getting the Edit right.
+#    # We'll not have the oracle refer to sentence boundaries specifically.
+#    # If costs are sunk by having a word's head already incorrect, we don't
+#    # try to enforce the boundary as well. We train for syntax first.
+#    return gold[s.top].is_edit or gold[s.top].sent_id == gold[s.i].sent_id
 
 
-cdef int edit_cost(State *s, Token* gold):
-    cdef int cost = 0
+#cdef int edit_cost(State *s, Token* gold):
+#    cdef int cost = 0
     # TODO: Is this good? I suspect not!
     #if can_break(s):
     #    cost += gold[s.top].sent_id != gold[s.i].sent_id
-    cost += not gold[s.top].is_edit
-    return cost
+#    cost += not gold[s.top].is_edit
+#    return cost
 
 
 cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
@@ -188,7 +213,7 @@ cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
     #valid[REDUCE] = can_reduce(s)
     valid[LEFT] = can_left(s)
     valid[RIGHT] = can_right(s)
-    #valid[EDIT] = can_edit(s)
+    valid[EDIT] = can_edit(s)
     #valid[BREAK] = can_break(s)
     for i in range(n):
         classes[i].is_valid = valid[classes[i].move]
@@ -211,9 +236,10 @@ cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except
     #costs[REDUCE] = reduce_cost(s, gold) if can_reduce(s) else -1
     costs[LEFT] = left_cost(s, gold) if can_left(s) else -1
     costs[RIGHT] = right_cost(s, gold) if can_right(s) else -1
-    #costs[EDIT] = edit_cost(s, gold) if can_edit(s) else -1
+    costs[EDIT] = edit_cost(s, gold) if can_edit(s) else -1
     #costs[BREAK] = break_cost(s, gold) if can_break(s) else -1
     #print costs[SHIFT], costs[REDUCE], costs[LEFT], costs[RIGHT], costs[EDIT], costs[BREAK]
+    #print costs[SHIFT], costs[LEFT], costs[RIGHT], costs[EDIT]
     for i in range(n):
         classes[i].cost = costs[classes[i].move]
         if classes[i].move == LEFT and classes[i].cost == 0:
@@ -238,6 +264,24 @@ cdef int transition(Transition* t, State *s) except -1:
     elif t.move == RIGHT:
         add_dep(s, s.second, s.top, t.label)
         pop_stack(s)
+    elif t.move == EDIT:
+        edited = pop_stack(s)
+        while s.parse[edited].l_valency:
+            child = get_l(s, edited)
+            del_l_child(s, edited)
+            s.second = s.top
+            s.top = child
+            s.stack[s.stack_len] = child
+            s.stack_len += 1
+        end = edited
+        erase_label = index.hashes.encode_label('erased')
+        while s.parse[end].r_valency:
+            end = get_r(s, end)
+        
+        for i in range(edited, end + 1):
+            s.parse[i].head = i
+            s.parse[i].label = erase_label
+            s.parse[i].is_edit = True
     else:
         raise StandardError(t.move)
     #elif t.move == REDUCE:
@@ -308,8 +352,8 @@ cdef int fill_moves(list left_labels, list right_labels, bint use_edit, bint use
     cdef size_t i = 0
     moves[i].move = SHIFT; i += 1
     #moves[i].move = REDUCE; i += 1
-    #if use_edit:
-    #    moves[i].move = EDIT; i += 1
+    if use_edit:
+        moves[i].move = EDIT; i += 1
     #if use_break:
     #    moves[i].move = BREAK; i += 1
     cdef size_t label

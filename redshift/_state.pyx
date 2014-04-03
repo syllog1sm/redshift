@@ -212,8 +212,8 @@ cdef State* init_state(Sentence* sent):
     s.top = 0
     s.second = 0
     s.stack_len = 0
-    s.is_finished = False
     s.at_end_of_buffer = sent.n == 2
+    s.is_finished = False
     n = sent.n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
     s.l_children = <size_t**>malloc(n * sizeof(size_t*))

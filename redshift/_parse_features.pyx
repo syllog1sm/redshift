@@ -536,8 +536,6 @@ arc_hybrid = (
     (S1p, S1rL, S0p),
     (S1rv, S0p),
     (S1rv, S0w),
-
-    (S1lv, S1rv, S1p, S0p),
 )
 
 extra_labels = (
