@@ -135,7 +135,6 @@ cdef int transition(Transition* t, State *s) except -1:
     assert not s.is_finished
     s.history[s.m] = t[0]
     s.m += 1 
-    cdef size_t erase_label
     if t.move == SHIFT:
         push_stack(s)
     elif t.move == LEFT:
@@ -154,10 +153,9 @@ cdef int transition(Transition* t, State *s) except -1:
             s.stack[s.stack_len] = child
             s.stack_len += 1
         end = edited
-        erase_label = index.hashes.encode_label('erased')
         for i in range(edited, s.parse[s.i].left_edge):
             s.parse[i].head = i
-            s.parse[i].label = erase_label
+            s.parse[i].label = t.label
             s.parse[i].is_edit = True
     else:
         raise StandardError(t.move)
@@ -178,9 +176,10 @@ cdef size_t get_nr_moves(list left_labels, list right_labels,
 cdef int fill_moves(list left_labels, list right_labels, bint use_edit,
                     bint use_break, Transition* moves):
     cdef size_t i = 0
-    moves[i].move = SHIFT; i += 1
+    cdef size_t erase_label = index.hashes.encode_label('erased')
+    moves[i].move = SHIFT; moves[i].label = 0; i += 1
     if use_edit:
-        moves[i].move = EDIT; i += 1
+        moves[i].move = EDIT; moves[i].label = erase_label; i += 1
     #if use_break:
     #    moves[i].move = BREAK; i += 1
     cdef size_t label
