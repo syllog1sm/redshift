@@ -536,6 +536,14 @@ arc_hybrid = (
     (S1p, S1rL, S0p),
     (S1rv, S0p),
     (S1rv, S0w),
+
+    # For Break
+    (S0re_p, N0p),
+    (S0re_w, N0p),
+    (S0re_p, N0w),
+    (S0re_p, N0le_p),
+    (S0re_w, N0le_p),
+    (S0re_p, N0le_w)
 )
 
 extra_labels = (
