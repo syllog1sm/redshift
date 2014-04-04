@@ -78,7 +78,7 @@ class Token(object):
             new_attrs.append(attrs[3])
             new_attrs.append(str(int(attrs[6]) - 1))
             dfl_feats = attrs[5].split('|')
-            self.dfl_tag = dfl_feats[2] if len(dfl_feats) >= 3 else '-'
+            self.dfl_tag = dfl_feats[1] if len(dfl_feats) >= 2 else '-'
             new_attrs.append(attrs[7])
             attrs = new_attrs
             attrs.append(str(len(dfl_feats) >= 3 and dfl_feats[2] == '1'))
@@ -125,6 +125,8 @@ def main(test_loc, gold_loc, eval_punct=False):
         if g.label in ["P", 'punct', 'discourse'] and not eval_punct:
             continue
         elif g.pos == 'ADD' and not eval_punct:
+            continue
+        elif g.dfl_tag != '-':
             continue
         ed_tp += t.is_edit and g.is_edit
         ed_fp += t.is_edit and not g.is_edit

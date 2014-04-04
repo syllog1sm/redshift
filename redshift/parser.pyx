@@ -43,7 +43,8 @@ def set_debug(val):
 
 
 def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
-          feat_set='basic', feat_thresh=10, use_edit=False, use_break=False):
+          feat_set='basic', feat_thresh=10,
+          use_edit=False, use_break=False, use_filler=False):
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
     os.mkdir(model_dir)
@@ -51,8 +52,9 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
                        train_str.strip().split('\n\n') if s.strip()]
     left_labels, right_labels = get_labels(sents)
     Config.write(model_dir, beam_width=beam_width, features=feat_set,
-                 feat_thresh=feat_thresh, left_labels=left_labels,
-                 right_labels=right_labels, use_edit=use_edit, use_break=use_break)
+                 feat_thresh=feat_thresh,
+                 left_labels=left_labels, right_labels=right_labels,
+                 use_edit=use_edit, use_break=use_break, use_filler=use_filler)
     write_tagger_config(model_dir, beam_width=4, features='basic', feat_thresh=feat_thresh)
     parser = Parser(model_dir)
     indices = list(range(len(sents)))
@@ -100,11 +102,8 @@ class Config(object):
 
 
 def get_templates(feats_str):
-    templates = _parse_features.baseline_templates()
     match_feats = []
-    #templates += _parse_features.ngram_feats(self.ngrams)
-    if 'hybrid' in feats_str:
-        templates = _parse_features.arc_hybrid
+    templates = _parse_features.arc_hybrid
     if 'disfl' in feats_str:
         templates += _parse_features.disfl
         templates += _parse_features.new_disfl
@@ -115,14 +114,8 @@ def get_templates(feats_str):
         match_feats = _parse_features.match_templates()
     elif 'clusters' in feats_str:
         templates += _parse_features.clusters
-    if 'stack' in feats_str:
-        templates += _parse_features.stack_second
-    if 'hist' in feats_str:
-        templates += _parse_features.history
     if 'bitags' in feats_str:
         templates += _parse_features.pos_bigrams()
-    if 'pauses' in feats_str:
-        templates += _parse_features.pauses
     return templates, match_feats
 
 
@@ -151,10 +144,11 @@ cdef class Parser:
         if os.path.exists(pjoin(model_dir, 'labels')):
             index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
         self.nr_moves = get_nr_moves(self.cfg.left_labels, self.cfg.right_labels,
-                                     self.cfg.use_edit, self.cfg.use_break)
+                                     self.cfg.use_edit, self.cfg.use_break,
+                                     self.cfg.use_filler)
         self.moves = <Transition*>calloc(self.nr_moves, sizeof(Transition))
         fill_moves(self.cfg.left_labels, self.cfg.right_labels, self.cfg.use_edit,
-                   self.cfg.use_break, self.moves)
+                   self.cfg.use_break, self.cfg.use_filler, self.moves)
         
         self.guide = Perceptron(self.nr_moves, pjoin(model_dir, 'model.gz'))
         if os.path.exists(pjoin(model_dir, 'model.gz')):
