@@ -20,7 +20,7 @@ cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
     for i in range(s.n):
         init_lattice_step(words_lattice[i], &s.lattice[i])
     cdef bint is_edit
-    for i, (word_idx, tag, head, label, sent_id, is_edit) in enumerate(parse):
+    for i, (word_idx, tag, head, label, sent_id, is_edit, is_fill) in enumerate(parse):
         s.tokens[i].word = s.lattice[i].nodes[word_idx]
         if tag is not None:
             s.tokens[i].tag = index.hashes.encode_pos(tag) 
@@ -32,6 +32,8 @@ cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
             s.tokens[i].is_edit = is_edit
         if sent_id is not None:
             s.tokens[i].sent_id = sent_id
+        if is_fill is not None:
+            s.tokens[i].is_fill = is_fill
     # Set position 0 to be blank
     s.lattice[0].nodes[0] = &BLANK_WORD
     assert s.tokens[0].tag == 0
@@ -80,9 +82,9 @@ cdef class Input:
         """
         lattice = []
         parse = []
-        for word, tag, head, label, sent_id, is_edit in tokens:
+        for word, tag, head, label, sent_id, is_edit, is_fill in tokens:
             lattice.append([(1.0, word)])
-            parse.append((0, tag, head, label, sent_id, is_edit))
+            parse.append((0, tag, head, label, sent_id, is_edit, is_fill))
         return cls(lattice, parse)
 
     @classmethod
@@ -90,7 +92,7 @@ cdef class Input:
         tokens = []
         for token_str in pos_strs:
             word, pos = token_str.rsplit('/', 1)
-            tokens.append((word, pos, None, None, None, None))
+            tokens.append((word, pos, None, None, None, None, None))
         return cls.from_tokens(tokens)
 
     @classmethod
@@ -103,18 +105,19 @@ cdef class Input:
             pos = fields[3]
             feats = fields[5].split('|')
             is_edit = len(feats) >= 3 and feats[2] == '1'
+            is_fill = len(feats) >= 2 and feats[1] in ('D', 'E', 'F')
             sent_id = int(feats[0].split('.')[1]) if '.' in feats[0] else 0
             head = int(fields[6])
             label = fields[7]
-            tokens.append((word, pos, head, label, sent_id, is_edit))
+            tokens.append((word, pos, head, label, sent_id, is_edit, is_fill))
         return cls.from_tokens(tokens)
 
     def __init__(self, list lattice, list parse):
         # Pad lattice with start and end tokens
         lattice.insert(0, [(1.0, '<start>')])
-        parse.insert(0, (0, None, None, None, False, False))
+        parse.insert(0, (0, None, None, None, False, False, False))
         lattice.append([(1.0, '<end>')])
-        parse.append((0, 'EOL', None, None, False, False))
+        parse.append((0, 'EOL', None, None, False, False, False))
 
         self.c_sent = init_sent(lattice, parse)
 
@@ -162,7 +165,7 @@ cdef bytes conll_line_from_token(size_t i, Token* a, Step* lattice):
     cdef bytes word = index.lexicon.get_str(<size_t>a.word)
     if not word:
         word = b'-OOV-'
-    feats = '%d|-|%d|-' % (a.sent_id, a.is_edit)
+    feats = '%d|%s|%d|-' % (a.sent_id, 'F' if a.is_fill else '-', a.is_edit)
     cdef bytes tag = index.hashes.decode_pos(a.tag)
     return '\t'.join((str(i), word, '_', tag, tag, feats, 
                      str(a.head), decode_label(a.label), '_', '_'))

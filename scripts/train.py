@@ -16,6 +16,7 @@ import redshift.parser
     train_tagger=("Train tagger alongside parser", "flag", "p", bool),
     use_edit=("Use the Edit transition", "flag", "e", bool),
     use_break=("Use the Break transition", "flag", "b", bool),
+    use_filler=("Use the Filler transition", "flag", "F", bool),
     seed=("Random seed", "option", "s", int)
 )
 def main(train_loc, model_loc, n_iter=15,
@@ -23,6 +24,7 @@ def main(train_loc, model_loc, n_iter=15,
          n_sents=0,
          use_edit=False,
          use_break=False,
+         use_filler=False,
          debug=False, seed=0, beam_width=4,
          train_tagger=False):
     if debug:
@@ -38,7 +40,8 @@ def main(train_loc, model_loc, n_iter=15,
         feat_set=feat_set,
         feat_thresh=feat_thresh,
         use_edit=use_edit,
-        use_break=use_break
+        use_break=use_break,
+        use_filler=use_filler
     )
 
 

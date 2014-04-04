@@ -173,33 +173,6 @@ cdef enum:
     N2lv
     N2rv
     
-    N3w
-    N3p
-    N3c
-    N3c6
-    N3c4
-    N3L
-    N3lv
-    N3rv
-
-    S0hw
-    S0hp
-    S0hc
-    S0hc6
-    S0hc4
-    S0hL
-    S0hlv
-    S0hrv
- 
-    S0h2w
-    S0h2p
-    S0h2c
-    S0h2c6
-    S0h2c4
-    S0h2L
-    S0h2lv
-    S0h2rv
-    
     S0le_w
     S0le_p
     S0le_c
@@ -336,14 +309,6 @@ cdef int fill_context(size_t* context, SlotTokens* t, Token* parse,
     fill_token(context, N1w, t.n1)
     fill_token(context, N2w, t.n2)
 
-    #if t.s0.label != 0:
-    fill_token(context, S0hw, t.s1)
-    #else:
-    #    zero_token(context, S0hw)
-    #if t.s0.label != 0 and t.s1.label != 0:
-    fill_token(context, S0h2w, t.s2)
-    #else:
-    #    zero_token(context, S0h2w)
     # TODO: Distance
     if t.s0.i != 0:
         assert t.n0.i > t.s0.i
@@ -460,7 +425,7 @@ arc_hybrid = (
    # From three words
    (N0p, N1p, N2p),
    (S0p, N0p, N1p),
-   (S0hp, S0p, N0p),
+   (S1p, S0p, N0p),
    (S0p, S0lp, N0p),
    (S0p, S0rp, N0p),
    (S0p, N0p, N0lp),
@@ -484,7 +449,7 @@ arc_hybrid = (
    # Third order
    (S0p, S0lp, S0l2p),
    (S0p, S0rp, S0r2p),
-   (S0p, S0hp, S0h2p),
+   (S0p, S1p, S2p),
    (N0p, N0lp, N0l2p),
    
    # Labels
@@ -541,6 +506,7 @@ arc_hybrid = (
     (S0re_p, N0p),
     (S0re_w, N0p),
     (S0re_p, N0w),
+
     (S0re_p, N0le_p),
     (S0re_w, N0le_p),
     (S0re_p, N0le_w)
@@ -554,105 +520,10 @@ extra_labels = (
     (S0p, S0lL, S0rL),
     (S0p, S0lL, S0l2L, S0l0L),
     (S0p, S0rL, S0r2L, S0r0L),
-    (S0hp, S0L, S0rL),
-    (S0hp, S0L, S0lL),
-)
-from_single = (
-    (S0w, S0p),
-    (S0w,),
-    (S0p,),
-    (N0w, N0p),
-    (N0w,),
-    (N0p,),
-    (N1w, N1p),
-    (N1w,),
-    (N1p,),
-    (N2w, N2p),
-    (N2w,),
-    (N2p,)
+    (S1p, S0L, S0rL),
+    (S1p, S0L, S0lL),
 )
 
-
-from_word_pairs = (
-   (S0w, S0p, N0w, N0p),
-   (S0w, S0p, N0w),
-   (S0w, N0w, N0p),
-   (S0w, S0p, N0p),
-   (S0p, N0w, N0p),
-   (S0w, N0w),
-   (S0p, N0p),
-   (N0p, N1p)
-)
-
-
-from_three_words = (
-   (N0p, N1p, N2p),
-   (S0p, N0p, N1p),
-   (S0hp, S0p, N0p),
-   (S0p, S0lp, N0p),
-   (S0p, S0rp, N0p),
-   (S0p, N0p, N0lp)
-)
-
-
-distance = (
-   (dist, S0w),
-   (dist, S0p),
-   (dist, N0w),
-   (dist, N0p),
-   (dist, S0w, N0w),
-   (dist, S0p, N0p),
-)
-
-
-valency = (
-   (S0w, S0rv),
-   (S0p, S0rv),
-   (S0w, S0lv),
-   (S0p, S0lv),
-   (N0w, N0lv),
-   (N0p, N0lv),
-)
-
-
-zhang_unigrams = (
-   (S0hw,),
-   (S0hp,),
-   (S0lw,),
-   (S0lp,),
-   (S0rw,),
-   (S0rp,),
-   (N0lw,),
-   (N0lp,),
-)
-
-
-third_order = (
-   (S0h2w,),
-   (S0h2p,),
-   (S0l2w,),
-   (S0l2p,),
-   (S0r2w,),
-   (S0r2p,),
-   (N0l2w,),
-   (N0l2p,),
-   (S0p, S0lp, S0l2p),
-   (S0p, S0rp, S0r2p),
-   (S0p, S0hp, S0h2p),
-   (N0p, N0lp, N0l2p)
-)
-
-
-labels = (
-   (S0L,),
-   (S0lL,),
-   (S0rL,),
-   (N0lL,),
-   (S0hL,),
-   (S0l2L,),
-   (S0r2L,),
-   (N0l2L,),
-)
 
 
 label_sets = (
@@ -672,8 +543,8 @@ extra_labels = (
     (S0p, S0lL, S0rL),
     (S0p, S0lL, S0l2L, S0l0L),
     (S0p, S0rL, S0r2L, S0r0L),
-    (S0hp, S0L, S0rL),
-    (S0hp, S0L, S0lL),
+    (S1p, S0L, S0rL),
+    (S1p, S0L, S0lL),
 )
 
 edges = (
@@ -690,28 +561,6 @@ edges = (
     (S0p, N0le_p)
 )
 
-
-stack_second = (
-    (S1w,),
-    (S1p,),
-    (S1w, S1p),
-    (S1w, N0w),
-    (S1w, N0p),
-    (S1p, N0w),
-    (S1p, N0p),
-    #(S1w, N1w),
-    (S1w, N1p),
-    (S1p, N1p),
-    (S1p, N1w),
-    (S1p, S0p, N0p),
-    #(S1w, S0w, N0w),
-    (S1w, S0p, N0p),
-    #(S2w, N0w),
-    #(S2w, N1w),
-    (S2p, N0p, N1w),
-    #(S2p, N0w, N1w),
-    (S2w, N0p, N1p),
-)
 
 # Koo et al (2008) dependency features, using Brown clusters.
 clusters = (
@@ -738,11 +587,11 @@ clusters = (
     (S0c4, N0lp, N0c4),
     (S0p, N0lc4, N0c4),
     # Grand-child, right-arc
-    (S0hc4, S0c4, N0c4),
-    (S0hc6, S0c6, N0c6),
-    (S0hp, S0c4, N0c4),
-    (S0hc4, S0p, N0c4),
-    (S0hc4, S0c4, N0p),
+    (S1c4, S0c4, N0c4),
+    (S1c6, S0c6, N0c6),
+    (S1p, S0c4, N0c4),
+    (S1c4, S0p, N0c4),
+    (S1c4, S0c4, N0p),
     # Grand-child, left-arc
     (S0lc4, S0c4, N0c4),
     (S0lc6, S0c6, N0c6),
@@ -808,11 +657,6 @@ def pos_bigrams():
         bitags.append(feat)
     print "Adding %d bitags" % len(bitags)
     return tuple(bitags)
-
-
-def baseline_templates():
-    return from_single + from_word_pairs + from_three_words + distance + \
-           valency + zhang_unigrams + third_order + labels + label_sets
 
 
 def match_templates():
