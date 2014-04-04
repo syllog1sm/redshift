@@ -56,8 +56,6 @@ cdef inline bint can_filler(State* s):
 cdef int shift_cost(State* s, Token* gold):
     assert not s.at_end_of_buffer
     cost = 0
-    if can_break(s):
-        cost += gold[s.top].sent_id != gold[s.i].sent_id
     if gold[s.i].head == s.top:
         return cost
     if gold[s.i].is_edit:
@@ -85,8 +83,6 @@ cdef int left_cost(State* s, Token* gold):
     assert s.stack_len
     cost = 0
     cost += gold[s.top].is_fill
-    if can_break(s):
-        cost += gold[s.top].sent_id != gold[s.i].sent_id
     if gold[s.i].is_edit:
         return cost
     if not gold[s.i].is_edit and gold[s.top].is_edit:
@@ -107,7 +103,7 @@ cdef int edit_cost(State *s, Token* gold):
 cdef int break_cost(State* s, Token* gold):
     assert s.stack_len == 1
     assert not s.at_end_of_buffer
-    return gold[s.top].sent_id == gold[s.i].sent_id
+    return 0 if gold[s.top].sent_id != gold[s.i].sent_id else 1
 
 
 cdef int filler_cost(State* s, Token* gold):
