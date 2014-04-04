@@ -65,6 +65,7 @@ cdef int push_stack(State *s) except -1:
     s.stack_len += 1
     assert s.top <= s.n
     s.i += 1
+    s.parse[s.i].sent_id = s.parse[s.top].sent_id
 
 
 cdef uint64_t hash_state(State* s):

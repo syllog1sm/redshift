@@ -58,7 +58,7 @@ def beam(name, k=8, n=1, size=0, use_edit='False', feats="zhang", tb='wsj',
     use_sbd = use_sbd == 'True'
     if tb == 'wsj':
         data = str(REMOTE_STANFORD)
-        train_name = 'train.txt'
+        train_name = 'train.conll'
         eval_pos = 'devi.txt'
         eval_parse = 'devr.txt'
     elif tb == 'swbd' or tb == 'unseg_swbd':
@@ -88,9 +88,9 @@ def qdisfl(size='1000'):
     parse_str = r'./scripts/parse.py {model} {pos} {out}'
     eval_str = r'./scripts/evaluate.py {out}/parses {gold} | tee {out}/acc'
 
-    train = '/tmp/converted/unseg_train.conll'
-    pos = '/tmp/converted/unseg_dev.pos'
-    gold = '/tmp/converted/unseg_dev.conll'
+    train = '~/data/converted/unseg/train.conll'
+    pos = '~/data/converted/unseg/dev.pos'
+    gold = '~/data/converted/unseg/dev.conll'
     model = '~/data/parsers/tmp'
     out = '~/data/parsers/tmp/dev'
     with cd(str(REMOTE_REPO)):
@@ -221,7 +221,7 @@ def _add_edits(test_dir, pos):
     return 'python scripts/add_edits.py %s %s > %s' % (in_loc, pos, out_loc)
 
 
-def _pbsify(repo, command_strs, size=6):
+def _pbsify(repo, command_strs, size=8):
     header = """#! /bin/bash
 #PBS -l walltime=20:00:00,mem=4gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate

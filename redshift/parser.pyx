@@ -176,8 +176,8 @@ cdef class Parser:
             for i in range(beam.bsize):
                 if not beam.beam[i].is_finished:
                     self._predict(beam.beam[i], beam.moves[i], sent.lattice)
-                    # The False flag tells it to allow non-gold predictions
-                    beam.enqueue(i, False)
+                # The False flag tells it to allow non-gold predictions
+                beam.enqueue(i, False)
             beam.extend()
         beam.fill_parse(sent.tokens)
         sent.score = beam.beam[0].score
@@ -251,8 +251,6 @@ cdef class Parser:
                 gt = g.m
                 memcpy(p_hist, p.history, pt * sizeof(Transition))
                 memcpy(g_hist, g.history, gt * sizeof(Transition))
-            self.guide.n_corr += p.history[p.m-1].clas == g.history[g.m-1].clas
-            self.guide.total += 1
         if max_violn >= 0:
             counted = self._count_feats(sent, pt, gt, p_hist, g_hist)
             self.guide.batch_update(counted)

@@ -14,26 +14,9 @@ cdef enum:
     LEFT
     RIGHT
     EDIT
+    BREAK
     N_MOVES
 
-
-cdef bint USE_BREAK = False
-cdef bint STRICT_BREAK = True
-cdef inline bint can_break(State* s):
-    if not USE_BREAK:
-        return False
-    if s.breaking:
-        return False
-    if s.at_end_of_buffer:
-        return False
-    elif not s.stack_len:
-        return False
-    elif STRICT_BREAK and (s.parse[s.i].l_valency != 0 or s.parse[s.top].r_valency != 0):
-        return False
-    elif nr_headless(s) != 1:
-        return False
-    else:
-        return True
 
 cdef inline bint can_shift(State* s):
     return not s.at_end_of_buffer
@@ -48,6 +31,10 @@ cdef bint USE_EDIT = False
 cdef inline bint can_edit(State* s):
     return USE_EDIT and s.stack_len
 
+cdef bint USE_BREAK = False
+cdef inline bint can_break(State* s):
+    return USE_BREAK and s.stack_len == 1 and not s.parse[s.i].l_valency and not s.at_end_of_buffer
+
 # Edit oracle:
 # - You can always LeftArc from an Edit word
 # - You can always RightArc between two Edit words
@@ -57,20 +44,23 @@ cdef inline bint can_edit(State* s):
 
 cdef int shift_cost(State* s, Token* gold):
     assert not s.at_end_of_buffer
-    if gold[s.i].head == s.top:
-        return 0
-    if gold[s.i].is_edit:
-        return 0
     cost = 0
+    if can_break(s):
+        cost += gold[s.top].sent_id != gold[s.i].sent_id
+    if gold[s.i].head == s.top:
+        return cost
+    if gold[s.i].is_edit:
+        return cost
     cost += has_head_in_stack(s, s.i, gold)
     cost += has_child_in_stack(s, s.i, gold)
     return cost
 
 cdef int right_cost(State* s, Token* gold):
     assert s.stack_len >= 2
+    assert not can_break(s)
     cost = 0
     if gold[s.second].is_edit and gold[s.top].is_edit:
-        return 0
+        return 1
     elif gold[s.second].is_edit or gold[s.top].is_edit:
         cost += 1
     cost += has_head_in_buffer(s, s.top, gold)
@@ -80,12 +70,14 @@ cdef int right_cost(State* s, Token* gold):
 cdef int left_cost(State* s, Token* gold):
     assert s.stack_len
     cost = 0
+    if can_break(s):
+        cost += gold[s.top].sent_id != gold[s.i].sent_id
     if gold[s.i].is_edit:
-        return 0
+        return cost
     if not gold[s.i].is_edit and gold[s.top].is_edit:
-        return 1
+        return cost + 1
     if gold[s.top].head == s.i:
-        return 0
+        return cost
     cost += gold[s.top].head == s.second
     cost += has_head_in_buffer(s, s.top, gold)
     cost += has_child_in_buffer(s, s.top, gold)
@@ -96,7 +88,7 @@ cdef int edit_cost(State *s, Token* gold):
     return 0 if gold[s.top].is_edit else 1
 
 cdef int break_cost(State* s, Token* gold):
-    assert s.stack_len
+    assert s.stack_len == 1
     assert not s.at_end_of_buffer
     return gold[s.top].sent_id == gold[s.i].sent_id
 
@@ -106,7 +98,7 @@ cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
     valid[LEFT] = can_left(s)
     valid[RIGHT] = can_right(s)
     valid[EDIT] = can_edit(s)
-    #valid[BREAK] = can_break(s)
+    valid[BREAK] = can_break(s)
     for i in range(n):
         classes[i].is_valid = valid[classes[i].move]
     for i in range(n):
@@ -121,7 +113,7 @@ cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except
     costs[LEFT] = left_cost(s, gold) if can_left(s) else -1
     costs[RIGHT] = right_cost(s, gold) if can_right(s) else -1
     costs[EDIT] = edit_cost(s, gold) if can_edit(s) else -1
-    #costs[BREAK] = break_cost(s, gold) if can_break(s) else -1
+    costs[BREAK] = break_cost(s, gold) if can_break(s) else -1
     #print costs[SHIFT], costs[LEFT], costs[RIGHT], costs[EDIT]
     for i in range(n):
         classes[i].cost = costs[classes[i].move]
@@ -135,7 +127,6 @@ cdef int transition(Transition* t, State *s) except -1:
     assert not s.is_finished
     s.history[s.m] = t[0]
     s.m += 1 
-    cdef size_t erase_label
     if t.move == SHIFT:
         push_stack(s)
     elif t.move == LEFT:
@@ -153,12 +144,15 @@ cdef int transition(Transition* t, State *s) except -1:
             s.top = child
             s.stack[s.stack_len] = child
             s.stack_len += 1
-        end = edited
-        erase_label = index.hashes.encode_label('erased')
         for i in range(edited, s.parse[s.i].left_edge):
             s.parse[i].head = i
-            s.parse[i].label = erase_label
+            s.parse[i].label = t.label
             s.parse[i].is_edit = True
+    elif t.move == BREAK:
+        assert s.stack_len == 1
+        add_dep(s, s.n - 1, s.top, t.label)
+        s.parse[s.i].sent_id = s.parse[s.top].sent_id + 1
+        pop_stack(s)
     else:
         raise StandardError(t.move)
     if s.i >= (s.n - 1):
@@ -178,11 +172,13 @@ cdef size_t get_nr_moves(list left_labels, list right_labels,
 cdef int fill_moves(list left_labels, list right_labels, bint use_edit,
                     bint use_break, Transition* moves):
     cdef size_t i = 0
-    moves[i].move = SHIFT; i += 1
+    cdef size_t erase_label = index.hashes.encode_label('erased')
+    cdef size_t root_label = index.hashes.encode_label('ROOT')
+    moves[i].move = SHIFT; moves[i].label = 0; i += 1
     if use_edit:
-        moves[i].move = EDIT; i += 1
-    #if use_break:
-    #    moves[i].move = BREAK; i += 1
+        moves[i].move = EDIT; moves[i].label = erase_label; i += 1
+    if use_break:
+        moves[i].move = BREAK; moves[i].label = root_label; i += 1
     cdef size_t label
     for label in left_labels:
         moves[i].move = LEFT; moves[i].label = label; i += 1
