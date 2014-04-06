@@ -191,7 +191,7 @@ def _train(data, model, debug=False, k=1, feat_str='zhang', i=15,
            seed=0, args='',
            n_sents=0, ngrams=0, feat_thresh=10,
            use_edit=False, use_sbd=True, auto_pos=False):
-    use_edit = '-e' if use_edit else ''
+    use_edit = '-e -F' if use_edit else ''
     use_sbd = '-b' if use_sbd else ''
     auto_pos = '-p' if auto_pos else ''
     template = './scripts/train.py -i {i} -k {k} -x {feat_str} {data} {model} -s {seed} -n {n_sents} -f {feat_thresh} {use_sbd} {use_edit} {auto_pos} {args}'
