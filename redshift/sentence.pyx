@@ -106,7 +106,7 @@ cdef class Input:
             pos = fields[3]
             feats = fields[5].split('|')
             is_edit = len(feats) >= 3 and feats[2] == '1'
-            is_fill = len(feats) >= 2 and feats[1] != '-'
+            is_fill = len(feats) >= 2 and feats[1] in ('D', 'E', 'F', 'A', 'C') 
             sent_id = int(feats[0].split('.')[1]) if '.' in feats[0] else 0
             head = int(fields[6])
             label = fields[7]
@@ -179,7 +179,7 @@ cdef bytes conll_line_from_token(size_t i, Token* a, Step* lattice):
     cdef bytes word = index.lexicon.get_str(<size_t>a.word)
     if not word:
         word = b'-OOV-'
-    feats = '%d|%s|%d|-' % (a.sent_id, 'F' if a.is_fill else '-', a.is_edit)
+    feats = '0.%d|%s|%d|-' % (a.sent_id, 'F' if a.is_fill else '-', a.is_edit)
     cdef bytes tag = index.hashes.decode_pos(a.tag)
     return '\t'.join((str(i), word, '_', tag, tag, feats, 
                      str(a.head), decode_label(a.label), '_', '_'))
