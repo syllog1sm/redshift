@@ -182,7 +182,7 @@ cdef int transition(Transition* t, State *s) except -1:
         pop_stack(s)
     elif t.move == FILLER:
         assert s.stack_len >= 1
-        add_dep(s, s.n - 1, s.top, t.label)
+        add_dep(s, 0, s.top, t.label)
         s.parse[s.top].is_fill = True
         pop_stack(s)
     else:
