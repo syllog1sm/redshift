@@ -28,7 +28,7 @@ cdef inline bint can_right(State* s):
 
 
 cdef inline bint can_left(State* s):
-    return s.stack_len >= 1
+    return s.stack_len >= 1 and not s.at_end_of_buffer
 
 
 cdef bint USE_EDIT = False
@@ -38,7 +38,7 @@ cdef inline bint can_edit(State* s):
 
 cdef bint USE_BREAK = False
 cdef inline bint can_break(State* s):
-    return USE_BREAK and s.stack_len == 1 and not s.at_end_of_buffer
+    return USE_BREAK and s.stack_len == 1 and (s.at_end_of_buffer or not s.parse[s.i].l_valency)
 
 
 cdef bint USE_FILL = False
@@ -56,8 +56,8 @@ cdef inline bint can_filler(State* s):
 cdef int shift_cost(State* s, Token* gold):
     assert not s.at_end_of_buffer
     cost = 0
-    #if can_break(s):
-    #    cost += not gold[s.top].is_fill and gold[s.top].sent_id != gold[s.i].sent_id
+    if can_break(s):
+        cost += gold[s.top].sent_id != gold[s.i].sent_id
     if gold[s.i].head == s.top:
         return cost
     if gold[s.i].is_edit:
@@ -106,7 +106,6 @@ cdef int edit_cost(State *s, Token* gold):
 
 cdef int break_cost(State* s, Token* gold):
     assert s.stack_len == 1
-    assert not s.at_end_of_buffer
     return 0 if gold[s.top].sent_id != gold[s.i].sent_id else 1
 
 
@@ -140,7 +139,7 @@ cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except
     costs[EDIT] = edit_cost(s, gold) if can_edit(s) else -1
     costs[BREAK] = break_cost(s, gold) if can_break(s) else -1
     costs[FILLER] = filler_cost(s, gold) if can_filler(s) else -1
-    #print costs[SHIFT], costs[LEFT], costs[RIGHT], costs[EDIT]
+    #print 'costs', costs[SHIFT], costs[LEFT], costs[RIGHT], costs[EDIT], costs[FILLER], costs[BREAK]
     for i in range(n):
         classes[i].cost = costs[classes[i].move]
         if classes[i].move == LEFT and classes[i].cost == 0:
@@ -177,7 +176,8 @@ cdef int transition(Transition* t, State *s) except -1:
                 s.parse[i].is_edit = True
     elif t.move == BREAK:
         assert s.stack_len == 1
-        add_dep(s, s.n - 1, s.top, t.label)
+        #add_dep(s, s.n - 1, s.top, t.label)
+        add_dep(s, 0, s.top, t.label)
         s.parse[s.i].sent_id = s.parse[s.top].sent_id + 1
         pop_stack(s)
     elif t.move == FILLER:
