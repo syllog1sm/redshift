@@ -38,7 +38,7 @@ cdef inline bint can_edit(State* s):
 
 cdef bint USE_BREAK = False
 cdef inline bint can_break(State* s):
-    return USE_BREAK and s.stack_len == 1 and not s.parse[s.i].l_valency and not s.at_end_of_buffer
+    return USE_BREAK and s.stack_len == 1 and not s.at_end_of_buffer
 
 
 cdef bint USE_FILL = False
@@ -56,8 +56,8 @@ cdef inline bint can_filler(State* s):
 cdef int shift_cost(State* s, Token* gold):
     assert not s.at_end_of_buffer
     cost = 0
-    if can_break(s):
-        cost += not gold[s.top].is_fill and gold[s.top].sent_id != gold[s.i].sent_id
+    #if can_break(s):
+    #    cost += not gold[s.top].is_fill and gold[s.top].sent_id != gold[s.i].sent_id
     if gold[s.i].head == s.top:
         return cost
     if gold[s.i].is_edit:
