@@ -104,17 +104,9 @@ cdef class Beam:
     cdef int fill_parse(self, Token* parse) except -1:
         cdef size_t i, head 
         cdef State* s = self.beam[0]
-        for i in range(1, s.n-1):
-            head = i
-            while s.parse[head].head != head and \
-                  s.parse[head].head < (s.n-1) and \
-                  s.parse[head].head != 0:
-                head = s.parse[head].head
-            s.parse[i].sent_id = head
         # No need to copy heads for root and start symbols
         for i in range(1, self.length - 1):
             parse[i] = s.parse[i]
-        #fill_edits(self.beam[0], edits)
  
     def __dealloc__(self):
         for i in range(self.k):
