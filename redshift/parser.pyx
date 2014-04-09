@@ -215,7 +215,7 @@ cdef class Parser:
         self.guide.cache.flush()
         words = py_sent.words
         #print words
-        move_strs = ['?', 'S', 'L', 'R', 'E']
+        move_strs = ['?', 'S', 'L', 'R', 'E', 'F', 'B']
         while not p_beam.is_finished and not g_beam.is_finished:
             for i in range(p_beam.bsize):
                 self._predict(p_beam.beam[i], p_beam.moves[i], sent.lattice)
