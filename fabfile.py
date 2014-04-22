@@ -45,6 +45,9 @@ def deploy():
     with cd(str(REMOTE_REPO)):
         run('git pull')
 
+def tmparse():
+    local('./scripts/parse.py ~/work_data/parsers/tmp ~/work_data/converted/unseg/dev.pos /tmp/parse')
+    local('./scripts/new_evaluate.py ~/work_data/converted/unseg/dev.conll /tmp/parse/parses')
 
 def beam(name, k=8, n=1, size=0, use_edit='False', feats="zhang", tb='wsj',
          auto_pos='False', iters=15,
