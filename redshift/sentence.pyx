@@ -106,7 +106,7 @@ cdef class Input:
             pos = fields[3]
             feats = fields[5].split('|')
             is_edit = len(feats) >= 3 and feats[2] == '1'
-            is_fill = len(feats) >= 2 and feats[1] in ('D', 'E', 'F', 'A', 'C') 
+            is_fill = len(feats) >= 2 and feats[1] in ('D', 'E', 'F') 
             sent_id = int(feats[0].split('.')[1]) if '.' in feats[0] else 0
             head = int(fields[6])
             label = fields[7]
