@@ -71,9 +71,12 @@ cdef int right_cost(State* s, Token* gold):
     assert s.stack_len >= 2
     assert not can_break(s)
     cost = 0
-    cost += gold[s.top].is_fill
+    if gold[s.second].is_fill and gold[s.top].is_fill:
+        return cost
+    elif gold[s.top].is_fill:
+        cost += 1
     if gold[s.second].is_edit and gold[s.top].is_edit:
-        return 1
+        return cost
     elif gold[s.second].is_edit or gold[s.top].is_edit:
         cost += 1
     cost += has_head_in_buffer(s, s.top, gold)
@@ -84,13 +87,16 @@ cdef int right_cost(State* s, Token* gold):
 cdef int left_cost(State* s, Token* gold):
     assert s.stack_len
     cost = 0
-    cost += gold[s.top].is_fill
     if can_break(s):
         cost += gold[s.top].sent_id != gold[s.i].sent_id
     if gold[s.i].is_edit:
         return cost
     if not gold[s.i].is_edit and gold[s.top].is_edit:
         return cost + 1
+    if gold[s.i].is_fill and gold[s.top].is_fill:
+        return cost
+    elif gold[s.top].is_fill:
+        cost += 1
     if gold[s.top].head == s.i:
         return cost
     cost += gold[s.top].head == s.second
