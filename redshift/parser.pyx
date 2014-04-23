@@ -114,6 +114,8 @@ def get_templates(feats_str):
         match_feats = _parse_features.match_templates()
     elif 'clusters' in feats_str:
         templates += _parse_features.clusters
+    if 'prevnext' in feats_str:
+        templates += _parse_features.prev_next
     if 'bitags' in feats_str:
         templates += _parse_features.pos_bigrams()
     return templates, match_feats

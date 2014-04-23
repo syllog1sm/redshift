@@ -91,6 +91,24 @@ cdef enum:
     S0L
     S0lv
     S0rv
+    
+    S0nw
+    S0np
+    S0nc
+    S0nc6
+    S0nc4
+    S0nL
+    S0nlv
+    S0nrv
+
+    S0nnw
+    S0nnp
+    S0nnc
+    S0nnc6
+    S0nnc4
+    S0nnL
+    S0nnlv
+    S0nnrv
 
     S0r0w
     S0r0p
@@ -146,6 +164,24 @@ cdef enum:
     N0llv
     N0lrv
 
+    P2w
+    P2p
+    P2c
+    P2c6
+    P2c4
+    P2L
+    P2lv
+    P2rv
+ 
+    P1w
+    P1p
+    P1c
+    P1c6
+    P1c4
+    P1L
+    P1lv
+    P1rv
+ 
     N0w
     N0p
     N0c
@@ -297,6 +333,8 @@ cdef int fill_context(size_t* context, SlotTokens* t, Token* parse,
     fill_token(context, S0l2w, t.s0l2)
     fill_token(context, S0l0w, t.s0l0)
     fill_token(context, S0w, t.s0)
+    fill_token(context, S0nw, t.s0n)
+    fill_token(context, S0nnw, t.s0nn)
     fill_token(context, S0r0w, t.s0r0)
     fill_token(context, S0r2w, t.s0r2)
     fill_token(context, S0rw, t.s0r)
@@ -305,6 +343,8 @@ cdef int fill_context(size_t* context, SlotTokens* t, Token* parse,
     fill_token(context, N0lw, t.n0l)
     fill_token(context, N0l2w, t.n0l2)
     fill_token(context, N0l0w, t.n0l0)
+    fill_token(context, P2w, t.p2)
+    fill_token(context, P1w, t.p1)
     fill_token(context, N0w, t.n0)
     fill_token(context, N1w, t.n1)
     fill_token(context, N2w, t.n2)
@@ -600,6 +640,30 @@ clusters = (
     (S0lc4, S0c4, N0p)
 )
 
+prev_next = (
+    (P2w,),
+    (P2p,),
+    (P1w,),
+    (P1p,),
+    (P2p, P1p,),
+    (P1p, N0w,),
+    (P1p, N0p,),
+
+    (S0nw,),
+    (S0np,),
+    (S0nnw,),
+    (S0nnp,),
+    (S0nnp, S0np),
+    (S0np, S0w,),
+    (S0np, S0p,),
+
+    (S0np, N0w),
+    (S0np, N0p),
+
+    (S0w, P1p),
+    (S0p, P1p),
+    (S0p, P1w),
+)
 
 disfl = (
     (prev_edit,),
