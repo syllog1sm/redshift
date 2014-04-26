@@ -48,15 +48,16 @@ cdef class Beam:
         cdef State* s = self.beam[i]
         cdef size_t move_id = i * self.nr_class
         if s.is_finished:
-            self.queue.push(ScoredMove(s.score + (s.score / self.t), move_id))
-            #self.queue.append((s.score + (s.score / self.t), i * self.nr_class))
+            self.queue.push(ScoredMove(s.score / s.m, move_id))
             return 0
         cdef Transition* moves = self.moves[i]
         cdef Transition t
         cdef size_t j
+        cdef double score = s.score
         for j in range(self.nr_class):
             if moves[j].is_valid and (not force_gold or moves[j].cost == 0):
-                self.queue.push(ScoredMove(s.score + moves[j].score, move_id + j))
+                self.queue.push(ScoredMove((score + moves[j].score) / (self.t+1),
+                                move_id + j))
 
     @cython.cdivision(True)
     cdef int extend(self):
@@ -81,7 +82,7 @@ cdef class Beam:
             # parents later.
             copy_state(self.beam[self.bsize], self.parents[parent_idx])
             s = self.beam[self.bsize]
-            s.score = data.first
+            s.score = data.first * s.m
             t = &self.moves[parent_idx][move_idx]
             if not s.is_finished:
                 s.cost += t.cost
