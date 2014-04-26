@@ -216,7 +216,7 @@ def _parse(model, data, out, gold=False):
 
 
 def _evaluate(test, gold):
-    return './scripts/evaluate.py %s %s > %s' % (test, gold, test.replace('parses', 'acc'))
+    return './scripts/new_evaluate.py %s %s > %s' % (gold, test, test.replace('parses', 'acc'))
 
 def _add_edits(test_dir, pos):
     in_loc = pjoin(test_dir, 'parses')
