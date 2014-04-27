@@ -70,10 +70,6 @@ cdef int right_cost(State* s, Token* gold):
     assert s.stack_len >= 2
     assert not can_break(s)
     cost = 0
-    #if gold[s.second].is_fill and gold[s.top].is_fill:
-    #    return cost
-    #elif gold[s.top].is_fill:
-    #    cost += 1
     if gold[s.second].is_edit and gold[s.top].is_edit:
         return cost
     elif gold[s.second].is_edit or gold[s.top].is_edit:
@@ -92,12 +88,6 @@ cdef int left_cost(State* s, Token* gold):
         return cost
     if not gold[s.i].is_edit and gold[s.top].is_edit:
         return cost + 1
-    #if gold[s.i].is_fill and gold[s.top].is_fill:
-    #    return cost
-    #elif gold[s.top].is_fill:
-    #    cost += 1
-    #elif gold[s.i].is_fill:
-    #    cost += 1
     if gold[s.top].head == s.i:
         return cost
     cost += gold[s.top].head == s.second
@@ -117,11 +107,6 @@ cdef int break_cost(State* s, Token* gold):
     return 0 if gold[s.top].sent_id != gold[s.i].sent_id else 1
 
 
-#cdef int filler_cost(State* s, Token* gold):
-#    assert s.stack_len >= 1
-#    return 0 if gold[s.top].is_fill else 1
-
-
 cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
     cdef bint[N_MOVES] valid
     valid[SHIFT] = can_shift(s)
@@ -129,7 +114,6 @@ cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
     valid[RIGHT] = can_right(s)
     valid[EDIT] = can_edit(s)
     valid[BREAK] = can_break(s)
-    #valid[FILLER] = can_filler(s)
     for i in range(n):
         classes[i].is_valid = valid[classes[i].move]
     for i in range(n):
@@ -146,8 +130,6 @@ cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except
     costs[RIGHT] = right_cost(s, gold) if can_right(s) else -1
     costs[EDIT] = edit_cost(s, gold) if can_edit(s) else -1
     costs[BREAK] = break_cost(s, gold) if can_break(s) else -1
-    #costs[FILLER] = filler_cost(s, gold) if can_filler(s) else -1
-    #print costs[SHIFT], costs[LEFT], costs[RIGHT], costs[EDIT]
     for i in range(n):
         classes[i].cost = costs[classes[i].move]
         if classes[i].move == LEFT and classes[i].cost == 0:
@@ -184,7 +166,6 @@ cdef int transition(Transition* t, State *s) except -1:
             # label.
             if s.parse[i].is_edit:
                 break
-            #if not s.parse[i].is_fill:
             s.parse[i].head = i
             s.parse[i].label = t.label
             s.parse[i].is_edit = True
@@ -193,11 +174,6 @@ cdef int transition(Transition* t, State *s) except -1:
         add_dep(s, s.n - 1, s.top, t.label)
         s.parse[s.i].sent_id = s.parse[s.top].sent_id + 1
         pop_stack(s)
-    #elif t.move == FILLER:
-    #    assert s.stack_len >= 1
-    #    add_dep(s, 0, s.top, t.label)
-    #    s.parse[s.top].is_fill = True
-    #    pop_stack(s)
     else:
         raise StandardError(t.move)
     if s.i >= (s.n - 1):
