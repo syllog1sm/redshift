@@ -81,7 +81,7 @@ def get_labels(sents):
     cdef Input sent
     for i, sent in enumerate(sents):
         for j in range(sent.length):
-            if sent.c_sent.tokens[j].is_edit or sent.c_sent.tokens[j].is_fill:
+            if sent.c_sent.tokens[j].is_edit:
                 dfl_labels.add(sent.c_sent.tokens[j].label)
             elif sent.c_sent.tokens[j].head > j:
                 left_labels.add(sent.c_sent.tokens[j].label)
