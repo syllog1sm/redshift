@@ -110,6 +110,10 @@ cdef class Input:
             sent_id = int(feats[0].split('.')[1]) if '.' in feats[0] else 0
             head = int(fields[6])
             label = fields[7]
+            if is_edit:
+                label = 'erased'
+            elif is_fill:
+                label = 'filler%s' % feats[1]
             tokens.append((word, pos, head, label, sent_id, is_edit, is_fill))
         return cls.from_tokens(tokens)
 
