@@ -14,7 +14,6 @@ cdef enum:
     LEFT
     RIGHT
     EDIT
-    FILLER
     BREAK
     N_MOVES
 
@@ -41,9 +40,9 @@ cdef inline bint can_break(State* s):
     return USE_BREAK and s.stack_len == 1 and not s.parse[s.i].l_valency and not s.at_end_of_buffer
 
 
-cdef bint USE_FILL = False
-cdef inline bint can_filler(State* s):
-    return s.stack_len >= 1
+#cdef bint USE_FILL = False
+#cdef inline bint can_filler(State* s):
+#    return s.stack_len >= 1
 
 
 # Edit oracle:
@@ -57,7 +56,7 @@ cdef int shift_cost(State* s, Token* gold):
     assert not s.at_end_of_buffer
     cost = 0
     if can_break(s):
-        cost += not gold[s.top].is_fill and gold[s.top].sent_id != gold[s.i].sent_id
+        cost += gold[s.top].sent_id != gold[s.i].sent_id
     if gold[s.i].head == s.top:
         return cost
     if gold[s.i].is_edit:
@@ -71,10 +70,10 @@ cdef int right_cost(State* s, Token* gold):
     assert s.stack_len >= 2
     assert not can_break(s)
     cost = 0
-    if gold[s.second].is_fill and gold[s.top].is_fill:
-        return cost
-    elif gold[s.top].is_fill:
-        cost += 1
+    #if gold[s.second].is_fill and gold[s.top].is_fill:
+    #    return cost
+    #elif gold[s.top].is_fill:
+    #    cost += 1
     if gold[s.second].is_edit and gold[s.top].is_edit:
         return cost
     elif gold[s.second].is_edit or gold[s.top].is_edit:
@@ -93,10 +92,12 @@ cdef int left_cost(State* s, Token* gold):
         return cost
     if not gold[s.i].is_edit and gold[s.top].is_edit:
         return cost + 1
-    if gold[s.i].is_fill and gold[s.top].is_fill:
-        return cost
-    elif gold[s.top].is_fill:
-        cost += 1
+    #if gold[s.i].is_fill and gold[s.top].is_fill:
+    #    return cost
+    #elif gold[s.top].is_fill:
+    #    cost += 1
+    #elif gold[s.i].is_fill:
+    #    cost += 1
     if gold[s.top].head == s.i:
         return cost
     cost += gold[s.top].head == s.second
@@ -116,9 +117,9 @@ cdef int break_cost(State* s, Token* gold):
     return 0 if gold[s.top].sent_id != gold[s.i].sent_id else 1
 
 
-cdef int filler_cost(State* s, Token* gold):
-    assert s.stack_len >= 1
-    return 0 if gold[s.top].is_fill else 1
+#cdef int filler_cost(State* s, Token* gold):
+#    assert s.stack_len >= 1
+#    return 0 if gold[s.top].is_fill else 1
 
 
 cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
@@ -128,7 +129,7 @@ cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
     valid[RIGHT] = can_right(s)
     valid[EDIT] = can_edit(s)
     valid[BREAK] = can_break(s)
-    valid[FILLER] = can_filler(s)
+    #valid[FILLER] = can_filler(s)
     for i in range(n):
         classes[i].is_valid = valid[classes[i].move]
     for i in range(n):
@@ -145,13 +146,15 @@ cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except
     costs[RIGHT] = right_cost(s, gold) if can_right(s) else -1
     costs[EDIT] = edit_cost(s, gold) if can_edit(s) else -1
     costs[BREAK] = break_cost(s, gold) if can_break(s) else -1
-    costs[FILLER] = filler_cost(s, gold) if can_filler(s) else -1
+    #costs[FILLER] = filler_cost(s, gold) if can_filler(s) else -1
     #print costs[SHIFT], costs[LEFT], costs[RIGHT], costs[EDIT]
     for i in range(n):
         classes[i].cost = costs[classes[i].move]
         if classes[i].move == LEFT and classes[i].cost == 0:
             classes[i].cost += gold[s.top].label != classes[i].label
         elif classes[i].move == RIGHT and classes[i].cost == 0:
+            classes[i].cost = gold[s.top].label != classes[i].label
+        elif classes[i].move == EDIT and classes[i].cost == 0:
             classes[i].cost = gold[s.top].label != classes[i].label
 
 
@@ -177,20 +180,24 @@ cdef int transition(Transition* t, State *s) except -1:
             s.stack[s.stack_len] = child
             s.stack_len += 1
         for i in range(edited, s.parse[s.i].left_edge):
-            if not s.parse[i].is_fill:
-                s.parse[i].head = i
-                s.parse[i].label = t.label
-                s.parse[i].is_edit = True
+            # We might have already set these as edits, under a different
+            # label.
+            if s.parse[i].is_edit:
+                break
+            #if not s.parse[i].is_fill:
+            s.parse[i].head = i
+            s.parse[i].label = t.label
+            s.parse[i].is_edit = True
     elif t.move == BREAK:
         assert s.stack_len == 1
         add_dep(s, s.n - 1, s.top, t.label)
         s.parse[s.i].sent_id = s.parse[s.top].sent_id + 1
         pop_stack(s)
-    elif t.move == FILLER:
-        assert s.stack_len >= 1
-        add_dep(s, 0, s.top, t.label)
-        s.parse[s.top].is_fill = True
-        pop_stack(s)
+    #elif t.move == FILLER:
+    #    assert s.stack_len >= 1
+    #    add_dep(s, 0, s.top, t.label)
+    #    s.parse[s.top].is_fill = True
+    #    pop_stack(s)
     else:
         raise StandardError(t.move)
     if s.i >= (s.n - 1):
@@ -199,29 +206,24 @@ cdef int transition(Transition* t, State *s) except -1:
         s.is_finished = True
 
 
-cdef size_t get_nr_moves(list left_labels, list right_labels,
-                         bint use_edit, bint use_break, bint use_fill):
+cdef size_t get_nr_moves(list left_labels, list right_labels, list dfl_labels,
+                         bint use_break):
     global USE_BREAK, USE_EDIT
     USE_BREAK = use_break
-    USE_EDIT = use_edit
-    USE_FILL = use_fill
-    return 1 + use_edit + use_break + use_fill + len(left_labels) + len(right_labels)
+    USE_EDIT = bool(dfl_labels) 
+    return 1 + use_break + len(left_labels) + len(right_labels) + len(dfl_labels)
 
 
-cdef int fill_moves(list left_labels, list right_labels, bint use_edit,
-                    bint use_break, bint use_fill, Transition* moves):
+cdef int fill_moves(list left_labels, list right_labels, list dfl_labels,
+                    bint use_break, Transition* moves):
     cdef size_t i = 0
-    cdef size_t erase_label = index.hashes.encode_label('erased')
     cdef size_t root_label = index.hashes.encode_label('ROOT')
-    cdef size_t filler_label = index.hashes.encode_label('filler')
     moves[i].move = SHIFT; moves[i].label = 0; i += 1
-    if use_edit:
-        moves[i].move = EDIT; moves[i].label = erase_label; i += 1
-    if use_fill:
-        moves[i].move = FILLER; moves[i].label = filler_label; i += 1
     if use_break:
         moves[i].move = BREAK; moves[i].label = root_label; i += 1
     cdef size_t label
+    for label in dfl_labels:
+        moves[i].move = EDIT; moves[i].label = label; i += 1
     for label in left_labels:
         moves[i].move = LEFT; moves[i].label = label; i += 1
     for label in right_labels:
