@@ -86,20 +86,16 @@ def score_sbd(gold, test):
     return (c / n) * 100 
 
 
-def is_disfluent(g, t):
-    return g.is_edit or g.is_filler
-
-
 def main(gold_loc, test_loc):
     gold = ParsedFile(gold_loc)
     test = ParsedFile(test_loc)
-    uas_scorer = Scorer(is_disfluent, eval_uas, gold, test)
-    las_scorer = Scorer(is_disfluent, eval_las, gold, test)
+    uas_scorer = Scorer(lambda g, t: g.is_edit, eval_uas, gold, test)
+    las_scorer = Scorer(lambda g, t: g.is_edit, eval_las, gold, test)
     print 'U: %.3f' % uas_scorer.percent
     print 'L: %.3f' % las_scorer.percent
-    p = Scorer(lambda g, t: g.is_filler or not t.is_edit,
+    p = Scorer(lambda g, t: not t.is_edit or t.label != 'erased',
                lambda g, t: g.is_edit == t.is_edit, gold, test).percent
-    r = Scorer(lambda g, t: g.is_filler or not g.is_edit,
+    r = Scorer(lambda g, t: not g.is_edit or g.label != 'erased',
                  lambda g, t: g.is_edit == t.is_edit, gold, test).percent
     print 'SBD: %.3f' % score_sbd(gold, test)
     print 'DIS P: %.2f' % p

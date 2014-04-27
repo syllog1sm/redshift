@@ -11,12 +11,11 @@ cdef struct Transition:
     int cost
     bint is_valid
 
-cdef size_t get_nr_moves(list left_labels, list right_labels,
-                         bint use_edit, bint use_break, bint use_filler)
+cdef size_t get_nr_moves(list left_labels, list right_labels, list dfl_labels,
+                         bint use_break)
 
-cdef int fill_moves(list left_labels, list right_labels,
-                    bint use_edit, bint use_break, bint use_filler,
-                    Transition* moves)
+cdef int fill_moves(list left_labels, list right_labels, list dfl_labels,
+                    bint use_break, Transition* moves)
 
 cdef int fill_valid(State* s, Transition* classes, size_t n) except -1
 

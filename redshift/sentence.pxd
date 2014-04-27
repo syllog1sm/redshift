@@ -12,7 +12,6 @@ cdef struct Token:
     size_t r_valency
     size_t sent_id
     bint is_edit
-    bint is_fill
 
 
 cdef struct Step:

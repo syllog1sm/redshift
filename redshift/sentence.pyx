@@ -21,7 +21,7 @@ cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
     for i in range(s.n):
         init_lattice_step(words_lattice[i], &s.lattice[i])
     cdef bint is_edit
-    for i, (word_idx, tag, head, label, sent_id, is_edit, is_fill) in enumerate(parse):
+    for i, (word_idx, tag, head, label, sent_id, is_edit) in enumerate(parse):
         s.tokens[i].word = s.lattice[i].nodes[word_idx]
         if tag is not None:
             s.tokens[i].tag = index.hashes.encode_pos(tag) 
@@ -33,8 +33,6 @@ cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
             s.tokens[i].is_edit = is_edit
         if sent_id is not None:
             s.tokens[i].sent_id = sent_id
-        if is_fill is not None:
-            s.tokens[i].is_fill = is_fill
     # Set position 0 to be blank
     s.lattice[0].nodes[0] = &BLANK_WORD
     assert s.tokens[0].tag == 0
@@ -83,9 +81,9 @@ cdef class Input:
         """
         lattice = []
         parse = []
-        for word, tag, head, label, sent_id, is_edit, is_fill in tokens:
+        for word, tag, head, label, sent_id, is_edit in tokens:
             lattice.append([(1.0, word)])
-            parse.append((0, tag, head, label, sent_id, is_edit, is_fill))
+            parse.append((0, tag, head, label, sent_id, is_edit))
         return cls(lattice, parse)
 
     @classmethod
@@ -93,7 +91,7 @@ cdef class Input:
         tokens = []
         for token_str in pos_strs:
             word, pos = token_str.rsplit('/', 1)
-            tokens.append((word, pos, None, None, None, None, None))
+            tokens.append((word, pos, None, None, None, None))
         return cls.from_tokens(tokens)
 
     @classmethod
@@ -114,15 +112,15 @@ cdef class Input:
                 label = 'erased'
             elif is_fill:
                 label = 'filler%s' % feats[1]
-            tokens.append((word, pos, head, label, sent_id, is_edit, is_fill))
+            tokens.append((word, pos, head, label, sent_id, is_edit or is_fill))
         return cls.from_tokens(tokens)
 
     def __init__(self, list lattice, list parse):
         # Pad lattice with start and end tokens
         lattice.insert(0, [(1.0, '<start>')])
-        parse.insert(0, (0, None, None, None, False, False, False))
+        parse.insert(0, (0, None, None, None, False, False))
         lattice.append([(1.0, '<end>')])
-        parse.append((0, 'EOL', None, None, False, False, False))
+        parse.append((0, 'EOL', None, None, False, False))
 
         self.c_sent = init_sent(lattice, parse)
 
@@ -133,16 +131,15 @@ cdef class Input:
 
     property tokens:
         def __get__(self):
-            Token = namedtuple('Token', 'id word tag head label sent_id is_edit is_filler')
+            Token = namedtuple('Token', 'id word tag head label sent_id is_edit')
             for i in range(1, self.c_sent.n - 1):
                 word = index.lexicon.get_str(<size_t>self.c_sent.tokens[i].word)
                 tag = decode_pos(self.c_sent.tokens[i].tag)
                 head = self.c_sent.tokens[i].head
                 label = decode_label(self.c_sent.tokens[i].label)
                 is_edit = self.c_sent.tokens[i].is_edit
-                is_filler = self.c_sent.tokens[i].is_fill
                 sent_id = self.c_sent.tokens[i].sent_id
-                yield Token(i, word, tag, head, label, sent_id, is_edit, is_filler)
+                yield Token(i, word, tag, head, label, sent_id, is_edit)
 
     property length:
         def __get__(self):
@@ -183,7 +180,9 @@ cdef bytes conll_line_from_token(size_t i, Token* a, Step* lattice):
     cdef bytes word = index.lexicon.get_str(<size_t>a.word)
     if not word:
         word = b'-OOV-'
-    feats = '0.%d|%s|%d|-' % (a.sent_id, 'F' if a.is_fill else '-', a.is_edit)
+    label = decode_label(a.label)
+    fill_tag = label[-1] if label.startswith('filler') else '-'
+    feats = '0.%d|%s|%d|-' % (a.sent_id, fill_tag, label == 'erased')
     cdef bytes tag = index.hashes.decode_pos(a.tag)
     return '\t'.join((str(i), word, '_', tag, tag, feats, 
-                     str(a.head), decode_label(a.label), '_', '_'))
+                     str(a.head), label, '_', '_'))
