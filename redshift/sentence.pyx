@@ -15,6 +15,7 @@ from index.hashes import decode_label
 cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
     cdef Sentence* s = <Sentence*>malloc(sizeof(Sentence))
     s.n = len(words_lattice)
+    assert s.n >= 3, words_lattice
     s.lattice = <Step*>calloc(s.n, sizeof(Step))
     s.tokens = <Token*>calloc(s.n, sizeof(Token))
     cdef Token t
@@ -33,6 +34,16 @@ cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
             s.tokens[i].is_edit = is_edit
         if sent_id is not None:
             s.tokens[i].sent_id = sent_id
+        # Initialise left edges to own value
+        s.tokens[i].left_edge = i
+    # Set left edges
+    cdef size_t gov
+    for i in range(1, s.n - 1):
+        gov = s.tokens[i].head
+        while i < s.tokens[gov].left_edge:
+            s.tokens[gov].left_edge = i
+            gov = s.tokens[gov].head
+
     # Set position 0 to be blank
     s.lattice[0].nodes[0] = &BLANK_WORD
     assert s.tokens[0].tag == 0
@@ -72,6 +83,21 @@ cdef void free_step(Step* s):
 
 
 cdef class Input:
+    def __init__(self, list lattice, list parse):
+        # Pad lattice with start and end tokens
+        lattice.insert(0, [(1.0, '<start>')])
+        parse.insert(0, (0, None, None, None, False, False))
+        lattice.append([(1.0, '<end>')])
+        parse.append((0, 'EOL', None, None, False, False))
+        self.c_sent = init_sent(lattice, parse)
+        self.segment()
+
+    def __dealloc__(self):
+        # TODO: Fix memory
+        pass
+        #free_sent(self.c_sent)
+
+
     @classmethod
     def from_tokens(cls, tokens):
         """
@@ -88,6 +114,7 @@ cdef class Input:
 
     @classmethod
     def from_pos(cls, pos_strs):
+        assert pos_strs
         tokens = []
         for token_str in pos_strs:
             word, pos = token_str.rsplit('/', 1)
@@ -104,7 +131,11 @@ cdef class Input:
             pos = fields[3]
             feats = fields[5].split('|')
             is_edit = len(feats) >= 3 and feats[2] == '1'
-            is_fill = len(feats) >= 2 and feats[1] in ('D', 'E', 'F') 
+            #if len(feats) >= 5 and feats[4] == 'RM':
+            #    is_edit = True
+            is_fill = len(feats) >= 2 and feats[1] in ('D', 'E', 'F', 'A') 
+            is_ns = len(feats) >= 4 and feats[3] == 'N_S'
+            is_ns = False
             sent_id = int(feats[0].split('.')[1]) if '.' in feats[0] else 0
             head = int(fields[6])
             label = fields[7]
@@ -112,22 +143,54 @@ cdef class Input:
                 label = 'erased'
             elif is_fill:
                 label = 'filler%s' % feats[1]
-            tokens.append((word, pos, head, label, sent_id, is_edit or is_fill))
+            elif is_ns:
+                label = 'fillerNS'
+            tokens.append((word, pos, head, label, sent_id,
+                          is_edit or is_fill or is_ns))
         return cls.from_tokens(tokens)
 
-    def __init__(self, list lattice, list parse):
-        # Pad lattice with start and end tokens
-        lattice.insert(0, [(1.0, '<start>')])
-        parse.insert(0, (0, None, None, None, False, False))
-        lattice.append([(1.0, '<end>')])
-        parse.append((0, 'EOL', None, None, False, False))
+    def segment(self):
+        cdef size_t i
+        cdef size_t root = encode_label('ROOT')
+        cdef size_t cc = encode_label('cc')
+        cdef size_t conj = encode_label('conj')
+        cdef size_t nsubj = encode_label('nsubj')
+        cdef Sentence* sent = self.c_sent
+        cdef Token* token
+        has_subj = set()
+        conjunctions = []
+        conjuncts = []
+        roots = set()
+        for i in range(1, self.c_sent.n - 1):
+            token = &sent.tokens[i]
+            if token.label == nsubj:
+                has_subj.add(token.head)
+            elif token.label == root:
+                roots.add(i)
+            elif token.label == cc:
+                conjunctions.append(i)
+            elif token.label == conj:
+                conjuncts.append(i)
+        for c in conjuncts:
+            if c in has_subj and sent.tokens[c].head in roots:
+                roots.add(c)
+        left_edges = []
+        for root in roots:
+            left_edges.append(sent.tokens[root].left_edge)
+        left_edges.sort()
+        left_edges.reverse()
+        segments = []
+        last_left = sent.n - 1
+        for edge in left_edges:
+            if edge != 1 and sent.tokens[edge - 1].label == cc:
+                edge -= 1
+            segments.append((edge, last_left))
+            last_left = edge
+        segments.sort()
+        print segments
+        print self.to_conll()
 
-        self.c_sent = init_sent(lattice, parse)
 
-    def __dealloc__(self):
-        # TODO: Fix memory
-        pass
-        #free_sent(self.c_sent)
 
     property tokens:
         def __get__(self):
