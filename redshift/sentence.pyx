@@ -90,7 +90,6 @@ cdef class Input:
         lattice.append([(1.0, '<end>')])
         parse.append((0, 'EOL', None, None, False, False))
         self.c_sent = init_sent(lattice, parse)
-        self.segment()
 
     def __dealloc__(self):
         # TODO: Fix memory
@@ -187,10 +186,9 @@ cdef class Input:
             segments.append((edge, last_left))
             last_left = edge
         segments.sort()
-        print segments
-        print self.to_conll()
-
-
+        for i, (start, end) in enumerate(segments):
+            for j in range(start, end):
+                self.c_sent.tokens[j].sent_id = i
 
     property tokens:
         def __get__(self):
