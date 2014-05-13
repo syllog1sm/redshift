@@ -72,7 +72,7 @@ def score_sbd(gold, test):
         last_g_id = None
         last_t_id = None
         for g, t in zip(gold_sent, test_sent):
-            if g.is_filler or g.is_edit or g.tag == 'UH':
+            if g.is_edit or g.tag == 'UH':
                 continue
             gold_break = last_g_id != None and g.sent_id != last_g_id
             test_break = last_t_id != None and t.sent_id != last_t_id
