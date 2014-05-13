@@ -178,6 +178,7 @@ cdef class Parser:
                 beam.enqueue(i, False)
             beam.extend()
         beam.fill_parse(sent.tokens)
+        py_sent.segment()
         sent.score = beam.beam[0].score
 
     cdef int _predict(self, State* s, Transition* classes, Step* lattice) except -1:
