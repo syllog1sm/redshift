@@ -37,16 +37,18 @@ def write_tagger_config(model_dir, beam_width=4, features='basic', feat_thresh=1
 
 
  
-def train(model_dir, list sents, beam_width=4, features='basic', nr_iter=10,
+def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
           feat_thresh=10):
     cdef Input sent
     cdef size_t i
     if not os.path.exists(model_dir):
         os.mkdir(model_dir)
-    tags = set()
+    sents = [Input.from_pos(s) for s in train_str.strip().split('\n') if s.strip()]
+    # Dict instead of set so json serialisable
+    tags = {}
     for sent in sents:
         for i in range(sent.c_sent.n):
-            tags.add(sent.tokens[i].tag)
+            tags[sent.c_sent.tokens[i].tag] = 1
     Config.write(model_dir, beam_width=beam_width, features=features, feat_thresh=feat_thresh,
                  tags=tags)
     tagger = Tagger(model_dir)
