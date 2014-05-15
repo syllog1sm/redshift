@@ -452,7 +452,8 @@ arc_hybrid = (
     (N1w, N1p,),
     (N2w, N2p,),
 
-  # Word pairs 
+   # Word pairs 
+   # S0, N0
    (S0w, S0p, N0w, N0p),
    (S0w, S0p, N0w),
    (S0w, N0w, N0p),
@@ -460,6 +461,15 @@ arc_hybrid = (
    (S0p, N0w, N0p),
    (S0w, N0w),
    (S0p, N0p),
+
+   # S1, S0
+   (S1w, S1p, S0w, S0p),
+   (S1w, S1p, S0w),
+   (S1w, S0w, S0p),
+   (S1w, S1p, S0p),
+   (S1p, S0w, S0p),
+   (S1p, S0p),
+   
    (N0p, N1p),
 
    # From three words
@@ -493,7 +503,6 @@ arc_hybrid = (
    (N0p, N0lp, N0l2p),
    
    # Labels
-   (S0L,),
    (S0lL,),
    (S0rL,),
    (N0lL,),
