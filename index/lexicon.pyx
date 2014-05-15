@@ -35,7 +35,7 @@ cdef class Lexicon:
         cdef size_t i, word_id, freq
         cdef float upper_pc, title_pc
         if loc is None:
-            loc = os.path.join(os.path.dirname(__file__), 'browns.txt')
+            loc = os.path.join(os.path.dirname(__file__), 'bllip-clusters')
         print "Loading vocab from ", loc 
         cdef size_t w
         for line in open(loc):
