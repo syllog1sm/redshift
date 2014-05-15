@@ -13,6 +13,7 @@ def local_path(filename):
 model_dir = local_path('model')
 train_str = open(local_path('train.10.conll')).read()
 
+
 @pytest.fixture
 def train_dir():
     import redshift.parser
@@ -34,3 +35,13 @@ def sentence():
 
 def test_parse(parser, sentence):
     parser.parse(sentence)
+    assert sentence.length == 7
+    tokens = list(sentence.tokens)
+    assert tokens[0].word == 'This'
+    assert tokens[1].word == 'is'
+    assert tokens[2].word == 'a'
+    assert tokens[3].word == 'test'
+    assert tokens[4].word == '.'
+    
+    assert tokens[2].tag == 'DT'
+    assert tokens[2].label == 'det'
