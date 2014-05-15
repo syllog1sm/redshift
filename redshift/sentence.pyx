@@ -132,7 +132,7 @@ cdef class Input:
             is_edit = len(feats) >= 3 and feats[2] == '1'
             #if len(feats) >= 5 and feats[4] == 'RM':
             #    is_edit = True
-            is_fill = len(feats) >= 2 and feats[1] in ('D', 'E', 'F', 'A') 
+            is_fill = len(feats) >= 2 and feats[1] in ('D', 'E', 'F', 'A', 'C') 
             is_ns = len(feats) >= 4 and feats[3] == 'N_S'
             is_ns = False
             sent_id = int(feats[0].split('.')[1]) if '.' in feats[0] else 0
