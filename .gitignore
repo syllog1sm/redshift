@@ -19,3 +19,4 @@ train
 *.html
 Profile.prof
 _paths.py
+tests/model/*
