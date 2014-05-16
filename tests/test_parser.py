@@ -30,7 +30,7 @@ def parser(train_dir):
 @pytest.fixture
 def sentence():
     from redshift.sentence import Input
-    return Input.from_pos('This/?? is/?? a/?? test/?? ./.'.split())
+    return Input.from_pos('This/?? is/?? a/?? test/?? ./.')
 
 
 def test_parse(parser, sentence):
