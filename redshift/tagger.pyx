@@ -119,10 +119,6 @@ cdef class Tagger:
         self.guide.fill_scores(self._features, scores)
 
 
-
-
-
-
 cdef class MaxViolnUpd:
     cdef TagState* pred
     cdef TagState* gold
