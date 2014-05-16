@@ -12,22 +12,16 @@ cdef class Tagger:
     cdef Perceptron guide
     cdef object model_dir
     cdef size_t beam_width
-    cdef int feat_thresh
-    cdef size_t max_feats
-    cdef size_t nr_tag
-    cdef size_t _acc
     cdef dense_hash_map[size_t, size_t] tagdict
 
     cdef size_t* _context
     cdef uint64_t* _features
-    cdef double** beam_scores
+    cdef double** _beam_scores
+
     cpdef int tag(self, Input py_sent) except -1
     cdef int train_sent(self, Input py_sent) except -1
 
-    cdef TagState* extend_gold(self, TagState* s, Sentence* sent, size_t i) except NULL
-    cdef int fill_beam_scores(self, TaggerBeam beam, Sentence* sent,
-                              size_t word_i) except -1
- 
+    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, double* scores)
 
 
 cdef class TaggerBeam:
@@ -53,6 +47,5 @@ cdef size_t get_pp(TagState* s)
 cdef struct TagState:
     double score
     TagState* prev
-    size_t alt
     size_t clas
     size_t length

@@ -36,6 +36,10 @@ cdef class Lexicon:
         cdef float upper_pc, title_pc
         if loc is None:
             loc = os.path.join(os.path.dirname(__file__), 'bllip-clusters')
+        case_stats = {}
+        for line in open(os.path.join(os.path.dirname(__file__), 'english.case')):
+            word, upper, title = line.split()
+            case_stats[word] = (float(upper), float(title))
         print "Loading vocab from ", loc 
         cdef size_t w
         for line in open(loc):
@@ -45,7 +49,8 @@ cdef class Lexicon:
             cluster = int(cluster_str[::-1], 2)
             #upper_pc = float(pieces[1])
             #title_pc = float(pieces[2])
-            w = <size_t>init_word(word, cluster, 0.0, 0.0)
+            upper_pc, title_pc = case_stats.get(word.lower(), (0.0, 0.0))
+            w = <size_t>init_word(word, cluster, upper_pc, title_pc)
             self.words[_hash_str(word)] = w
             self.strings[<size_t>w] = word
 
