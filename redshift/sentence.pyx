@@ -112,10 +112,10 @@ cdef class Input:
         return cls(lattice, parse)
 
     @classmethod
-    def from_pos(cls, pos_strs):
-        assert pos_strs
+    def from_pos(cls, pos_str):
+        assert pos_str
         tokens = []
-        for token_str in pos_strs:
+        for token_str in pos_str.split():
             word, pos = token_str.rsplit('/', 1)
             tokens.append((word, pos, None, None, None, None))
         return cls.from_tokens(tokens)
