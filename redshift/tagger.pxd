@@ -16,7 +16,8 @@ cdef class Tagger:
 
     cdef size_t* _context
     cdef uint64_t* _features
-    cdef double** beam_scores
+    cdef double** _beam_scores
+
     cpdef int tag(self, Input py_sent) except -1
     cdef int train_sent(self, Input py_sent) except -1
 

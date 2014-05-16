@@ -63,9 +63,9 @@ cdef class Tagger:
         if path.exists(path.join(model_dir, 'tagger.gz')):
             self.guide.load(path.join(model_dir, 'tagger.gz'),
                             thresh=self.cfg.feat_thresh)
-        self.beam_scores = <double**>malloc(sizeof(double*) * self.beam_width)
+        self._beam_scores = <double**>malloc(sizeof(double*) * self.beam_width)
         for i in range(self.beam_width):
-            self.beam_scores[i] = <double*>calloc(nr_tag, sizeof(double))
+            self._beam_scores[i] = <double*>calloc(nr_tag, sizeof(double))
 
     cpdef int tag(self, Input py_sent) except -1:
         cdef Sentence* sent = py_sent.c_sent
@@ -77,8 +77,8 @@ cdef class Tagger:
             for j in range(beam.bsize):
                 # At this point, beam.clas is the _last_ prediction, not the
                 # prediction for this instance
-                self._predict(i, beam.parents[j], sent, self.beam_scores[j])
-            beam.extend_states(self.beam_scores)
+                self._predict(i, beam.parents[j], sent, self._beam_scores[j])
+            beam.extend_states(self._beam_scores)
         s = <TagState*>beam.beam[0]
         fill_hist(sent.tokens, s, sent.n - 1)
 
@@ -98,8 +98,8 @@ cdef class Tagger:
             for j in range(beam.bsize):
                 # At this point, beam.clas is the _last_ prediction, not the
                 # prediction for this instance
-                self._predict(i, beam.parents[j], sent, self.beam_scores[j])
-            beam.extend_states(self.beam_scores)
+                self._predict(i, beam.parents[j], sent, self._beam_scores[j])
+            beam.extend_states(self._beam_scores)
             updater.compare(beam.beam[0], gold, i)
             self.guide.n_corr += (gold.clas == beam.beam[0].clas)
             self.guide.total += 1
