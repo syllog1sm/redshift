@@ -42,6 +42,3 @@ def test_parse(parser, sentence):
     assert tokens[2].word == 'a'
     assert tokens[3].word == 'test'
     assert tokens[4].word == '.'
-    
-    assert tokens[2].tag == 'DT'
-    assert tokens[2].label == 'det'
