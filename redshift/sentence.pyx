@@ -27,8 +27,7 @@ cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
         if tag is not None:
             s.tokens[i].tag = index.hashes.encode_pos(tag) 
         if head is not None:
-            s.tokens[i].head = head if head < (s.n - 1) else 0
-            #s.tokens[i].head = head if head != 0 else s.n - 1
+            s.tokens[i].head = head if head != 0 else s.n - 1
         if label is not None:
             s.tokens[i].label = index.hashes.encode_label(label)
         if is_edit is not None:
