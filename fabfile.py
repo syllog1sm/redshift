@@ -34,6 +34,7 @@ def clean():
 def make():
     with lcd(str(LOCAL_REPO)):
         local('python setup.py build_ext --inplace')
+        local('py.test')
 
 def qstat():
     run("qstat -na | grep mhonn")
@@ -224,7 +225,7 @@ def _add_edits(test_dir, pos):
     return 'python scripts/add_edits.py %s %s > %s' % (in_loc, pos, out_loc)
 
 
-def _pbsify(repo, command_strs, size=8):
+def _pbsify(repo, command_strs, size=6):
     header = """#! /bin/bash
 #PBS -l walltime=20:00:00,mem=4gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate
