@@ -20,3 +20,4 @@ train
 Profile.prof
 _paths.py
 tests/model/*
+tests/model/
