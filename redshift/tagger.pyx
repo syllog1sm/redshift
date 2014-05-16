@@ -181,8 +181,7 @@ cdef class MaxViolnUpd:
             i -= 1
         return counts
 
-    cdef int _inc_feats(self, dict counts, uint64_t* feats,
-                        double inc) except -1:
+    cdef int _inc_feats(self, dict counts, uint64_t* feats, double inc) except -1:
         cdef size_t f = 0
         while feats[f] != 0:
             if feats[f] not in counts:
