@@ -8,21 +8,12 @@ import pstats
 import cProfile
 
 import redshift.parser
+from redshift.sentence import Input
 
 
-def get_pos(conll_str):
-    pos_sents = []
-    for sent_str in conll_str.strip().split('\n\n'):
-        sent = []
-        for line in sent_str.split('\n'):
-            pieces = line.split()
-            if len(pieces) == 5:
-                pieces.pop(0)
-            word = pieces[0]
-            pos = pieces[1]
-            sent.append('%s/%s' % (word, pos))
-        pos_sents.append(' '.join(sent))
-    return '\n'.join(pos_sents)
+def parse(parser, sentences):
+    for sent in sentences:
+        parser.parse(sent)
 
 
 @plac.annotations(
@@ -34,19 +25,25 @@ def main(parser_dir, text_loc, out_dir, profile=False, debug=False):
         redshift.parser.set_debug(debug)
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
-    yield "Loading parser"
-    parser = redshift.parser.load_parser(parser_dir)
-    #sentences.connect_sentences(1700)
+    print "Loading parser"
+    parser = redshift.parser.Parser(parser_dir)
+    sentences = [Input.from_pos(p.strip().split()) for i, p in
+                 enumerate(open(text_loc).read().strip().split('\n'))]
     if profile:
-        cProfile.runctx("parser.add_parses(sentences)",
+        cProfile.runctx("parse(parser, sentences)",
                         globals(), locals(), "Profile.prof")
         s = pstats.Stats("Profile.prof")
         s.strip_dirs().sort_stats("time").print_stats()
     else:
         t1 = time.time()
-        parser.parse_file(text_loc, os.path.join(out_dir, 'parses'))
+        parse(parser, sentences)
         t2 = time.time()
-        print 'Parsing took %0.3f ms' % ((t2-t1)*1000.0)
+        print '%d sents took %0.3f ms' % (len(sentences), (t2-t1)*1000.0)
+
+    with open(os.path.join(out_dir, 'parses'), 'w') as out_file:
+        for sentence in sentences:
+            out_file.write(sentence.to_conll())
+            out_file.write('\n\n')
 
 
 if __name__ == '__main__':

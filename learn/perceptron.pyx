@@ -1,11 +1,13 @@
 # cython: profile=True
+import os.path
 import math
 import gzip
+
 from libc.stdlib cimport *
 from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 from libcpp.queue cimport priority_queue
-from libc.string cimport strtok
+from libc.string cimport strtok, memset
 
 from cython.operator cimport dereference as deref, preincrement as inc
 
@@ -54,11 +56,12 @@ cdef void free_dense_feat(DenseFeature* feat):
     free(feat)
 
 
-cdef inline void score_dense_feat(double* scores, size_t nr_class, DenseFeature* feat):
+cdef inline void score_dense_feat(double* scores, DenseFeature* feat):
     feat.nr_seen += 1
     cdef size_t c
+    cdef double* w = feat.w
     for c in range(feat.s, feat.e):
-        scores[c] += feat.w[c]
+        scores[c] += w[c]
 
 
 cdef void update_dense(size_t now, double w, size_t clas, DenseFeature* raw):
@@ -154,6 +157,9 @@ cdef inline void update_square(size_t nr_class, size_t div,
     params.last_upd[i] = now
 
 
+cdef size_t MAX_ACTIVE = 1000
+
+
 cdef class Perceptron:
     def __cinit__(self, max_classes, model_loc):
         self.path = model_loc
@@ -175,11 +181,15 @@ cdef class Perceptron:
         self.total = 0.0
         self.use_cache = True
         self.cache = index.hashes.ScoresCache(max_classes) 
+        self._active_dense = <DenseFeature**>calloc(MAX_ACTIVE, sizeof(size_t))
+        self._active_square = <SquareFeature**>calloc(MAX_ACTIVE, sizeof(size_t))
 
     def __dealloc__(self):
         cdef pair[uint64_t, size_t] data
         cdef dense_hash_map[uint64_t, size_t].iterator it
         free(self.scores)
+        free(self._active_dense)
+        free(self._active_square)
         it = self.W.begin()
         while it != self.W.end():
             data = deref(it)
@@ -190,6 +200,21 @@ cdef class Perceptron:
         for i in range(self.nr_raws):
             free_dense_feat(self.raws[i])
         free(self.raws)
+
+    def end_train_iter(self, iter_num, feat_thresh):
+        pc = lambda a, b: '%.1f' % ((float(a) / (b + 1e-100)) * 100)
+        acc = pc(self.n_corr, self.total)
+        cache_use = pc(self.cache.n_hit, self.cache.n_hit + self.cache.n_miss + 1e-100)
+        msg = "#%d: Moves %d/%d=%s" % (iter_num, self.n_corr, self.total, acc)
+        if cache_use != 0:
+            msg += '. Cache use %s' % cache_use
+        print msg
+        if iter_num % 2 == 1 and feat_thresh > 1:
+            self.prune(feat_thresh)
+        if iter_num < 3:
+            self.reindex()
+        self.n_corr = 0.0
+        self.total = 0.0
 
     def set_classes(self, labels):
         self.nr_class = len(labels)
@@ -261,27 +286,38 @@ cdef class Perceptron:
                               self.now, -1.0, pred_i, <SquareFeature*>feat_addr)
    
     cdef inline int fill_scores(self, uint64_t* features, double* scores) except -1:
-        cdef size_t i, f, j, k, c
         cdef size_t feat_addr
-        cdef SquareFeature* feat
-        cdef DenseFeature* raw_feat
-        cdef size_t part_idx
-        for c in range(self.nr_class):
-            scores[c] = 0
-        i = 0
-        while True:
+        cdef size_t i
+        cdef uint64_t f
+
+        cdef SquareFeature** active_square = self._active_square
+        cdef DenseFeature** active_dense = self._active_dense
+        cdef DenseFeature** raws = self.raws
+        cdef size_t nr_square = 0
+        cdef size_t nr_dense = 0
+        cdef size_t nr_raws = self.nr_raws
+        # First collect the active features, in two lots --- dense and square
+        for i in range(MAX_ACTIVE):
             f = features[i]
             if f == 0:
                 break
-            i += 1
             feat_addr = self.W[f]
-            if feat_addr == 0:
-                continue
-            elif feat_addr < self.nr_raws:
-                score_dense_feat(scores, self.nr_class, self.raws[feat_addr])
-            else:
-                score_square_feat(scores, self.div, self.nr_class,
-                                  <SquareFeature*>feat_addr)
+            if feat_addr >= nr_raws:
+                active_square[nr_square] = <SquareFeature*>feat_addr
+                nr_square += 1
+            elif feat_addr != 0:
+                active_dense[nr_dense] = raws[feat_addr]
+                nr_dense += 1
+        # Now evaluate the features. Doing it this way improves cache locality,
+        # giving a small efficiency improvement.
+        cdef size_t nr_class = self.nr_class
+        memset(scores, 0, nr_class * sizeof(double))
+        for i in range(nr_dense):
+            score_dense_feat(scores, active_dense[i])
+        cdef size_t div = self.div
+        for i in range(nr_square):
+            score_square_feat(scores, div, nr_class, active_square[i])
+
 
     cdef uint64_t predict_best_class(self, uint64_t* features):
         cdef uint64_t i
@@ -294,7 +330,7 @@ cdef class Perceptron:
                 best = self.scores[i]
         return best_i
 
-    cdef int64_t finalize(self) except -1:
+    def end_training(self, loc):
         cdef uint64_t f
         cdef double tmp
         cdef SquareFeature* feat
@@ -326,6 +362,7 @@ cdef class Perceptron:
                 accs[c] += (self.now - last_upd[c]) * weights[c]
                 weights[c] = accs[c] / self.now
                 accs[c] = tmp
+        self._save(loc)
     
     cdef int unfinalize(self) except -1:
         cdef double tmp
@@ -349,7 +386,7 @@ cdef class Perceptron:
                 self.raws[i].w[c] = self.raws[i].acc[c]
                 self.raws[i].acc[c] = tmp
 
-    def save(self, out_loc):
+    def _save(self, out_loc):
         cdef size_t i
         cdef uint64_t feat_id
         # Break LibSVM compatibility for now to be a bit more disk-friendly

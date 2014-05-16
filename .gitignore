@@ -1,6 +1,7 @@
 *.pyc
 *.swp
 *.swo
+.*.s*
 *.cpp
 *.so
 *.so.1
@@ -16,3 +17,5 @@ train
 *.pdf
 *.aux
 *.html
+Profile.prof
+_paths.py

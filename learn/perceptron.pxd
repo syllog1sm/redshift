@@ -41,6 +41,8 @@ cdef struct DenseFeature:
 cdef class Perceptron:
     cdef int nr_class
     cdef double *scores
+    cdef DenseFeature** _active_dense
+    cdef SquareFeature** _active_square
     cdef object path
     cdef bint is_trained
     cdef float n_corr
@@ -63,7 +65,6 @@ cdef class Perceptron:
                         uint64_t* features, double weight) except -1
     cdef int fill_scores(self, uint64_t* features, double* scores) except -1
     cdef uint64_t predict_best_class(self, uint64_t* features)
-    cdef int64_t finalize(self) except -1
     cdef int unfinalize(self) except -1
 
 

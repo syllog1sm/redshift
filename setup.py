@@ -43,8 +43,11 @@ exts = [
     Extension('redshift._state', ["redshift/_state.pyx", "ext/MurmurHash2.cpp",
                                   "ext/MurmurHash3.cpp"],
                                   language="c++", include_dirs=includes),
-    Extension('redshift.io_parse', ["redshift/io_parse.pyx"], language="c++",
+    Extension('redshift.sentence', ["redshift/sentence.pyx"], language="c++",
                include_dirs=includes),
+
+    Extension('redshift.sentence', ["redshift/sentence.pyx"], language="c++",
+              include_dirs=includes),
     Extension('redshift._parse_features', ["redshift/_parse_features.pyx"],
               language="c++", include_dirs=includes),
     Extension('redshift.transitions', ["redshift/transitions.pyx"],
@@ -54,11 +57,16 @@ exts = [
     Extension("index.hashes", ["index/hashes.pyx", "ext/MurmurHash2.cpp",
                                "ext/MurmurHash3.cpp"], language="c++",
               include_dirs=includes),
+    Extension("index.lexicon", ["index/lexicon.pyx", "ext/MurmurHash2.cpp",
+                               "ext/MurmurHash3.cpp"], language="c++",
+              include_dirs=includes),
+
     Extension("features.extractor", ["features/extractor.pyx", "ext/MurmurHash2.cpp",
               "ext/MurmurHash3.cpp"], language="c++", include_dirs=includes),
     Extension("redshift.tagger", ["redshift/tagger.pyx", "ext/MurmurHash2.cpp",
                                   "ext/MurmurHash3.cpp"], include_dirs=includes,
         language="c++"),
+    #Extension("redshift.tester", ["redshift/tester.pyx"], include_dirs=includes)
 ]
 
 

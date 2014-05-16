@@ -2,62 +2,46 @@ from libc.string cimport const_void
 from libc.stdint cimport uint64_t, int64_t
 
 from ext.murmurhash cimport *
+from sentence cimport Sentence, Token
+from transitions cimport Transition
 
+# From left-to-right in the string, the slot tokens are:
+# S2, S1, S0le, S0l, S0l2, S0l0, S0, S0r0, S0r2, S0r, S0re
+# N0le, N0l, N0l2, N0l0
 
-cdef struct Subtree:
-    size_t val
-    size_t[4] lab
-    size_t[4] idx
-    size_t[4] tags
+cdef struct SlotTokens:
+    Token s2
+    Token s1
+    Token s1r
+    Token s0le
+    Token s0l
+    Token s0l2
+    Token s0l0
+    Token s0
+    Token s0r0
+    Token s0r2
+    Token s0r
+    Token s0re
+    Token n0le
+    Token n0l
+    Token n0l2
+    Token n0l0
+    Token n0
+    Token n1
+    Token n2
 
-
-cdef struct Kernel:
-    size_t i
-    size_t n0p
-    size_t n1p
-    size_t n2p
-    size_t n3p
-    size_t s0
-    size_t s0p
-    size_t Ls0
-    size_t s1
-    size_t s1p
-    size_t s2
-    size_t s2p
-    size_t Ls1
-    size_t Ls2
-    size_t s0ledge
-    size_t s0ledgep
-    size_t s0redgep
-    size_t n0ledge
-    size_t n0ledgep
-    bint prev_edit
-    bint prev_prev_edit
-    bint next_edit
-    bint next_next_edit
-    size_t prev_tag
-    size_t next_tag
-    Subtree s0l
-    Subtree s0r
-    Subtree n0l
-    size_t[5] hist
-
-
-cdef struct FastState:
-    Kernel* k
-    size_t last_action
-    FastState* previous
-    FastState* tail
-    double score
-    bint is_gold
-    size_t cost
-    size_t nr_kids
+    # Previous to n0
+    Token p1
+    Token p2
+    # After S0
+    Token s0n
+    Token s0nn
 
 
 cdef struct State:
     double score
     size_t i
-    size_t t
+    size_t m
     size_t n
     size_t stack_len
     size_t top
@@ -65,26 +49,19 @@ cdef struct State:
     bint is_finished
     bint at_end_of_buffer
     int cost
+    bint breaking
 
     size_t* stack
-    size_t* heads
-    size_t* labels
-    size_t* guess_labels
-    size_t* l_valencies
-    size_t* r_valencies
-    size_t* ledges
+    
     size_t** l_children
     size_t** r_children
-    size_t* history
-    Kernel kernel
+    Token* parse
+    Transition* history
+    SlotTokens slots
 
-cdef uint64_t hash_kernel(Kernel* k)
-cdef int fill_kernel(State* s, size_t* pos) except -1
 
-#cdef Kernel* kernel_from_s(Kernel* parent) except NULL
-#cdef Kernel* kernel_from_r(Kernel* parent, size_t label) except NULL
-#cdef Kernel* kernel_from_d(Kernel* parent, Kernel* gp) except NULL
-#cdef Kernel* kernel_from_l(Kernel* parent, Kernel* gp, size_t label) except NULL
+cdef uint64_t hash_state(State* s)
+cdef int fill_slots(State* s) except -1
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1
 cdef int del_l_child(State *s, size_t head) except -1
@@ -98,13 +75,14 @@ cdef size_t get_l2(State *s, size_t head)
 cdef size_t get_r(State *s, size_t head)
 cdef size_t get_r2(State *s, size_t head)
 
-cdef int has_child_in_buffer(State *s, size_t word, size_t* heads) except -1
-cdef int has_head_in_buffer(State *s, size_t word, size_t* heads) except -1
-cdef int has_child_in_stack(State *s, size_t word, size_t* heads) except -1
-cdef int has_head_in_stack(State *s, size_t word, size_t* heads) except -1
+cdef int has_child_in_buffer(State *s, size_t word, Token* gold) except -1
+cdef int has_head_in_buffer(State *s, size_t word, Token* gold) except -1
+cdef int has_child_in_stack(State *s, size_t word, Token* gold) except -1
+cdef int has_head_in_stack(State *s, size_t word, Token* gold) except -1
 cdef bint has_root_child(State *s, size_t token)
+cdef int nr_headless(State *s) except -1
 
 cdef int fill_edits(State *s, bint* edits) except -1
-cdef State* init_state(size_t n)
+cdef State* init_state(Sentence* sent)
 cdef free_state(State* s)
-cdef copy_state(State* s, State* old)
+cdef int copy_state(State* s, State* old) except -1

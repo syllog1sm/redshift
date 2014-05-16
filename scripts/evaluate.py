@@ -19,7 +19,14 @@ def gen_toks(loc):
     token = None
     i = 0
     for sent_str in sent_strs:
-        tokens = [Token(i, tok_str.split()) for i, tok_str in enumerate(sent_str.split('\n'))]
+        if not sent_str.strip():
+            continue
+        try:
+            tokens = [Token(i, tok_str.split()) for i, tok_str in enumerate(sent_str.split('\n'))]
+        except:
+            print sent_str
+            raise
+        move_root_deps(tokens)
         flatten_edits(tokens)
         tokens[-1].sbd = True
         for token in tokens:
@@ -47,6 +54,13 @@ def flatten_edits(tokens):
         for child in subtrees[token.id]:
             edits.append(child)
     
+def move_root_deps(tokens):
+    """Deal with unsegmented text by moving all root dependencies to the
+    root token, for more stable evaluation."""
+    root = len(tokens)
+    for token in tokens:
+        if token.label.lower() == 'root':
+            token.head = root
 
 class Token(object):
     def __init__(self, id_, attrs):
@@ -55,7 +69,7 @@ class Token(object):
         self.sbd = False
         # CoNLL format
         is_edit = False
-        if len(attrs) == 5 or len(attrs) == 4:
+        if len(attrs) == 4: 
             attrs.append('False')
             self.dfl_tag = '-'
         elif len(attrs) == 10:
@@ -64,21 +78,16 @@ class Token(object):
             new_attrs.append(attrs[3])
             new_attrs.append(str(int(attrs[6]) - 1))
             dfl_feats = attrs[5].split('|')
-            self.dfl_tag = dfl_feats[1]
+            self.dfl_tag = dfl_feats[1] if len(dfl_feats) >= 2 else '-'
             new_attrs.append(attrs[7])
             attrs = new_attrs
-            attrs.append(str(dfl_feats[2] == '1'))
+            attrs.append(str(len(dfl_feats) >= 3 and dfl_feats[2] == '1'))
         self.is_edit = attrs.pop() == 'True'
         self.label = attrs.pop()
         if self.label.lower() == 'root':
             self.label = 'ROOT'
         head = int(attrs.pop())
         self.head = head
-        # Make head an offset from the token id, for sent variation
-        #if head == -1 or self.label.upper() == 'ROOT':
-        #    self.head = id_
-        #else:
-        #    self.head = head - id_
         self.pos = attrs.pop()
         self.word = attrs.pop()
         self.dir = 'R' if head >= 0 and head < self.id else 'L'
@@ -110,9 +119,14 @@ def main(test_loc, gold_loc, eval_punct=False):
     prev_g = None
     prev_t = None
     for (sst, t), (ss, g) in zip(gen_toks(test_loc), gen_toks(gold_loc)):
+        assert g.word == t.word
         tags_corr += t.pos == g.pos
         tags_tot += 1
-        if g.label in ["P", 'punct'] and not eval_punct:
+        if g.label in ["P", 'punct', 'discourse'] and not eval_punct:
+            continue
+        elif g.pos == 'ADD' and not eval_punct:
+            continue
+        elif g.dfl_tag != '-':
             continue
         ed_tp += t.is_edit and g.is_edit
         ed_fp += t.is_edit and not g.is_edit
@@ -122,7 +136,9 @@ def main(test_loc, gold_loc, eval_punct=False):
         if g.is_edit:
             ed_n += 1
             continue
-        if g.dfl_tag != '-': continue
+        if g.label == 'filler':
+            continue
+        #if g.dfl_tag != '-': continue
         u_c = g.head == t.head
         l_c = u_c and g.label == t.label
         N += 1

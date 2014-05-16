@@ -17,7 +17,6 @@ cdef struct MatchPred:
 
 
 cdef class Extractor:
-    cdef uint64_t mask_value
     cdef size_t nr_template
     cdef Template** templates
     cdef size_t nr_match
