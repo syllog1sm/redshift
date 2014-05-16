@@ -1,39 +1,29 @@
-from redshift._state cimport *
 from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
 import index.hashes
 cimport index.hashes
-from ext.murmurhash cimport MurmurHash64A
-from ext.sparsehash cimport *
 from .util import Config
-
 
 from redshift.sentence cimport Input, Sentence
 from index.lexicon cimport Lexeme
 
-
 from libc.stdlib cimport malloc, calloc, free
-from libc.string cimport memcpy, memset
 from libc.stdint cimport uint64_t, int64_t
 from libcpp.queue cimport priority_queue
 from libcpp.utility cimport pair
 
 cimport cython
 import os
-import os.path
-from os.path import join as pjoin
+from os import path
 import random
 import shutil
-from collections import defaultdict
-
-DEBUG = False
 
 
 def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
           feat_thresh=10):
     cdef Input sent
     cdef size_t i
-    if os.path.exists(model_dir):
+    if path.exists(model_dir):
         shutil.rmtree(model_dir)
     os.mkdir(model_dir)
     sents = [Input.from_pos(s) for s in train_str.strip().split('\n') if s.strip()]
@@ -52,7 +42,7 @@ def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
             tagger.train_sent(sent)
         tagger.guide.end_train_iter(n, feat_thresh)
         random.shuffle(indices)
-    tagger.guide.end_training(pjoin(model_dir, 'tagger.gz'))
+    tagger.guide.end_training(path.join(model_dir, 'tagger.gz'))
     return tagger
 
 
@@ -67,12 +57,12 @@ cdef class Tagger:
         self.feat_thresh = self.cfg.feat_thresh
         self.beam_width = self.cfg.beam_width
 
-        if os.path.exists(pjoin(model_dir, 'pos')):
-            index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
+        if path.exists(path.join(model_dir, 'pos')):
+            index.hashes.load_pos_idx(path.join(model_dir, 'pos'))
         self.nr_tag = index.hashes.get_nr_pos()
-        self.guide = Perceptron(self.nr_tag, pjoin(model_dir, 'tagger.gz'))
-        if os.path.exists(pjoin(model_dir, 'tagger.gz')):
-            self.guide.load(pjoin(model_dir, 'tagger.gz'),
+        self.guide = Perceptron(self.nr_tag, path.join(model_dir, 'tagger.gz'))
+        if path.exists(path.join(model_dir, 'tagger.gz')):
+            self.guide.load(path.join(model_dir, 'tagger.gz'),
                             thresh=self.cfg.feat_thresh)
         self.beam_scores = <double**>malloc(sizeof(double*) * self.beam_width)
         for i in range(self.beam_width):

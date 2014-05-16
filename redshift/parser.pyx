@@ -18,7 +18,6 @@ from transitions cimport get_nr_moves, fill_moves
 from transitions cimport *
 from beam cimport Beam
 from tagger cimport Tagger
-from tagger import write_tagger_config
 from util import Config
 
 from features.extractor cimport Extractor
