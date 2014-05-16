@@ -47,30 +47,29 @@ def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
 
 
 cdef class Tagger:
-    def __cinit__(self, model_dir, feat_set="basic", feat_thresh=5, beam_width=4):
+    def __cinit__(self, model_dir):
         self.cfg = Config.read(model_dir, 'tagger')
         self.extractor = Extractor(basic + clusters + case + orth, [],
                                    bag_of_words=[])
         self._features = <uint64_t*>calloc(self.extractor.nr_feat, sizeof(uint64_t))
         self._context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
 
-        self.feat_thresh = self.cfg.feat_thresh
         self.beam_width = self.cfg.beam_width
 
         if path.exists(path.join(model_dir, 'pos')):
             index.hashes.load_pos_idx(path.join(model_dir, 'pos'))
-        self.nr_tag = index.hashes.get_nr_pos()
-        self.guide = Perceptron(self.nr_tag, path.join(model_dir, 'tagger.gz'))
+        nr_tag = index.hashes.get_nr_pos()
+        self.guide = Perceptron(nr_tag, path.join(model_dir, 'tagger.gz'))
         if path.exists(path.join(model_dir, 'tagger.gz')):
             self.guide.load(path.join(model_dir, 'tagger.gz'),
                             thresh=self.cfg.feat_thresh)
         self.beam_scores = <double**>malloc(sizeof(double*) * self.beam_width)
         for i in range(self.beam_width):
-            self.beam_scores[i] = <double*>calloc(self.nr_tag, sizeof(double))
+            self.beam_scores[i] = <double*>calloc(nr_tag, sizeof(double))
 
     cpdef int tag(self, Input py_sent) except -1:
         cdef Sentence* sent = py_sent.c_sent
-        cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.n, self.nr_tag)
+        cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.n, self.guide.nr_class)
         cdef size_t p_idx
         cdef TagState* s
         for i in range(sent.n - 1):
@@ -92,9 +91,9 @@ cdef class Tagger:
     cdef int train_sent(self, Input py_sent) except -1:
         cdef Sentence* sent = py_sent.c_sent
         cdef size_t  i, tmp
-        cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.n, self.nr_tag)
+        cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.n, self.guide.nr_class)
         cdef TagState* gold_state = extend_state(NULL, 0, NULL, 0)
-        cdef MaxViolnUpd updater = MaxViolnUpd(self.nr_tag)
+        cdef MaxViolnUpd updater = MaxViolnUpd(self.guide.nr_class)
         for i in range(sent.n - 1):
             # Extend gold
             gold_state = self.extend_gold(gold_state, sent, i)

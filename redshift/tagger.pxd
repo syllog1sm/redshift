@@ -12,10 +12,6 @@ cdef class Tagger:
     cdef Perceptron guide
     cdef object model_dir
     cdef size_t beam_width
-    cdef int feat_thresh
-    cdef size_t max_feats
-    cdef size_t nr_tag
-    cdef size_t _acc
     cdef dense_hash_map[size_t, size_t] tagdict
 
     cdef size_t* _context
