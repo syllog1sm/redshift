@@ -22,3 +22,4 @@ _paths.py
 tests/model/*
 tests/model/
 *.orig
+.coverage
