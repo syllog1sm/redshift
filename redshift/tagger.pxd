@@ -20,10 +20,7 @@ cdef class Tagger:
     cpdef int tag(self, Input py_sent) except -1
     cdef int train_sent(self, Input py_sent) except -1
 
-    cdef TagState* extend_gold(self, TagState* s, Sentence* sent, size_t i) except NULL
-    cdef int fill_beam_scores(self, TaggerBeam beam, Sentence* sent,
-                              size_t word_i) except -1
- 
+    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, double* scores)
 
 
 cdef class TaggerBeam:

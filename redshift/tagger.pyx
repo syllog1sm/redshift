@@ -73,54 +73,54 @@ cdef class Tagger:
         cdef size_t p_idx
         cdef TagState* s
         for i in range(sent.n - 1):
-            self.fill_beam_scores(beam, sent, i)
+            # Extend beam
+            for j in range(beam.bsize):
+                # At this point, beam.clas is the _last_ prediction, not the
+                # prediction for this instance
+                self._predict(i, beam.parents[j], sent, self.beam_scores[j])
             beam.extend_states(self.beam_scores)
         s = <TagState*>beam.beam[0]
         fill_hist(sent.tokens, s, sent.n - 1)
 
-    cdef int fill_beam_scores(self, TaggerBeam beam, Sentence* sent,
-                              size_t word_i) except -1:
-        for i in range(beam.bsize):
-            # At this point, beam.clas is the _last_ prediction, not the prediction
-            # for this instance
-            fill_context(self._context, sent, beam.parents[i].clas,
-                         get_p(beam.parents[i]), word_i)
-            self.extractor.extract(self._features, self._context)
-            self.guide.fill_scores(self._features, self.beam_scores[i])
-
     cdef int train_sent(self, Input py_sent) except -1:
+        cdef size_t  i, j 
         cdef Sentence* sent = py_sent.c_sent
-        cdef size_t  i, tmp
-        cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.n, self.guide.nr_class)
-        cdef TagState* gold_state = extend_state(NULL, 0, NULL, 0)
-        cdef MaxViolnUpd updater = MaxViolnUpd(self.guide.nr_class)
+        cdef size_t nr_class = self.guide.nr_class
+        cdef double* scores = self.guide.scores
+        cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.n, nr_class)
+        cdef TagState* gold = extend_state(NULL, 0, NULL, 0)
+        cdef MaxViolnUpd updater = MaxViolnUpd(nr_class)
         for i in range(sent.n - 1):
             # Extend gold
-            gold_state = self.extend_gold(gold_state, sent, i)
-            self.fill_beam_scores(beam, sent, i)
+            self._predict(i, gold, sent, scores)
+            gold = extend_state(gold, sent.tokens[i].tag, scores, nr_class)
+            # Extend beam
+            for j in range(beam.bsize):
+                # At this point, beam.clas is the _last_ prediction, not the
+                # prediction for this instance
+                self._predict(i, beam.parents[j], sent, self.beam_scores[j])
             beam.extend_states(self.beam_scores)
-            updater.compare(beam.beam[0], gold_state, i)
-            self.guide.n_corr += (gold_state.clas == beam.beam[0].clas)
+            updater.compare(beam.beam[0], gold, i)
+            self.guide.n_corr += (gold.clas == beam.beam[0].clas)
             self.guide.total += 1
         if updater.delta != -1:
-            counts = updater.count_feats(self._features, self._context, sent, self.extractor)
+            counts = updater.count_feats(self._features, self._context, sent,
+                                         self.extractor)
             self.guide.batch_update(counts)
         cdef TagState* prev
-        while gold_state != NULL:
-            prev = gold_state.prev
-            free(gold_state)
-            gold_state = prev
+        while gold != NULL:
+            prev = gold.prev
+            free(gold)
+            gold = prev
 
-    cdef TagState* extend_gold(self, TagState* s, Sentence* sent, size_t i) except NULL:
-        if i >= 1:
-            assert s.clas == sent.tokens[i - 1].tag
-        else:
-            assert s.clas == 0
+    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, double* scores):
         fill_context(self._context, sent, s.clas, get_p(s), i)
         self.extractor.extract(self._features, self._context)
-        self.guide.fill_scores(self._features, self.guide.scores)
-        ext = extend_state(s, sent.tokens[i].tag, self.guide.scores, self.guide.nr_class)
-        return ext
+        self.guide.fill_scores(self._features, scores)
+
+
+
+
 
 
 cdef class MaxViolnUpd:
