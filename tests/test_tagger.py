@@ -40,6 +40,18 @@ def sentence():
     return Input.from_pos('This/?? is/?? a/?? test/?? ./.')
 
 
+def test_feature_thresh():
+    # assert that we end up with fewer features by setting a feature threshold
+    pass
+
+def test_beam_width():
+    # assert that accuracy is higher with beam-width 4 than beam-width 1.
+    pass
+
+def test_feature_set():
+    # assert that two different debug feature sets change the number of features.
+    pass
+
 def test_tag(tagger, sentence):
     tagger.tag(sentence)
     assert sentence.length == 7
@@ -49,5 +61,3 @@ def test_tag(tagger, sentence):
     assert tokens[2].word == 'a'
     assert tokens[3].word == 'test'
     assert tokens[4].word == '.'
-    
-    assert tokens[2].tag == 'DT'
