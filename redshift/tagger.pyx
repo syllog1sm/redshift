@@ -50,7 +50,7 @@ cdef class Tagger:
     def __cinit__(self, model_dir, feat_set="basic", feat_thresh=5, beam_width=4):
         self.cfg = Config.read(model_dir, 'tagger')
         self.extractor = Extractor(basic + clusters + case + orth, [],
-                                   bag_of_words=[P1p, P1alt])
+                                   bag_of_words=[])
         self._features = <uint64_t*>calloc(self.extractor.nr_feat, sizeof(uint64_t))
         self._context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
 
@@ -85,8 +85,7 @@ cdef class Tagger:
             # At this point, beam.clas is the _last_ prediction, not the prediction
             # for this instance
             fill_context(self._context, sent, beam.parents[i].clas,
-                         get_p(beam.parents[i]),
-                         beam.parents[i].alt, word_i)
+                         get_p(beam.parents[i]), word_i)
             self.extractor.extract(self._features, self._context)
             self.guide.fill_scores(self._features, self.beam_scores[i])
 
@@ -97,6 +96,7 @@ cdef class Tagger:
         cdef TagState* gold_state = extend_state(NULL, 0, NULL, 0)
         cdef MaxViolnUpd updater = MaxViolnUpd(self.nr_tag)
         for i in range(sent.n - 1):
+            # Extend gold
             gold_state = self.extend_gold(gold_state, sent, i)
             self.fill_beam_scores(beam, sent, i)
             beam.extend_states(self.beam_scores)
@@ -117,7 +117,7 @@ cdef class Tagger:
             assert s.clas == sent.tokens[i - 1].tag
         else:
             assert s.clas == 0
-        fill_context(self._context, sent, s.clas, get_p(s), s.alt, i)
+        fill_context(self._context, sent, s.clas, get_p(s), i)
         self.extractor.extract(self._features, self._context)
         self.guide.fill_scores(self._features, self.guide.scores)
         ext = extend_state(s, sent.tokens[i].tag, self.guide.scores, self.guide.nr_class)
@@ -161,22 +161,18 @@ cdef class MaxViolnUpd:
             gclas = g.clas
             gprev = get_p(g)
             gprevprev = get_pp(g)
-            galt = g.alt
             pclas = p.clas
             pprev = get_p(p)
             pprevprev = get_pp(p)
-            palt = p.alt
             if gclas == pclas and pprev == gprev and gprevprev == pprevprev:
                 g = g.prev
                 p = p.prev
                 i -= 1
                 continue
-            fill_context(context, sent, gprev, gprevprev,
-                         g.prev.alt if g.prev != NULL else 0, i)
+            fill_context(context, sent, gprev, gprevprev, i)
             extractor.extract(feats, context)
             self._inc_feats(counts[gclas], feats, 1.0)
-            fill_context(context, sent, pprev, pprevprev,
-                         p.prev.alt if p.prev != NULL else 0, i)
+            fill_context(context, sent, pprev, pprevprev, i)
             extractor.extract(feats, context)
             self._inc_feats(counts[p.clas], feats, -1.0)
             assert sent.tokens[i].word.norm == context[N0w]
@@ -198,7 +194,6 @@ cdef class MaxViolnUpd:
 cdef enum:
     P1p
     P2p
-    P1alt
 
     N0w
     N0c
@@ -277,7 +272,7 @@ basic = (
     (P1suff,),
     (N2w,),
     (N3w,),
-    (P1p, P1alt),
+    (P1p,),
 )
 
 case = (
@@ -354,7 +349,7 @@ cdef inline void fill_token(size_t* context, size_t i, Lexeme* word):
 
 
 cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag,
-                      size_t p_alt, size_t i):
+                      size_t i):
     for j in range(CONTEXT_SIZE):
         context[j] = 0
     context[P1p] = ptag
@@ -442,26 +437,16 @@ cdef class TaggerBeam:
 
 cdef TagState* extend_state(TagState* s, size_t clas, double* scores,
                             size_t nr_class):
-    cdef double score, alt_score
-    cdef size_t alt
+    cdef double score
     ext = <TagState*>calloc(1, sizeof(TagState))
     ext.prev = s
     ext.clas = clas
-    ext.alt = 0
     if s == NULL:
         ext.score = 0
         ext.length = 0
     else:
         ext.score = s.score + scores[clas]
         ext.length = s.length + 1
-        alt_score = 1
-        for alt in range(nr_class):
-            if alt == clas or alt == 0:
-                continue
-            score = scores[alt]
-            if score > alt_score and alt != 0:
-                ext.alt = alt
-                alt_score = score
     return ext
 
 

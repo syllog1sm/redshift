@@ -53,6 +53,5 @@ cdef size_t get_pp(TagState* s)
 cdef struct TagState:
     double score
     TagState* prev
-    size_t alt
     size_t clas
     size_t length
