@@ -98,20 +98,14 @@ cdef class ScoresCache:
         free(self._pool)
 
 
+
 _pos_idx = Index(['ROOT', 'NONE', 'OOB'])
 _label_idx = Index(['ERR', 'ROOT', 'P', 'erased'])
 
 
-def load_idx(name, path):
-    global _word_idx, _pos_idx, _label_idx
-    if name == 'word':
-        _word_idx.load(path)
-    elif name == 'pos':
-        _pos_idx.load(path)
-    elif name == 'label':
-        _label_idx.load(path)
-    else:
-        raise StandardError, name
+def load_pos_idx(path):
+    global _pos_idx
+    _pos_idx.load(path)
 
 
 def load_label_idx(path):
