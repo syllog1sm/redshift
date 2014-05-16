@@ -27,7 +27,7 @@ cdef inline bint can_right(State* s):
 
 
 cdef inline bint can_left(State* s):
-    return s.stack_len >= 1 and not s.at_end_of_buffer
+    return s.stack_len >= 1
 
 
 cdef bint USE_EDIT = False
@@ -37,7 +37,12 @@ cdef inline bint can_edit(State* s):
 
 cdef bint USE_BREAK = False
 cdef inline bint can_break(State* s):
-    return USE_BREAK and s.stack_len == 1 and (s.at_end_of_buffer or not s.parse[s.i].l_valency)
+    return USE_BREAK and s.stack_len == 1 and not s.parse[s.i].l_valency and not s.at_end_of_buffer
+
+
+#cdef bint USE_FILL = False
+#cdef inline bint can_filler(State* s):
+#    return s.stack_len >= 1
 
 
 # Edit oracle:
@@ -98,6 +103,7 @@ cdef int edit_cost(State *s, Token* gold):
 
 cdef int break_cost(State* s, Token* gold):
     assert s.stack_len == 1
+    assert not s.at_end_of_buffer
     return 0 if gold[s.top].sent_id != gold[s.i].sent_id else 1
 
 
@@ -165,8 +171,7 @@ cdef int transition(Transition* t, State *s) except -1:
             s.parse[i].is_edit = True
     elif t.move == BREAK:
         assert s.stack_len == 1
-        #add_dep(s, s.n - 1, s.top, t.label)
-        add_dep(s, 0, s.top, t.label)
+        add_dep(s, s.n - 1, s.top, t.label)
         s.parse[s.i].sent_id = s.parse[s.top].sent_id + 1
         pop_stack(s)
     else:
