@@ -39,17 +39,12 @@ cdef class Lexicon:
         print "Loading vocab from ", loc 
         cdef size_t w
         for line in open(loc):
-            if not line.strip():
-                continue
-            pieces = line.split()
+            cluster_str, word, freq_str = line.split()
             # Decode as a little-endian string, so that we can do & 15 to get
             # the first 4 bits. See _parse_features.pyx
-            cluster = int(''.join(reversed(pieces[0])), 2)
+            cluster = int(cluster_str[::-1], 2)
             #upper_pc = float(pieces[1])
             #title_pc = float(pieces[2])
-            word = pieces[1]
-            freq = int(pieces[2])
-            #self[word] = <size_t>init_word(word, cluster, upper_pc, title_pc)
             w = <size_t>init_word(word, cluster, 0.0, 0.0)
             self.words[_hash_str(word)] = w
             self.strings[<size_t>w] = word
