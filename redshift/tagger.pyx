@@ -36,13 +36,13 @@ def write_tagger_config(model_dir, beam_width=4, features='basic', feat_thresh=1
                  feat_thresh=feat_thresh)
 
 
- 
 def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
           feat_thresh=10):
     cdef Input sent
     cdef size_t i
-    if not os.path.exists(model_dir):
-        os.mkdir(model_dir)
+    if os.path.exists(model_dir):
+        shutil.rmtree(model_dir)
+    os.mkdir(model_dir)
     sents = [Input.from_pos(s) for s in train_str.strip().split('\n') if s.strip()]
     # Dict instead of set so json serialisable
     tags = {}
@@ -224,13 +224,6 @@ cdef class MaxViolnUpd:
                 counts[feats[f]] = 0
             counts[feats[f]] += inc
             f += 1
-
-
-def print_train_msg(n, n_corr, n_move):
-    pc = lambda a, b: '%.1f' % ((float(a) / (b + 1e-100)) * 100)
-    move_acc = pc(n_corr, n_move)
-    msg = "#%d: Moves %d/%d=%s" % (n, n_corr, n_move, move_acc)
-    print msg
 
 
 cdef enum:
@@ -523,4 +516,3 @@ cdef size_t get_pp(TagState* s):
         return 0
     else:
         return s.prev.prev.clas
-
