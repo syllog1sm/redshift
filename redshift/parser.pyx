@@ -50,11 +50,11 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
     os.mkdir(model_dir)
     cdef list sents = [Input.from_conll(s) for s in
                        train_str.strip().split('\n\n') if s.strip()]
-    left_labels, right_labels = get_labels(sents)
+    left_labels, right_labels, dfl_labels = get_labels(sents)
     Config.write(model_dir, beam_width=beam_width, features=feat_set,
                  feat_thresh=feat_thresh,
                  left_labels=left_labels, right_labels=right_labels,
-                 use_edit=use_edit, use_break=use_break, use_filler=use_filler)
+                 dfl_labels=dfl_labels, use_break=use_break)
     write_tagger_config(model_dir, beam_width=4, features='basic', feat_thresh=feat_thresh)
     parser = Parser(model_dir)
     indices = list(range(len(sents)))
@@ -77,14 +77,17 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
 def get_labels(sents):
     left_labels = set()
     right_labels = set()
+    dfl_labels = set()
     cdef Input sent
     for i, sent in enumerate(sents):
         for j in range(sent.length):
-            if sent.c_sent.tokens[j].head > j:
+            if sent.c_sent.tokens[j].is_edit:
+                dfl_labels.add(sent.c_sent.tokens[j].label)
+            elif sent.c_sent.tokens[j].head > j:
                 left_labels.add(sent.c_sent.tokens[j].label)
             else:
                 right_labels.add(sent.c_sent.tokens[j].label)
-    return list(sorted(left_labels)), list(sorted(right_labels))
+    return list(sorted(left_labels)), list(sorted(right_labels)), list(sorted(dfl_labels))
 
 
 class Config(object):
@@ -114,6 +117,8 @@ def get_templates(feats_str):
         match_feats = _parse_features.match_templates()
     elif 'clusters' in feats_str:
         templates += _parse_features.clusters
+    if 'prevnext' in feats_str:
+        templates += _parse_features.prev_next
     if 'bitags' in feats_str:
         templates += _parse_features.pos_bigrams()
     return templates, match_feats
@@ -144,11 +149,10 @@ cdef class Parser:
         if os.path.exists(pjoin(model_dir, 'labels')):
             index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
         self.nr_moves = get_nr_moves(self.cfg.left_labels, self.cfg.right_labels,
-                                     self.cfg.use_edit, self.cfg.use_break,
-                                     self.cfg.use_filler)
+                                     self.cfg.dfl_labels, self.cfg.use_break)
         self.moves = <Transition*>calloc(self.nr_moves, sizeof(Transition))
-        fill_moves(self.cfg.left_labels, self.cfg.right_labels, self.cfg.use_edit,
-                   self.cfg.use_break, self.cfg.use_filler, self.moves)
+        fill_moves(self.cfg.left_labels, self.cfg.right_labels, self.cfg.dfl_labels,
+                   self.cfg.use_break, self.moves)
         
         self.guide = Perceptron(self.nr_moves, pjoin(model_dir, 'model.gz'))
         if os.path.exists(pjoin(model_dir, 'model.gz')):
@@ -174,6 +178,7 @@ cdef class Parser:
                 beam.enqueue(i, False)
             beam.extend()
         beam.fill_parse(sent.tokens)
+        py_sent.segment()
         sent.score = beam.beam[0].score
 
     cdef int _predict(self, State* s, Transition* classes, Step* lattice) except -1:

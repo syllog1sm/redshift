@@ -34,6 +34,7 @@ def clean():
 def make():
     with lcd(str(LOCAL_REPO)):
         local('python setup.py build_ext --inplace')
+        local('py.test')
 
 def qstat():
     run("qstat -na | grep mhonn")
@@ -45,6 +46,9 @@ def deploy():
     with cd(str(REMOTE_REPO)):
         run('git pull')
 
+def tmparse():
+    local('./scripts/parse.py ~/work_data/parsers/tmp ~/work_data/converted/unseg/dev.pos /tmp/parse')
+    local('./scripts/new_evaluate.py ~/work_data/converted/unseg/dev.conll /tmp/parse/parses')
 
 def beam(name, k=8, n=1, size=0, use_edit='False', feats="zhang", tb='wsj',
          auto_pos='False', iters=15,
@@ -213,7 +217,7 @@ def _parse(model, data, out, gold=False):
 
 
 def _evaluate(test, gold):
-    return './scripts/evaluate.py %s %s > %s' % (test, gold, test.replace('parses', 'acc'))
+    return './scripts/new_evaluate.py %s %s > %s' % (gold, test, test.replace('parses', 'acc'))
 
 def _add_edits(test_dir, pos):
     in_loc = pjoin(test_dir, 'parses')
@@ -221,7 +225,7 @@ def _add_edits(test_dir, pos):
     return 'python scripts/add_edits.py %s %s > %s' % (in_loc, pos, out_loc)
 
 
-def _pbsify(repo, command_strs, size=8):
+def _pbsify(repo, command_strs, size=6):
     header = """#! /bin/bash
 #PBS -l walltime=20:00:00,mem=4gb,nodes=1:ppn={n_procs}
 source /home/mhonniba/ev/bin/activate

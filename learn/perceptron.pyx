@@ -546,6 +546,8 @@ cdef class Perceptron:
         q.sort(reverse=True)
         if not q:
             return None
+        if len(q) < self.nr_raws:
+            return None
         cutoff = q[self.nr_raws][0]
         vacancies = []
         for i in range(1, self.nr_raws):

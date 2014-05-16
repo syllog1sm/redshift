@@ -49,7 +49,6 @@ cdef class Beam:
         cdef size_t move_id = i * self.nr_class
         if s.is_finished:
             self.queue.push(ScoredMove(s.score + (s.score / self.t), move_id))
-            #self.queue.append((s.score + (s.score / self.t), i * self.nr_class))
             return 0
         cdef Transition* moves = self.moves[i]
         cdef Transition t

@@ -4,42 +4,32 @@ import plac
 import time
 
 import redshift.tagger
-import redshift.io_parse
+from redshift.sentence import Input
 
 @plac.annotations(
     iters=("Number of training iterations", "option", "i", int),
     n_sents=("Number of training sentences", "option", "n", int),
-    conll_format=("Read train and test in conll format", "flag", "c", bool)
+    feat_thresh=("Threshold for feature pruning", "option", "f", int),
+    beam_width=("Number of hypotheses to keep alive", "option", "k", int)
 )
-def main(model_loc, train_loc, test_loc, iters=5, n_sents=0, conll_format=False):
-    tagger = redshift.tagger.GreedyTagger(model_loc, clean=True)
-    if conll_format:
-        train_strs = open(train_loc).read().strip().split('\n\n')
-    else:
-        train_strs = open(train_loc).read().strip().split('\n')
+def main(model_dir, train_loc, dev_loc, iters=5, n_sents=0, feat_thresh=5, beam_width=4):
+    sent_strs = open(train_loc).read().strip().replace('|', '/').split('\n')
     # Apply limit
-    train_strs = train_strs[-n_sents:]
-    if conll_format:
-        train = redshift.io_parse.read_conll('\n\n'.join(train_strs))
-    else:
-        train = redshift.io_parse.read_pos('\n'.join(train_strs), sep='|')
-    tagger.train(train, nr_iter=iters)
-    tagger.save()
-    test_data = open(test_loc).read()
-    if conll_format:
-        to_tag = redshift.io_parse.read_conll(test_data)
-    else:
-        to_tag = redshift.io_parse.read_pos(test_data, sep='|')
-    t1 = time.time()
-    tagger.add_tags(to_tag)
-    t2 = time.time()
-    print '%d sents took %0.3f ms' % (to_tag.length, (t2-t1)*1000.0)
-    if conll_format:
-        gold = redshift.io_parse.read_conll(test_data)
-    else:
-        gold = redshift.io_parse.read_pos(test_data, sep='|')
-    acc, c, n = redshift.io_parse.eval_tags(to_tag, gold)
-    print '%.2f' % acc, c, n
+    if n_sents != 0:
+        sent_strs = sent_strs[:n_sents]
+    tagger = redshift.tagger.train('\n'.join(sent_strs), model_dir,
+        beam_width=beam_width, nr_iter=iters, feat_thresh=feat_thresh)
+    dev_input = [Input.from_pos(s.replace('|', '/'))
+                 for s in open(dev_loc).read().strip().split('\n')]
+    t = 1e-100
+    c = 0
+    for sent in dev_input:
+        gold_tags = [tok.tag for tok in sent.tokens]
+        tagger.tag(sent)
+        for i, token in enumerate(sent.tokens):
+            c += gold_tags[i] == token.tag
+            t += 1
+    print c / t
 
 if __name__ == '__main__':
     plac.call(main)
