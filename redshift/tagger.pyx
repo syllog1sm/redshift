@@ -5,6 +5,7 @@ import index.hashes
 cimport index.hashes
 from ext.murmurhash cimport MurmurHash64A
 from ext.sparsehash cimport *
+from .util import Config
 
 
 from redshift.sentence cimport Input, Sentence
@@ -14,26 +15,18 @@ from index.lexicon cimport Lexeme
 from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport memcpy, memset
 from libc.stdint cimport uint64_t, int64_t
-from libcpp.vector cimport vector 
 from libcpp.queue cimport priority_queue
 from libcpp.utility cimport pair
 
 cimport cython
-from os.path import join as pjoin
 import os
 import os.path
 from os.path import join as pjoin
 import random
 import shutil
 from collections import defaultdict
-import json
 
 DEBUG = False
-
-
-def write_tagger_config(model_dir, beam_width=4, features='basic', feat_thresh=10):
-    Config.write(model_dir, beam_width=beam_width, features=features,
-                 feat_thresh=feat_thresh)
 
 
 def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
@@ -49,8 +42,8 @@ def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
     for sent in sents:
         for i in range(sent.c_sent.n):
             tags[sent.c_sent.tokens[i].tag] = 1
-    Config.write(model_dir, beam_width=beam_width, features=features, feat_thresh=feat_thresh,
-                 tags=tags)
+    Config.write(model_dir, 'tagger', beam_width=beam_width, features=features,
+                 feat_thresh=feat_thresh, tags=tags)
     tagger = Tagger(model_dir)
     indices = list(range(len(sents)))
     for n in range(nr_iter):
@@ -63,23 +56,9 @@ def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
     return tagger
 
 
-class Config(object):
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
-    @classmethod
-    def write(cls, model_dir, **kwargs):
-        open(pjoin(model_dir, 'tagger_config.json'), 'w').write(json.dumps(kwargs))
-
-    @classmethod
-    def read(cls, model_dir):
-        return cls(**json.load(open(pjoin(model_dir, 'tagger_config.json'))))
-
-
 cdef class Tagger:
     def __cinit__(self, model_dir, feat_set="basic", feat_thresh=5, beam_width=4):
-        self.cfg = Config.read(model_dir)
+        self.cfg = Config.read(model_dir, 'tagger')
         self.extractor = Extractor(basic + clusters + case + orth, [],
                                    bag_of_words=[P1p, P1alt])
         self._features = <uint64_t*>calloc(self.extractor.nr_feat, sizeof(uint64_t))

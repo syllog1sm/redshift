@@ -19,6 +19,7 @@ from transitions cimport *
 from beam cimport Beam
 from tagger cimport Tagger
 from tagger import write_tagger_config
+from util import Config
 
 from features.extractor cimport Extractor
 import _parse_features
@@ -51,11 +52,12 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
     cdef list sents = [Input.from_conll(s) for s in
                        train_str.strip().split('\n\n') if s.strip()]
     left_labels, right_labels, dfl_labels = get_labels(sents)
-    Config.write(model_dir, beam_width=beam_width, features=feat_set,
+    Config.write(model_dir, 'config', beam_width=beam_width, features=feat_set,
                  feat_thresh=feat_thresh,
                  left_labels=left_labels, right_labels=right_labels,
                  dfl_labels=dfl_labels, use_break=use_break)
-    write_tagger_config(model_dir, beam_width=4, features='basic', feat_thresh=feat_thresh)
+    Config.write(model_dir, 'tagger', beam_width=4, features='basic',
+                 feat_thresh=5)
     parser = Parser(model_dir)
     indices = list(range(len(sents)))
     cdef Input py_sent
@@ -88,20 +90,6 @@ def get_labels(sents):
             else:
                 right_labels.add(sent.c_sent.tokens[j].label)
     return list(sorted(left_labels)), list(sorted(right_labels)), list(sorted(dfl_labels))
-
-
-class Config(object):
-    def __init__(self, **kwargs):
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
-    @classmethod
-    def write(cls, model_dir, **kwargs):
-        open(pjoin(model_dir, 'config.json'), 'w').write(json.dumps(kwargs))
-
-    @classmethod
-    def read(cls, model_dir):
-        return cls(**json.load(open(pjoin(model_dir, 'config.json'))))
 
 
 def get_templates(feats_str):
@@ -138,7 +126,7 @@ cdef class Parser:
 
     def __cinit__(self, model_dir):
         assert os.path.exists(model_dir) and os.path.isdir(model_dir)
-        self.cfg = Config.read(model_dir)
+        self.cfg = Config.read(model_dir, 'config')
         self.extractor = Extractor(*get_templates(self.cfg.features))
         self._features = <uint64_t*>calloc(self.extractor.nr_feat, sizeof(uint64_t))
         self._context = <size_t*>calloc(_parse_features.context_size(), sizeof(size_t))
