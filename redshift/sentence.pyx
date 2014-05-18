@@ -185,10 +185,13 @@ cdef class Input:
                 edge -= 1
             segments.append((edge, last_left))
             last_left = edge
+        if left_edges and edge >= 2:
+            segments[-1] = (1, segments[-1][1])
         segments.sort()
         for i, (start, end) in enumerate(segments):
             for j in range(start, end):
                 self.c_sent.tokens[j].sent_id = i
+
 
     property tokens:
         def __get__(self):
