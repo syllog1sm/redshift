@@ -5,7 +5,6 @@ def read_sents(loc):
     sents = open(loc).read().strip().split('\n\n')
     for sent in sents:
         tokens = [t.split() for t in sent.split('\n')]
-        tokens[-1][2] = 'T'
         yield tokens
         
 
@@ -20,8 +19,7 @@ def main(test_loc, gold_loc):
     for test, gold in zip(test_sents, gold_sents):
         assert len(test) == len(gold)
         for t, g in zip(test, gold):
-            print 'g', g
-            print 't', t
+            assert t[0] == g[0]
             if g[2] == 'T' and t[2] == 'T':
                 tp += 1
             elif g[2] == 'T' and t[2] == 'F':
@@ -44,7 +42,7 @@ def main(test_loc, gold_loc):
     print 'P: %.2f' % p
     print 'R: %.2f' % r 
     print 'F: %.2f' % f
-    print 'Err: %.2f' % ((fp + fn) / (tp + fp + fn + tn))
+    print 'Err: %.4f' % ((fp + fn) / (tp + fp + fn + tn))
     print 'NIST: %.2f' % ((fp + fn) / (tp + fn))
             
 
