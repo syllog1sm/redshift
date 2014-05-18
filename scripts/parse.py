@@ -28,7 +28,8 @@ def main(parser_dir, text_loc, out_dir, profile=False, debug=False):
     print "Loading parser"
     parser = redshift.parser.Parser(parser_dir)
     sentences = [Input.from_pos(p.strip()) for i, p in
-                 enumerate(open(text_loc).read().strip().split('\n'))]
+                 enumerate(open(text_loc).read().strip().split('\n'))
+                 if p.strip()]
     if profile:
         cProfile.runctx("parse(parser, sentences)",
                         globals(), locals(), "Profile.prof")
