@@ -17,7 +17,7 @@ class Scorer(object):
     def eval_file(self, gold, test):
         gold_tokens = list(gold.tokens)
         test_tokens = list(test.tokens)
-        assert len(gold_tokens) == len(test_tokens)
+        assert len(gold_tokens) == len(test_tokens), '%d vs %d' % (len(gold_tokens), len(test_tokens))
         for g, t in zip(gold_tokens, test_tokens):
             assert g.word == t.word
             if self.skip(g, t):
@@ -67,22 +67,39 @@ def eval_las(g, t):
 def score_sbd(gold, test):
     c = 0
     n = 0
-    assert len(gold.sents) == len(test.sents)
-    for gold_sent, test_sent in zip(gold.sents, test.sents):
+    tp = 1e-100
+    fp = 0
+    fn = 0
+    test_sents = iter(test.sents)
+    test_sent = None
+    last_t_id = None
+    for gold_sent in gold.sents:
         last_g_id = None
-        last_t_id = None
-        for g, t in zip(gold_sent, test_sent):
+        for g in gold_sent:
+            if not test_sent:
+                test_sent = list(test_sents.next())
+                last_t_id = None
+            t = test_sent.pop(0)
             if g.is_edit or g.tag == 'UH' or g.label == 'discourse':
                 continue
-            gold_break = last_g_id != None and g.sent_id != last_g_id
-            test_break = last_t_id != None and t.sent_id != last_t_id
+            gold_break = last_g_id is None or g.sent_id != last_g_id
+            test_break = last_t_id is None or t.sent_id != last_t_id
             assert g.word == t.word
             last_g_id = g.sent_id
             if not t.is_edit:
                 last_t_id = t.sent_id
-            #print g.word, g.tag, gold_break, test_break
+            tp += test_break and gold_break
+            fp += test_break and not gold_break
+            fn += gold_break and not test_break
             c += gold_break == test_break
             n += 1
+    p = tp / (tp + fp)
+    r = tp / (tp + fn)
+    f = (2 * p * r) / (p + r)
+    print "SBD p: %.2f" % (p * 100)
+    print "SBD r: %.2f" % (r * 100)
+    print "SBD f: %.2f" % (f * 100)
+
     return (c / n) * 100 
 
 
@@ -98,7 +115,9 @@ def main(gold_loc, test_loc):
                lambda g, t: g.is_edit == t.is_edit, gold, test).percent
     r = Scorer(lambda g, t: g.label != 'discourse' and (not g.is_edit or g.label != 'erased'),
                  lambda g, t: g.is_edit == t.is_edit, gold, test).percent
-    print 'SBD: %.3f' % score_sbd(gold, test)
+    sbd_score = score_sbd(gold, test)
+    if sbd_score is not None:
+        print 'SBD: %.3f' % sbd_score
     print 'DIS P: %.2f' % p
     print 'DIS R: %.2f' % r
     print 'DIS F: %.2f' % ((2 * p * r) / (p + r))
