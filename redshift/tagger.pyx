@@ -43,6 +43,7 @@ def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
         tagger.guide.end_train_iter(n, feat_thresh)
         random.shuffle(indices)
     tagger.guide.end_training(path.join(model_dir, 'tagger.gz'))
+    index.hashes.save_pos_idx(path.join(model_dir, 'pos'))
     return tagger
 
 
