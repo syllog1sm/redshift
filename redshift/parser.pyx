@@ -256,9 +256,9 @@ cdef class Parser:
         g_inc = 1.0
         p_inc = -1.0
         for i in range(max((pt, gt))):
-            self.guide.total += 1
+            self.guide.total += 1.0
             if not seen_diff and ghist[i].clas == phist[i].clas:
-                self.guide.n_corr += 1
+                self.guide.n_corr += 1.0
                 transition(&ghist[i], gold_state)
                 transition(&phist[i], pred_state)
                 continue
