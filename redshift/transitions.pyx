@@ -19,7 +19,7 @@ cdef enum:
 
 
 cdef inline bint can_shift(State* s):
-    return not s.at_end_of_buffer
+    return not at_eol(s)
 
 
 cdef inline bint can_right(State* s):
@@ -37,7 +37,7 @@ cdef inline bint can_edit(State* s):
 
 cdef bint USE_BREAK = False
 cdef inline bint can_break(State* s):
-    return USE_BREAK and s.stack_len == 1 and not s.parse[s.i].l_valency and not s.at_end_of_buffer
+    return USE_BREAK and s.stack_len == 1 and not s.parse[s.i].l_valency and not at_eol(s)
 
 
 #cdef bint USE_FILL = False
@@ -53,7 +53,7 @@ cdef inline bint can_break(State* s):
 # - You can always Shift an Edit word
 
 cdef int shift_cost(State* s, Token* gold):
-    assert not s.at_end_of_buffer
+    assert not at_eol(s)
     cost = 0
     if can_break(s):
         cost += gold[s.top].sent_id != gold[s.i].sent_id
@@ -103,7 +103,7 @@ cdef int edit_cost(State *s, Token* gold):
 
 cdef int break_cost(State* s, Token* gold):
     assert s.stack_len == 1
-    assert not s.at_end_of_buffer
+    assert not at_eol(s)
     return 0 if gold[s.top].sent_id != gold[s.i].sent_id else 1
 
 
@@ -176,9 +176,7 @@ cdef int transition(Transition* t, State *s) except -1:
         pop_stack(s)
     else:
         raise StandardError(t.move)
-    if s.i >= (s.n - 1):
-        s.at_end_of_buffer = True
-    if s.at_end_of_buffer and s.stack_len == 0:
+    if at_eol(s) and s.stack_len == 0:
         s.is_finished = True
 
 

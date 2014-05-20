@@ -51,14 +51,10 @@ cdef size_t pop_stack(State *s) except 0:
         s.second = 0
     assert s.top <= s.n, s.top
     assert popped != 0
-    cdef size_t child
-    if s.breaking and not s.stack_len:
-        s.breaking = False
     return popped
 
 
 cdef int push_stack(State *s) except -1:
-    assert not s.breaking
     s.second = s.top
     s.top = s.i
     s.stack[s.stack_len] = s.i
@@ -162,6 +158,9 @@ cdef int has_head_in_stack(State *s, size_t word, Token* gold) except -1:
     return 0
 
 
+cdef bint at_eol(State *s):
+    return s.i >= (s.n - 1)
+
 DEF PADDING = 5
 
 
@@ -176,7 +175,6 @@ cdef State* init_state(Sentence* sent):
     s.top = 0
     s.second = 0
     s.stack_len = 0
-    s.at_end_of_buffer = sent.n == 2
     s.is_finished = False
     n = sent.n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
@@ -209,9 +207,7 @@ cdef int copy_state(State* s, State* old) except -1:
     s.top = old.top
     s.second = old.second
     s.is_finished = old.is_finished
-    s.at_end_of_buffer = old.at_end_of_buffer
     s.cost = old.cost
-    s.breaking = old.breaking
     # Be thrifty in what we copy, as in large beams it starts to matter 
     memcpy(s.stack, old.stack, (old.stack_len + 1) * sizeof(size_t))
     # Only have to look up to (and including) the start of the buffer 
