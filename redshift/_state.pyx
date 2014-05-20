@@ -249,12 +249,14 @@ cdef int copy_state(State* s, State* old) except -1:
     s.at_end_of_buffer = old.at_end_of_buffer
     s.cost = old.cost
     s.breaking = old.breaking
-    
-    memcpy(s.stack, old.stack, old.n * sizeof(size_t))
-    
-    for i in range(old.n):
-        memcpy(s.l_children[i], old.l_children[i], MAX_VALENCY * sizeof(size_t))
-        memcpy(s.r_children[i], old.r_children[i], MAX_VALENCY * sizeof(size_t))
+    # Be thrifty in what we copy, as in large beams it starts to matter 
+    memcpy(s.stack, old.stack, (old.stack_len + 1) * sizeof(size_t))
+    # Only have to look up to (and including) the start of the buffer 
+    for i in range(old.i + 1):
+        memcpy(s.l_children[i], old.l_children[i], old.parse[i].l_valency * sizeof(size_t))
+        memcpy(s.r_children[i], old.r_children[i], old.parse[i].r_valency * sizeof(size_t))
+    # TODO: This seems to change feature calculations, if we limit to (old.i + 1)
+    # Why?
     memcpy(s.parse, old.parse, old.n * sizeof(Token))
     memcpy(s.history, old.history, old.m * sizeof(Transition))
 
