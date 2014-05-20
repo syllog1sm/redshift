@@ -56,7 +56,7 @@ cdef void free_dense_feat(DenseFeature* feat):
     free(feat)
 
 
-cdef inline void score_dense_feat(double* scores, DenseFeature* feat):
+cdef inline void score_dense_feat(double* scores, DenseFeature* feat) nogil:
     feat.nr_seen += 1
     cdef size_t c
     cdef double* w = feat.w
@@ -126,7 +126,7 @@ cdef void free_square_feat(SquareFeature* feat, size_t div):
 
 
 cdef inline void score_square_feat(double* scores, size_t div, size_t nr_class,
-                                   SquareFeature* feat):
+                                   SquareFeature* feat) nogil:
     cdef size_t j, k, part_idx
     feat.nr_seen  += 1
     for j in range(div):
@@ -171,7 +171,7 @@ cdef class Perceptron:
         if (self.div * self.div) < max_classes:
             self.div += 1
         self.now = 0
-        self.nr_raws = 10000
+        self.nr_raws = 20000
         self.raws = <DenseFeature**>malloc(self.nr_raws * sizeof(DenseFeature*))
         cdef size_t i
         for i in range(self.nr_raws):
