@@ -228,14 +228,6 @@ cdef class Perceptron:
         cdef SquareFeature* feat = init_square_feat(f, self.div)
         self.W[f] = <size_t>feat
 
-    cdef int add_instance(self, size_t label, double weight, int n, uint64_t* feats) except -1:
-        """
-        Add instance with 1 good label. Generalise to multi-label soon.
-        """
-        cdef int64_t pred = self.predict_best_class(feats)
-        self.update(pred, label, feats, 1)
-        return pred
-
     def batch_update(self, deltas):
         cdef size_t feat_addr
         self.now += 1
@@ -318,18 +310,6 @@ cdef class Perceptron:
         for i in range(nr_square):
             score_square_feat(scores, div, nr_class, active_square[i])
 
-
-    cdef uint64_t predict_best_class(self, uint64_t* features):
-        cdef uint64_t i
-        self.fill_scores(features, self.scores)
-        cdef int best_i = 0
-        cdef double best = self.scores[0]
-        for i in range(self.nr_class):
-            if best < self.scores[i]:
-                best_i = i
-                best = self.scores[i]
-        return best_i
-
     def end_training(self, loc):
         cdef uint64_t f
         cdef double tmp
@@ -364,28 +344,6 @@ cdef class Perceptron:
                 accs[c] = tmp
         self._save(loc)
     
-    cdef int unfinalize(self) except -1:
-        cdef double tmp
-        cdef dense_hash_map[uint64_t, size_t].iterator it
-        it = self.W.begin()
-        while it != self.W.end():
-            data = deref(it)
-            inc(it)
-            if data.second >= self.nr_raws:
-                feat = <SquareFeature*>data.second
-                for i in range(self.div):
-                    if feat.seen[i]:
-                        params = &feat.parts[i]
-                        for j in range(self.div):
-                            tmp = params.w[j] * self.now
-                            params.w[j] = params.acc[j]
-                            params.acc[j] = tmp
-        for i in range(1, self.nr_raws):
-            for c in range(self.nr_class):
-                tmp = self.raws[i].w[c] * self.now
-                self.raws[i].w[c] = self.raws[i].acc[c]
-                self.raws[i].acc[c] = tmp
-
     def _save(self, out_loc):
         cdef size_t i
         cdef uint64_t feat_id
