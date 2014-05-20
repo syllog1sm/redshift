@@ -67,7 +67,7 @@ cdef class Extractor:
         cdef:
             size_t i, j, size
             uint64_t value
-            bint seen_non_zero, seen_masked
+            bint seen_non_zero
             Template* pred
         cdef size_t f = 0
         # Extra trick:
@@ -77,15 +77,12 @@ cdef class Extractor:
         for i in range(self.nr_template):
             pred = self.templates[i]
             seen_non_zero = False
-            seen_masked = False
             for j in range(pred.n):
                 value = context[pred.args[j]]
-                # Extra trick: provide a way to exclude features that depend on
-                # rare vocabulary items
                 if value != 0:
                     seen_non_zero = True
                 pred.raws[j] = value
-            if seen_non_zero and not seen_masked:
+            if seen_non_zero:
                 pred.raws[pred.n] = pred.id
                 size = (pred.n + 1) * sizeof(uint64_t)
                 features[f] = MurmurHash64A(pred.raws, size, i)
