@@ -392,7 +392,7 @@ cdef class Perceptron:
 
     def load(self, in_, size_t thresh=0):
         cdef SquareFeature* feat
-        cdef size_t i
+        cdef size_t i, nr_seen
         nr_feat = 0
         nr_weight = 0
         #cdef uint64_t f, clas, idx
@@ -412,7 +412,7 @@ cdef class Perceptron:
         cdef char* line
         cdef bytes py_line
         cdef double w
-        cdef int cls
+        cdef size_t cls
         cdef char* token
         for py_line in in_:
             line = <char*>py_line
@@ -504,7 +504,9 @@ cdef class Perceptron:
         q.sort(reverse=True)
         if not q:
             return None
-        if len(q) < self.nr_raws:
+        cdef size_t max_raws = self.nr_raws
+        cdef size_t length = len(q)
+        if length < max_raws:
             return None
         cutoff = q[self.nr_raws][0]
         vacancies = []

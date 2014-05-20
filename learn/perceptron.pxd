@@ -33,14 +33,14 @@ cdef struct DenseFeature:
 
 
 cdef class Perceptron:
-    cdef int nr_class
+    cdef size_t nr_class
     cdef double *scores
     cdef DenseFeature** _active_dense
     cdef SquareFeature** _active_square
     cdef object path
     cdef bint is_trained
-    cdef float n_corr
-    cdef float total
+    cdef double n_corr
+    cdef double total
     cdef bint accept_new_feats
 
     cdef size_t nr_raws
