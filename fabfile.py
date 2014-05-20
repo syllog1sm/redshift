@@ -34,6 +34,9 @@ def clean():
 def make():
     with lcd(str(LOCAL_REPO)):
         local('python setup.py build_ext --inplace')
+
+def test():
+    with lcd(str(LOCAL_REPO)):
         local('py.test')
 
 def qstat():
