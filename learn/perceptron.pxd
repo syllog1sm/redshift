@@ -9,12 +9,6 @@ DEF MAX_PARAMS = 5000000
 
 DEF MAX_DENSE = 100000
 
-cdef struct Param:
-    double w
-    double acc
-    size_t clas
-    size_t last_upd
-
 
 cdef struct DenseParams:
     double* w
