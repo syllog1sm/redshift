@@ -291,7 +291,7 @@ cdef class Perceptron:
             if feat_addr >= nr_raws:
                 active_square[nr_square] = <SquareFeature*>feat_addr
                 nr_square += 1
-            elif feat_addr != 0:
+            else:
                 active_dense[nr_dense] = raws[feat_addr]
                 nr_dense += 1
         # Now evaluate the features. Doing it this way improves cache locality,
