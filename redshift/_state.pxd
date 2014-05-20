@@ -45,7 +45,6 @@ cdef struct State:
     size_t n
     size_t stack_len
     size_t top
-    size_t second
     int cost
 
     size_t* stack
@@ -71,6 +70,8 @@ cdef size_t get_l(State *s, size_t head)
 cdef size_t get_l2(State *s, size_t head)
 cdef size_t get_r(State *s, size_t head)
 cdef size_t get_r2(State *s, size_t head)
+
+cdef size_t get_s1(State *s)
 
 cdef bint at_eol(State *s)
 cdef bint is_final(State *s)

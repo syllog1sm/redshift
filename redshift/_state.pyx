@@ -43,19 +43,14 @@ cdef size_t pop_stack(State *s) except 0:
     cdef size_t popped
     assert s.stack_len >= 1
     popped = s.top
+    s.top = get_s1(s)
     s.stack_len -= 1
-    s.top = s.second
-    if s.stack_len >= 2:
-        s.second = s.stack[s.stack_len - 2]
-    else:
-        s.second = 0
     assert s.top <= s.n, s.top
     assert popped != 0
     return popped
 
 
 cdef int push_stack(State *s) except -1:
-    s.second = s.top
     s.top = s.i
     s.stack[s.stack_len] = s.i
     s.stack_len += 1
@@ -70,8 +65,8 @@ cdef uint64_t hash_state(State* s):
 
 cdef int fill_slots(State *s) except -1:
     s.slots.s2 = s.parse[s.stack[s.stack_len - 3] if s.stack_len >= 3 else 0]
-    s.slots.s1 = s.parse[s.second]
-    s.slots.s1r = s.parse[get_r(s, s.second)]
+    s.slots.s1 = s.parse[get_s1(s)]
+    s.slots.s1r = s.parse[get_r(s, get_s1(s))]
     s.slots.s0le = s.parse[s.parse[s.top].left_edge]
     s.slots.s0l = s.parse[get_l(s, s.top)]
     s.slots.s0l2 = s.parse[get_l2(s, s.top)]
@@ -96,6 +91,11 @@ cdef int fill_slots(State *s) except -1:
     s.slots.s0n = s.parse[s.top + 1 if s.top and s.top < (s.n - 1) else 0]
     s.slots.s0nn = s.parse[s.top + 1 if s.top and s.top < (s.n - 2) else 0]
 
+
+cdef size_t get_s1(State *s):
+    if s.stack_len < 2:
+        return 0
+    return s.stack[s.stack_len - 2]
 
 cdef size_t get_l(State *s, size_t head):
     if s.parse[head].l_valency == 0:
@@ -176,7 +176,6 @@ cdef State* init_state(Sentence* sent):
     s.cost = 0
     s.score = 0
     s.top = 0
-    s.second = 0
     s.stack_len = 0
     n = sent.n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
@@ -207,7 +206,6 @@ cdef int copy_state(State* s, State* old) except -1:
     s.n = old.n
     s.stack_len = old.stack_len
     s.top = old.top
-    s.second = old.second
     s.cost = old.cost
     # Be thrifty in what we copy, as in large beams it starts to matter 
     memcpy(s.stack, old.stack, (old.stack_len + 1) * sizeof(size_t))

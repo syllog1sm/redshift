@@ -70,9 +70,9 @@ cdef int right_cost(State* s, Token* gold):
     assert s.stack_len >= 2
     assert not can_break(s)
     cost = 0
-    if gold[s.second].is_edit and gold[s.top].is_edit:
+    if gold[get_s1(s)].is_edit and gold[s.top].is_edit:
         return cost
-    elif gold[s.second].is_edit or gold[s.top].is_edit:
+    elif gold[get_s1(s)].is_edit or gold[s.top].is_edit:
         cost += 1
     cost += has_head_in_buffer(s, s.top, gold)
     cost += has_child_in_buffer(s, s.top, gold)
@@ -90,7 +90,7 @@ cdef int left_cost(State* s, Token* gold):
         return cost + 1
     if gold[s.top].head == s.i:
         return cost
-    cost += gold[s.top].head == s.second
+    cost += gold[s.top].head == get_s1(s)
     cost += has_head_in_buffer(s, s.top, gold)
     cost += has_child_in_buffer(s, s.top, gold)
     return cost
@@ -149,14 +149,13 @@ cdef int transition(Transition* t, State *s) except -1:
         add_dep(s, s.i, s.top, t.label)
         pop_stack(s)
     elif t.move == RIGHT:
-        add_dep(s, s.second, s.top, t.label)
+        add_dep(s, get_s1(s), s.top, t.label)
         pop_stack(s)
     elif t.move == EDIT:
         edited = pop_stack(s)
         while s.parse[edited].l_valency:
             child = get_l(s, edited)
             del_l_child(s, edited)
-            s.second = s.top
             s.top = child
             s.stack[s.stack_len] = child
             s.stack_len += 1

@@ -221,10 +221,6 @@ cdef class Parser:
                 g = g_beam.beam[i]
                 moves = g_beam.moves[i]
                 self._predict(g, moves, sent.lattice)
-                # Constrain this beam to only gold candidates
-                #print g.stack_len
-                #print words[g.second], words[g.top], '|', words[g.i]
-                #print sent.tokens[g.second].is_edit, sent.tokens[g.top].is_edit, sent.tokens[g.i].is_edit
                 fill_costs(g, moves, self.nr_moves, gold_parse)
                 g_beam.enqueue(i, True)
             g_beam.extend()
