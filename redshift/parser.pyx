@@ -132,7 +132,7 @@ cdef class Parser:
 
         self.feat_thresh = self.cfg.feat_thresh
         self.beam_width = self.cfg.beam_width
-
+ 
         if os.path.exists(pjoin(model_dir, 'labels')):
             index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
         self.nr_moves = get_nr_moves(self.cfg.left_labels, self.cfg.right_labels,
