@@ -240,7 +240,7 @@ cdef class Input:
         return '\n'.join(lines)
 
 
-cdef bytes conll_line_from_token(size_t i, Token* a, Step* lattice):
+cdef object conll_line_from_token(size_t i, Token* a, Step* lattice):
     cdef bytes word = index.lexicon.get_str(<size_t>a.word)
     if not word:
         word = b'-OOV-'
