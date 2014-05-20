@@ -162,43 +162,6 @@ cdef int has_head_in_stack(State *s, size_t word, Token* gold) except -1:
     return 0
 
 
-cdef int nr_headless(State* s) except -1:
-    cdef size_t n = 0
-    cdef size_t i
-    for i in range(s.stack_len):
-        n += s.parse[s.stack[i]].head == 0
-    return n
-
-
-cdef int fill_edits(State* s, bint* edits) except -1:
-    cdef size_t i, j
-    i = 0
-    j = 0
-    while i <= s.n:
-        if i != 0 and s.parse[i].head == i:
-            edits[i] = True
-            start = s.parse[i].left_edge
-            end = i
-            while s.parse[end].r_valency != 0:
-                end = get_r(s, end)
-            end += 1
-            #print "Editing %d-%d" % (start, end)
-            for k in range(start, end):
-                edits[k] = True
-            i = end
-        else:
-            i += 1
-
-
-cdef bint has_root_child(State *s, size_t token):
-    if s.at_end_of_buffer:
-        return False
-    # TODO: Refer to the root label constant instead here!!
-    # TODO: Instead update left-arc on root so that it attaches the rest of the
-    # stack to S0
-    return s.parse[get_l(s, token)].label == 3
-
-
 DEF PADDING = 5
 
 

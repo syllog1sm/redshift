@@ -79,10 +79,7 @@ cdef int has_child_in_buffer(State *s, size_t word, Token* gold) except -1
 cdef int has_head_in_buffer(State *s, size_t word, Token* gold) except -1
 cdef int has_child_in_stack(State *s, size_t word, Token* gold) except -1
 cdef int has_head_in_stack(State *s, size_t word, Token* gold) except -1
-cdef bint has_root_child(State *s, size_t token)
-cdef int nr_headless(State *s) except -1
 
-cdef int fill_edits(State *s, bint* edits) except -1
 cdef State* init_state(Sentence* sent)
 cdef free_state(State* s)
 cdef int copy_state(State* s, State* old) except -1

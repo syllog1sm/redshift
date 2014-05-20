@@ -113,7 +113,6 @@ cdef class Beam:
         # No need to copy heads for root and start symbols
         for i in range(1, self.length - 1):
             parse[i] = s.parse[i]
-        #fill_edits(self.beam[0], edits)
  
     def __dealloc__(self):
         for i in range(self.k):
