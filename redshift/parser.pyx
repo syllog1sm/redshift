@@ -184,11 +184,9 @@ cdef class Parser:
 
     cdef int train_sent(self, Input py_sent) except -1:
         cdef size_t i
-        cdef size_t nr_move = sent.n * 3
         cdef Transition[1000] g_hist
         cdef Transition[1000] p_hist
         cdef Sentence* sent = py_sent.c_sent
-        
         cdef size_t* gold_tags = <size_t*>calloc(sent.n, sizeof(size_t))
         for i in range(sent.n):
             gold_tags[i] = sent.tokens[i].tag
