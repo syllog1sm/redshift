@@ -46,7 +46,6 @@ cdef struct State:
     size_t stack_len
     size_t top
     size_t second
-    bint is_finished
     int cost
 
     size_t* stack
@@ -74,6 +73,7 @@ cdef size_t get_r(State *s, size_t head)
 cdef size_t get_r2(State *s, size_t head)
 
 cdef bint at_eol(State *s)
+cdef bint is_final(State *s)
 
 cdef int has_child_in_buffer(State *s, size_t word, Token* gold) except -1
 cdef int has_head_in_buffer(State *s, size_t word, Token* gold) except -1

@@ -159,7 +159,7 @@ cdef class Parser:
         self.guide.cache.flush()
         while not beam.is_finished:
             for i in range(beam.bsize):
-                if not beam.beam[i].is_finished:
+                if not is_final(beam.beam[i]):
                     self._predict(beam.beam[i], beam.moves[i], sent.lattice)
                 # The False flag tells it to allow non-gold predictions
                 beam.enqueue(i, False)
@@ -170,7 +170,7 @@ cdef class Parser:
 
     cdef int _predict(self, State* s, Transition* classes, Step* lattice) except -1:
         cdef bint cache_hit = False
-        if s.is_finished:
+        if is_final(s):
             return 0
         fill_slots(s)
         scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)

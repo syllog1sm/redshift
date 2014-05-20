@@ -161,6 +161,9 @@ cdef int has_head_in_stack(State *s, size_t word, Token* gold) except -1:
 cdef bint at_eol(State *s):
     return s.i >= (s.n - 1)
 
+cdef bint is_final(State *s):
+    return at_eol(s) and s.stack_len == 0
+
 DEF PADDING = 5
 
 
@@ -175,7 +178,6 @@ cdef State* init_state(Sentence* sent):
     s.top = 0
     s.second = 0
     s.stack_len = 0
-    s.is_finished = False
     n = sent.n + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
     s.l_children = <size_t**>malloc(n * sizeof(size_t*))
@@ -206,7 +208,6 @@ cdef int copy_state(State* s, State* old) except -1:
     s.stack_len = old.stack_len
     s.top = old.top
     s.second = old.second
-    s.is_finished = old.is_finished
     s.cost = old.cost
     # Be thrifty in what we copy, as in large beams it starts to matter 
     memcpy(s.stack, old.stack, (old.stack_len + 1) * sizeof(size_t))

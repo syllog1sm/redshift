@@ -47,7 +47,7 @@ cdef class Beam:
     cdef int enqueue(self, size_t i, bint force_gold) except -1:
         cdef State* s = self.beam[i]
         cdef size_t move_id = i * self.nr_class
-        if s.is_finished:
+        if is_final(s):
             self.queue.push(ScoredMove(s.score + (s.score / self.t), move_id))
             return 0
         cdef Transition* moves = self.moves[i]
@@ -82,7 +82,7 @@ cdef class Beam:
             s = self.beam[self.bsize]
             s.score = data.first
             t = &self.moves[parent_idx][move_idx]
-            if not s.is_finished:
+            if not is_final(s):
                 s.cost += t.cost
                 transition(t, s)
                 assert s.m != 0
@@ -92,7 +92,7 @@ cdef class Beam:
         self.is_full = self.bsize >= self.k
         assert self.beam[0].m != 0
         for i in range(self.bsize):
-            if not self.beam[i].is_finished:
+            if not is_final(self.beam[i]):
                 self.is_finished = False
                 break
         else:

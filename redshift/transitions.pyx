@@ -141,7 +141,6 @@ cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except
 
 
 cdef int transition(Transition* t, State *s) except -1:
-    assert not s.is_finished
     s.history[s.m] = t[0]
     s.m += 1 
     if t.move == SHIFT:
@@ -176,8 +175,6 @@ cdef int transition(Transition* t, State *s) except -1:
         pop_stack(s)
     else:
         raise StandardError(t.move)
-    if at_eol(s) and s.stack_len == 0:
-        s.is_finished = True
 
 
 cdef size_t get_nr_moves(list left_labels, list right_labels, list dfl_labels,
