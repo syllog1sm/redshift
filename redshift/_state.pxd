@@ -1,7 +1,6 @@
 from libc.string cimport const_void
 from libc.stdint cimport uint64_t, int64_t
 
-from ext.murmurhash cimport *
 from sentence cimport Sentence, Token
 from transitions cimport Transition
 
@@ -56,7 +55,6 @@ cdef struct State:
     SlotTokens slots
 
 
-cdef uint64_t hash_state(State* s)
 cdef int fill_slots(State* s) except -1
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1

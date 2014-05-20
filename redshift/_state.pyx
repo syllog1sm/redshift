@@ -59,10 +59,6 @@ cdef int push_stack(State *s) except -1:
     s.parse[s.i].sent_id = s.parse[s.top].sent_id
 
 
-cdef uint64_t hash_state(State* s):
-    return MurmurHash64A(&s.slots, sizeof(SlotTokens), 0)
-
-
 cdef int fill_slots(State *s) except -1:
     s.slots.s2 = s.parse[s.stack[s.stack_len - 3] if s.stack_len >= 3 else 0]
     s.slots.s1 = s.parse[get_s1(s)]
