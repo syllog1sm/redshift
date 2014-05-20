@@ -40,11 +40,6 @@ cdef inline bint can_break(State* s):
     return USE_BREAK and s.stack_len == 1 and not s.parse[s.i].l_valency and not at_eol(s)
 
 
-#cdef bint USE_FILL = False
-#cdef inline bint can_filler(State* s):
-#    return s.stack_len >= 1
-
-
 # Edit oracle:
 # - You can always LeftArc from an Edit word
 # - You can always RightArc between two Edit words
