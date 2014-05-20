@@ -50,7 +50,7 @@ cdef class Lexicon:
             #upper_pc = float(pieces[1])
             #title_pc = float(pieces[2])
             upper_pc, title_pc = case_stats.get(word.lower(), (0.0, 0.0))
-            w = <size_t>init_word(word, cluster, upper_pc, title_pc)
+            w = <size_t>init_word(word, cluster, upper_pc, title_pc, int(freq_str))
             self.words[_hash_str(word)] = w
             self.strings[<size_t>w] = word
 
@@ -63,7 +63,7 @@ cdef class Lexicon:
         cdef uint64_t hashed = _hash_str(word)
         cdef size_t addr = self.words[hashed]
         if addr == 0:
-            addr = <size_t>init_word(word, 0, 0.0, 0.0)
+            addr = <size_t>init_word(word, 0, 0.0, 0.0, 0)
             self.words[hashed] = addr
             self.strings[addr] = word
         return addr
@@ -81,10 +81,13 @@ cpdef bytes normalize_word(word):
     
 
 cdef Lexeme* init_word(bytes py_word, size_t cluster,
-                     float upper_pc, float title_pc) except NULL:
+                     float upper_pc, float title_pc, size_t freq) except NULL:
     cdef Lexeme* word = <Lexeme*>malloc(sizeof(Lexeme))
     word.orig = _hash_str(py_word)
-    word.norm = _hash_str(normalize_word(py_word))
+    if freq < 10:
+        word.norm = 0
+    else:
+        word.norm = _hash_str(normalize_word(py_word))
     word.suffix = _hash_str(py_word[-3:])
     word.prefix = ord(py_word[0])
     
