@@ -51,7 +51,6 @@ cdef class Perceptron:
  
     cdef dense_hash_map[uint64_t, size_t] W
     cdef index.hashes.ScoresCache cache
-    cdef bint use_cache
 
     cdef int add_feature(self, uint64_t f)
     cdef int64_t update(self, size_t gold_i, size_t pred_i,

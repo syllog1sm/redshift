@@ -179,7 +179,6 @@ cdef class Perceptron:
             self.raws[i] = init_dense_feat(0, max_classes)
         self.n_corr = 0.0
         self.total = 0.0
-        self.use_cache = True
         self.cache = index.hashes.ScoresCache(max_classes) 
         self._active_dense = <DenseFeature**>calloc(MAX_ACTIVE, sizeof(size_t))
         self._active_square = <SquareFeature**>calloc(MAX_ACTIVE, sizeof(size_t))
