@@ -1,13 +1,10 @@
 cimport index.hashes
-from libcpp.vector cimport vector
 from libcpp.utility cimport pair
 
 from libc.stdint cimport int64_t, uint64_t
 from ext.sparsehash cimport *
 
 DEF MAX_PARAMS = 5000000
-
-DEF MAX_DENSE = 100000
 
 
 cdef struct DenseParams:
