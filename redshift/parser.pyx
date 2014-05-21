@@ -220,7 +220,7 @@ cdef class Parser:
             g_beam.extend()
             g = g_beam.beam[0]; p = p_beam.beam[0] 
             delta = p.score - g.score
-            if delta >= max_violn and p.cost >= 1:
+            if delta > max_violn and p.cost >= 1:
                 max_violn = delta
                 pt = p.m
                 gt = g.m
@@ -229,9 +229,8 @@ cdef class Parser:
         if max_violn >= 0:
             counted = self._count_feats(sent, pt, gt, p_hist, g_hist)
             self.guide.batch_update(counted)
-            # TODO: We should tick the epoch here if max_violn == 0, right?
-        #else:
-        #    self.guide.now += 1
+        else:
+            self.guide.now += 1
         for i in range(sent.n):
             sent.tokens[i].tag = gold_tags[i]
         free(gold_tags)
