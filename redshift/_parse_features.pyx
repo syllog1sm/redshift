@@ -318,8 +318,7 @@ cdef inline void zero_token(size_t* context, size_t i):
         context[i+j] = 0
 
 
-cdef int fill_context(size_t* context, SlotTokens* t, Token* parse,
-                      Step* steps) except -1:
+cdef int fill_context(size_t* context, SlotTokens* t, Token* parse) except -1:
     cdef size_t c
     for c in range(CONTEXT_SIZE):
         context[c] = 0

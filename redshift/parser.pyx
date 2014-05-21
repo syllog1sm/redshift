@@ -12,7 +12,7 @@ from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
 
 from _state cimport *
-from sentence cimport Input, Sentence, Token
+from sentence cimport Input, Sentence, Token, Step
 from transitions cimport Transition, transition, fill_valid, fill_costs
 from transitions cimport get_nr_moves, fill_moves
 from transitions cimport *
@@ -154,12 +154,11 @@ cdef class Parser:
             self.tagger.tag(py_sent)
         cdef Beam beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves,
                               py_sent)
-
         self.guide.cache.flush()
         while not beam.is_finished:
             for i in range(beam.bsize):
                 if not is_final(beam.beam[i]):
-                    self._predict(beam.beam[i], beam.moves[i], sent.lattice)
+                    self._predict(beam.beam[i], beam.moves[i])
                 # The False flag tells it to allow non-gold predictions
                 beam.enqueue(i, False)
             beam.extend()
@@ -167,17 +166,18 @@ cdef class Parser:
         py_sent.segment()
         sent.score = beam.beam[0].score
 
-    cdef int _predict(self, State* s, Transition* classes, Step* lattice) except -1:
+    cdef int _predict(self, State* s, Transition* classes) except -1:
         cdef bint cache_hit = False
         if is_final(s):
             return 0
         fill_slots(s)
         scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
         if not cache_hit:
-            fill_context(self._context, &s.slots, s.parse, lattice)
+            fill_context(self._context, &s.slots, s.parse)
             self.extractor.extract(self._features, self._context)
             self.guide.fill_scores(self._features, scores)
         fill_valid(s, classes, self.nr_moves)
+        cdef size_t i
         for i in range(self.nr_moves):
             classes[i].score = scores[i]
 
@@ -205,7 +205,7 @@ cdef class Parser:
         words = py_sent.words
         while not p_beam.is_finished and not g_beam.is_finished:
             for i in range(p_beam.bsize):
-                self._predict(p_beam.beam[i], p_beam.moves[i], sent.lattice)
+                self._predict(p_beam.beam[i], p_beam.moves[i])
                 # Fill costs so we can see whether the prediction is gold-standard
                 fill_costs(p_beam.beam[i], p_beam.moves[i], self.nr_moves, gold_parse)
                 # The False flag tells it to allow non-gold predictions
@@ -214,7 +214,7 @@ cdef class Parser:
             for i in range(g_beam.bsize):
                 g = g_beam.beam[i]
                 moves = g_beam.moves[i]
-                self._predict(g, moves, sent.lattice)
+                self._predict(g, moves)
                 fill_costs(g, moves, self.nr_moves, gold_parse)
                 g_beam.enqueue(i, True)
             g_beam.extend()
@@ -243,15 +243,13 @@ cdef class Parser:
         cdef size_t clas
         cdef State* gold_state = init_state(sent)
         cdef State* pred_state = init_state(sent)
-        # Find where the states diverge
         cdef dict counts = {}
         for clas in range(self.nr_moves):
             counts[clas] = {}
         cdef bint seen_diff = False
-        g_inc = 1.0
-        p_inc = -1.0
         for i in range(max((pt, gt))):
             self.guide.total += 1.0
+            # Find where the states diverge
             if not seen_diff and ghist[i].clas == phist[i].clas:
                 self.guide.n_corr += 1.0
                 transition(&ghist[i], gold_state)
@@ -259,23 +257,17 @@ cdef class Parser:
                 continue
             seen_diff = True
             if i < gt:
-                self._inc_feats(counts[ghist[i].clas], gold_state, sent.lattice, g_inc)
+                fill_slots(gold_state)
+                fill_context(self._context, &gold_state.slots, gold_state.parse)
+                self.extractor.extract(self._features, self._context)
+                self.extractor.count(counts[ghist[i].clas], self._features, 1.0)
                 transition(&ghist[i], gold_state)
             if i < pt:
-                self._inc_feats(counts[phist[i].clas], pred_state, sent.lattice, p_inc)
+                fill_slots(pred_state)
+                fill_context(self._context, &pred_state.slots, pred_state.parse)
+                self.extractor.extract(self._features, self._context)
+                self.extractor.count(counts[phist[i].clas], self._features, -1.0)
                 transition(&phist[i], pred_state)
         free_state(gold_state)
         free_state(pred_state)
         return counts
-
-    cdef int _inc_feats(self, dict counts, State* s, Step* lattice, double inc) except -1:
-        fill_slots(s)
-        fill_context(self._context, &s.slots, s.parse, lattice)
-        self.extractor.extract(self._features, self._context)
- 
-        cdef size_t f = 0
-        while self._features[f] != 0:
-            if self._features[f] not in counts:
-                counts[self._features[f]] = 0
-            counts[self._features[f]] += inc
-            f += 1

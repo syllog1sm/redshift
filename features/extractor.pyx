@@ -41,6 +41,14 @@ cdef class Extractor:
         free(self.templates)
         free(self.match_preds)
 
+    cdef int count(self, dict counts, uint64_t* features, double inc) except -1:
+        cdef size_t f = 0
+        while features[f] != 0:
+            if features[f] not in counts:
+                counts[features[f]] = 0
+            counts[features[f]] += inc
+            f += 1
+
     cdef int extract(self, uint64_t* features, size_t* context) except -1:
         cdef:
             size_t i, j, size
