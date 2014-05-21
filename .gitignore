@@ -23,3 +23,4 @@ tests/model/*
 tests/model/
 *.orig
 .coverage
+*.pyo
