@@ -203,13 +203,10 @@ cdef class Parser:
         cdef Transition* moves
         self.guide.cache.flush()
         words = py_sent.words
-        #print words
-        move_strs = ['?', 'S', 'L', 'R', 'E']
         while not p_beam.is_finished and not g_beam.is_finished:
             for i in range(p_beam.bsize):
                 self._predict(p_beam.beam[i], p_beam.moves[i], sent.lattice)
                 # Fill costs so we can see whether the prediction is gold-standard
-                #print 'ignore',
                 fill_costs(p_beam.beam[i], p_beam.moves[i], self.nr_moves, gold_parse)
                 # The False flag tells it to allow non-gold predictions
                 p_beam.enqueue(i, False)
@@ -222,7 +219,6 @@ cdef class Parser:
                 g_beam.enqueue(i, True)
             g_beam.extend()
             g = g_beam.beam[0]; p = p_beam.beam[0] 
-            #print 'Move taken: ', move_strs[g.history[g.m-1].move]
             delta = p.score - g.score
             if delta >= max_violn and p.cost >= 1:
                 max_violn = delta
