@@ -10,6 +10,9 @@ import json
 
 from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
+from libcpp.vector cimport vector
+from cython.operator cimport dereference as deref
+from cython.operator cimport preincrement as inc
 
 from _state cimport *
 from sentence cimport Input, Sentence, Token, Step
@@ -157,29 +160,34 @@ cdef class Parser:
         self.guide.cache.flush()
         while not beam.is_finished:
             for i in range(beam.bsize):
-                if not is_final(beam.beam[i]):
-                    self._predict(beam.beam[i], beam.moves[i])
-                # The False flag tells it to allow non-gold predictions
-                beam.enqueue(i, False)
+                self._enqueue_beam(beam, i, False)
             beam.extend()
         beam.fill_parse(sent.tokens)
         py_sent.segment()
         sent.score = beam.beam[0].score
 
-    cdef int _predict(self, State* s, Transition* classes) except -1:
+    cdef int _enqueue_beam(self, Beam beam, i, bint force_gold):
+        cdef vector[Transition] moves = vector[Transition]()
+        # TODO: deal with is_final states
+        cdef SlotTokens slots = SlotTokens()
+        cdef Transition t
+        assert not is_final(beam.beam[i])
+        add_valid_moves(moves, beam.beam[i], force_gold)
+        it = moves.begin()
+        while it != moves.end():
+            t = deref(it)
+            transition_slots(&slots, &t)
+            t.score += self._predict(&slots, beam.beam[i].parse)
+        beam.enqueue(i, moves)
+
+    cdef double _predict(self, SlotTokens* slots, Token* parse) except -1:
         cdef bint cache_hit = False
-        if is_final(s):
-            return 0
-        fill_slots(s)
-        scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
+        scores = self.guide.cache.lookup(sizeof(SlotTokens), slots, &cache_hit)
         if not cache_hit:
-            fill_context(self._context, &s.slots, s.parse)
+            fill_context(self._context, slots, parse)
             self.extractor.extract(self._features, self._context)
             self.guide.fill_scores(self._features, scores)
-        fill_valid(s, classes, self.nr_moves)
-        cdef size_t i
-        for i in range(self.nr_moves):
-            classes[i].score = scores[i]
+        return scores[0]
 
     cdef int train_sent(self, Input py_sent) except -1:
         cdef size_t i
@@ -191,8 +199,8 @@ cdef class Parser:
             gold_tags[i] = sent.tokens[i].tag
         if self.tagger:
             self.tagger.tag(py_sent)
-        g_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
-        p_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+        g_beam = Beam(self.beam_width, py_sent)
+        p_beam = Beam(self.beam_width, py_sent)
         cdef Token* gold_parse = sent.tokens
         cdef double delta = 0
         cdef double max_violn = -1
@@ -205,18 +213,14 @@ cdef class Parser:
         words = py_sent.words
         while not p_beam.is_finished and not g_beam.is_finished:
             for i in range(p_beam.bsize):
-                self._predict(p_beam.beam[i], p_beam.moves[i])
+                self._enqueue_beam(p_beam, i, False)
                 # Fill costs so we can see whether the prediction is gold-standard
-                fill_costs(p_beam.beam[i], p_beam.moves[i], self.nr_moves, gold_parse)
                 # The False flag tells it to allow non-gold predictions
-                p_beam.enqueue(i, False)
+                #fill_costs(p_beam.beam[i], p_beam.moves[i], self.nr_moves, gold_parse)
             p_beam.extend()
             for i in range(g_beam.bsize):
-                g = g_beam.beam[i]
-                moves = g_beam.moves[i]
-                self._predict(g, moves)
-                fill_costs(g, moves, self.nr_moves, gold_parse)
-                g_beam.enqueue(i, True)
+                #fill_costs(g_beam.beam[i], g_beam.moves[i], self.nr_moves, gold_parse)
+                self._enqueue_beam(g_beam, i, True)
             g_beam.extend()
             g = g_beam.beam[0]; p = p_beam.beam[0] 
             delta = p.score - g.score
@@ -228,6 +232,7 @@ cdef class Parser:
                 memcpy(g_hist, g.history, gt * sizeof(Transition))
         if max_violn >= 0:
             counted = self._count_feats(sent, pt, gt, p_hist, g_hist)
+            print counted
             self.guide.batch_update(counted)
         else:
             self.guide.now += 1
@@ -243,8 +248,6 @@ cdef class Parser:
         cdef State* gold_state = init_state(sent)
         cdef State* pred_state = init_state(sent)
         cdef dict counts = {}
-        for clas in range(self.nr_moves):
-            counts[clas] = {}
         cdef bint seen_diff = False
         for i in range(max((pt, gt))):
             self.guide.total += 1.0
@@ -259,13 +262,13 @@ cdef class Parser:
                 fill_slots(gold_state)
                 fill_context(self._context, &gold_state.slots, gold_state.parse)
                 self.extractor.extract(self._features, self._context)
-                self.extractor.count(counts[ghist[i].clas], self._features, 1.0)
+                self.extractor.count(counts, self._features, 1.0)
                 transition(&ghist[i], gold_state)
             if i < pt:
                 fill_slots(pred_state)
                 fill_context(self._context, &pred_state.slots, pred_state.parse)
                 self.extractor.extract(self._features, self._context)
-                self.extractor.count(counts[phist[i].clas], self._features, -1.0)
+                self.extractor.count(counts, self._features, -1.0)
                 transition(&phist[i], pred_state)
         free_state(gold_state)
         free_state(pred_state)

@@ -3,6 +3,8 @@ from _state cimport *
 from libc.stdlib cimport malloc, calloc, free
 import index.hashes
 
+from libcpp.vector cimport vector
+
 # TODO: Link these with other compile constants
 DEF MAX_TAGS = 100
 DEF MAX_LABELS = 200
@@ -170,6 +172,11 @@ cdef int transition(Transition* t, State *s) except -1:
     else:
         raise StandardError(t.move)
 
+cdef int transition_slots(SlotTokens* slots, Transition* t) except -1:
+    pass
+
+cdef int add_valid_moves(vector[Transition] moves, State* s, bint force_gold) except -1:
+    pass
 
 cdef size_t get_nr_moves(list left_labels, list right_labels, list dfl_labels,
                          bint use_break):
