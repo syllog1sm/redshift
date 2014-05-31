@@ -14,9 +14,7 @@ cdef class Beam:
     cdef State** parents
     cdef State** beam
 
-    cdef priority_queue[ScoredMove] queue
-    #cdef Transition** moves
-    cdef vector[Candidate] moves
+    cdef Transition** moves
 
     cdef size_t k
     cdef size_t i
@@ -28,7 +26,5 @@ cdef class Beam:
     cdef bint is_full
     cdef bint is_finished
 
-    #cdef int enqueue(self, size_t i, bint force_gold) except -1
-    cdef int enqueue(self, size_t i, vector[Transition] moves) except -1
     cdef int extend(self) except -1
     cdef int fill_parse(self, Token* parse) except -1

@@ -172,25 +172,97 @@ cdef int transition(Transition* t, State *s) except -1:
     else:
         raise StandardError(t.move)
 
-cdef int transition_slots(SlotTokens* slots, Transition* t) except -1:
-    pass
 
-cdef int add_valid_moves(vector[Transition] moves, State* s, bint force_gold) except -1:
-    pass
+cdef int transition_slots(SlotTokens* new, State* s, Transition* t) except -1:
+    new.move = t.clas
+    cdef SlotTokens old = s.slots
+    if t.move == SHIFT:
+        new.s2 = old.s1
+        new.s1 = old.s0
+        new.s1r = old.s0r
+        new.s0le = old.n0le
+        new.s0l = old.n0l
+        new.s0l2 = old.n0l2
+        new.s0l0 = old.n0l0
+        new.s0 = old.n0
+        new.s0r0 = s.parse[0]
+        new.s0r = s.parse[0]
+        new.s0r2 = s.parse[0]
+        new.s0re = old.n0
+        new.n0le = old.n1
+        new.n0l = s.parse[0]
+        new.n0l2 = s.parse[0]
+        new.n0l0 = s.parse[0]
+        new.n0 = old.n1
+        new.n1 = old.n2
+        new.n2 = s.parse[s.i + 3 if s.i < (s.n - 3) else 0]
+        new.p1 = old.n0
+        new.p2 = old.p1
+        new.s0n = old.n1
+        new.s0nn = old.n2
+    elif t.move == LEFT or t.move == RIGHT:
+        assert old.s0.left_edge != 0
+        new.s2 = s.parse[s.stack[s.stack_len - 4 if s.stack_len >= 4 else 0]]
+        new.s1 = old.s2
+        new.s1r = s.parse[get_r(s, old.s2.i)]
+        new.s0le = s.parse[old.s1.left_edge]
+        new.s0l = s.parse[get_l(s, old.s1.i)]
+        new.s0l2 = s.parse[get_l2(s, old.s1.i)]
+        new.s0l0 = s.parse[s.l_children[old.s1.i][0]]
+        new.s0 = old.s1
+        new.s0r0 = s.parse[s.r_children[old.s1.i][0]]
+        new.s0r2 = s.parse[get_r2(s, old.s1.i)]
+        new.s0r = old.s1r
+        # IE S1re is the word before S0le
+        new.s0re = s.parse[old.s0.left_edge - 1]
+        new.n0le = old.n0le
+        new.n0l = old.n0l
+        new.n0l2 = old.n0l2
+        new.n0l0 = old.n0l0
+        new.n0 = old.n0
+        new.n1 = old.n1
+        new.n2 = old.n2
+        new.p1 = old.p1
+        new.p2 = old.p2
+        new.s0n = s.parse[old.s1.i + 1]
+        new.s0nn = s.parse[old.s1.i + 2]
+        
+        if t.move == LEFT:
+            new.n0.l_valency += 1
+            new.n0.left_edge = old.s0.left_edge
+            new.n0l = old.s0
+            new.n0l.head = old.n0.i
+            new.n0l.label = t.label
+            new.n0l2 = old.n0l
+            if new.n0.l_valency == 1:
+                new.n0l0 = old.s0
+        else:
+            new.s0.r_valency += 1
+            new.s0r = old.s0
+            new.s0r.head = old.s1.i
+            new.s0r.label = t.label
+            if new.s0.r_valency == 1:
+                new.s0r0 = old.s0
+    else:
+        raise StandardError
 
-cdef size_t get_nr_moves(list left_labels, list right_labels, list dfl_labels,
-                         bint use_break):
+
+cdef size_t get_nr_moves(size_t lattice_width, list left_labels, list right_labels,
+                         list dfl_labels, bint use_break):
     global USE_BREAK, USE_EDIT
     USE_BREAK = use_break
     USE_EDIT = bool(dfl_labels) 
-    return 1 + use_break + len(left_labels) + len(right_labels) + len(dfl_labels)
+    return lattice_width + use_break + len(left_labels) + len(right_labels) + len(dfl_labels)
 
 
-cdef int fill_moves(list left_labels, list right_labels, list dfl_labels,
-                    bint use_break, Transition* moves):
-    cdef size_t i = 0
+cdef int fill_moves(size_t lattice_width, list left_labels, list right_labels,
+                    list dfl_labels, bint use_break, Transition* moves):
     cdef size_t root_label = index.hashes.encode_label('ROOT')
-    moves[i].move = SHIFT; moves[i].label = 0; i += 1
+    cdef size_t i = 0
+    for i in range(lattice_width):
+        moves[i].move = SHIFT
+        moves[i].label = i
+    i += 1
     if use_break:
         moves[i].move = BREAK; moves[i].label = root_label; i += 1
     cdef size_t label

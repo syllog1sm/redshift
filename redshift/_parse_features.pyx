@@ -29,6 +29,7 @@ from itertools import combinations
 #]
 # NB: The order of the enum is _not arbitrary!!_
 cdef enum:
+    move
     S2w
     S2p
     S2c
@@ -322,6 +323,7 @@ cdef int fill_context(size_t* context, SlotTokens* t, Token* parse) except -1:
     cdef size_t c
     for c in range(CONTEXT_SIZE):
         context[c] = 0
+    context[move] = t.move
     # This fills in the basic properties of each of our "slot" tokens, e.g.
     # word on top of the stack, word at the front of the buffer, etc.
     fill_token(context, S2w, t.s2)
