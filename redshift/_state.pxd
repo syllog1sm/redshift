@@ -9,7 +9,6 @@ from transitions cimport Transition
 # N0le, N0l, N0l2, N0l0
 
 cdef struct SlotTokens:
-    size_t move
     Token s2
     Token s1
     Token s1r
