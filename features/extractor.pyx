@@ -43,10 +43,12 @@ cdef class Extractor:
 
     cdef int count(self, dict counts, uint64_t* features, double inc) except -1:
         cdef size_t f = 0
+        cdef uint64_t value
         while features[f] != 0:
-            if features[f] not in counts:
-                counts[features[f]] = 0
-            counts[features[f]] += inc
+            value = features[f]
+            if value not in counts:
+                counts[value] = 0
+            counts[value] += inc
             f += 1
 
     cdef int extract(self, uint64_t* features, size_t* context) except -1:
