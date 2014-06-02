@@ -19,7 +19,7 @@ from sentence cimport Input, Sentence, Token, Step
 from transitions cimport Transition, transition, fill_valid, fill_costs
 from transitions cimport get_nr_moves, fill_moves
 from transitions cimport *
-from beam cimport Beam
+from beam cimport Beam, get_violation
 from tagger cimport Tagger
 from util import Config
 
@@ -193,34 +193,29 @@ cdef class Parser:
 
     cdef int train_sent(self, Input py_sent) except -1:
         cdef size_t i
-        # TODO: Fix this...
-        cdef Transition[1000] g_hist
-        cdef Transition[1000] p_hist
         cdef Sentence* sent = py_sent.c_sent
         cdef size_t* gold_tags = <size_t*>calloc(sent.n, sizeof(size_t))
         for i in range(sent.n):
             gold_tags[i] = sent.tokens[i].tag
         if self.tagger:
             self.tagger.tag(py_sent)
-        g_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
-        p_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
         cdef Token* gold_parse = sent.tokens
-        cdef double delta = 0
-        cdef double max_violn = -1
-        cdef size_t pt = 0
-        cdef size_t gt = 0
-        cdef State* p
-        cdef State* g
-        cdef Transition* moves
         self.guide.cache.flush()
-        words = py_sent.words
-        while not p_beam.is_finished and not g_beam.is_finished:
+        p_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+        while not p_beam.is_finished:
             for i in range(p_beam.bsize):
                 fill_valid(p_beam.beam[i], p_beam.moves[i], self.nr_moves) 
                 self._score_classes(p_beam.beam[i], p_beam.moves[i])
                 # Fill costs so we can see whether the prediction is gold-standard
                 fill_costs(p_beam.beam[i], p_beam.moves[i], self.nr_moves, gold_parse)
             p_beam.extend()
+        if p_beam.beam[0].cost == 0:
+            self.guide.now += 1
+            self.guide.n_corr += p_beam.beam[0].m
+            self.guide.total += p_beam.beam[0].m
+            return 0
+        g_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+        while not g_beam.is_finished:
             for i in range(g_beam.bsize):
                 fill_valid(g_beam.beam[i], g_beam.moves[i], self.nr_moves) 
                 fill_costs(g_beam.beam[i], g_beam.moves[i], self.nr_moves, gold_parse)
@@ -229,23 +224,52 @@ cdef class Parser:
                         g_beam.moves[i][j].is_valid = False
                 self._score_classes(g_beam.beam[i], g_beam.moves[i])
             g_beam.extend()
-            g = g_beam.beam[0]; p = p_beam.beam[0] 
-            delta = p.score - g.score
-            if delta > max_violn and p.cost >= 1:
-                max_violn = delta
-                pt = p.m
-                gt = g.m
-                memcpy(p_hist, p.history, pt * sizeof(Transition))
-                memcpy(g_hist, g.history, gt * sizeof(Transition))
-        if max_violn >= 0:
-            counted = self._count_feats(sent, pt, gt, p_hist, g_hist)
-            self.guide.batch_update(counted)
-        else:
-            self.guide.now += 1
+        cdef size_t v = get_violation(p_beam, g_beam)
+        counts = self._count_feats(sent, v, p_beam.history[v], g_beam.history[v])
+        self.guide.batch_update(counts)
         for i in range(sent.n):
             sent.tokens[i].tag = gold_tags[i]
         free(gold_tags)
+    
+    cdef dict _count_feats(self, Sentence* sent, size_t v, Transition* phist,
+                           Transition* ghist):
+        cdef size_t d, i, f
+        cdef uint64_t* feats
+        cdef size_t clas
+        cdef State* gold_state = init_state(sent)
+        cdef State* pred_state = init_state(sent)
+        cdef dict counts = {}
+        for clas in range(self.nr_moves):
+            counts[clas] = {}
+        cdef bint seen_diff = False
+        for i in range(v + 1):
+            self.guide.total += 1.0
+            # Find where the states diverge
+            if not seen_diff and ghist[i].clas == phist[i].clas:
+                self.guide.n_corr += 1.0
+                transition(&ghist[i], gold_state)
+                transition(&phist[i], pred_state)
+                continue
+            seen_diff = True
+            if not is_final(gold_state):
+                fill_slots(gold_state)
+                fill_context(self._context, &gold_state.slots)
+                self.extractor.extract(self._features, self._context)
+                self.extractor.count(counts[ghist[i].clas], self._features, 1.0)
+                transition(&ghist[i], gold_state)
+            if not is_final(pred_state):
+                fill_slots(pred_state)
+                fill_context(self._context, &pred_state.slots)
+                self.extractor.extract(self._features, self._context)
+                self.extractor.count(counts[phist[i].clas], self._features, -1.0)
+                transition(&phist[i], pred_state)
+        free_state(gold_state)
+        free_state(pred_state)
+        return counts
 
+
+
+    """
     cdef int train_nbest(self, Input gold_sent, object nbest) except -1:
         cdef size_t i
         self.guide.cache.flush()
@@ -299,39 +323,6 @@ cdef class Parser:
             self.guide.batch_update(counted)
         else:
             self.guide.now += 1
+    """
 
-    cdef dict _count_feats(self, Sentence* sent, size_t pt, size_t gt,
-                           Transition* phist, Transition* ghist):
-        cdef size_t d, i, f
-        cdef uint64_t* feats
-        cdef size_t clas
-        cdef State* gold_state = init_state(sent)
-        cdef State* pred_state = init_state(sent)
-        cdef dict counts = {}
-        for clas in range(self.nr_moves):
-            counts[clas] = {}
-        cdef bint seen_diff = False
-        for i in range(max((pt, gt))):
-            self.guide.total += 1.0
-            # Find where the states diverge
-            if not seen_diff and ghist[i].clas == phist[i].clas:
-                self.guide.n_corr += 1.0
-                transition(&ghist[i], gold_state)
-                transition(&phist[i], pred_state)
-                continue
-            seen_diff = True
-            if i < gt:
-                fill_slots(gold_state)
-                fill_context(self._context, &gold_state.slots)
-                self.extractor.extract(self._features, self._context)
-                self.extractor.count(counts[ghist[i].clas], self._features, 1.0)
-                transition(&ghist[i], gold_state)
-            if i < pt:
-                fill_slots(pred_state)
-                fill_context(self._context, &pred_state.slots)
-                self.extractor.extract(self._features, self._context)
-                self.extractor.count(counts[phist[i].clas], self._features, -1.0)
-                transition(&phist[i], pred_state)
-        free_state(gold_state)
-        free_state(pred_state)
-        return counts
+

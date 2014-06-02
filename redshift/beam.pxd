@@ -9,12 +9,16 @@ from libcpp.vector cimport vector
 
 ctypedef pair[double, size_t] ScoredMove
 ctypedef pair[size_t, Transition] Candidate
+ctypedef Transition* History
 
 cdef class Beam:
     cdef State** parents
     cdef State** beam
 
     cdef Transition** moves
+    cdef vector[History] history
+    cdef vector[double] scores
+    cdef vector[int] costs
 
     cdef size_t k
     cdef size_t i
@@ -28,3 +32,6 @@ cdef class Beam:
 
     cdef int extend(self) except -1
     cdef int fill_parse(self, Token* parse) except -1
+
+
+cdef int get_violation(Beam pred, Beam gold) except -1

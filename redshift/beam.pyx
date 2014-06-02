@@ -40,6 +40,8 @@ cdef class Beam:
                 self.moves[i][j].is_valid = True
                 self.moves[i][j].score = 0
                 self.moves[i][j].cost = 0
+        self.history = vector[History]()
+        self.scores = vector[double]()
         self.bsize = 1
         self.psize = 0
         self.t = 0
@@ -84,6 +86,11 @@ cdef class Beam:
                 assert s.m != 0
             self.bsize += 1
             queue.pop()
+        hist = <Transition*>malloc(self.beam[0].m * sizeof(Transition))
+        memcpy(hist, self.beam[0].history, self.beam[0].m * sizeof(Transition))
+        self.history.push_back(hist)
+        self.scores.push_back(self.beam[0].score)
+        self.costs.push_back(self.beam[0].cost)
         self.t += 1
         self.is_full = self.bsize >= self.k
         assert self.beam[0].m != 0
@@ -112,5 +119,24 @@ cdef class Beam:
         for i in range(self.k):
             free_state(self.beam[i])
             free_state(self.parents[i])
+        for i in range(self.t):
+            free(self.history[i])
         free(self.beam)
         free(self.parents)
+
+
+cdef int get_violation(Beam pred, Beam gold) except -1:
+    cdef State* p = pred.beam[0]
+    cdef State* g = gold.beam[0]
+
+    cdef double max_violn = -1
+    cdef size_t v = 0
+    for i in range(max((pred.t, gold.t))):
+        delta = pred.scores[i] - gold.scores[i]
+        if delta > max_violn and pred.costs[i] >= 1:
+            max_violn = delta
+            v = i
+    return v
+
+
+
