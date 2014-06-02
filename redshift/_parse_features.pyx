@@ -29,7 +29,6 @@ from itertools import combinations
 #]
 # NB: The order of the enum is _not arbitrary!!_
 cdef enum:
-    move
     S2w
     S2p
     S2c
@@ -319,11 +318,10 @@ cdef inline void zero_token(size_t* context, size_t i):
         context[i+j] = 0
 
 
-cdef int fill_context(size_t* context, SlotTokens* t, Token* parse) except -1:
+cdef int fill_context(size_t* context, SlotTokens* t) except -1:
     cdef size_t c
     for c in range(CONTEXT_SIZE):
         context[c] = 0
-    context[move] = t.move
     # This fills in the basic properties of each of our "slot" tokens, e.g.
     # word on top of the stack, word at the front of the buffer, etc.
     fill_token(context, S2w, t.s2)
@@ -385,29 +383,29 @@ cdef int fill_context(size_t* context, SlotTokens* t, Token* parse) except -1:
     context[psexact] = 1
     cdef size_t n0ledge = t.n0.left_edge
     cdef size_t s0ledge = t.s0.left_edge
-    for i in range(5):
-        if ((n0ledge + i) > t.n0.i) or ((s0ledge + i) > t.s0.i):
-            break
-        if context[wexact]:
-            if parse[n0ledge + i].word.orig == parse[s0ledge + i].word.orig:
-                context[wcopy] += 1
-            else:
-                context[wexact] = 0
-        if context[pexact]:
-            if parse[n0ledge + i].tag == parse[s0ledge + i].tag:
-                context[pcopy] += 1
-            else:
-                context[pexact] = 0
-        if context[wsexact]:
-            if parse[t.s0.i - i].word.orig == parse[t.n0.i - i].word.orig:
-                context[wscopy] += 1
-            else:
-                context[wsexact] = 0
-        if context[psexact]:
-            if parse[t.s0.i - i].tag == parse[t.n0.i - i].tag:
-                context[pscopy] += 1
-            else:
-                context[psexact] = 0
+    #for i in range(5):
+    #    if ((n0ledge + i) > t.n0.i) or ((s0ledge + i) > t.s0.i):
+    #        break
+    #    if context[wexact]:
+    #        if parse[n0ledge + i].word.orig == parse[s0ledge + i].word.orig:
+    #            context[wcopy] += 1
+    #        else:
+    #            context[wexact] = 0
+    #    if context[pexact]:
+    #        if parse[n0ledge + i].tag == parse[s0ledge + i].tag:
+    #            context[pcopy] += 1
+    #        else:
+    #            context[pexact] = 0
+    #    if context[wsexact]:
+    #        if parse[t.s0.i - i].word.orig == parse[t.n0.i - i].word.orig:
+    #            context[wscopy] += 1
+    #        else:
+    #            context[wsexact] = 0
+    #    if context[psexact]:
+    #        if parse[t.s0.i - i].tag == parse[t.n0.i - i].tag:
+    #            context[pscopy] += 1
+    #        else:
+    #            context[psexact] = 0
 
 
 arc_hybrid = (

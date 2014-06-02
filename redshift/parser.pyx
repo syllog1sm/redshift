@@ -154,7 +154,6 @@ cdef class Parser:
         fill_moves(self.cfg.lattice_width, self.cfg.left_labels,
                    self.cfg.right_labels, self.cfg.dfl_labels,
                    self.cfg.use_break, self.moves)
-        
         self.guide = Perceptron(self.nr_moves, pjoin(model_dir, 'model.gz'))
         if os.path.exists(pjoin(model_dir, 'model.gz')):
             self.guide.load(pjoin(model_dir, 'model.gz'), thresh=int(self.cfg.feat_thresh))
@@ -173,20 +172,19 @@ cdef class Parser:
         while not beam.is_finished:
             for i in range(beam.bsize):
                 fill_valid(beam.beam[i], beam.moves[i], self.nr_moves) 
-                # TODO: Avoid passing sent.tokens here
-                self._score_classes(beam.beam[i], beam.moves[i], sent.tokens)
+                self._score_classes(beam.beam[i], beam.moves[i])
             beam.extend()
         beam.fill_parse(sent.tokens)
         py_sent.segment()
         sent.score = beam.beam[0].score
 
-    cdef int _score_classes(self, State* s, Transition* classes, Token* parse) except -1:
+    cdef int _score_classes(self, State* s, Transition* classes) except -1:
         assert not is_final(s)
         cdef bint cache_hit = False
         fill_slots(s)
         scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
         if not cache_hit:
-            fill_context(self._context, &s.slots, parse)
+            fill_context(self._context, &s.slots)
             self.extractor.extract(self._features, self._context)
             self.guide.fill_scores(self._features, scores)
         for i in range(self.nr_moves):
@@ -219,8 +217,7 @@ cdef class Parser:
         while not p_beam.is_finished and not g_beam.is_finished:
             for i in range(p_beam.bsize):
                 fill_valid(p_beam.beam[i], p_beam.moves[i], self.nr_moves) 
-                # TODO: Avoid passing parse here
-                self._score_classes(p_beam.beam[i], p_beam.moves[i], gold_parse)
+                self._score_classes(p_beam.beam[i], p_beam.moves[i])
                 # Fill costs so we can see whether the prediction is gold-standard
                 fill_costs(p_beam.beam[i], p_beam.moves[i], self.nr_moves, gold_parse)
             p_beam.extend()
@@ -230,7 +227,7 @@ cdef class Parser:
                 for j in range(self.nr_moves):
                     if g_beam.moves[i][j].cost != 0:
                         g_beam.moves[i][j].is_valid = False
-                self._score_classes(g_beam.beam[i], g_beam.moves[i], gold_parse)
+                self._score_classes(g_beam.beam[i], g_beam.moves[i])
             g_beam.extend()
             g = g_beam.beam[0]; p = p_beam.beam[0] 
             delta = p.score - g.score
@@ -248,6 +245,60 @@ cdef class Parser:
         for i in range(sent.n):
             sent.tokens[i].tag = gold_tags[i]
         free(gold_tags)
+
+    cdef int train_nbest(self, Input gold_sent, object nbest) except -1:
+        cdef size_t i
+        self.guide.cache.flush()
+        cdef Token* gold_parse = gold_sent.sent.tokens
+        # Identify best-scoring candidate, so we can search for max. violation
+        # update within it.
+        best_p = None
+        for py_sent in nbest:
+            p_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+            while not p_beam.is_finished:
+                for i in range(p_beam.bsize):
+                    fill_valid(p_beam.beam[i], p_beam.moves[i], self.nr_moves) 
+                    self._score_classes(p_beam.beam[i], p_beam.moves[i])
+                    # Fill costs so we can see whether the prediction is gold-standard
+                    # TODO: Make this work for nbest list. An nbest candidate
+                    # can be gold even if its surface string differs from the
+                    # gold --- what we want to know about is its _fluent_
+                    # string, and whether it matches the gold fluent string.
+                    fill_costs(p_beam.beam[i], p_beam.moves[i], self.nr_moves,
+                               gold_parse)
+                p_beam.extend()
+            if best_p is None or p_beam.beam[0].score > best_p.beam[0].score:
+                best_p = p_beam
+
+        for py_sent in nbest:
+            g_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves,
+                          py_sent)
+            while not g_beam.is_finished:
+                for i in range(g_beam.bsize):
+                    fill_valid(g_beam.beam[i], g_beam.moves[i], self.nr_moves)
+                    fill_costs(g_beam.beam[i], g_beam.moves[i], self.nr_moves,
+                               gold_parse)
+                    seen_valid = False
+                    for j in range(self.nr_moves):
+                        if g_beam.moves[i][j].cost != 0:
+                            g_beam.moves[i][j].is_valid = False
+                        else:
+                            seen_valid = True
+                    if not seen_valid:
+                        break
+                    self._score_classes(g_beam.beam[i], g_beam.moves[i])
+                if not seen_valid:
+                    break
+                g_beam.extend()
+            else:
+                if best_g is None or g_beam.beam[0].score > best_g.beam[0].score:
+                    best_g = g_beam
+
+        get_violation(best_p, best_g)
+        if counted:
+            self.guide.batch_update(counted)
+        else:
+            self.guide.now += 1
 
     cdef dict _count_feats(self, Sentence* sent, size_t pt, size_t gt,
                            Transition* phist, Transition* ghist):
@@ -271,13 +322,13 @@ cdef class Parser:
             seen_diff = True
             if i < gt:
                 fill_slots(gold_state)
-                fill_context(self._context, &gold_state.slots, gold_state.parse)
+                fill_context(self._context, &gold_state.slots)
                 self.extractor.extract(self._features, self._context)
                 self.extractor.count(counts[ghist[i].clas], self._features, 1.0)
                 transition(&ghist[i], gold_state)
             if i < pt:
                 fill_slots(pred_state)
-                fill_context(self._context, &pred_state.slots, pred_state.parse)
+                fill_context(self._context, &pred_state.slots)
                 self.extractor.extract(self._features, self._context)
                 self.extractor.count(counts[phist[i].clas], self._features, -1.0)
                 transition(&phist[i], pred_state)
