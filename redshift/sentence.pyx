@@ -90,6 +90,7 @@ cdef class Input:
         lattice.append([(1.0, '<end>')])
         parse.append((0, 'EOL', None, None, False, False))
         self.c_sent = init_sent(lattice, parse)
+        self.wer = 0
 
     def __dealloc__(self):
         # TODO: Fix memory

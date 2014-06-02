@@ -230,6 +230,51 @@ cdef class Parser:
         for i in range(sent.n):
             sent.tokens[i].tag = gold_tags[i]
         free(gold_tags)
+
+    cdef int train_nbest(self, Token* gold_parse, object nbest) except -1:
+        cdef Input py_sent
+        cdef Sentence* sent
+        cdef size_t i
+        self.guide.cache.flush()
+        # Identify best-scoring candidate, so we can search for max. violation
+        # update within it.
+        cdef Beam p_beam = None
+        cdef Beam g_beam = None
+        for py_sent in nbest:
+            sent = py_sent.c_sent
+            self.tagger.tag(py_sent)
+            beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+            while not beam.is_finished:
+                for i in range(beam.bsize):
+                    fill_valid(beam.beam[i], beam.moves[i], self.nr_moves) 
+                    self._score_classes(beam.beam[i], beam.moves[i])
+                    # Fill costs so we can see whether the prediction is gold-standard
+                    if py_sent.wer == 0:
+                        fill_costs(beam.beam[i], beam.moves[i], self.nr_moves,
+                                   sent.tokens)
+                beam.extend()
+            if p_beam is None or beam.beam[0].score > p_beam.beam[0].score:
+                p_beam = beam
+            
+            if py_sent.wer != 0:
+                continue
+            beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+            while not beam.is_finished:
+                for i in range(beam.bsize):
+                    fill_valid(beam.beam[i], beam.moves[i], self.nr_moves) 
+                    fill_costs(beam.beam[i], beam.moves[i], self.nr_moves,
+                               sent.tokens)
+                    for j in range(self.nr_moves):
+                        if beam.moves[i][j].cost != 0:
+                            beam.moves[i][j].is_valid = False
+                    self._score_classes(beam.beam[i], beam.moves[i])
+                beam.extend()
+            if g_beam is None or beam.beam[0].score > g_beam.beam[0].score:
+                g_beam = beam
+
+        cdef size_t v = get_violation(p_beam, g_beam)
+        counts = self._count_feats(sent, v, p_beam.history[v], g_beam.history[v])
+        self.guide.batch_update(counts)
     
     cdef dict _count_feats(self, Sentence* sent, size_t v, Transition* phist,
                            Transition* ghist):

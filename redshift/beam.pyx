@@ -39,7 +39,7 @@ cdef class Beam:
                 self.moves[i][j].label = moves[j].label
                 self.moves[i][j].is_valid = True
                 self.moves[i][j].score = 0
-                self.moves[i][j].cost = 0
+                self.moves[i][j].cost = py_sent.wer
         self.history = vector[History]()
         self.scores = vector[double]()
         self.bsize = 1
