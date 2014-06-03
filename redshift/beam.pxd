@@ -19,6 +19,7 @@ cdef class Beam:
     cdef vector[History] history
     cdef vector[double] scores
     cdef vector[int] costs
+    cdef vector[size_t] lengths
 
     cdef size_t k
     cdef size_t i

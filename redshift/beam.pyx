@@ -42,6 +42,7 @@ cdef class Beam:
                 self.moves[i][j].cost = py_sent.wer
         self.history = vector[History]()
         self.scores = vector[double]()
+        self.lengths = vector[size_t]()
         self.bsize = 1
         self.psize = 0
         self.t = 0
@@ -52,7 +53,12 @@ cdef class Beam:
     cdef int extend(self):
         cdef priority_queue[ScoredMove] queue = priority_queue[ScoredMove]()
         cdef size_t i, j, move_id
+        cdef double score
         for i in range(self.bsize):
+            if is_final(self.beam[i]):
+                score = self.beam[i].score 
+                queue.push(ScoredMove(score + (score / self.t), i * self.nr_class))
+                continue
             for j in range(self.nr_class):
                 if self.moves[i][j].is_valid:
                     move_id = (i * self.nr_class) + j
@@ -79,8 +85,8 @@ cdef class Beam:
             copy_state(self.beam[self.bsize], self.parents[parent_idx])
             s = self.beam[self.bsize]
             s.score = data.first
-            t = &self.moves[parent_idx][move_idx]
             if not is_final(s):
+                t = &self.moves[parent_idx][move_idx]
                 s.cost += t.cost
                 transition(t, s)
                 assert s.m != 0
@@ -91,6 +97,7 @@ cdef class Beam:
         self.history.push_back(hist)
         self.scores.push_back(self.beam[0].score)
         self.costs.push_back(self.beam[0].cost)
+        self.lengths.push_back(self.beam[0].m)
         self.t += 1
         self.is_full = self.bsize >= self.k
         assert self.beam[0].m != 0
