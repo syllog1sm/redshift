@@ -7,32 +7,37 @@ import redshift.parser
 from redshift.sentence import Input
 
 
-def get_oracle_wer(candidate, gold_words):
-    fluency = [not t.is_edit for t in gold_words]
+def get_oracle_alignment(candidate, gold_words):
+    # Levenshtein distance, except we need the history, and some operations
+    # are zero-cost. Specifically, inserting a word that's disfluent in the
+    # gold is 0-cost (why insert it?), and we can always delete additional
+    # candidate words (via Edit). Mark costly operations with the string 'f',
+    # and score the history using _edit_cost.
     previous_row = []
     for i in range(len(gold_words) + 1):
-        # The number of inserts needed to take an empty candidate string up
-        # to the gold string at position i. Normally, this would just be "i"
-        # -- but inserting disfluent words is free. So, we count the number
-        # of fluent words up to position i.
-        previous_row.append(['I'] * sum(fluency[:i]))
+        cell = []
+        for j in range(i):
+            cell.append('I' if gold_words[j].is_edit else 'fI')
+        previous_row.append(cell)
     for i, cand in enumerate(candidate):
-        current_row = [ [] * (i + 1) ]
+        current_row = [ ['D'] * (i + 1) ]
         for j, gold in enumerate(gold_words):
-            delete = previous_row[j + 1]
-            if gold.is_edit:
-                insert = current_row[j]
+            if not gold.is_edit and gold.word == cand:
+                subst = previous_row[j] + ['M']
+                insert = current_row[j] + ['fI']
+                delete = previous_row[j + 1] + ['fD']
             else:
-                insert = current_row[j] + ['I']
-            insert = current_row[j] + ['I']
-            if gold.word != cand:
-                subst = previous_row[j] + ['S']
-            else:
-                subst = previous_row[j]
-            best = min((insert, delete, subst), key=lambda hist: len(hist))
+                delete = previous_row[j + 1] + ['D']
+                insert = current_row[j] + ['I' if gold.is_edit else 'fI']
+                subst = previous_row[j] + ['fS']
+            best = min((insert, delete, subst), key=_edit_cost)
             current_row.append(best)
         previous_row = current_row
-    return previous_row[-1]
+    return _edit_cost(previous_row[-1]), previous_row[-1]
+
+
+def _edit_cost(edits):
+    return sum(e[0] == 'f' for e in edits)
 
 
 def tokenise_candidate(candidate):
@@ -73,38 +78,67 @@ def get_nbest(gold_sent, nbest_dir):
     nbest = [gold_sent]
     if not nbest_loc.exists():
         return nbest
-    gold_str = ' '.join(t.word for t in gold_sent.tokens)
+    gold_tokens = list(gold_sent.tokens)
+    gold_sent_id = gold_tokens[0].sent_id
+    gold_str = ' '.join(t.word for t in gold_tokens)
     for score, candidate in read_nbest(str(nbest_loc)):
         if ' '.join(candidate) == gold_str:
             continue
-        edits = get_oracle_wer(candidate, list(gold_sent.tokens))
-        #if wer == 0:
-        #    sent = make_gold(gold_sent.tokens, candidate)
-        #else:
-        #    sent = make_non_gold(wer, candidate)
-        #nbest.append(sent)
+        cost, edits = get_oracle_alignment(candidate, gold_tokens)
+        if cost == 0:
+            sent = make_gold_sent(gold_tokens, candidate, edits)
+        else:
+            sent = make_non_gold_sent(cost, candidate, gold_sent_id)
+        nbest.append(sent)
     return nbest
 
+def make_non_gold_sent(wer, words, sent_id):
+    tokens = [(word, None, None, None, sent_id, None) for word in words]
+    return Input.from_tokens(tokens, wer=wer)
 
-def make_gold(gold, candidate):
+
+def make_gold_sent(gold, candidate, edits):
     tokens = []
     words = list(candidate)
     gold = list(gold)
-    offset = 0
-    while words:
-        word = words.pop(0)
-        if word == gold[0].word or gold[0].is_edit:
-            tokens.append((word, gold[0].tag, gold[0].head + offset, gold[0].label,
-                           gold[0].sent_id, gold[0].is_edit))
-            gold.pop(0)
+    g_i = 0
+    c_i = 0
+    alignment = {}
+    for op in edits:
+        if op == 'M':
+            alignment[g_i] = c_i
+            g_i += 1
+            c_i += 1
+        elif op == 'I':
+            g_i += 1
+        elif op == 'D':
+            c_i += 1
         else:
-            offset += 1
-            tokens.append((word, 'UH', len(tokens), _guess_label(word),
-                          gold[0].sent_id, True))
-    sent = Input.from_tokens(tokens)
-    print sent.to_conll()
-    return sent
-    
+            raise StandardError(op)
+    g_i = 0
+    c_i = 0
+    sent_id = gold[0].sent_id
+    tokens = []
+    for op in edits:
+        if op == 'M':
+            tokens.append(_make_token(candidate[c_i], gold[g_i], alignment))
+            g_i += 1
+            c_i += 1
+        elif op == 'I':
+            g_i += 1
+        elif op == 'D':
+            tokens.append(_make_dfl_token(candidate[c_i], c_i, sent_id))
+            c_i += 1
+    return Input.from_tokens(tokens)
+
+def _make_token(word, gold, alignment):
+    head = alignment.get(gold.head - 1, -1) + 1
+    return (word, gold.tag, head, gold.label,
+            gold.sent_id, gold.is_edit)
+
+def _make_dfl_token(word, i, sent_id):
+    return (word, 'UH', i + 1, _guess_label(word), sent_id, True)
+
 
 def _guess_label(word):
     fillers = set(['uh', 'um', 'uhhuh', 'uh-huh'])
