@@ -132,12 +132,12 @@ cdef class Beam:
         free(self.parents)
 
 
-cdef int get_violation(Beam pred, Beam gold) except -1:
+cdef int get_violation(Beam pred, Beam gold):
     cdef State* p = pred.beam[0]
     cdef State* g = gold.beam[0]
 
     cdef double max_violn = -1
-    cdef size_t v = 0
+    cdef int v = -1
     for i in range(max((pred.t, gold.t))):
         delta = pred.scores[i] - gold.scores[i]
         if delta > max_violn and pred.costs[i] >= 1:

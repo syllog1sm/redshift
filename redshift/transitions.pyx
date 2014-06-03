@@ -117,6 +117,7 @@ cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
         if classes[i].is_valid:
             break
     else:
+        print s.i, s.n, s.stack_len, is_final(s)
         raise StandardError
 
 

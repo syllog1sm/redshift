@@ -34,3 +34,4 @@ cdef void free_sent(Sentence* s)
 cdef class Input:
     cdef Sentence* c_sent
     cdef size_t wer
+    cdef object turn_id

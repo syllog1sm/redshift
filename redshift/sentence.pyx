@@ -66,40 +66,33 @@ cdef int init_lattice_step(list lattice_step, Step* step) except -1:
 cdef void free_sent(Sentence* s):
     cdef size_t i, j
     for i in range(s.n):
-        free(&s.tokens[i])
         free_step(&s.lattice[i])
     free(s.lattice)
     free(s.tokens)
 
 
 cdef void free_step(Step* s):
-    # TODO: When we pass in pointers to these from a central vocab, remove this
-    # free
-    cdef size_t i
-    for i in range(s.n):
-        free(s.nodes[i])
     free(s.nodes)
     free(s.probs)
 
 
 cdef class Input:
-    def __init__(self, list lattice, list parse):
+    def __init__(self, list lattice, list parse, turn_id=None, wer=0):
         # Pad lattice with start and end tokens
         lattice.insert(0, [(1.0, '<start>')])
         parse.insert(0, (0, None, None, None, False, False))
         lattice.append([(1.0, '<end>')])
         parse.append((0, 'EOL', None, None, False, False))
         self.c_sent = init_sent(lattice, parse)
-        self.wer = 0
+        self.wer = wer
+        self.turn_id = turn_id
 
     def __dealloc__(self):
-        # TODO: Fix memory
-        pass
-        #free_sent(self.c_sent)
+        free_sent(self.c_sent)
 
 
     @classmethod
-    def from_tokens(cls, tokens):
+    def from_tokens(cls, tokens, turn_id=None, wer=0):
         """
         Create sentence from a flat list of unambiguous tokens, instead of a lattice.
         Tokens should be a list of (word, tag, head, label, sent_id, is_edit)
@@ -110,7 +103,7 @@ cdef class Input:
         for word, tag, head, label, sent_id, is_edit in tokens:
             lattice.append([(1.0, word)])
             parse.append((0, tag, head, label, sent_id, is_edit))
-        return cls(lattice, parse)
+        return cls(lattice, parse, turn_id=turn_id, wer=wer)
 
     @classmethod
     def from_pos(cls, pos_str):
@@ -124,6 +117,7 @@ cdef class Input:
     @classmethod
     def from_conll(cls, conll_str):
         tokens = []
+        turn_id = None
         for line in conll_str.split('\n'):
             fields = line.split()
             word_id = int(fields[0]) - 1
@@ -136,7 +130,7 @@ cdef class Input:
             is_fill = len(feats) >= 2 and feats[1] in ('D', 'E', 'F', 'A') 
             is_ns = len(feats) >= 4 and feats[3] == 'N_S'
             is_ns = False
-            sent_id = int(feats[0].split('.')[1]) if '.' in feats[0] else 0
+            turn_id, sent_id = feats[0].split('.')
             head = int(fields[6])
             label = fields[7]
             if is_edit:
@@ -145,9 +139,9 @@ cdef class Input:
                 label = 'filler%s' % feats[1]
             elif is_ns:
                 label = 'fillerNS'
-            tokens.append((word, pos, head, label, sent_id,
+            tokens.append((word, pos, head, label, int(sent_id),
                           is_edit or is_fill or is_ns))
-        return cls.from_tokens(tokens)
+        return cls.from_tokens(tokens, turn_id=turn_id)
 
     def segment(self):
         cdef size_t i
@@ -206,6 +200,10 @@ cdef class Input:
                 sent_id = self.c_sent.tokens[i].sent_id
                 yield Token(i, word, tag, head, label, sent_id, is_edit)
 
+    property turn_id:
+        def __get__(self):
+            return self.turn_id
+
     property length:
         def __get__(self):
             return self.c_sent.n
@@ -232,6 +230,10 @@ cdef class Input:
     property edits:
         def __get__(self):
             return [self.c_sent.tokens[i].is_edit for i in range(self.c_sent.n)]
+
+    property score:
+        def __get__(self):
+            return self.c_sent.score
 
     def to_conll(self):
         lines = []

@@ -35,4 +35,4 @@ cdef class Beam:
     cdef int fill_parse(self, Token* parse) except -1
 
 
-cdef int get_violation(Beam pred, Beam gold) except -1
+cdef int get_violation(Beam pred, Beam gold)

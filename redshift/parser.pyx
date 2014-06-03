@@ -48,11 +48,11 @@ def set_debug(val):
 def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
           feat_set='basic', feat_thresh=10,
           use_edit=False, use_break=False, use_filler=False):
+    cdef list sents = [Input.from_conll(s) for s in
+                       train_str.strip().split('\n\n') if s.strip()]
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
     os.mkdir(model_dir)
-    cdef list sents = [Input.from_conll(s) for s in
-                       train_str.strip().split('\n\n') if s.strip()]
     lattice_width, left_labels, right_labels, dfl_labels = get_labels(sents)
     Config.write(model_dir, 'config', beam_width=beam_width, features=feat_set,
                  feat_thresh=feat_thresh,
@@ -67,8 +67,46 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
     for n in range(n_iter):
         for i in indices:
             py_sent = sents[i]
+            # TODO: Should this be sensitive to whether we've hit max trainign
+            # iters for tagger?
             parser.tagger.train_sent(py_sent)
             parser.train_sent(py_sent)
+        parser.guide.end_train_iter(n, feat_thresh)
+        parser.tagger.guide.end_train_iter(n, feat_thresh)
+        random.shuffle(indices)
+    parser.guide.end_training(pjoin(model_dir, 'model.gz'))
+    parser.tagger.guide.end_training(pjoin(model_dir, 'tagger.gz'))
+    index.hashes.save_pos_idx(pjoin(model_dir, 'pos'))
+    index.hashes.save_label_idx(pjoin(model_dir, 'labels'))
+    return parser
+
+
+def train_nbest(sents, nbests, model_dir, n_iter=15, beam_width=8,
+                train_tagger=True, feat_set='basic', feat_thresh=10,
+                use_edit=False, use_break=False, use_filler=False):
+    if os.path.exists(model_dir):
+        shutil.rmtree(model_dir)
+    os.mkdir(model_dir)
+    gold_sents = list(sents)
+    cdef Input sent
+    for nbest in nbests:
+        for sent in nbest:
+            if sent.wer == 0:
+                gold_sents.append(sent)
+    lattice_width, left_labels, right_labels, dfl_labels = get_labels(gold_sents)
+    Config.write(model_dir, 'config', beam_width=beam_width, features=feat_set,
+                 feat_thresh=feat_thresh,
+                 lattice_width=lattice_width,
+                 left_labels=left_labels, right_labels=right_labels,
+                 dfl_labels=dfl_labels, use_break=use_break)
+    Config.write(model_dir, 'tagger', beam_width=4, features='basic',
+                 feat_thresh=5)
+    parser = Parser(model_dir)
+    indices = list(range(len(sents)))
+    for n in range(n_iter):
+        for i in indices:
+            parser.tagger.train_sent(sents[i])
+            parser.train_nbest(nbests[i])
         parser.guide.end_train_iter(n, feat_thresh)
         parser.tagger.guide.end_train_iter(n, feat_thresh)
         random.shuffle(indices)
@@ -171,8 +209,9 @@ cdef class Parser:
         self.guide.cache.flush()
         while not beam.is_finished:
             for i in range(beam.bsize):
-                fill_valid(beam.beam[i], beam.moves[i], self.nr_moves) 
-                self._score_classes(beam.beam[i], beam.moves[i])
+                if not is_final(beam.beam[i]):
+                    fill_valid(beam.beam[i], beam.moves[i], self.nr_moves) 
+                    self._score_classes(beam.beam[i], beam.moves[i])
             beam.extend()
         beam.fill_parse(sent.tokens)
         py_sent.segment()
@@ -229,15 +268,17 @@ cdef class Parser:
                             g_beam.moves[i][j].is_valid = False
                     self._score_classes(s, g_beam.moves[i])
             g_beam.extend()
-        counts = self._count_feats(sent, p_beam, g_beam)
+        counts = self._count_feats(sent, sent, p_beam, g_beam)
         self.guide.batch_update(counts)
  
         for i in range(sent.n):
             sent.tokens[i].tag = gold_tags[i]
         free(gold_tags)
 
-    cdef int train_nbest(self, Token* gold_parse, object nbest) except -1:
+    cdef int train_nbest(self, object nbest) except -1:
         cdef Input py_sent
+        cdef Sentence* psent
+        cdef Sentence* gsent
         cdef Sentence* sent
         cdef size_t i
         self.guide.cache.flush()
@@ -251,37 +292,52 @@ cdef class Parser:
             beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
             while not beam.is_finished:
                 for i in range(beam.bsize):
-                    fill_valid(beam.beam[i], beam.moves[i], self.nr_moves) 
-                    self._score_classes(beam.beam[i], beam.moves[i])
-                    # Fill costs so we can see whether the prediction is gold-standard
-                    if py_sent.wer == 0:
-                        fill_costs(beam.beam[i], beam.moves[i], self.nr_moves,
-                                   sent.tokens)
+                    s = beam.beam[i]
+                    if not is_final(s):
+                        fill_valid(s, beam.moves[i], self.nr_moves) 
+                        self._score_classes(s, beam.moves[i])
+                        # Fill costs so we can see whether the prediction is gold-standard
+                        if py_sent.wer == 0:
+                            fill_costs(s, beam.moves[i], self.nr_moves,
+                                       sent.tokens)
                 beam.extend()
             if p_beam is None or beam.beam[0].score > p_beam.beam[0].score:
                 p_beam = beam
+                psent = sent
             
             if py_sent.wer != 0:
                 continue
             beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
             while not beam.is_finished:
                 for i in range(beam.bsize):
-                    fill_valid(beam.beam[i], beam.moves[i], self.nr_moves) 
-                    fill_costs(beam.beam[i], beam.moves[i], self.nr_moves,
-                               sent.tokens)
-                    for j in range(self.nr_moves):
-                        if beam.moves[i][j].cost != 0:
-                            beam.moves[i][j].is_valid = False
-                    self._score_classes(beam.beam[i], beam.moves[i])
+                    s = beam.beam[i]
+                    if not is_final(s):
+                        fill_valid(s, beam.moves[i], self.nr_moves) 
+                        fill_costs(s, beam.moves[i], self.nr_moves,
+                                   sent.tokens)
+                        for j in range(self.nr_moves):
+                            if beam.moves[i][j].cost != 0:
+                                beam.moves[i][j].is_valid = False
+                        self._score_classes(s, beam.moves[i])
                 beam.extend()
             if g_beam is None or beam.beam[0].score > g_beam.beam[0].score:
                 g_beam = beam
-        counts = self._count_feats(sent, p_beam, g_beam)
-        self.guide.batch_update(counts)
+                gsent = sent
+        assert p_beam is not None and g_beam is not None
+        if p_beam.beam[0].cost > 0:
+            counts = self._count_feats(psent, gsent, p_beam, g_beam)
+            self.guide.batch_update(counts)
+        else:
+            self.guide.n_corr += p_beam.beam[0].m
+            self.guide.total += p_beam.beam[0].m
+            self.guide.now += 1
     
-    cdef dict _count_feats(self, Sentence* sent, Beam p_beam, Beam g_beam):
+    cdef dict _count_feats(self, Sentence* psent, Sentence* gsent,
+                           Beam p_beam, Beam g_beam):
         # TODO: Improve this...
-        cdef size_t v = get_violation(p_beam, g_beam)
+        cdef int v = get_violation(p_beam, g_beam)
+        if v < 0:
+            return {}
         cdef Transition* phist
         cdef Transition* ghist
         cdef size_t pt, gt
@@ -301,16 +357,20 @@ cdef class Parser:
         cdef size_t d, i, f
         cdef uint64_t* feats
         cdef size_t clas
-        cdef State* gold_state = init_state(sent)
-        cdef State* pred_state = init_state(sent)
+        cdef State* gold_state = init_state(gsent)
+        cdef State* pred_state = init_state(psent)
         cdef dict counts = {}
         for clas in range(self.nr_moves):
             counts[clas] = {}
         cdef bint seen_diff = False
+        cdef Token* gword
+        cdef Token* pword
         for i in range(max((pt, gt))):
             self.guide.total += 1.0
             # Find where the states diverge
-            if not seen_diff and ghist[i].clas == phist[i].clas:
+            gword = &gsent.tokens[gold_state.i]
+            pword = &psent.tokens[pred_state.i]
+            if not seen_diff and gword.word == pword.word and ghist[i].clas == phist[i].clas:
                 self.guide.n_corr += 1.0
                 transition(&ghist[i], gold_state)
                 transition(&phist[i], pred_state)
