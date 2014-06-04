@@ -40,14 +40,10 @@ cdef class Beam:
                 self.moves[i][j].is_valid = True
                 self.moves[i][j].score = 0
                 self.moves[i][j].cost = py_sent.wer
-        self.history = vector[History]()
-        self.scores = vector[double]()
-        self.lengths = vector[size_t]()
         self.bsize = 1
         self.psize = 0
         self.t = 0
         self.is_full = self.bsize >= self.k
-    
 
     @cython.cdivision(True)
     cdef int extend(self):
@@ -124,6 +120,7 @@ cdef class Beam:
  
     def __dealloc__(self):
         for i in range(self.k):
+            free(self.moves[i])
             free_state(self.beam[i])
             free_state(self.parents[i])
         for i in range(self.t):
