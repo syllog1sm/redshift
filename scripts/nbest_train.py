@@ -70,12 +70,17 @@ def tokenise_candidate(candidate):
             if word.endswith(suffix):
                 words.append(word[:-len(suffix)])
                 words.append(suffix)
+                break
+        else:
+            words.append(word)
     return words
             
 
-def read_nbest(nbest_loc):
+def read_nbest(nbest_loc, limit=0):
     lines = open(nbest_loc).read().strip().split('\n')
     lines.pop(0)
+    if limit:
+        lines = lines[:limit]
     for line in lines:
         pieces = line.split()
         _ = pieces.pop(0)
@@ -85,7 +90,7 @@ def read_nbest(nbest_loc):
             yield float(log_prob), words
 
 
-def get_nbest(gold_sent, nbest_dir):
+def get_nbest(gold_sent, nbest_dir, limit=0):
     turn_id = gold_sent.turn_id
     filename, turn_num = gold_sent.turn_id.split('~')
     speaker = turn_num[0]
@@ -98,7 +103,7 @@ def get_nbest(gold_sent, nbest_dir):
     gold_tokens = list(gold_sent.tokens)
     gold_sent_id = gold_tokens[0].sent_id
     gold_str = ' '.join(t.word for t in gold_tokens)
-    for score, candidate in read_nbest(str(nbest_loc)):
+    for score, candidate in read_nbest(str(nbest_loc), limit=limit):
         if ' '.join(candidate) == gold_str:
             continue
         cost, edits = get_oracle_alignment(candidate, gold_tokens)
@@ -175,6 +180,7 @@ def _guess_label(word):
     beam_width=("Beam width", "option", "k", int),
     feat_set=("Name of feat set [zhang, iso, full]", "option", "x", str),
     n_sents=("Number of sentences to train from", "option", "n", int),
+    limit=("Limit nbest list to N", "option", "N", int),
     train_tagger=("Train tagger alongside parser", "flag", "p", bool),
     use_edit=("Use the Edit transition", "flag", "e", bool),
     use_break=("Use the Break transition", "flag", "b", bool),
@@ -184,6 +190,7 @@ def _guess_label(word):
 def main(train_loc, nbest_dir, model_loc, n_iter=15,
          feat_set="zhang", feat_thresh=10,
          n_sents=0,
+         limit=0,
          use_edit=False,
          use_break=False,
          use_filler=False,
@@ -197,9 +204,11 @@ def main(train_loc, nbest_dir, model_loc, n_iter=15,
     if n_sents != 0:
         print "Using %d sents for training" % n_sents
         train_str = '\n\n'.join(train_str.split('\n\n')[:n_sents])
+    print "Get sents"
     sents = [Input.from_conll(s) for s in
              train_str.strip().split('\n\n') if s.strip()]
-    nbests = [get_nbest(sent, nbest_dir) for sent in sents]
+    nbests = [get_nbest(sent, nbest_dir, limit=limit) for sent in sents]
+    print "Train"
     redshift.parser.train_nbest(sents, nbests, model_loc,
         n_iter=n_iter,
         train_tagger=train_tagger,
