@@ -14,26 +14,43 @@ def get_oracle_alignment(candidate, gold_words):
     # candidate words (via Edit). Mark costly operations with the string 'f',
     # and score the history using _edit_cost.
     previous_row = []
+    previous_costs = []
     for i in range(len(gold_words) + 1):
         cell = []
         for j in range(i):
             cell.append('I' if gold_words[j].is_edit else 'fI')
         previous_row.append(cell)
+        previous_costs.append(_edit_cost(cell))
     for i, cand in enumerate(candidate):
         current_row = [ ['D'] * (i + 1) ]
+        current_costs = [0]
         for j, gold in enumerate(gold_words):
             if not gold.is_edit and gold.word == cand:
                 subst = previous_row[j] + ['M']
                 insert = current_row[j] + ['fI']
                 delete = previous_row[j + 1] + ['fD']
+                s_cost = previous_costs[j]
+                i_cost = current_costs[j] + 1
+                d_cost = previous_costs[j + 1] + 1
             else:
-                delete = previous_row[j + 1] + ['D']
-                insert = current_row[j] + ['I' if gold.is_edit else 'fI']
                 subst = previous_row[j] + ['fS']
-            best = min((insert, delete, subst), key=_edit_cost)
-            current_row.append(best)
+                insert = current_row[j] + ['I' if gold.is_edit else 'fI']
+                delete = previous_row[j + 1] + ['D']
+                s_cost = previous_costs[j] + 1
+                i_cost = current_costs[j] + (not gold.is_edit)
+                d_cost = previous_costs[j + 1]
+            
+            #assert s_cost == _edit_cost(subst)
+            #assert i_cost == _edit_cost(insert)
+            #assert d_cost == _edit_cost(delete)
+            move_costs = zip((s_cost, i_cost, d_cost), (subst, insert, delete))
+            best_cost, best_hist = min(move_costs)
+            current_row.append(best_hist)
+            current_costs.append(best_cost)
         previous_row = current_row
-    return _edit_cost(previous_row[-1]), previous_row[-1]
+        previous_costs = current_costs
+    #assert previous_costs[-1] == _edit_cost(previous_row[-1])
+    return previous_costs[-1], previous_row[-1]
 
 
 def _edit_cost(edits):
