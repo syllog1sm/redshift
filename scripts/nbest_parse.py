@@ -32,9 +32,11 @@ def levenshtein(s1, s2):
     return previous_row[-1]
 
 
-def read_nbest(nbest_loc):
+def read_nbest(nbest_loc, limit):
     lines = open(nbest_loc).read().strip().split('\n')
     lines.pop(0)
+    if limit:
+        lines = lines[:limit]
     for line in lines:
         pieces = line.split()
         _ = pieces.pop(0)
@@ -44,7 +46,7 @@ def read_nbest(nbest_loc):
             yield math.exp(float(log_prob)), words
 
 
-def get_nbest(turn_id, nbest_dir):
+def get_nbest(turn_id, nbest_dir, limit=0):
     filename, turn_num = turn_id.split('~')
     speaker = turn_num[0]
     turn_num = turn_num[1:]
@@ -53,7 +55,7 @@ def get_nbest(turn_id, nbest_dir):
     if not nbest_loc.exists():
         return []
     else:
-        return list(read_nbest(str(nbest_loc)))
+        return list(read_nbest(str(nbest_loc), limit))
 
 
 def tokenise_candidate(candidate):
@@ -92,9 +94,10 @@ def parse_nbest(parser, candidates, mix_weight):
 
 
 @plac.annotations(
-    mix_weight=("Control the LM and acoustic model mixture", "option", "w", float)
+    mix_weight=("Control the LM and acoustic model mixture", "option", "w", float),
+    limit=("Limit N-best to N candidates", "option", "N", int)
 )
-def main(parser_dir, conll_loc, nbest_dir, out_dir, mix_weight=0.0):
+def main(parser_dir, conll_loc, nbest_dir, out_dir, mix_weight=0.0, limit=0):
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
     nbest_dir = Path(nbest_dir)
@@ -106,7 +109,7 @@ def main(parser_dir, conll_loc, nbest_dir, out_dir, mix_weight=0.0):
     baseline = 0
     n = 0
     for gold in gold_sents:
-        nbest = get_nbest(gold.turn_id, nbest_dir)
+        nbest = get_nbest(gold.turn_id, nbest_dir, limit=limit)
         if not nbest:
             continue
         first, guess = parse_nbest(parser, nbest, mix_weight)
