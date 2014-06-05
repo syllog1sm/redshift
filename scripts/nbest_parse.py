@@ -149,6 +149,29 @@ def get_lower_bound(nbest, gold):
     return min(errors)[0]
 
 
+def get_verbatim_wer(candidate, gold):
+    return levenshtein(candidate.replace('/NN', '').split(), [w.word for w in gold])
+
+
+def sparseval(test, gold):
+    test_deps = _get_deps(test)
+    gold_deps = _get_deps(gold)
+    tp = test_deps.intersection(gold_deps)
+    fn = gold_deps - test_deps
+    return len(tp), len(fn), len(test_deps)
+
+
+def _get_deps(tokens):
+    deps = set()
+    n = len(tokens)
+    for t in tokens:
+        if t.is_edit:
+            continue
+        head = tokens[t.head - 1].word if (t.head - 1) < n else "ROOT"
+        deps.add((t.word, head))
+    return deps
+
+
 @plac.annotations(
     mix_weight=("Control the LM and acoustic model mixture", "option", "w", float),
     limit=("Limit N-best to N candidates", "option", "N", int)
@@ -162,24 +185,52 @@ def main(parser_dir, conll_loc, nbest_dir, out_dir, mix_weight=0.0, limit=0):
     gold_sents = [Input.from_conll(s) for s in
                   open(conll_loc).read().strip().split('\n\n') if s.strip()]
     wer = 0
+    verbatim = 0
+    verbatim_oracle = 0
+    v_n = 0
     baseline = 0
     oracle = 0
+    asr_fluent = 0
     n = 0
+    tp_deps = 0
+    fn_deps = 0
+    n_deps = 0
     for gold in gold_sents:
         nbest = get_nbest(gold.turn_id, nbest_dir, limit=limit)
         if not nbest:
             continue
-        oracle += get_lower_bound(nbest, list(gold.tokens))
+        gold_tokens = list(gold.tokens)
+        oracle += get_lower_bound(nbest, gold_tokens)
+        verb_scores = [get_verbatim_wer(s, gold_tokens) for p, s in nbest]
+        verbatim += verb_scores[0]
+        verbatim_oracle += min(verb_scores)
+        v_n += len(gold_tokens)
         first, guess = parse_nbest(parser, nbest, mix_weight)
+        parse_scores = sparseval(list(guess.tokens), gold_tokens)
+        tp_deps += parse_scores[0]
+        fn_deps += parse_scores[1]
+        n_deps += parse_scores[2]
         fluent_gold = [t.word for t in gold.tokens if not t.is_edit]
         fluent_guess = [t.word for t in guess.tokens if not t.is_edit]
         fluent_bl = [t.word for t in first.tokens if not t.is_edit]
         baseline += levenshtein(fluent_gold, fluent_bl)
-        wer += levenshtein(fluent_gold, fluent_guess)
+        wer += levenshtein(fluent_guess, fluent_gold)
+        asr_fluent += levenshtein(nbest[0][1].replace('/NN', '').split(), fluent_gold)
         n += len(fluent_gold)
-    print wer, n, float(wer) / n
-    print baseline, n, float(baseline) / n
-    print oracle, n, float(oracle) / n
+    print "Against verbatim:"
+    print '1-best: %.3f' % (float(verbatim) / v_n)
+    print 'Oracle: %.3f' % (float(verbatim_oracle) / v_n)
+    print "Against fluent:"
+    print 'ASR: %.3f' % (float(asr_fluent) / n)
+    print 'ASR --> dfl.: %.3f' % (float(baseline) / n)
+    print 'Hyp: %.3f' % (float(wer) / n)
+    print 'Oracle: %.3f' % (float(oracle) / n)
+    print "Sparseval:"
+    p = float(tp_deps) / n_deps
+    r = float(tp_deps) / (tp_deps + fn_deps)
+    print "P: %.3f" % p
+    print "R: %.3f" % r
+    print "F: %.3f" % ((2 * p * r) / (p + r))
 
 
 if __name__ == '__main__':
