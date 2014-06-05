@@ -300,7 +300,7 @@ cdef inline void fill_token(size_t* context, size_t i, Token token):
     # first_4_bits = int(s, 2)
     # print first_4_bits
     # 5
-    # print "{0:b}".format(prefix).ljust(4, '0')
+    # print "{0:b}".format(first_4_bits).ljust(4, '0')
     # 1110
     # What we're doing here is picking a number where all bits are 1, e.g.
     # 15 is 1111, 63 is 111111 and doing bitwise AND, so getting all bits in
