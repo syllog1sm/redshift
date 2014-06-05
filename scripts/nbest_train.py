@@ -97,7 +97,11 @@ def get_nbest(gold_sent, nbest_dir, limit=0):
     turn_num = turn_num[1:]
     turn_id = '%s%s~%s' % (filename, speaker, turn_num)
     nbest_loc = nbest_dir.join(filename).join(speaker).join('nbest').join(turn_id)
-    nbest = [gold_sent]
+    # Need to copy the gold_sent, as we're going to pass gold_sent to the tagger
+    # for training, and the tags get modified by nbest_train.
+    gold_copy = Input.from_tokens([(t.word, t.tag, t.head, t.label, t.sent_id, t.is_edit)
+                                    for t in gold_sent.tokens])
+    nbest = [gold_copy]
     if not nbest_loc.exists():
         return nbest
     gold_tokens = list(gold_sent.tokens)
