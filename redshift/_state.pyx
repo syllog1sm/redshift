@@ -87,6 +87,43 @@ cdef int fill_slots(State *s) except -1:
     s.slots.s0n = s.parse[s.top + 1 if s.top and s.top < (s.n - 1) else 0]
     s.slots.s0nn = s.parse[s.top + 1 if s.top and s.top < (s.n - 2) else 0]
 
+    # These features find how much of S0's span matches N0's span, starting from
+    # the left.
+    # 
+    s.slots.wcopy = 0
+    s.slots.wexact = 1
+    s.slots.pcopy = 0
+    s.slots.pexact = 1
+    s.slots.wscopy = 0
+    s.slots.wsexact = 1
+    s.slots.pscopy = 0
+    s.slots.psexact = 1
+    cdef size_t n0ledge = s.slots.n0.left_edge
+    cdef size_t s0ledge = s.slots.s0.left_edge
+    for i in range(5):
+        if ((n0ledge + i) > s.slots.n0.i) or ((s0ledge + i) > s.slots.s0.i):
+            break
+        if s.slots.wexact:
+            if s.parse[n0ledge + i].word.orig == s.parse[s0ledge + i].word.orig:
+                s.slots.wcopy += 1
+            else:
+                s.slots.wexact = 0
+        if s.slots.pexact:
+            if s.parse[n0ledge + i].tag == s.parse[s0ledge + i].tag:
+                s.slots.pcopy += 1
+            else:
+                s.slots.pexact = 0
+        if s.slots.wsexact:
+            if s.parse[s.slots.s0.i - i].word.orig == s.parse[s.slots.n0.i - i].word.orig:
+                s.slots.wscopy += 1
+            else:
+                s.slots.wsexact = 0
+        if s.slots.psexact:
+            if s.parse[s.slots.s0.i - i].tag == s.parse[s.slots.n0.i - i].tag:
+                s.slots.pscopy += 1
+            else:
+                s.slots.psexact = 0
+
 
 cdef size_t get_s1(State *s):
     if s.stack_len < 2:

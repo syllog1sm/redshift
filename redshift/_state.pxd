@@ -36,6 +36,16 @@ cdef struct SlotTokens:
     Token s0n
     Token s0nn
 
+    # Match features
+    size_t wcopy
+    size_t wexact
+    size_t wscopy
+    size_t wsexact
+    size_t pcopy
+    size_t pexact
+    size_t pscopy
+    size_t psexact
+
 
 cdef struct State:
     double score

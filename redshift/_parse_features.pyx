@@ -373,39 +373,14 @@ cdef int fill_context(size_t* context, SlotTokens* t) except -1:
     # These features find how much of S0's span matches N0's span, starting from
     # the left.
     # 
-    context[wcopy] = 0
-    context[wexact] = 1
-    context[pcopy] = 0
-    context[pexact] = 1
-    context[wscopy] = 0
-    context[wsexact] = 1
-    context[pscopy] = 0
-    context[psexact] = 1
-    cdef size_t n0ledge = t.n0.left_edge
-    cdef size_t s0ledge = t.s0.left_edge
-    #for i in range(5):
-    #    if ((n0ledge + i) > t.n0.i) or ((s0ledge + i) > t.s0.i):
-    #        break
-    #    if context[wexact]:
-    #        if parse[n0ledge + i].word.orig == parse[s0ledge + i].word.orig:
-    #            context[wcopy] += 1
-    #        else:
-    #            context[wexact] = 0
-    #    if context[pexact]:
-    #        if parse[n0ledge + i].tag == parse[s0ledge + i].tag:
-    #            context[pcopy] += 1
-    #        else:
-    #            context[pexact] = 0
-    #    if context[wsexact]:
-    #        if parse[t.s0.i - i].word.orig == parse[t.n0.i - i].word.orig:
-    #            context[wscopy] += 1
-    #        else:
-    #            context[wsexact] = 0
-    #    if context[psexact]:
-    #        if parse[t.s0.i - i].tag == parse[t.n0.i - i].tag:
-    #            context[pscopy] += 1
-    #        else:
-    #            context[psexact] = 0
+    context[wcopy] = t.wcopy
+    context[wexact] = t.wexact
+    context[pcopy] = t.pcopy
+    context[pexact] = t.pexact
+    context[wscopy] = t.wscopy
+    context[wsexact] = t.wsexact
+    context[pscopy] = t.pscopy
+    context[psexact] = t.psexact
 
 
 arc_hybrid = (
