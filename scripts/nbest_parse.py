@@ -69,6 +69,9 @@ def tokenise_candidate(candidate):
             if word.endswith(suffix):
                 words.append(word[:-len(suffix)] + '/NN')
                 words.append(suffix + '/NN')
+                break
+        else:
+            words.append(word + '/NN')
     return ' '.join(words)
 
 
