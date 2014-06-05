@@ -19,30 +19,30 @@ def get_oracle_alignment(candidate, gold_words):
         cell = []
         for j in range(i):
             cell.append('I' if gold_words[j].is_edit else 'fI')
-        previous_row.append(cell)
-        previous_costs.append(_edit_cost(cell))
+        previous_row.append(''.join(cell))
+        previous_costs.append(_edit_cost(''.join(cell)))
     for i, cand in enumerate(candidate):
-        current_row = [ ['D'] * (i + 1) ]
+        current_row = ['D' * (i + 1) ]
         current_costs = [0]
         for j, gold in enumerate(gold_words):
             if not gold.is_edit and gold.word == cand:
-                subst = previous_row[j] + ['M']
-                insert = current_row[j] + ['fI']
-                delete = previous_row[j + 1] + ['fD']
+                subst = previous_row[j] + 'M'
+                insert = current_row[j] + 'fI'
+                delete = previous_row[j + 1] + 'fD'
                 s_cost = previous_costs[j]
                 i_cost = current_costs[j] + 1
                 d_cost = previous_costs[j + 1] + 1
             else:
-                subst = previous_row[j] + ['fS']
-                insert = current_row[j] + ['I' if gold.is_edit else 'fI']
-                delete = previous_row[j + 1] + ['D']
+                subst = previous_row[j] + 'fS'
+                insert = current_row[j] + ('I' if gold.is_edit else 'fI')
+                delete = previous_row[j + 1] + 'D'
                 s_cost = previous_costs[j] + 1
                 i_cost = current_costs[j] + (not gold.is_edit)
                 d_cost = previous_costs[j + 1]
             
             #assert s_cost == _edit_cost(subst)
             #assert i_cost == _edit_cost(insert)
-            #assert d_cost == _edit_cost(delete)
+            #assert d_cost == _edit_cost(delete), 'Cost: %d, string: %s' % (d_cost, delete)
             move_costs = zip((s_cost, i_cost, d_cost), (subst, insert, delete))
             best_cost, best_hist = min(move_costs)
             current_row.append(best_hist)
@@ -50,11 +50,11 @@ def get_oracle_alignment(candidate, gold_words):
         previous_row = current_row
         previous_costs = current_costs
     #assert previous_costs[-1] == _edit_cost(previous_row[-1])
-    return previous_costs[-1], previous_row[-1]
+    return previous_costs[-1], previous_row[-1].replace('f', '')
 
 
 def _edit_cost(edits):
-    return sum(e[0] == 'f' for e in edits)
+    return edits.count('f')
 
 
 def tokenise_candidate(candidate):
@@ -153,7 +153,7 @@ def make_gold_sent(gold, candidate, edits):
         elif op == 'I':
             g_i += 1
         elif op == 'D':
-            tokens.append(_make_dfl_token(candidate[c_i], c_i, sent_id))
+            tokens.append(_make_dfl_token(candidate, c_i, sent_id))
             c_i += 1
     return Input.from_tokens(tokens)
 
@@ -162,17 +162,49 @@ def _make_token(word, gold, alignment):
     return (word, gold.tag, head, gold.label,
             gold.sent_id, gold.is_edit)
 
-def _make_dfl_token(word, i, sent_id):
-    return (word, 'UH', i + 1, _guess_label(word), sent_id, True)
+def _make_dfl_token(words, i, sent_id):
+    word = words[i]
+    last_word = words[i - 1] if i != 0 else 'EOL'
+    next_word = words[i + 1] if i < (len(words) - 1) else 'EOL'
+    return (word, 'UH', i + 1, _guess_label(word, last_word, next_word), sent_id, True)
 
 
-def _guess_label(word):
-    fillers = set(['uh', 'um', 'uhhuh', 'uh-huh'])
-    discourse = set(['you', 'know', 'well', 'okay'])
+def _guess_label(word, last_word, next_word):
+    """
+    13117 uh
+    7189 you
+    7186 know
+    4569 well
+    3633 oh
+    3319 um
+    1712 i
+    1609 mean
+    1050 like
+    522 so
+    372 huh
+    284 now
+    213 see
+    124 yeah
+    108 or
+    106 actually
+    """
+    fillers = set(['uh', 'um', 'uhhuh', 'uh-huh', 'huh', 'oh'])
+    discourse = set(['well', 'okay', 'actually', 'like', 'so', 'now', 'yeah'])
+    editing = set(['or'])
     if word in fillers:
         return 'fillerF'
     elif word in discourse:
         return 'fillerD'
+    elif word in editing:
+        return 'fillerE'
+    elif word == 'you' and next_word == 'know':
+        return 'fillerD'
+    elif word == 'know' and last_word == 'you':
+        return 'fillerD'
+    elif word == 'i' and next_word == 'mean':
+        return 'fillerD'
+    elif word == 'mean' and last_word == 'i':
+        return 'fillerE'
     else:
         return 'erased'
 
