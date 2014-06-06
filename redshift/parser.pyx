@@ -215,7 +215,7 @@ cdef class Parser:
             beam.extend()
         beam.fill_parse(sent.tokens)
         py_sent.segment()
-        sent.score = beam.beam[0].score
+        sent.score = beam.score
 
     cdef int _score_classes(self, State* s, Transition* classes) except -1:
         assert not is_final(s)
@@ -301,7 +301,7 @@ cdef class Parser:
                             fill_costs(s, beam.moves[i], self.nr_moves,
                                        sent.tokens)
                 beam.extend()
-            if p_beam is None or beam.beam[0].score > p_beam.beam[0].score:
+            if p_beam is None or beam.score > p_beam.score:
                 p_beam = beam
                 psent = sent
             
@@ -320,7 +320,7 @@ cdef class Parser:
                                 beam.moves[i][j].is_valid = False
                         self._score_classes(s, beam.moves[i])
                 beam.extend()
-            if g_beam is None or beam.beam[0].score > g_beam.beam[0].score:
+            if g_beam is None or beam.score > g_beam.score:
                 g_beam = beam
                 gsent = sent
         assert p_beam is not None and g_beam is not None

@@ -45,6 +45,10 @@ cdef class Beam:
         self.t = 0
         self.is_full = self.bsize >= self.k
 
+    property score:
+        def __get__(self):
+            return self.beam[0].score / self.t
+
     @cython.cdivision(True)
     cdef int extend(self):
         cdef priority_queue[ScoredMove] queue = priority_queue[ScoredMove]()
