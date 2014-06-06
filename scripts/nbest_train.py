@@ -101,21 +101,22 @@ def get_nbest(gold_sent, nbest_dir, limit=0):
     # for training, and the tags get modified by nbest_train.
     gold_copy = Input.from_tokens([(t.word, t.tag, t.head, t.label, t.sent_id, t.is_edit)
                                     for t in gold_sent.tokens])
-    nbest = [gold_copy]
     if not nbest_loc.exists():
-        return nbest
+        return [gold_copy]
     gold_tokens = list(gold_sent.tokens)
     gold_sent_id = gold_tokens[0].sent_id
-    gold_str = ' '.join(t.word for t in gold_tokens)
+    nbest = []
+    seen_gold = False
     for score, candidate in read_nbest(str(nbest_loc), limit=limit):
-        if ' '.join(candidate) == gold_str:
-            continue
         cost, edits = get_oracle_alignment(candidate, gold_tokens)
         if cost == 0:
             sent = make_gold_sent(gold_tokens, candidate, edits)
+            seen_gold = True
         else:
             sent = make_non_gold_sent(cost, candidate, gold_sent_id)
         nbest.append(sent)
+    if not seen_gold:
+        nbest.append(gold_copy)
     return nbest
 
 def make_non_gold_sent(wer, words, sent_id):
