@@ -61,6 +61,8 @@ def tokenise_candidate(candidate):
     suffixes = set(["n't", "'s", "'d", "'re", "'ll", "'m", "'ve", "'"])
     words = []
     for word in candidate:
+        if word == '[laugh]':
+            continue
         if word == 'uhhuh':
             word = 'uh-huh'
         if "'" not in word:
@@ -86,7 +88,7 @@ def read_nbest(nbest_loc, limit=0):
         _ = pieces.pop(0)
         log_prob = pieces.pop(0)
         words = tokenise_candidate(pieces)
-        if pieces:
+        if words:
             yield float(log_prob), words
 
 
