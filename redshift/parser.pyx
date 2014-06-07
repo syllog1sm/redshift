@@ -253,8 +253,8 @@ cdef class Parser:
             p_beam.extend()
         if p_beam.beam[0].cost == 0:
             self.guide.now += 1
-            self.guide.n_corr += p_beam.beam[0].m
-            self.guide.total += p_beam.beam[0].m
+            self.guide.total += 1
+            self.guide.n_corr += 1
             return 0
         g_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
         while not g_beam.is_finished:
@@ -268,9 +268,9 @@ cdef class Parser:
                             g_beam.moves[i][j].is_valid = False
                     self._score_classes(s, g_beam.moves[i])
             g_beam.extend()
+        self.guide.total += 1
         counts = self._count_feats(sent, sent, p_beam, g_beam)
         self.guide.batch_update(counts)
- 
         for i in range(sent.n):
             sent.tokens[i].tag = gold_tags[i]
         free(gold_tags)
