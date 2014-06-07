@@ -324,12 +324,12 @@ cdef class Parser:
                 g_beam = beam
                 gsent = sent
         assert p_beam is not None and g_beam is not None
+        self.guide.total += 1
         if p_beam.beam[0].cost > 0:
             counts = self._count_feats(psent, gsent, p_beam, g_beam)
             self.guide.batch_update(counts)
         else:
-            self.guide.n_corr += p_beam.beam[0].m
-            self.guide.total += p_beam.beam[0].m
+            self.guide.n_corr += 1
             self.guide.now += 1
     
     cdef dict _count_feats(self, Sentence* psent, Sentence* gsent,
@@ -366,12 +366,10 @@ cdef class Parser:
         cdef Token* gword
         cdef Token* pword
         for i in range(max((pt, gt))):
-            self.guide.total += 1.0
             # Find where the states diverge
             gword = &gsent.tokens[gold_state.i]
             pword = &psent.tokens[pred_state.i]
             if not seen_diff and gword.word == pword.word and ghist[i].clas == phist[i].clas:
-                self.guide.n_corr += 1.0
                 transition(&ghist[i], gold_state)
                 transition(&phist[i], pred_state)
                 continue
