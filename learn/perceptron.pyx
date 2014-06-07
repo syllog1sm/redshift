@@ -63,10 +63,9 @@ cdef void free_dense_feat(DenseFeature* feat):
 cdef inline void score_dense_feat(double* scores, DenseFeature* feat) nogil:
     feat.nr_seen += 1
     cdef size_t c
-    cdef double total = feat.total
     cdef double* w = feat.w
     for c in range(feat.s, feat.e):
-        scores[c] += (w[c] + total)
+        scores[c] += w[c]
 
 
 cdef void update_dense(size_t now, double w, size_t clas, DenseFeature* raw):
@@ -142,14 +141,13 @@ cdef inline void score_square_feat(double* scores, size_t div, size_t nr_class,
                                    SquareFeature* feat) nogil:
     cdef size_t j, k, part_idx
     feat.nr_seen  += 1
-    cdef double total = feat.total
     for j in range(div):
         if feat.seen[j]:
             part_idx = j * div
             for k in range(div):
                 if (part_idx + k) >= nr_class:
                     break
-                scores[part_idx + k] += (feat.parts[j].w[k] + total)
+                scores[part_idx + k] += feat.parts[j].w[k]
 
 
 cdef inline void update_square(size_t nr_class, size_t div,
@@ -298,6 +296,7 @@ cdef class Perceptron:
         cdef DenseFeature** raws = self.raws
         cdef size_t nr_square = 0
         cdef size_t nr_dense = 0
+        cdef double inst_weight = 0.0
         cdef size_t nr_raws = self.nr_raws
         # First collect the active features, in two lots --- dense and square
         for i in range(MAX_ACTIVE):
@@ -307,14 +306,18 @@ cdef class Perceptron:
             feat_addr = self.W[f]
             if feat_addr >= nr_raws:
                 active_square[nr_square] = <SquareFeature*>feat_addr
+                inst_weight += active_square[nr_square].total
                 nr_square += 1
             else:
                 active_dense[nr_dense] = raws[feat_addr]
+                inst_weight += active_dense[nr_dense].total
                 nr_dense += 1
         # Now evaluate the features. Doing it this way improves cache locality,
         # giving a small efficiency improvement.
         cdef size_t nr_class = self.nr_class
-        memset(scores, 0, nr_class * sizeof(double))
+        for i in range(nr_class):
+            #scores[i] = 0
+            scores[i] = inst_weight
         for i in range(nr_dense):
             score_dense_feat(scores, active_dense[i])
         cdef size_t div = self.div
