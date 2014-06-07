@@ -8,9 +8,21 @@ import pstats
 import cProfile
 from pathlib import Path
 import math
+import sh
 
 import redshift.parser
 from redshift.sentence import Input
+
+
+def get_dfl_strings(strings):
+    open('/tmp/for_dfl', 'w').write('\n'.join(strings))
+    sh.qian('/tmp/for_dfl', '/tmp/dfl_out')
+    output = []
+    for line in open('/tmp/dfl_out').read().strip().split('\n'):
+        tokens = [t.rsplit('/', 3) for t in line.split()]
+        fluent = [w for (w, p, d) in tokens if d == 'S-O' or (d == 'S-I' and p == 'CC')]
+        output.append(fluent)
+    return output
 
 def get_oracle_alignment(candidate, gold_words):
     # Levenshtein distance, except we need the history, and some operations
@@ -92,7 +104,7 @@ def read_nbest(nbest_loc, limit):
         _ = pieces.pop(0)
         log_prob = pieces.pop(0)
         words = tokenise_candidate(pieces)
-        if pieces:
+        if words:
             yield math.exp(float(log_prob)), words
 
 
@@ -114,6 +126,8 @@ def tokenise_candidate(candidate):
     for word in candidate:
         if word == 'uhhuh':
             word = 'uh-huh'
+        if word == '[laugh]':
+            continue
         if "'" not in word:
             words.append(word + '/NN')
             continue
@@ -195,33 +209,41 @@ def main(parser_dir, conll_loc, nbest_dir, out_dir, mix_weight=0.0, limit=0):
     tp_deps = 0
     fn_deps = 0
     n_deps = 0
+    asr_strings = []
+    fluent_strings = []
     for gold in gold_sents:
         nbest = get_nbest(gold.turn_id, nbest_dir, limit=limit)
         if not nbest:
             continue
         gold_tokens = list(gold.tokens)
+        fluent_gold = [t.word for t in gold.tokens if not t.is_edit]
         oracle += get_lower_bound(nbest, gold_tokens)
+        asr_strings.append(nbest[0][1].replace('/NN', ''))
+        fluent_strings.append(fluent_gold)
         verb_scores = [get_verbatim_wer(s, gold_tokens) for p, s in nbest]
         verbatim += verb_scores[0]
         verbatim_oracle += min(verb_scores)
         v_n += len(gold_tokens)
-        first, guess = parse_nbest(parser, nbest, mix_weight)
+        first, guess  = parse_nbest(parser, nbest, mix_weight)
         parse_scores = sparseval(list(guess.tokens), gold_tokens)
         tp_deps += parse_scores[0]
         fn_deps += parse_scores[1]
         n_deps += parse_scores[2]
-        fluent_gold = [t.word for t in gold.tokens if not t.is_edit]
         fluent_guess = [t.word for t in guess.tokens if not t.is_edit]
         fluent_bl = [t.word for t in first.tokens if not t.is_edit]
         baseline += levenshtein(fluent_gold, fluent_bl)
         wer += levenshtein(fluent_guess, fluent_gold)
         asr_fluent += levenshtein(nbest[0][1].replace('/NN', '').split(), fluent_gold)
         n += len(fluent_gold)
+    dfl_strings = get_dfl_strings(asr_strings)
+    assert len(dfl_strings) == len(fluent_strings)
+    qian_pl = sum(levenshtein(dfl, gold) for (dfl, gold) in zip(dfl_strings, fluent_strings))
     print "Against verbatim:"
     print '1-best: %.3f' % (float(verbatim) / v_n)
     print 'Oracle: %.3f' % (float(verbatim_oracle) / v_n)
     print "Against fluent:"
     print 'ASR: %.3f' % (float(asr_fluent) / n)
+    print 'ASR --> Qian: %.3f' % (float(qian_pl) / n)
     print 'ASR --> dfl.: %.3f' % (float(baseline) / n)
     print 'Hyp: %.3f' % (float(wer) / n)
     print 'Oracle: %.3f' % (float(oracle) / n)
