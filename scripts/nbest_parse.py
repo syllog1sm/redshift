@@ -124,6 +124,8 @@ def tokenise_candidate(candidate):
     suffixes = set(["n't", "'s", "'d", "'re", "'ll", "'m", "'ve", "'"])
     words = []
     for word in candidate:
+        if word == '[laugh]':
+            continue
         if word == 'uhhuh':
             word = 'uh-huh'
         if word == '[laugh]':

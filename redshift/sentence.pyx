@@ -123,6 +123,7 @@ cdef class Input:
             word_id = int(fields[0]) - 1
             word = fields[1]
             pos = fields[3]
+            assert pos.strip()
             feats = fields[5].split('|')
             is_edit = len(feats) >= 3 and feats[2] == '1'
             #if len(feats) >= 5 and feats[4] == 'RM':
@@ -130,7 +131,11 @@ cdef class Input:
             is_fill = len(feats) >= 2 and feats[1] in ('D', 'E', 'F', 'A') 
             is_ns = len(feats) >= 4 and feats[3] == 'N_S'
             is_ns = False
-            turn_id, sent_id = feats[0].split('.')
+            if '.' in feats[0]:
+                turn_id, sent_id = feats[0].split('.')
+            else:
+                turn_id = feats[0]
+                sent_id = '0'
             head = int(fields[6])
             label = fields[7]
             if is_edit:
@@ -251,5 +256,6 @@ cdef object conll_line_from_token(size_t i, Token* a, Step* lattice):
     fill_tag = label[-1] if label.startswith('filler') else '-'
     feats = '0.%d|%s|%d|-' % (a.sent_id, fill_tag, label == 'erased')
     cdef bytes tag = index.hashes.decode_pos(a.tag)
+    assert tag.strip()
     return '\t'.join((str(i), word, '_', tag, tag, feats, 
                      str(a.head), label, '_', '_'))

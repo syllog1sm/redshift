@@ -19,10 +19,11 @@ cdef class Index:
         if entry in self.table:
             return self.table[entry]
         else:
+            value = self.i
             self.i += 1
-            self.table[entry] = self.i
-            self.reverse[self.i] = entry
-            return self.i
+            self.table[entry] = value
+            self.reverse[value] = entry
+            return value
 
     cpdef bytes get_str(self, size_t code):
         return self.reverse.get(code, '')

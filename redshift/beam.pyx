@@ -86,6 +86,7 @@ cdef class Beam:
             s = self.beam[self.bsize]
             s.score = data.first
             if not is_final(s):
+                # TODO: Could this be the right place to implement the lattice?
                 t = &self.moves[parent_idx][move_idx]
                 s.cost += t.cost
                 transition(t, s)
