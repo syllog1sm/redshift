@@ -133,6 +133,7 @@ cdef class Beam:
             free(self.history[i])
         free(self.beam)
         free(self.parents)
+        free(self.moves)
 
 
 cdef int get_violation(Beam pred, Beam gold):
