@@ -147,7 +147,7 @@ def parse_nbest(parser, candidates, mix_weight):
     sentences = []
     norm = 0.0
     for prob, cand_str in candidates:
-        sent = Input.from_pos(cand_str)
+        sent = Input.from_pos(cand_str, prior=prob)
         parser.parse(sent)
         norm += sent.score
         sentences.append((prob, sent))

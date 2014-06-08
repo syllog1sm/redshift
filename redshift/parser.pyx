@@ -192,7 +192,8 @@ cdef class Parser:
         fill_moves(self.cfg.lattice_width, self.cfg.left_labels,
                    self.cfg.right_labels, self.cfg.dfl_labels,
                    self.cfg.use_break, self.moves)
-        self.guide = Perceptron(self.nr_moves, pjoin(model_dir, 'model.gz'))
+        self.guide = Perceptron(self.nr_moves - self.cfg.lattice_width,
+                                pjoin(model_dir, 'model.gz'))
         if os.path.exists(pjoin(model_dir, 'model.gz')):
             self.guide.load(pjoin(model_dir, 'model.gz'), thresh=int(self.cfg.feat_thresh))
         if os.path.exists(pjoin(model_dir, 'pos')):
@@ -227,7 +228,7 @@ cdef class Parser:
             self.extractor.extract(self._features, self._context)
             self.guide.fill_scores(self._features, scores)
         for i in range(self.nr_moves):
-            classes[i].score = s.score + scores[i]
+            classes[i].score = s.score + scores[classes[i].clas]
         return 0
 
     cdef int train_sent(self, Input py_sent) except -1:

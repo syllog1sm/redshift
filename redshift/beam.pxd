@@ -31,6 +31,8 @@ cdef class Beam:
     cdef bint is_full
     cdef bint is_finished
 
+    cdef double prior
+
     cdef int extend(self) except -1
     cdef int fill_parse(self, Token* parse) except -1
 
