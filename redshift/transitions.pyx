@@ -186,22 +186,26 @@ cdef int fill_moves(size_t lattice_width, list left_labels, list right_labels,
                     list dfl_labels, bint use_break, Transition* moves):
     cdef size_t root_label = index.hashes.encode_label('ROOT')
     cdef size_t i = 0
+    cdef size_t clas = 0
     for i in range(lattice_width):
         moves[i].move = SHIFT
         moves[i].label = i
-    i += 1
+        moves[i].clas = clas
+    i += 1; clas += 1
     if use_break:
         moves[i].move = BREAK; moves[i].label = root_label; i += 1
+        moves[i].clas = clas; clas += 1
     cdef size_t label
     for label in dfl_labels:
         moves[i].move = EDIT; moves[i].label = label; i += 1
+        moves[i].clas = clas; clas += 1
     for label in left_labels:
         moves[i].move = LEFT; moves[i].label = label; i += 1
+        moves[i].clas = clas; clas += 1
     for label in right_labels:
         moves[i].move = RIGHT; moves[i].label = label; i += 1
-    cdef size_t clas
-    for clas in range(i):
-        moves[clas].clas = clas
-        moves[clas].score = 0
-        moves[clas].cost = 0
-        moves[clas].is_valid = True
+        moves[i].clas = clas; clas += 1
+    for m in range(i):
+        moves[m].score = 0
+        moves[m].cost = 0
+        moves[m].is_valid = True
