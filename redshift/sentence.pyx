@@ -3,6 +3,7 @@ from collections import namedtuple
 
 cimport index.lexicon
 cimport index.hashes
+import random
 import index.lexicon
 from index.lexicon cimport Lexeme
 from index.lexicon cimport BLANK_WORD
@@ -24,6 +25,7 @@ cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
     cdef bint is_edit
     for i, (word_idx, tag, head, label, sent_id, is_edit) in enumerate(parse):
         s.tokens[i].word = s.lattice[i].nodes[word_idx]
+        assert s.tokens[i].word != NULL
         if tag is not None:
             s.tokens[i].tag = index.hashes.encode_pos(tag) 
         if head is not None:
@@ -91,7 +93,6 @@ cdef class Input:
     def __dealloc__(self):
         free_sent(self.c_sent)
 
-
     @classmethod
     def from_tokens(cls, tokens, turn_id=None, wer=0, prior=1.0):
         """
@@ -101,8 +102,16 @@ cdef class Input:
         """
         lattice = []
         parse = []
+        #last_word = 'the'
         for word, tag, head, label, sent_id, is_edit in tokens:
             lattice.append([(1.0, word)])
+            #if random.random >= 0.5:
+            #    lattice.append([(0.5, word), (0.5, last_word)])
+            #    idx = 0
+            #else:
+            #    lattice.append([(0.5, last_word), (0.5, word)])
+            #    idx = 1
+            #last_word = word
             parse.append((0, tag, head, label, sent_id, is_edit))
         return cls(lattice, parse, turn_id=turn_id, wer=wer, prior=prior)
 

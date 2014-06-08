@@ -1,7 +1,7 @@
 from libc.string cimport const_void
 from libc.stdint cimport uint64_t, int64_t
 
-from sentence cimport Sentence, Token
+from sentence cimport Sentence, Token, Step
 from transitions cimport Transition
 
 # From left-to-right in the string, the slot tokens are:
@@ -72,7 +72,7 @@ cdef int del_l_child(State *s, size_t head) except -1
 cdef int del_r_child(State *s, size_t head) except -1
 
 cdef size_t pop_stack(State *s) except 0
-cdef int push_stack(State *s) except -1
+cdef int push_stack(State *s, size_t w, Step* lattice) except -1
 
 cdef size_t get_l(State *s, size_t head)
 cdef size_t get_l2(State *s, size_t head)
@@ -89,6 +89,6 @@ cdef int has_head_in_buffer(State *s, size_t word, Token* gold) except -1
 cdef int has_child_in_stack(State *s, size_t word, Token* gold) except -1
 cdef int has_head_in_stack(State *s, size_t word, Token* gold) except -1
 
-cdef State* init_state(Sentence* sent)
+cdef State* init_state(size_t length) except NULL
 cdef free_state(State* s)
 cdef int copy_state(State* s, State* old) except -1

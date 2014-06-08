@@ -1,6 +1,7 @@
 from _state cimport *
 from transitions cimport Transition
 from sentence cimport Token
+from sentence cimport Step
 
 
 from libcpp.queue cimport priority_queue
@@ -12,6 +13,8 @@ ctypedef pair[size_t, Transition] Candidate
 ctypedef Transition* History
 
 cdef class Beam:
+    cdef Step* lattice
+
     cdef State** parents
     cdef State** beam
 

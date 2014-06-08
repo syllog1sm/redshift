@@ -1,6 +1,6 @@
 from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
-from redshift.sentence cimport Input, Sentence, Token
+from redshift.sentence cimport Input, Sentence, Token, Step
 from ext.sparsehash cimport dense_hash_map
 
 from libc.stdint cimport uint64_t, int64_t
@@ -19,6 +19,7 @@ cdef class Tagger:
     cdef double** _beam_scores
 
     cpdef int tag(self, Input py_sent) except -1
+    cdef int tag_word(self, Token* state, size_t i, Step* lattice, size_t n) except -1
     cdef int train_sent(self, Input py_sent) except -1
 
     cdef int _predict(self, size_t i, TagState* s, Sentence* sent, double* scores)

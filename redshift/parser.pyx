@@ -211,7 +211,9 @@ cdef class Parser:
         while not beam.is_finished:
             for i in range(beam.bsize):
                 if not is_final(beam.beam[i]):
-                    fill_valid(beam.beam[i], beam.moves[i], self.nr_moves) 
+                    fill_valid(beam.beam[i], sent.lattice, beam.moves[i], self.nr_moves) 
+                    #self.tagger.tag_word(beam.beam[i].parse, beam.beam[i].i,
+                    #                     sent.lattice, sent.n)
                     self._score_classes(beam.beam[i], beam.moves[i])
             beam.extend()
         beam.fill_parse(sent.tokens)
@@ -247,10 +249,12 @@ cdef class Parser:
             for i in range(p_beam.bsize):
                 s = p_beam.beam[i]
                 if not is_final(s):
-                    fill_valid(s, p_beam.moves[i], self.nr_moves) 
+                    fill_valid(s, sent.lattice, p_beam.moves[i], self.nr_moves) 
+                    #self.tagger.tag_word(s.parse, s.i, sent.lattice, sent.n)
                     self._score_classes(s, p_beam.moves[i])
                     # Fill costs so we can see whether the prediction is gold-standard
-                    fill_costs(s, p_beam.moves[i], self.nr_moves, gold_parse)
+                    fill_costs(s, sent.lattice, p_beam.moves[i], self.nr_moves,
+                               gold_parse)
             p_beam.extend()
         if p_beam.beam[0].cost == 0:
             self.guide.now += 1
@@ -262,8 +266,10 @@ cdef class Parser:
             for i in range(g_beam.bsize):
                 s = g_beam.beam[i]
                 if not is_final(s):
-                    fill_valid(s, g_beam.moves[i], self.nr_moves) 
-                    fill_costs(s, g_beam.moves[i], self.nr_moves, gold_parse)
+                    #self.tagger.tag_word(s.parse, s.i, sent.lattice, sent.n)
+                    fill_valid(s, sent.lattice, g_beam.moves[i], self.nr_moves) 
+                    fill_costs(s, sent.lattice, g_beam.moves[i], self.nr_moves,
+                               gold_parse)
                     for j in range(self.nr_moves):
                         if g_beam.moves[i][j].cost != 0:
                             g_beam.moves[i][j].is_valid = False
@@ -295,11 +301,12 @@ cdef class Parser:
                 for i in range(beam.bsize):
                     s = beam.beam[i]
                     if not is_final(s):
-                        fill_valid(s, beam.moves[i], self.nr_moves) 
+                        fill_valid(s, sent.lattice, beam.moves[i], self.nr_moves) 
+                        #self.tagger.tag_word(s.parse, s.i, sent.lattice, sent.n)
                         self._score_classes(s, beam.moves[i])
                         # Fill costs so we can see whether the prediction is gold-standard
                         if py_sent.wer == 0:
-                            fill_costs(s, beam.moves[i], self.nr_moves,
+                            fill_costs(s, sent.lattice, beam.moves[i], self.nr_moves,
                                        sent.tokens)
                 beam.extend()
             if p_beam is None or beam.score > p_beam.score:
@@ -313,9 +320,10 @@ cdef class Parser:
                 for i in range(beam.bsize):
                     s = beam.beam[i]
                     if not is_final(s):
-                        fill_valid(s, beam.moves[i], self.nr_moves) 
-                        fill_costs(s, beam.moves[i], self.nr_moves,
+                        fill_valid(s, sent.lattice, beam.moves[i], self.nr_moves) 
+                        fill_costs(s, sent.lattice, beam.moves[i], self.nr_moves,
                                    sent.tokens)
+                        self.tagger.tag_word(s.parse, s.i, sent.lattice, sent.n)
                         for j in range(self.nr_moves):
                             if beam.moves[i][j].cost != 0:
                                 beam.moves[i][j].is_valid = False
@@ -358,8 +366,14 @@ cdef class Parser:
         cdef size_t d, i, f
         cdef uint64_t* feats
         cdef size_t clas
-        cdef State* gold_state = init_state(gsent)
-        cdef State* pred_state = init_state(psent)
+        cdef State* gold_state = init_state(gsent.n)
+        cdef State* pred_state = init_state(psent.n)
+        for w in range(1, gsent.n):
+            gold_state.parse[w].tag = gsent.tokens[w].tag
+            #gold_state.parse[w].word = gsent.lattice[w].nodes[0]
+        for w in range(1, psent.n):
+            pred_state.parse[w].tag = psent.tokens[w].tag
+            #pred_state.parse[w].word = psent.lattice[w].nodes[0]
         cdef dict counts = {}
         for clas in range(self.nr_moves):
             counts[clas] = {}
@@ -371,22 +385,26 @@ cdef class Parser:
             gword = &gsent.tokens[gold_state.i]
             pword = &psent.tokens[pred_state.i]
             if not seen_diff and gword.word == pword.word and ghist[i].clas == phist[i].clas:
-                transition(&ghist[i], gold_state)
-                transition(&phist[i], pred_state)
+                transition(&ghist[i], gold_state, gsent.lattice)
+                transition(&phist[i], pred_state, psent.lattice)
                 continue
             seen_diff = True
             if i < gt:
+                self.tagger.tag_word(gold_state.parse, gold_state.i,
+                                     gsent.lattice, gsent.n)
                 fill_slots(gold_state)
                 fill_context(self._context, &gold_state.slots)
                 self.extractor.extract(self._features, self._context)
                 self.extractor.count(counts[ghist[i].clas], self._features, 1.0)
-                transition(&ghist[i], gold_state)
+                transition(&ghist[i], gold_state, gsent.lattice)
             if i < pt:
+                self.tagger.tag_word(pred_state.parse, pred_state.i,
+                                     psent.lattice, psent.n)
                 fill_slots(pred_state)
                 fill_context(self._context, &pred_state.slots)
                 self.extractor.extract(self._features, self._context)
                 self.extractor.count(counts[phist[i].clas], self._features, -1.0)
-                transition(&phist[i], pred_state)
+                transition(&phist[i], pred_state, psent.lattice)
         free_state(gold_state)
         free_state(pred_state)
         return counts

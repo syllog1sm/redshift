@@ -2,6 +2,7 @@
 from _state cimport *
 from libc.stdlib cimport malloc, calloc, free
 import index.hashes
+from redshift.sentence cimport Step
 
 from libcpp.vector cimport vector
 
@@ -104,7 +105,7 @@ cdef int break_cost(State* s, Token* gold):
     return 0 if gold[s.top].sent_id != gold[s.i].sent_id else 1
 
 
-cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
+cdef int fill_valid(State* s, Step* lattice, Transition* classes, size_t n) except -1:
     cdef bint[N_MOVES] valid
     valid[SHIFT] = can_shift(s)
     valid[LEFT] = can_left(s)
@@ -113,6 +114,8 @@ cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
     valid[BREAK] = can_break(s)
     for i in range(n):
         classes[i].is_valid = valid[classes[i].move]
+        if classes[i].is_valid and classes[i].move == SHIFT:
+            classes[i].is_valid = classes[i].label < lattice[s.i + 1].n
     for i in range(n):
         if classes[i].is_valid:
             break
@@ -121,7 +124,8 @@ cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
         raise StandardError
 
 
-cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except -1:
+cdef int fill_costs(State* s, Step* lattice, Transition* classes,
+                    size_t n, Token* gold) except -1:
     cdef int[N_MOVES] costs
     costs[SHIFT] = shift_cost(s, gold) if can_shift(s) else -1
     costs[LEFT] = left_cost(s, gold) if can_left(s) else -1
@@ -138,11 +142,11 @@ cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except
             classes[i].cost = gold[s.top].label != classes[i].label
 
 
-cdef int transition(Transition* t, State *s) except -1:
+cdef int transition(Transition* t, State *s, Step* lattice) except -1:
     s.history[s.m] = t[0]
     s.m += 1 
     if t.move == SHIFT:
-        push_stack(s)
+        push_stack(s, t.label, lattice)
     elif t.move == LEFT:
         add_dep(s, s.i, s.top, t.label)
         pop_stack(s)

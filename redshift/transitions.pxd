@@ -1,6 +1,7 @@
 from _state cimport State, SlotTokens
 
 from redshift.sentence cimport Token
+from redshift.sentence cimport Step
 
 from libcpp.vector cimport vector
 
@@ -21,8 +22,8 @@ cdef int fill_moves(size_t lattice_width, list left_labels, list right_labels,
                     list dfl_labels,
                     bint use_break, Transition* moves)
 
-cdef int fill_valid(State* s, Transition* classes, size_t n) except -1
+cdef int fill_valid(State* s, Step* lattice, Transition* classes, size_t n) except -1
 
-cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except -1
+cdef int fill_costs(State* s, Step* lattice, Transition* classes, size_t n, Token* gold) except -1
 
-cdef int transition(Transition* t, State *s) except -1
+cdef int transition(Transition* t, State *s, Step* lattice) except -1

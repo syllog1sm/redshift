@@ -347,7 +347,6 @@ cdef int fill_context(size_t* context, SlotTokens* t) except -1:
     fill_token(context, N0w, t.n0)
     fill_token(context, N1w, t.n1)
     fill_token(context, N2w, t.n2)
-
     # TODO: Distance
     if t.s0.i != 0:
         assert t.n0.i > t.s0.i
@@ -361,7 +360,6 @@ cdef int fill_context(size_t* context, SlotTokens* t) except -1:
     context[prev_prev_edit] = t.p1.is_edit and t.p2.is_edit
     context[prev_edit_word] = t.p1.word.norm if t.p1.is_edit else 0
     context[prev_edit_pos] = t.p1.tag if t.p1.is_edit else 0
-    
     
     context[next_edit] = t.s0n.is_edit
     context[next_edit_wmatch] = t.s0n.is_edit and t.s0n.word == t.s0.word

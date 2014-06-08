@@ -9,7 +9,6 @@ from libc.string cimport memcpy
 from libc.stdint cimport uint64_t, int64_t
 
 from libcpp.queue cimport priority_queue
-from libcpp.vector cimport vector
 from libcpp.pair cimport pair
 from cython.operator cimport dereference as deref, preincrement as inc
 
@@ -22,6 +21,7 @@ cdef class Beam:
         self.nr_class = nr_class
         self.k = k
         self.i = 0
+        self.lattice = py_sent.c_sent.lattice
         self.is_finished = False
         self.prior = py_sent.prior
         cdef size_t i
@@ -30,8 +30,11 @@ cdef class Beam:
         self.moves = <Transition**>malloc(k * sizeof(Transition*))
         cdef Transition* moves = <Transition*>moves_addr
         for i in range(k):
-            self.parents[i] = init_state(py_sent.c_sent)
-            self.beam[i] = init_state(py_sent.c_sent)
+            self.parents[i] = init_state(py_sent.length)
+            self.beam[i] = init_state(py_sent.length)
+            # TODO: Fix this
+            for w in range(1, py_sent.length):
+                self.beam[i].parse[w].tag = py_sent.c_sent.tokens[w].tag
             self.moves[i] = <Transition*>calloc(self.nr_class, sizeof(Transition))
             for j in range(self.nr_class):
                 assert moves[j].clas < nr_class
@@ -87,10 +90,9 @@ cdef class Beam:
             s = self.beam[self.bsize]
             s.score = data.first
             if not is_final(s):
-                # TODO: Could this be the right place to implement the lattice?
                 t = &self.moves[parent_idx][move_idx]
                 s.cost += t.cost
-                transition(t, s)
+                transition(t, s, self.lattice)
                 assert s.m != 0
             self.bsize += 1
             queue.pop()

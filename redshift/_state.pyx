@@ -2,6 +2,9 @@
 from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
 
+from redshift.sentence cimport Step
+from index.lexicon cimport BLANK_WORD, get_str
+
 DEF MAX_VALENCY = 200
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
@@ -50,13 +53,16 @@ cdef size_t pop_stack(State *s) except 0:
     return popped
 
 
-cdef int push_stack(State *s) except -1:
-    s.top = s.i
-    s.stack[s.stack_len] = s.i
-    s.stack_len += 1
+cdef int push_stack(State *s, size_t w, Step* lattice) except -1:
+    if s.i != 0:
+        s.top = s.i
+        s.stack[s.stack_len] = s.i
+        s.stack_len += 1
     assert s.top <= s.n
     s.i += 1
-    s.parse[s.i].sent_id = s.parse[s.top].sent_id
+    s.parse[s.i].word = lattice[s.i].nodes[w]
+    assert s.parse[s.i].word != NULL
+    s.parse[s.i].sent_id = s.parse[s.top].sent_id # TODO: Do we need this?
 
 
 cdef int fill_slots(State *s) except -1:
@@ -71,9 +77,12 @@ cdef int fill_slots(State *s) except -1:
     s.slots.s0r = s.parse[get_r(s, s.top)]
     s.slots.s0r2 = s.parse[get_r2(s, s.top)]
     s.slots.s0r0 = s.parse[s.r_children[s.top][0]]
-    assert s.parse[s.i].left_edge != 0
     # IE S0re is the word before N0le
-    s.slots.s0re = s.parse[s.parse[s.i].left_edge - 1]
+    if s.i == 0:
+        s.slots.s0re = s.parse[0]
+    else:
+        assert s.parse[s.i].left_edge != 0
+        s.slots.s0re = s.parse[s.parse[s.i].left_edge - 1]
     s.slots.n0le = s.parse[s.parse[s.i].left_edge]
     s.slots.n0l = s.parse[get_l(s, s.i)]
     s.slots.n0l2 = s.parse[get_l2(s, s.i)]
@@ -81,7 +90,6 @@ cdef int fill_slots(State *s) except -1:
     s.slots.n0 = s.parse[s.i]
     s.slots.n1 = s.parse[s.i + 1 if s.n >= 1 and  s.i < (s.n - 1) else 0]
     s.slots.n2 = s.parse[s.i + 2 if s.n >= 2 and s.i < (s.n - 2) else 0]
-
     s.slots.p1 = s.parse[s.i - 1 if s.i >= 1 else 0]
     s.slots.p2 = s.parse[s.i - 2 if s.i >= 2 else 0]
     s.slots.s0n = s.parse[s.top + 1 if s.top and s.n >= 1 and s.top < (s.n - 1) else 0]
@@ -100,29 +108,30 @@ cdef int fill_slots(State *s) except -1:
     s.slots.psexact = 1
     cdef size_t n0ledge = s.slots.n0.left_edge
     cdef size_t s0ledge = s.slots.s0.left_edge
-    for i in range(5):
-        if ((n0ledge + i) > s.slots.n0.i) or ((s0ledge + i) > s.slots.s0.i):
-            break
-        if s.slots.wexact:
-            if s.parse[n0ledge + i].word.orig == s.parse[s0ledge + i].word.orig:
-                s.slots.wcopy += 1
-            else:
-                s.slots.wexact = 0
-        if s.slots.pexact:
-            if s.parse[n0ledge + i].tag == s.parse[s0ledge + i].tag:
-                s.slots.pcopy += 1
-            else:
-                s.slots.pexact = 0
-        if s.slots.wsexact:
-            if s.parse[s.slots.s0.i - i].word.orig == s.parse[s.slots.n0.i - i].word.orig:
-                s.slots.wscopy += 1
-            else:
-                s.slots.wsexact = 0
-        if s.slots.psexact:
-            if s.parse[s.slots.s0.i - i].tag == s.parse[s.slots.n0.i - i].tag:
-                s.slots.pscopy += 1
-            else:
-                s.slots.psexact = 0
+    # TODO: These seem to break the lattice
+    #for i in range(5):
+    #    if ((n0ledge + i) > s.slots.n0.i) or ((s0ledge + i) > s.slots.s0.i):
+    #        break
+    #    if s.slots.wexact:
+    #        if s.parse[n0ledge + i].word.orig == s.parse[s0ledge + i].word.orig:
+    #            s.slots.wcopy += 1
+    #        else:
+    #            s.slots.wexact = 0
+    #    if s.slots.pexact:
+    #        if s.parse[n0ledge + i].tag == s.parse[s0ledge + i].tag:
+    #            s.slots.pcopy += 1
+    #        else:
+    #            s.slots.pexact = 0
+    #    if s.slots.wsexact:
+    #        if s.parse[s.slots.s0.i - i].word.orig == s.parse[s.slots.n0.i - i].word.orig:
+    #            s.slots.wscopy += 1
+    #        else:
+    #            s.slots.wsexact = 0
+    #    if s.slots.psexact:
+    #        if s.parse[s.slots.s0.i - i].tag == s.parse[s.slots.n0.i - i].tag:
+    #            s.slots.pscopy += 1
+    #        else:
+    #            s.slots.psexact = 0
 
 
 cdef size_t get_s1(State *s):
@@ -200,27 +209,25 @@ cdef bint is_final(State *s):
 DEF PADDING = 5
 
 
-cdef State* init_state(Sentence* sent):
+cdef State* init_state(size_t length) except NULL:
     cdef size_t i
     cdef State* s = <State*>calloc(1, sizeof(State))
-    s.n = sent.n
+    s.n = length
     s.m = 0
-    s.i = 1
+    s.i = 0
     s.cost = 0
     s.score = 0
     s.top = 0
     s.stack_len = 0
-    n = sent.n + PADDING
+    n = length + PADDING
     s.stack = <size_t*>calloc(n, sizeof(size_t))
     s.l_children = <size_t**>malloc(n * sizeof(size_t*))
     s.r_children = <size_t**>malloc(n * sizeof(size_t*))
     s.parse = <Token*>calloc(n, sizeof(Token))
     for i in range(n):
         s.parse[i].i = i
-        # TODO: Control whether these get filled
-        s.parse[i].word = sent.tokens[i].word
-        s.parse[i].tag = sent.tokens[i].tag
         s.parse[i].left_edge = i
+        s.parse[i].word = &BLANK_WORD
         s.l_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
         s.r_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
     s.history = <Transition*>calloc(n * 5, sizeof(Transition))

@@ -4,7 +4,7 @@ import index.hashes
 cimport index.hashes
 from .util import Config
 
-from redshift.sentence cimport Input, Sentence
+from redshift.sentence cimport Input, Sentence, Step
 from index.lexicon cimport Lexeme
 
 from libc.stdlib cimport malloc, calloc, free
@@ -68,6 +68,27 @@ cdef class Tagger:
         for i in range(self.beam_width):
             self._beam_scores[i] = <double*>calloc(nr_tag, sizeof(double))
 
+    cdef int tag_word(self, Token* state, size_t i, Step* lattice, size_t n):
+        cdef size_t prev_tag = state[i-1].tag if i >= 1 else 0
+        cdef size_t prevprev_tag = state[i-2].tag if i >= 2 else 0
+        cdef Lexeme* prev_word = state[i - 1].word if i >= 1 else NULL
+        cdef Lexeme* prevprev_word = state[i - 2].word if i >= 2 else NULL
+        cdef Lexeme* n0 = lattice[i].nodes[0]
+        cdef Lexeme* n1 = lattice[i+1].nodes[0] if (i+1) < n else NULL
+        cdef Lexeme* n2 = lattice[i+2].nodes[0] if (i+2) < n else NULL
+        cdef Lexeme* n3 = lattice[i+3].nodes[0] if (i+3) < n else NULL
+        fill_context(self._context, prev_tag, prevprev_tag, prev_word, prevprev_word,
+                     n0, n1, n2, n3)
+        self.extractor.extract(self._features, self._context)
+        self.guide.fill_scores(self._features, self.guide.scores)
+        cdef double mode = self.guide.scores[0]
+        state[i].tag = 0
+        for clas in range(1, self.guide.nr_class):
+            if self.guide.scores[clas] >= mode:
+                state[i].tag = clas
+                mode = self.guide.scores[clas]
+
+
     cpdef int tag(self, Input py_sent) except -1:
         cdef Sentence* sent = py_sent.c_sent
         cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.n, self.guide.nr_class)
@@ -115,7 +136,10 @@ cdef class Tagger:
             gold = prev
 
     cdef int _predict(self, size_t i, TagState* s, Sentence* sent, double* scores):
-        fill_context(self._context, sent, s.clas, get_p(s), i)
+        fill_context(self._context, s.clas, get_p(s), get_token(sent, i, -2),
+                     get_token(sent, i, -1), get_token(sent, i, 0),
+                     get_token(sent, i, 1), get_token(sent, i, 2),
+                     get_token(sent, i, 3))
         self.extractor.extract(self._features, self._context)
         self.guide.fill_scores(self._features, scores)
 
@@ -165,10 +189,14 @@ cdef class MaxViolnUpd:
                 p = p.prev
                 i -= 1
                 continue
-            fill_context(context, sent, gprev, gprevprev, i)
+            fill_context(context, gprev, gprevprev, get_token(sent, i, -2),
+                         get_token(sent, i, -1), get_token(sent, i, 0), get_token(sent, i, 1),
+                         get_token(sent, i, 2), get_token(sent, i, 3))
             extractor.extract(feats, context)
             self._inc_feats(counts[gclas], feats, 1.0)
-            fill_context(context, sent, pprev, pprevprev, i)
+            context[P1p] = pprev
+            context[P2p] = pprevprev
+            #fill_context(context, sent, pprev, pprevprev, i)
             extractor.extract(feats, context)
             self._inc_feats(counts[p.clas], feats, -1.0)
             assert sent.tokens[i].word.norm == context[N0w]
@@ -184,6 +212,15 @@ cdef class MaxViolnUpd:
                 counts[feats[f]] = 0
             counts[feats[f]] += inc
             f += 1
+
+cdef Lexeme* get_token(Sentence* sent, size_t i, int offset):
+    cdef int index = <int>i - offset
+    if index < 1:
+        return NULL
+    if index >= sent.n:
+        return NULL
+    else:
+        return sent.tokens[index].word
 
 
 cdef enum:
@@ -320,46 +357,45 @@ clusters = (
 
 
 cdef inline void fill_token(size_t* context, size_t i, Lexeme* word):
-    context[i] = word.norm
-    # We've read in the string little-endian, so now we can take & (2**n)-1
-    # to get the first n bits of the cluster.
-    # e.g. s = "1110010101"
-    # s = ''.join(reversed(s))
-    # first_4_bits = int(s, 2)
-    # print first_4_bits
-    # 5
-    # print "{0:b}".format(prefix).ljust(4, '0')
-    # 1110
-    # What we're doing here is picking a number where all bits are 1, e.g.
-    # 15 is 1111, 63 is 111111 and doing bitwise AND, so getting all bits in
-    # the source that are set to 1.
-    context[i+1] = word.cluster
-    context[i+2] = word.cluster & 63
-    context[i+3] = word.cluster & 15
-    context[i+4] = word.prefix
-    context[i+5] = word.suffix
-    context[i+6] = word.oft_title
-    context[i+7] = word.oft_upper
-    context[i+8] = word.non_alpha
+    if word is not NULL:
+        context[i] = word.norm
+        # We've read in the string little-endian, so now we can take & (2**n)-1
+        # to get the first n bits of the cluster.
+        # e.g. s = "1110010101"
+        # s = ''.join(reversed(s))
+        # first_4_bits = int(s, 2)
+        # print first_4_bits
+        # 5
+        # print "{0:b}".format(prefix).ljust(4, '0')
+        # 1110
+        # What we're doing here is picking a number where all bits are 1, e.g.
+        # 15 is 1111, 63 is 111111 and doing bitwise AND, so getting all bits in
+        # the source that are set to 1.
+        context[i+1] = word.cluster
+        context[i+2] = word.cluster & 63
+        context[i+3] = word.cluster & 15
+        context[i+4] = word.prefix
+        context[i+5] = word.suffix
+        context[i+6] = word.oft_title
+        context[i+7] = word.oft_upper
+        context[i+8] = word.non_alpha
 
-
-cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag,
-                      size_t i):
+cdef int fill_context(size_t* context,
+                      size_t ptag, size_t pptag,
+                      Lexeme* p2, Lexeme* p1,
+                      Lexeme* n0,
+                      Lexeme* n1, Lexeme* n2, Lexeme* n3):
     for j in range(CONTEXT_SIZE):
         context[j] = 0
     context[P1p] = ptag
     context[P2p] = pptag
     
-    fill_token(context, N0w, sent.tokens[i].word)
-    fill_token(context, N1w, sent.tokens[i+1].word)
-    if (i + 2) < sent.n:
-        fill_token(context, N2w, sent.tokens[i+2].word)
-    if (i + 3) < sent.n:
-        fill_token(context, N3w, sent.tokens[i+3].word)
-    if i >= 1:
-        fill_token(context, P1w, sent.tokens[i-1].word)
-    if i >= 2:
-        fill_token(context, P2w, sent.tokens[i-2].word)
+    fill_token(context, N0w, n0)
+    fill_token(context, N1w, n1)
+    fill_token(context, N2w, n2)
+    fill_token(context, N3w, n3)
+    fill_token(context, P1w, p1)
+    fill_token(context, P2w, p2)
 
 
 cdef class TaggerBeam:
