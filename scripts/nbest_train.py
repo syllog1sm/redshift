@@ -2,6 +2,7 @@
 
 import plac
 from pathlib import Path
+import math
 
 import redshift.parser
 from redshift.sentence import Input
@@ -89,7 +90,7 @@ def read_nbest(nbest_loc, limit=0):
         log_prob = pieces.pop(0)
         words = tokenise_candidate(pieces)
         if words:
-            yield float(log_prob), words
+            yield math.exp(float(log_prob)), words
 
 
 def get_nbest(gold_sent, nbest_dir, limit=0):
@@ -102,7 +103,7 @@ def get_nbest(gold_sent, nbest_dir, limit=0):
     # Need to copy the gold_sent, as we're going to pass gold_sent to the tagger
     # for training, and the tags get modified by nbest_train.
     gold_copy = Input.from_tokens([(t.word, t.tag, t.head, t.label, t.sent_id, t.is_edit)
-                                    for t in gold_sent.tokens])
+                                    for t in gold_sent.tokens], prior=0.01)
     if not nbest_loc.exists():
         return [gold_copy]
     gold_tokens = list(gold_sent.tokens)
@@ -112,21 +113,21 @@ def get_nbest(gold_sent, nbest_dir, limit=0):
     for score, candidate in read_nbest(str(nbest_loc), limit=limit):
         cost, edits = get_oracle_alignment(candidate, gold_tokens)
         if cost == 0:
-            sent = make_gold_sent(gold_tokens, candidate, edits)
+            sent = make_gold_sent(gold_tokens, candidate, edits, score)
             seen_gold = True
         else:
-            sent = make_non_gold_sent(cost, candidate, gold_sent_id)
+            sent = make_non_gold_sent(cost, candidate, gold_sent_id, score)
         nbest.append(sent)
     if not seen_gold:
         nbest.append(gold_copy)
     return nbest
 
-def make_non_gold_sent(wer, words, sent_id):
+def make_non_gold_sent(wer, words, sent_id, prior):
     tokens = [(word, None, None, None, sent_id, None) for word in words]
-    return Input.from_tokens(tokens, wer=wer)
+    return Input.from_tokens(tokens, wer=wer, prior=prior)
 
 
-def make_gold_sent(gold, candidate, edits):
+def make_gold_sent(gold, candidate, edits, prior):
     tokens = []
     words = list(candidate)
     gold = list(gold)
@@ -158,7 +159,7 @@ def make_gold_sent(gold, candidate, edits):
         elif op == 'D':
             tokens.append(_make_dfl_token(candidate, c_i, sent_id))
             c_i += 1
-    return Input.from_tokens(tokens)
+    return Input.from_tokens(tokens, prior=prior)
 
 def _make_token(word, gold, alignment):
     head = alignment.get(gold.head - 1, -1) + 1

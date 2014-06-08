@@ -23,6 +23,7 @@ cdef class Beam:
         self.k = k
         self.i = 0
         self.is_finished = False
+        self.prior = py_sent.prior
         cdef size_t i
         self.parents = <State**>malloc(k * sizeof(State*))
         self.beam = <State**>malloc(k * sizeof(State*))
@@ -47,7 +48,7 @@ cdef class Beam:
 
     property score:
         def __get__(self):
-            return self.beam[0].score / self.t
+            return (self.beam[0].score / self.t) * self.prior
 
     @cython.cdivision(True)
     cdef int extend(self):
