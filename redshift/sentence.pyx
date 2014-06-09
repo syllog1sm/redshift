@@ -59,6 +59,7 @@ cdef int init_lattice_step(list lattice_step, Step* step) except -1:
     step.probs = <double*>calloc(step.n, sizeof(double))
     cdef size_t lex_addr
     for i, (p, word) in enumerate(lattice_step):
+        assert p != 0
         step.probs[i] = p
         lex_addr = index.lexicon.lookup(word)
         step.nodes[i] = <Lexeme*>lex_addr
