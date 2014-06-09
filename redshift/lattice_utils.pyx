@@ -136,15 +136,18 @@ def read_lattice(lattice_loc, add_gold=False):
     if not lattice:
         return None
     assert len(lattice) == len(parse)
-    return Input(lattice, parse, prior=1.0, turn_id=turn_id, wer=0)
+    normed = []
+    for step in lattice:
+        z = 1 / sum(p for p, w in step)
+        normed.append([(p * z, w) for p, w in step])
+        assert 0.9 < sum(p for p, w in normed[-1]) < 1.1
+    return Input(normed, parse, prior=1.0, turn_id=turn_id, wer=0)
 
 
 def _make_new_step(word_probs, ref):
     if ref != '*DELETE*' and word_probs['*DELETE*'] == 0:
         word_probs.pop('*DELETE*')
     step = [(p, w) for w, p in word_probs.items()]
-    for p, w in step:
-        assert w
     step.sort(reverse=True)
     return step
 
@@ -173,3 +176,25 @@ def _adjust_word(word):
         if word.endswith(suffix) and word != suffix:
             return word[:-len(suffix)], suffix
     return word, '*DELETE*'
+
+
+def levenshtein(s1, s2):
+    if len(s1) < len(s2):
+        return levenshtein(s2, s1)
+ 
+    # len(s1) >= len(s2)
+    if len(s2) == 0:
+        return len(s1)
+    previous_row = xrange(len(s2) + 1)
+    for i, c1 in enumerate(s1):
+        current_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
+            substitutions = previous_row[j] + (c1 != c2)
+            current_row.append(min(insertions, deletions, substitutions))
+        previous_row = current_row
+ 
+    return previous_row[-1]
+
+
