@@ -61,7 +61,8 @@ cdef int push_stack(State *s, size_t w, Step* lattice) except -1:
     assert s.top <= s.n
     s.i += 1
     s.parse[s.i].word = lattice[s.i].nodes[w]
-    s.string_prob += lattice[s.i].probs[w]
+    s.string_prob = lattice[s.i].probs[w]
+    #s.score += lattice[s.i].probs[w]
     assert s.parse[s.i].word != NULL
     s.parse[s.i].sent_id = s.parse[s.top].sent_id # TODO: Do we need this?
 
@@ -107,6 +108,12 @@ cdef int fill_slots(State *s) except -1:
     s.slots.wsexact = 1
     s.slots.pscopy = 0
     s.slots.psexact = 1
+
+    # Force to int values between -1 and -10
+    #if s.string_prob < -10:
+    #    s.slots.n0_prob = 10
+    #else:
+    #    s.slots.n0_prob = abs(<int>s.string_prob)
     cdef size_t n0ledge = s.slots.n0.left_edge
     cdef size_t s0ledge = s.slots.s0.left_edge
     # TODO: These seem to break the lattice

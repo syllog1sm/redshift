@@ -46,6 +46,8 @@ cdef struct SlotTokens:
     size_t pscopy
     size_t psexact
 
+    #size_t n0_prob
+
 
 cdef struct State:
     double score

@@ -35,7 +35,7 @@ cdef bint can_left(State* s, Step* lattice, size_t label):
 
 cdef bint USE_EDIT = False
 cdef bint can_edit(State* s, Step* lattice, size_t label):
-    return USE_EDIT and s.stack_len
+    return s.stack_len
 
 
 cdef bint USE_BREAK = False
@@ -51,16 +51,20 @@ cdef bint can_break(State* s, Step* lattice, size_t label):
 # - You can always Shift an Edit word
 
 
-cdef int shift_cost(State* s, size_t label, Token* gold, Step* lattice):
+cdef int shift_cost(State* s, size_t label, Token* gold, Step* lattice) except -1:
     assert not at_eol(s)
     cost = 0
     cdef size_t w
     if can_break(s, lattice, 0):
         cost += gold[s.top].sent_id != gold[s.i].sent_id
+    # We'll shift the word at s.i+1 in from the lattice, choosing the word indicated
+    # by label. So, check that either s.i+1 is an edit, or we're shifting in the
+    # right word
+    if (s.i + 1) < s.n and not gold[s.i+1].is_edit and \
+      gold[s.i+1].word != lattice[s.i+1].nodes[label]:
+        cost += 1
     if gold[s.i].head == s.top:
         return cost
-    #if lattice_match(gold[s.i].head, s.top, gold, lattice):
-    #    return cost
     if gold[s.i].is_edit:
         return cost
     cost += has_head_in_stack(s, s.i, gold)
@@ -68,7 +72,7 @@ cdef int shift_cost(State* s, size_t label, Token* gold, Step* lattice):
     return cost
 
 
-cdef int right_cost(State* s, size_t label, Token* gold, Step* lattice):
+cdef int right_cost(State* s, size_t label, Token* gold, Step* lattice) except -1:
     assert s.stack_len >= 2
     assert not can_break(s, lattice, 0)
     cost = 0
@@ -83,7 +87,7 @@ cdef int right_cost(State* s, size_t label, Token* gold, Step* lattice):
     return cost
 
 
-cdef int left_cost(State* s, size_t label, Token* gold, Step* lattice):
+cdef int left_cost(State* s, size_t label, Token* gold, Step* lattice) except -1:
     assert s.stack_len
     cost = 0
     if can_break(s, lattice, 0):
@@ -101,18 +105,21 @@ cdef int left_cost(State* s, size_t label, Token* gold, Step* lattice):
     return cost
 
 
-cdef int edit_cost(State *s, size_t label, Token* gold, Step* lattice):
-    assert s.stack_len >= 1
-    return 0 if gold[s.top].is_edit and gold[s.top].label == label else 1
+cdef int edit_cost(State *s, size_t label, Token* gold, Step* lattice) except -1:
+    # TODO: Why is being label agnostic here a problem?
+    if gold[s.top].is_edit:
+        return 0
+    else:
+        return 1
 
 
-cdef int break_cost(State* s, size_t label, Token* gold, Step* lattice):
+cdef int break_cost(State* s, size_t label, Token* gold, Step* lattice) except -1:
     assert s.stack_len == 1
     assert not at_eol(s)
     return 0 if gold[s.top].sent_id != gold[s.i].sent_id else 1
 
 
-ctypedef int (*cost_func)(State* s, size_t label, Token* gold, Step* lattice)
+ctypedef int (*cost_func)(State* s, size_t label, Token* gold, Step* lattice) except -1
 
 cdef cost_func[N_MOVES] cost_getters
 

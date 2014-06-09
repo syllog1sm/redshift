@@ -187,12 +187,16 @@ cdef class Parser:
         self.nr_moves = get_nr_moves(self.cfg.lattice_width, self.cfg.left_labels,
                                      self.cfg.right_labels,
                                      self.cfg.dfl_labels, self.cfg.use_break)
+        print self.cfg.lattice_width
+        print 'nr class', 1 + len(self.cfg.left_labels) + len(self.cfg.right_labels) + len(self.cfg.dfl_labels)
+        print 'nr moves', self.nr_moves
         self.moves = <Transition*>calloc(self.nr_moves, sizeof(Transition))
         fill_moves(self.cfg.lattice_width, self.cfg.left_labels,
                    self.cfg.right_labels, self.cfg.dfl_labels,
                    self.cfg.use_break, self.moves)
         self.guide = Perceptron(self.nr_moves - self.cfg.lattice_width + 1,
                                 pjoin(model_dir, 'model.gz'))
+        print self.guide.nr_class
         if os.path.exists(pjoin(model_dir, 'model.gz')):
             self.guide.load(pjoin(model_dir, 'model.gz'), thresh=int(self.cfg.feat_thresh))
         if os.path.exists(pjoin(model_dir, 'pos')):
