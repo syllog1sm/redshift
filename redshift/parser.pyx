@@ -47,11 +47,8 @@ def set_debug(val):
     DEBUG = val
 
 
-def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
-          feat_set='basic', feat_thresh=10,
-          use_edit=False, use_break=False, use_filler=False):
-    cdef list sents = [Input.from_conll(s) for s in
-                       train_str.strip().split('\n\n') if s.strip()]
+def train(sents, model_dir, n_iter=15, beam_width=8,
+          feat_set='basic', feat_thresh=10, use_break=False):
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
     os.mkdir(model_dir)
@@ -84,8 +81,8 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
 
 
 def train_nbest(sents, nbests, model_dir, n_iter=15, beam_width=8,
-                train_tagger=True, feat_set='basic', feat_thresh=10,
-                use_edit=False, use_break=False, use_filler=False):
+                feat_set='basic', feat_thresh=10,
+                use_break=False):
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
     os.mkdir(model_dir)
