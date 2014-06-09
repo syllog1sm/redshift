@@ -49,6 +49,7 @@ cdef struct SlotTokens:
 
 cdef struct State:
     double score
+    double string_prob
     size_t i
     size_t m
     size_t n

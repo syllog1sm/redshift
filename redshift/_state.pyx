@@ -61,6 +61,7 @@ cdef int push_stack(State *s, size_t w, Step* lattice) except -1:
     assert s.top <= s.n
     s.i += 1
     s.parse[s.i].word = lattice[s.i].nodes[w]
+    s.string_prob *= lattice[s.i].probs[w]
     assert s.parse[s.i].word != NULL
     s.parse[s.i].sent_id = s.parse[s.top].sent_id # TODO: Do we need this?
 
@@ -217,6 +218,7 @@ cdef State* init_state(size_t length) except NULL:
     s.i = 0
     s.cost = 0
     s.score = 0
+    s.string_prob = 0
     s.top = 0
     s.stack_len = 0
     n = length + PADDING
@@ -241,6 +243,7 @@ cdef int copy_state(State* s, State* old) except -1:
     else:
         nbytes = (old.i + 1) * sizeof(size_t)
     s.score = old.score
+    s.string_prob = old.string_prob
     s.i = old.i
     s.m = old.m
     s.n = old.n
