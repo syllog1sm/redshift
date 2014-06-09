@@ -5,6 +5,8 @@ from libc.string cimport memcpy, memset
 from redshift.sentence cimport Step
 from index.lexicon cimport BLANK_WORD, get_str
 
+from libc.math cimport floor
+
 DEF MAX_VALENCY = 200
 
 cdef int add_dep(State *s, size_t head, size_t child, size_t label) except -1:
@@ -61,8 +63,6 @@ cdef int push_stack(State *s, size_t w, Step* lattice) except -1:
     assert s.top <= s.n
     s.i += 1
     s.parse[s.i].word = lattice[s.i].nodes[w]
-    s.string_prob = lattice[s.i].probs[w]
-    #s.score += lattice[s.i].probs[w]
     assert s.parse[s.i].word != NULL
     s.parse[s.i].sent_id = s.parse[s.top].sent_id # TODO: Do we need this?
 
@@ -101,19 +101,21 @@ cdef int fill_slots(State *s) except -1:
     # the left.
     # 
     s.slots.wcopy = 0
-    s.slots.wexact = 1
+    s.slots.wexact = 0
     s.slots.pcopy = 0
-    s.slots.pexact = 1
+    s.slots.pexact = 0
     s.slots.wscopy = 0
-    s.slots.wsexact = 1
+    s.slots.wsexact = 0
     s.slots.pscopy = 0
-    s.slots.psexact = 1
+    s.slots.psexact = 0
 
-    # Force to int values between -1 and -10
-    #if s.string_prob < -10:
-    #    s.slots.n0_prob = 10
-    #else:
-    #    s.slots.n0_prob = abs(<int>s.string_prob)
+    # Force to int values between 0 and -10
+    if s.string_prob < -10:
+        s.slots.n0_prob = 10
+    elif s.string_prob != 0:
+        s.slots.n0_prob = -<int>floor(s.string_prob)
+    else:
+        s.slots.n0_prob = 0
     cdef size_t n0ledge = s.slots.n0.left_edge
     cdef size_t s0ledge = s.slots.s0.left_edge
     # TODO: These seem to break the lattice

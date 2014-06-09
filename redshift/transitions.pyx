@@ -106,7 +106,6 @@ cdef int left_cost(State* s, size_t label, Token* gold, Step* lattice) except -1
 
 
 cdef int edit_cost(State *s, size_t label, Token* gold, Step* lattice) except -1:
-    # TODO: Why is being label agnostic here a problem?
     if gold[s.top].is_edit:
         return 0
     else:
@@ -166,8 +165,10 @@ cdef int fill_costs(State* s, Step* lattice, Transition* classes,
 cdef int transition(Transition* t, State *s, Step* lattice) except -1:
     s.history[s.m] = t[0]
     s.m += 1 
+    s.string_prob = 0
     if t.move == SHIFT:
         push_stack(s, t.label, lattice)
+        s.string_prob = lattice[s.i].probs[t.label]
     elif t.move == LEFT:
         add_dep(s, s.i, s.top, t.label)
         pop_stack(s)
