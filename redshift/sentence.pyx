@@ -45,7 +45,6 @@ cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
         while i < s.tokens[gov].left_edge:
             s.tokens[gov].left_edge = i
             gov = s.tokens[gov].head
-
     # Set position 0 to be blank
     s.lattice[0].nodes[0] = &BLANK_WORD
     assert s.tokens[0].tag == 0
@@ -102,16 +101,8 @@ cdef class Input:
         """
         lattice = []
         parse = []
-        #last_word = 'the'
         for word, tag, head, label, sent_id, is_edit in tokens:
             lattice.append([(1.0, word)])
-            #if random.random >= 0.5:
-            #    lattice.append([(0.5, word), (0.5, last_word)])
-            #    idx = 0
-            #else:
-            #    lattice.append([(0.5, last_word), (0.5, word)])
-            #    idx = 1
-            #last_word = word
             parse.append((0, tag, head, label, sent_id, is_edit))
         return cls(lattice, parse, turn_id=turn_id, wer=wer, prior=prior)
 
