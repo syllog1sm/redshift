@@ -32,9 +32,6 @@ cdef class Beam:
         for i in range(k):
             self.parents[i] = init_state(py_sent.length)
             self.beam[i] = init_state(py_sent.length)
-            # TODO: Fix this
-            for w in range(1, py_sent.length):
-                self.beam[i].parse[w].tag = py_sent.c_sent.tokens[w].tag
             self.moves[i] = <Transition*>calloc(self.nr_class, sizeof(Transition))
             for j in range(self.nr_class):
                 assert moves[j].clas < nr_class

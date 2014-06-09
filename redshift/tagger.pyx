@@ -2,6 +2,7 @@ from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
 import index.hashes
 cimport index.hashes
+from index.lexicon cimport get_str
 from .util import Config
 
 from redshift.sentence cimport Input, Sentence, Step
@@ -69,6 +70,11 @@ cdef class Tagger:
             self._beam_scores[i] = <double*>calloc(nr_tag, sizeof(double))
 
     cdef int tag_word(self, Token* state, size_t i, Step* lattice, size_t n):
+        if i >= n:
+            return 0
+        if i == 0:
+            state[0].tag = 0
+            return 0
         cdef size_t prev_tag = state[i-1].tag if i >= 1 else 0
         cdef size_t prevprev_tag = state[i-2].tag if i >= 2 else 0
         cdef Lexeme* prev_word = state[i - 1].word if i >= 1 else NULL
@@ -77,14 +83,14 @@ cdef class Tagger:
         cdef Lexeme* n1 = lattice[i+1].nodes[0] if (i+1) < n else NULL
         cdef Lexeme* n2 = lattice[i+2].nodes[0] if (i+2) < n else NULL
         cdef Lexeme* n3 = lattice[i+3].nodes[0] if (i+3) < n else NULL
-        fill_context(self._context, prev_tag, prevprev_tag, prev_word, prevprev_word,
+        fill_context(self._context, prevprev_tag, prev_tag, prevprev_word, prev_word,
                      n0, n1, n2, n3)
         self.extractor.extract(self._features, self._context)
         self.guide.fill_scores(self._features, self.guide.scores)
         cdef double mode = self.guide.scores[0]
         state[i].tag = 0
-        for clas in range(1, self.guide.nr_class):
-            if self.guide.scores[clas] >= mode:
+        for clas in range(self.guide.nr_class):
+            if self.guide.scores[clas] > mode:
                 state[i].tag = clas
                 mode = self.guide.scores[clas]
 
@@ -136,12 +142,20 @@ cdef class Tagger:
             gold = prev
 
     cdef int _predict(self, size_t i, TagState* s, Sentence* sent, double* scores):
-        fill_context(self._context, s.clas, get_p(s), get_token(sent, i, -2),
+        fill_context(self._context, get_p(s), s.clas, get_token(sent, i, -2),
                      get_token(sent, i, -1), get_token(sent, i, 0),
                      get_token(sent, i, 1), get_token(sent, i, 2),
                      get_token(sent, i, 3))
         self.extractor.extract(self._features, self._context)
         self.guide.fill_scores(self._features, scores)
+        cdef double mode = scores[0]
+        best = 0
+        for clas in range(self.guide.nr_class):
+            if scores[clas] > mode:
+                best = clas
+                mode = scores[clas]
+
+
 
 
 cdef class MaxViolnUpd:
@@ -189,7 +203,7 @@ cdef class MaxViolnUpd:
                 p = p.prev
                 i -= 1
                 continue
-            fill_context(context, gprev, gprevprev, get_token(sent, i, -2),
+            fill_context(context, gprevprev, gprev, get_token(sent, i, -2),
                          get_token(sent, i, -1), get_token(sent, i, 0), get_token(sent, i, 1),
                          get_token(sent, i, 2), get_token(sent, i, 3))
             extractor.extract(feats, context)
@@ -214,7 +228,7 @@ cdef class MaxViolnUpd:
             f += 1
 
 cdef Lexeme* get_token(Sentence* sent, size_t i, int offset):
-    cdef int index = <int>i - offset
+    cdef int index = <int>i + offset
     if index < 1:
         return NULL
     if index >= sent.n:
@@ -381,7 +395,7 @@ cdef inline void fill_token(size_t* context, size_t i, Lexeme* word):
         context[i+8] = word.non_alpha
 
 cdef int fill_context(size_t* context,
-                      size_t ptag, size_t pptag,
+                      size_t pptag, size_t ptag,
                       Lexeme* p2, Lexeme* p1,
                       Lexeme* n0,
                       Lexeme* n1, Lexeme* n2, Lexeme* n3):
