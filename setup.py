@@ -44,8 +44,9 @@ exts = [
                                   "ext/MurmurHash3.cpp"],
                                   language="c++", include_dirs=includes),
     Extension('redshift.sentence', ["redshift/sentence.pyx"], language="c++",
+              include_dirs=includes),
+    Extension('redshift.lattice_utils', ["redshift/lattice_utils.pyx"], language="c++",
                include_dirs=includes),
-
     Extension('redshift.sentence', ["redshift/sentence.pyx"], language="c++",
               include_dirs=includes),
     Extension('redshift._parse_features', ["redshift/_parse_features.pyx"],
