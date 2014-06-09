@@ -1,6 +1,7 @@
 from ext.murmurhash cimport *
 from libc.stdlib cimport malloc, calloc, free
 from libc.stdint cimport uint64_t
+from libc.limits cimport ULONG_MAX
 
 import os.path
 
@@ -15,7 +16,7 @@ def load(): # Called in index/__init__.py
         _LEXICON = Lexicon()
 
 
-cpdef size_t lookup(bytes word):
+cpdef size_t lookup(bytes word) except ULONG_MAX:
     global _LEXICON
     return _LEXICON.lookup(word)
 
@@ -59,7 +60,7 @@ cdef class Lexicon:
         for word_addr in self.values():
             free(<Lexeme*>word_addr)
 
-    cdef size_t lookup(self, bytes word):
+    cdef size_t lookup(self, bytes word) except ULONG_MAX:
         cdef uint64_t hashed = _hash_str(word)
         cdef size_t addr = self.words[hashed]
         if addr == 0:
