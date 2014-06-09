@@ -239,7 +239,7 @@ cdef State* init_state(size_t length) except NULL:
         s.parse[i].word = &BLANK_WORD
         s.l_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
         s.r_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
-    s.history = <Transition*>calloc(n * 5, sizeof(Transition))
+    s.history = <Transition*>calloc(n * 20, sizeof(Transition))
     return s
 
 
