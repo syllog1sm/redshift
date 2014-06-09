@@ -394,13 +394,9 @@ cdef int fill_context(size_t* context, SlotTokens* t) except -1:
     context[pscopy] = t.pscopy
     context[psexact] = t.psexact
 
-    #cdef size_t lp_feat
-    #for lp_feat in range(lp1, lp10):
-    #    context[lp1 + lp_feat] = 0
-    #    if (lp_feat + 1) >= t.n0_prob:
-    #        context[lp1 + lp_feat] = 1
-    #    else:
-    #        context[lp1 + lp_feat] = 0
+    cdef size_t lp_feat
+    for lp_feat in range(t.n0_prob):
+        context[lp1 + lp_feat] = 1
 
 
 arc_hybrid = (
@@ -715,6 +711,19 @@ suffix_disfl = (
     (wscopy, psexact),
 )
 
+
+string_probs = (
+    (lp1,),
+    (lp2,),
+    (lp3,),
+    (lp4,),
+    (lp5,),
+    (lp6,),
+    (lp7,),
+    (lp8,),
+    (lp9,),
+    (lp10,)
+)
 
 def pos_bigrams():
     kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]

@@ -152,6 +152,7 @@ def get_templates(feats_str):
         templates += _parse_features.clusters
         templates += _parse_features.edges
         templates += _parse_features.prev_next
+        templates += _parse_features.string_probs
         match_feats = _parse_features.match_templates()
     elif 'clusters' in feats_str:
         templates += _parse_features.clusters
