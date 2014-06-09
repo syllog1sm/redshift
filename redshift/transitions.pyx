@@ -21,25 +21,25 @@ cdef enum:
     N_MOVES
 
 
-cdef bint can_shift(State* s, size_t label):
-    return not at_eol(s)
+cdef bint can_shift(State* s, Step* lattice, size_t label):
+    return not at_eol(s) and label < lattice[s.i + 1].n
 
 
-cdef bint can_right(State* s, size_t label):
+cdef bint can_right(State* s, Step* lattice, size_t label):
     return s.stack_len >= 2
 
 
-cdef bint can_left(State* s, size_t label):
+cdef bint can_left(State* s, Step* lattice, size_t label):
     return s.stack_len >= 1
 
 
 cdef bint USE_EDIT = False
-cdef bint can_edit(State* s, size_t label):
+cdef bint can_edit(State* s, Step* lattice, size_t label):
     return USE_EDIT and s.stack_len
 
 
 cdef bint USE_BREAK = False
-cdef bint can_break(State* s, size_t label):
+cdef bint can_break(State* s, Step* lattice, size_t label):
     return USE_BREAK and s.stack_len == 1 and not s.parse[s.i].l_valency and not at_eol(s)
 
 
@@ -55,7 +55,7 @@ cdef int shift_cost(State* s, size_t label, Token* gold, Step* lattice):
     assert not at_eol(s)
     cost = 0
     cdef size_t w
-    if can_break(s, 0):
+    if can_break(s, lattice, 0):
         cost += gold[s.top].sent_id != gold[s.i].sent_id
     if gold[s.i].head == s.top:
         return cost
@@ -70,7 +70,7 @@ cdef int shift_cost(State* s, size_t label, Token* gold, Step* lattice):
 
 cdef int right_cost(State* s, size_t label, Token* gold, Step* lattice):
     assert s.stack_len >= 2
-    assert not can_break(s, 0)
+    assert not can_break(s, lattice, 0)
     cost = 0
     if gold[get_s1(s)].is_edit and gold[s.top].is_edit:
         return cost
@@ -86,7 +86,7 @@ cdef int right_cost(State* s, size_t label, Token* gold, Step* lattice):
 cdef int left_cost(State* s, size_t label, Token* gold, Step* lattice):
     assert s.stack_len
     cost = 0
-    if can_break(s, 0):
+    if can_break(s, lattice, 0):
         cost += gold[s.top].sent_id != gold[s.i].sent_id
     if gold[s.i].is_edit:
         return cost
@@ -112,7 +112,7 @@ cdef int break_cost(State* s, size_t label, Token* gold, Step* lattice):
     return 0 if gold[s.top].sent_id != gold[s.i].sent_id else 1
 
 
-ctypedef int (*cost_func)(State*, size_t, Token*, Step*)
+ctypedef int (*cost_func)(State* s, size_t label, Token* gold, Step* lattice)
 
 cdef cost_func[N_MOVES] cost_getters
 
@@ -122,7 +122,7 @@ cost_getters[LEFT] = left_cost
 cost_getters[EDIT] = edit_cost
 cost_getters[BREAK] = break_cost
 
-ctypedef bint (*can_func)(State* s, size_t label)
+ctypedef bint (*can_func)(State* s, Step* lattice, size_t label)
 
 cdef can_func[N_MOVES] valid_checkers
 
@@ -136,7 +136,7 @@ cdef int fill_valid(State* s, Step* lattice, Transition* classes, size_t n) exce
     cdef Transition* t
     for i in range(n):
         t = &classes[i]
-        t.is_valid = valid_checkers[t.move](s, t.label)
+        t.is_valid = valid_checkers[t.move](s, lattice, t.label)
     for i in range(n):
         if classes[i].is_valid:
             break
@@ -150,7 +150,7 @@ cdef int fill_costs(State* s, Step* lattice, Transition* classes,
     cdef Transition* t
     for i in range(n):
         t = &classes[i]
-        if valid_checkers[t.move](s, t.label):
+        if valid_checkers[t.move](s, lattice, t.label):
             t.cost = cost_getters[t.move](s, t.label, gold, lattice)
         else:
             t.cost = -1
