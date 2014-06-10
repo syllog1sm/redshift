@@ -184,11 +184,12 @@ cdef size_t get_r2(State *s, size_t head):
 cdef int has_child_in_buffer(State *s, size_t word, Token* gold) except -1:
     assert word != 0
     cdef size_t buff_i
-    cdef int n = 0
-    for buff_i in range(s.i, s.n):
+    # For efficiency, don't search past the word's head, if its head is to the right
+    cdef size_t stop = gold[word].head if gold[word].head < word else s.n
+    for buff_i in range(s.i, stop):
         if gold[buff_i].head == word:
-            n += 1
-    return n
+            return 1
+    return 0
 
 
 cdef int has_head_in_buffer(State *s, size_t word, Token* gold) except -1:
