@@ -262,7 +262,7 @@ cdef class Parser:
         cdef Token* gold_parse = sent.tokens
         self.guide.cache.flush()
         p_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
-        for i in range(p_beam.bsize):
+        for i in range(self.beam_width):
             self._prepare_state(p_beam.beam[i], sent.tokens, sent.lattice)
         while not p_beam.is_finished:
             for i in range(p_beam.bsize):
@@ -285,7 +285,7 @@ cdef class Parser:
             free(gold_tags)
             return 0
         g_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
-        for i in range(g_beam.bsize):
+        for i in range(self.beam_width):
             self._prepare_state(g_beam.beam[i], sent.tokens, sent.lattice)
   
         while not g_beam.is_finished:
