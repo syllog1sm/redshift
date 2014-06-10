@@ -58,20 +58,12 @@ cdef class Beam:
         for i in range(self.bsize):
             if is_final(self.beam[i]):
                 score = self.beam[i].score + (self.beam[i].score / self.t)
-                # Mix with string probability, except we want the average
-                # probability assigned to the words
-                #if self.beam[i].i != 0:
-                #    score *= (self.beam[i].string_prob / self.beam[i].i)
                 queue.push(ScoredMove(score, i * self.nr_class))
                 continue
             for j in range(self.nr_class):
                 if self.moves[i][j].is_valid:
                     move_id = (i * self.nr_class) + j
-                    # Mix with string probability, except we want the average
-                    # probability assigned to the words
                     score = self.moves[i][j].score
-                    #if self.beam[i].i != 0:
-                    #   score *= (self.beam[i].string_prob / self.beam[i].i)
                     queue.push(ScoredMove(score, move_id))
         # Former states are now parents, beam will hold the extensions
         cdef State** parents = self.parents
