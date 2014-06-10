@@ -209,6 +209,23 @@ cdef class Input:
                 sent_id = self.c_sent.tokens[i].sent_id
                 yield Token(i, word, tag, head, label, sent_id, is_edit)
 
+    property lattice_baseline_tokens:
+        def __get__(self):
+            Token = namedtuple('Token', 'id word tag head label sent_id is_edit')
+            for i in range(1, self.c_sent.n - 1):
+                word = index.lexicon.get_str(<size_t>self.c_sent.lattice[i].nodes[0])
+                if word == '*DELETE*':
+                    continue
+                tag = decode_pos(self.c_sent.tokens[i].tag)
+                head = self.c_sent.tokens[i].head
+                label = decode_label(self.c_sent.tokens[i].label)
+                is_edit = self.c_sent.tokens[i].is_edit
+                sent_id = self.c_sent.tokens[i].sent_id
+                yield Token(i, word, tag, head, label, sent_id, is_edit)
+
+
+
+
     property turn_id:
         def __get__(self):
             return self.turn_id
