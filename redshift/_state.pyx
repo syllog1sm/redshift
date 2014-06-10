@@ -107,6 +107,7 @@ cdef int fill_slots(State *s) except -1:
     else:
         s.slots.n0_prob = 0
 
+    # Match features
     cdef size_t[5] s1
     cdef size_t[5] s2
     cdef size_t len1 = _fill_words(s1, s.top, 5, s.i, s.parse)
