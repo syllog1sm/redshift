@@ -52,9 +52,10 @@ def train(sents, model_dir, n_iter=15, beam_width=8,
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
     os.mkdir(model_dir)
-    lattice_width, left_labels, right_labels, dfl_labels = get_labels(sents)
+    shift_classes, lattice_width, left_labels, right_labels, dfl_labels = get_labels(sents)
     Config.write(model_dir, 'config', beam_width=beam_width, features=feat_set,
                  feat_thresh=feat_thresh,
+                 shift_classes=shift_classes,
                  lattice_width=lattice_width,
                  left_labels=left_labels, right_labels=right_labels,
                  dfl_labels=dfl_labels, use_break=use_break)
@@ -92,9 +93,10 @@ def train_nbest(sents, nbests, model_dir, n_iter=15, beam_width=8,
         for sent in nbest:
             if sent.wer == 0:
                 gold_sents.append(sent)
-    lattice_width, left_labels, right_labels, dfl_labels = get_labels(gold_sents)
+    lattice_classes, lattice_width, left_labels, right_labels, dfl_labels = get_labels(gold_sents)
     Config.write(model_dir, 'config', beam_width=beam_width, features=feat_set,
                  feat_thresh=feat_thresh,
+                 lattice_classes=lattice_classes,
                  lattice_width=lattice_width,
                  left_labels=left_labels, right_labels=right_labels,
                  dfl_labels=dfl_labels, use_break=use_break)
@@ -132,7 +134,10 @@ def get_labels(sents):
                 right_labels.add(sent.c_sent.tokens[j].label)
             if sent.c_sent.lattice[j].n > lattice_width:
                 lattice_width = sent.c_sent.lattice[j].n
+    nr_lattice_classes = 1
+    assert lattice_width >= nr_lattice_classes
     output = (
+        nr_lattice_classes,
         lattice_width,
         list(sorted(left_labels)),
         list(sorted(right_labels)),
@@ -185,19 +190,17 @@ cdef class Parser:
  
         if os.path.exists(pjoin(model_dir, 'labels')):
             index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
-        self.nr_moves = get_nr_moves(self.cfg.lattice_width, self.cfg.left_labels,
+        self.nr_moves = get_nr_moves(self.cfg.shift_classes, self.cfg.lattice_width,
+                                     self.cfg.left_labels,
                                      self.cfg.right_labels,
-                                     self.cfg.dfl_labels, self.cfg.use_break)
-        print self.cfg.lattice_width
-        print 'nr class', 1 + len(self.cfg.left_labels) + len(self.cfg.right_labels) + len(self.cfg.dfl_labels)
-        print 'nr moves', self.nr_moves
+                                     self.cfg.dfl_labels,
+                                     self.cfg.use_break)
         self.moves = <Transition*>calloc(self.nr_moves, sizeof(Transition))
-        fill_moves(self.cfg.lattice_width, self.cfg.left_labels,
-                   self.cfg.right_labels, self.cfg.dfl_labels,
+        fill_moves(self.cfg.shift_classes, self.cfg.lattice_width,
+                   self.cfg.left_labels, self.cfg.right_labels, self.cfg.dfl_labels,
                    self.cfg.use_break, self.moves)
         self.guide = Perceptron(self.nr_moves - self.cfg.lattice_width + 1,
                                 pjoin(model_dir, 'model.gz'))
-        print self.guide.nr_class
         if os.path.exists(pjoin(model_dir, 'model.gz')):
             self.guide.load(pjoin(model_dir, 'model.gz'), thresh=int(self.cfg.feat_thresh))
         if os.path.exists(pjoin(model_dir, 'pos')):

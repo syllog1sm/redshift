@@ -15,12 +15,11 @@ cdef struct Transition:
     int cost
     bint is_valid
 
-cdef size_t get_nr_moves(size_t lattice_width, list left_labels, list right_labels,
-                         list dfl_labels, bint use_break)
+cdef size_t get_nr_moves(size_t shift_classes, size_t lattice_width, list left_labels,
+                         list right_labels, list dfl_labels, bint use_break)
 
-cdef int fill_moves(size_t lattice_width, list left_labels, list right_labels,
-                    list dfl_labels,
-                    bint use_break, Transition* moves)
+cdef int fill_moves(size_t shift_classes, size_t lattice_width, list left_labels,
+                    list right_labels, list dfl_labels, bint use_break, Transition* moves)
 
 cdef int fill_valid(State* s, Step* lattice, Transition* classes, size_t n) except -1
 

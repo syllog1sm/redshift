@@ -168,7 +168,7 @@ cdef int transition(Transition* t, State *s, Step* lattice) except -1:
     s.string_prob = 0
     if t.move == SHIFT:
         push_stack(s, t.label, lattice)
-        if lattice[s.i].probs[t.label] == 0:
+        if lattice[s.i].probs[t.label] >= 0:
             s.string_prob = 1
         else:
             s.string_prob = lattice[s.i].probs[t.label]
