@@ -37,14 +37,14 @@ cdef struct SlotTokens:
     Token s0nn
 
     # Match features
-    size_t wcopy
-    size_t wexact
-    size_t wscopy
-    size_t wsexact
-    size_t pcopy
-    size_t pexact
-    size_t pscopy
-    size_t psexact
+    size_t w_f_copy
+    size_t w_f_exact
+    size_t p_f_copy
+    size_t p_f_exact
+    size_t w_b_copy
+    size_t w_b_exact
+    size_t p_b_copy
+    size_t p_b_exact
 
     int n0_prob
 

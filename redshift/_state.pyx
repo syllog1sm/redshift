@@ -97,18 +97,6 @@ cdef int fill_slots(State *s) except -1:
     s.slots.s0n = s.parse[s.top + 1 if s.top and s.n >= 1 and s.top < (s.n - 1) else 0]
     s.slots.s0nn = s.parse[s.top + 2 if s.top and s.n >= 2 and s.top < (s.n - 2) else 0]
 
-    # These features find how much of S0's span matches N0's span, starting from
-    # the left.
-    # 
-    s.slots.wcopy = 0
-    s.slots.wexact = 0
-    s.slots.pcopy = 0
-    s.slots.pexact = 0
-    s.slots.wscopy = 0
-    s.slots.wsexact = 0
-    s.slots.pscopy = 0
-    s.slots.psexact = 0
-
     # Force to int values between 0 and -10
     if s.string_prob < -10:
         s.slots.n0_prob = -10
@@ -118,33 +106,54 @@ cdef int fill_slots(State *s) except -1:
         s.slots.n0_prob = <int>floor(s.string_prob)
     else:
         s.slots.n0_prob = 0
-    cdef size_t n0ledge = s.slots.n0.left_edge
-    cdef size_t s0ledge = s.slots.s0.left_edge
-    # TODO: These seem to break the lattice
-    #for i in range(5):
-    #    if ((n0ledge + i) > s.slots.n0.i) or ((s0ledge + i) > s.slots.s0.i):
-    #        break
-    #    if s.slots.wexact:
-    #        if s.parse[n0ledge + i].word.orig == s.parse[s0ledge + i].word.orig:
-    #            s.slots.wcopy += 1
-    #        else:
-    #            s.slots.wexact = 0
-    #    if s.slots.pexact:
-    #        if s.parse[n0ledge + i].tag == s.parse[s0ledge + i].tag:
-    #            s.slots.pcopy += 1
-    #        else:
-    #            s.slots.pexact = 0
-    #    if s.slots.wsexact:
-    #        if s.parse[s.slots.s0.i - i].word.orig == s.parse[s.slots.n0.i - i].word.orig:
-    #            s.slots.wscopy += 1
-    #        else:
-    #            s.slots.wsexact = 0
-    #    if s.slots.psexact:
-    #        if s.parse[s.slots.s0.i - i].tag == s.parse[s.slots.n0.i - i].tag:
-    #            s.slots.pscopy += 1
-    #        else:
-    #            s.slots.psexact = 0
 
+    cdef size_t[5] s1
+    cdef size_t[5] s2
+    cdef size_t len1 = _fill_words(s1, s.top, 5, s.i, s.parse)
+    cdef size_t len2 = _fill_words(s2, s.i, 5, s.n, s.parse)
+    s.slots.w_f_exact = _fill_match(&s.slots.w_f_copy, s1, s2, min(len1, len2))
+
+    len1 = _fill_words(s1, s.top, -5, 0, s.parse)
+    len2 = _fill_words(s2, s.i, -5, s.top, s.parse)
+    s.slots.w_b_exact = _fill_match(&s.slots.w_b_copy, s1, s2, min(len1, len2))
+
+    len1 = _fill_tags(s1, s.top, 5, s.i, s.parse)
+    len2 = _fill_tags(s2, s.i, 5, s.n, s.parse)
+    s.slots.p_f_exact = _fill_match(&s.slots.p_f_copy, s1, s2, min(len1, len2))
+
+    len1 = _fill_tags(s1, s.top, -5, 0, s.parse)
+    len2 = _fill_tags(s2, s.i, -5, s.top, s.parse)
+    s.slots.p_b_exact = _fill_match(&s.slots.p_b_copy, s1, s2, min(len1, len2))
+
+ 
+cdef size_t _fill_words(size_t* string, size_t start, int n, size_t stop, Token* tokens):
+    cdef size_t i = 0
+    if n >= 0:
+        for i in range(min(n, stop - start)):
+            string[i] = <size_t>tokens[start + i].word.orig
+    else:
+        for i in range(min(-n, start - stop)):
+            string[i] = <size_t>tokens[start - i].word.orig
+    return i
+
+cdef size_t _fill_tags(size_t* string, size_t start, int n, size_t stop, Token* tokens):
+    cdef size_t i = 0
+    if n >= 0:
+        for i in range(min(n, stop - start)):
+            string[i] = <size_t>tokens[start + i].tag
+    else:
+        for i in range(min(-n, start - stop)):
+            string[i] = <size_t>tokens[start - i].tag
+    return i
+
+cdef bint _fill_match(size_t* match_len, size_t* s1, size_t* s2, size_t n):
+    for i in range(n):
+        if s1[i] == s2[i]:
+            match_len[0] += 1
+        else:
+            return False
+    return i != 0
+ 
 
 cdef size_t get_s1(State *s):
     if s.stack_len < 2:

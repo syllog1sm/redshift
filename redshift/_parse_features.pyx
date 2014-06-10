@@ -252,17 +252,15 @@ cdef enum:
     next_edit_pos
     next_next_edit
 
-    wcopy 
-    pcopy
+    w_f_copy 
+    w_f_exact
+    p_f_copy
+    p_f_exact
 
-    wexact
-    pexact
-
-    wscopy
-    pscopy
-
-    wsexact
-    psexact
+    w_b_copy
+    p_b_copy
+    w_b_exact
+    p_b_exact
 
     # Probability features
     # p=1.0 gets its own bucket
@@ -387,14 +385,14 @@ cdef int fill_context(size_t* context, SlotTokens* t) except -1:
     # These features find how much of S0's span matches N0's span, starting from
     # the left.
     # 
-    context[wcopy] = t.wcopy
-    context[wexact] = t.wexact
-    context[pcopy] = t.pcopy
-    context[pexact] = t.pexact
-    context[wscopy] = t.wscopy
-    context[wsexact] = t.wsexact
-    context[pscopy] = t.pscopy
-    context[psexact] = t.psexact
+    context[w_f_copy] = t.w_f_copy
+    context[w_f_exact] = t.w_f_exact
+    context[p_f_copy] = t.p_f_copy
+    context[p_f_exact] = t.p_f_exact
+    context[w_b_copy] = t.w_b_copy
+    context[w_b_exact] = t.w_b_exact
+    context[p_b_copy] = t.p_b_copy
+    context[p_b_exact] = t.p_b_exact
 
     cdef size_t lp_feat
     if t.n0_prob == 1:
@@ -676,18 +674,18 @@ disfl = (
     (prev_edit_pmatch,),
     (prev_edit_word,),
     (prev_edit_pos,),
-    (wcopy,),
-    (pcopy,),
-    (wexact,),
-    (pexact,),
-    (wcopy, pcopy),
-    (wexact, pexact),
-    (wexact, pcopy),
-    (wcopy, pexact),
-    (prev_edit, wcopy),
-    (prev_prev_edit, wcopy),
-    (prev_edit, pcopy),
-    (prev_prev_edit, pcopy)
+    (w_f_copy,),
+    (p_f_copy,),
+    (w_f_exact,),
+    (p_f_exact,),
+    (w_f_copy, p_f_copy),
+    (w_f_exact, p_f_exact),
+    (w_f_exact, p_f_copy),
+    (w_f_copy, p_f_exact),
+    (prev_edit, w_f_copy),
+    (prev_prev_edit, w_f_copy),
+    (prev_edit, p_f_copy),
+    (prev_prev_edit, p_f_copy)
 )
 
 
@@ -699,21 +697,21 @@ new_disfl = (
     (next_edit_pmatch,),
     (next_edit_word,),
     (next_edit_pos,),
-    (next_edit, wcopy),
-    (next_next_edit, wcopy),
-    (next_edit, pcopy),
-    (next_next_edit, pcopy),
+    (next_edit, w_f_copy),
+    (next_next_edit, w_f_copy),
+    (next_edit, p_f_copy),
+    (next_next_edit, p_f_copy),
 )
 
 suffix_disfl = (
-    (wscopy,),
-    (pscopy,),
-    (wsexact,),
-    (psexact,),
-    (wscopy, pscopy),
-    (wsexact, psexact),
-    (wsexact, pscopy),
-    (wscopy, psexact),
+    (w_b_copy,),
+    (p_b_copy,),
+    (w_b_exact,),
+    (p_b_exact,),
+    (w_b_copy, p_b_copy),
+    (w_b_exact, p_b_exact),
+    (w_b_exact, p_b_copy),
+    (w_b_copy, p_b_exact),
 )
 
 
