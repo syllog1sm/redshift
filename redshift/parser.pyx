@@ -246,6 +246,11 @@ cdef class Parser:
             classes[i].score = s.score + scores[classes[i].clas]
         return 0
 
+    cdef int _prepare_state(self, State* s, Token* tokens, Step* lattice) except -1:
+        for i in range(s.n):
+            s.parse[i].tag = tokens[i].tag
+            s.parse[i].word = lattice[i].nodes[0]
+
     cdef int train_sent(self, Input py_sent) except -1:
         cdef size_t i
         cdef State* s
@@ -253,9 +258,12 @@ cdef class Parser:
         cdef size_t* gold_tags = <size_t*>calloc(sent.n, sizeof(size_t))
         for i in range(sent.n):
             gold_tags[i] = sent.tokens[i].tag
+        self.tagger.tag(py_sent)
         cdef Token* gold_parse = sent.tokens
         self.guide.cache.flush()
         p_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+        for i in range(p_beam.bsize):
+            self._prepare_state(p_beam.beam[i], sent.tokens, sent.lattice)
         while not p_beam.is_finished:
             for i in range(p_beam.bsize):
                 s = p_beam.beam[i]
@@ -277,6 +285,9 @@ cdef class Parser:
             free(gold_tags)
             return 0
         g_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+        for i in range(g_beam.bsize):
+            self._prepare_state(g_beam.beam[i], sent.tokens, sent.lattice)
+  
         while not g_beam.is_finished:
             for i in range(g_beam.bsize):
                 s = g_beam.beam[i]
@@ -325,6 +336,8 @@ cdef class Parser:
         cdef size_t clas
         cdef State* gold_state = init_state(gsent.n)
         cdef State* pred_state = init_state(psent.n)
+        self._prepare_state(gold_state, gsent.tokens, gsent.lattice)
+        self._prepare_state(pred_state, psent.tokens, psent.lattice)
         cdef dict counts = {}
         for clas in range(self.nr_moves):
             counts[clas] = {}
