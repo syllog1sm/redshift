@@ -32,8 +32,6 @@ cdef DenseFeature* init_dense_feat(uint64_t feat_id, size_t nr_class):
     feat.s = 0
     feat.e = 0
     feat.total = 0.0
-    feat.last_upd_global = 0
-    feat.acc_global = 0
     return feat
 
 
@@ -69,10 +67,7 @@ cdef inline void score_dense_feat(double* scores, DenseFeature* feat) nogil:
 
 
 cdef void update_dense(size_t now, double w, size_t clas, DenseFeature* raw):
-    raw.acc_global += (now - raw.last_upd_global) * raw.total
     raw.total += w
-    raw.last_upd_global = now
-
     raw.acc[clas] += (now - raw.last_upd[clas]) * raw.w[clas]
     raw.w[clas] += w
     raw.last_upd[clas] = now
@@ -99,8 +94,6 @@ cdef inline SquareFeature* init_square_feat(uint64_t feat_id, size_t div):
     feat.parts = <DenseParams*>malloc(div * sizeof(DenseParams))
     feat.seen = <bint*>calloc(div, sizeof(bint))
     feat.total = 0.0
-    feat.acc_global = 0.0
-    feat.last_upd_global = 0
     return feat
 
 
@@ -152,9 +145,7 @@ cdef inline void score_square_feat(double* scores, size_t div, size_t nr_class,
 
 cdef inline void update_square(size_t nr_class, size_t div,
                                size_t now, double weight, size_t clas, SquareFeature* feat):
-    feat.acc_global += (now - feat.last_upd_global) * feat.total
     feat.total += weight
-    feat.last_upd_global = now
     cdef DenseParams* params
     cdef size_t part_idx = clas / div
     if not feat.seen[part_idx]:
@@ -337,8 +328,7 @@ cdef class Perceptron:
             inc(it)
             if data.second >= self.nr_raws:
                 feat = <SquareFeature*>data.second
-                feat.acc_global += (self.now - feat.last_upd_global) * feat.total
-                feat.total = feat.acc_global / self.now
+                feat.total = 0
                 for i in range(self.div):
                     if feat.seen[i]:
                         params = &feat.parts[i]
@@ -347,12 +337,12 @@ cdef class Perceptron:
                             tmp = params.w[j]
                             params.acc[j] += (self.now - params.last_upd[j]) * params.w[j]
                             params.w[j] = params.acc[j] / self.now
+                            feat.total += params.w[j]
                             params.acc[j] = tmp
         cdef DenseFeature* rfeat
         for i in range(1, self.nr_raws):
             rfeat = self.raws[i]
-            rfeat.acc_global += (self.now - rfeat.last_upd_global) * rfeat.total
-            rfeat.total = rfeat.acc_global / self.now
+            rfeat.total = 0
             weights = self.raws[i].w
             accs = self.raws[i].acc
             last_upd = self.raws[i].last_upd
@@ -361,6 +351,7 @@ cdef class Perceptron:
                 tmp = weights[c]
                 accs[c] += (self.now - last_upd[c]) * weights[c]
                 weights[c] = accs[c] / self.now
+                rfeat.total += weights[c]
                 accs[c] = tmp
         self._save(loc)
     
@@ -559,8 +550,6 @@ cdef class Perceptron:
         feat = <SquareFeature*>self.W[f_id]
         feat.nr_seen = self.raws[raw_idx].nr_seen
         feat.total = self.raws[raw_idx].total
-        feat.acc_global = self.raws[raw_idx].acc_global
-        feat.last_upd_global = self.raws[raw_idx].last_upd_global
         self.raws[raw_idx].id = 0
         self.raws[raw_idx].nr_seen = 0
         assert self.raws[raw_idx].s <= self.nr_class
@@ -596,8 +585,6 @@ cdef class Perceptron:
         cdef SquareFeature* feat = <SquareFeature*>feat_addr
         raw.nr_seen = feat.nr_seen
         raw.total = feat.total
-        raw.acc_global = feat.acc_global
-        raw.last_upd_global = feat.last_upd_global
         raw.s = 0
         raw.e = 0
         cdef size_t j, k
