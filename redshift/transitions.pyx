@@ -164,11 +164,11 @@ cdef int fill_costs(State* s, Step* lattice, Transition* classes,
     validity[BREAK] = can_break(s)
  
     cdef int costs[N_MOVES]
-    costs[SHIFT] = shift_cost(s, gold) if validity[SHIFT] else -1
-    costs[LEFT] = left_cost(s, gold) if validity[LEFT] else -1
-    costs[RIGHT] = right_cost(s, gold) if validity[RIGHT] else -1
-    costs[EDIT] = edit_cost(s, gold) if validity[EDIT] else -1
-    costs[BREAK] = break_cost(s, gold) if validity[BREAK] else -1
+    costs[SHIFT] = shift_cost(s, gold) if validity[SHIFT] else 0
+    costs[LEFT] = left_cost(s, gold) if validity[LEFT] else 0
+    costs[RIGHT] = right_cost(s, gold) if validity[RIGHT] else 0
+    costs[EDIT] = edit_cost(s, gold) if validity[EDIT] else 0
+    costs[BREAK] = break_cost(s, gold) if validity[BREAK] else 0
 
     cdef label_cost_func[N_MOVES] label_costs
     # These get their own functions for efficiency, so that we don't have to call
@@ -188,7 +188,7 @@ cdef int fill_costs(State* s, Step* lattice, Transition* classes,
         t.cost = costs[t.move]
         if t.move == SHIFT and t.label >= lattice_n:
             t.is_valid = False
-            t.cost = -1
+            t.cost = 0
         elif t.cost == 0:
             t.cost += label_costs[t.move](s, t.label, lattice, gold)
 

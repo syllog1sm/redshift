@@ -231,7 +231,10 @@ cdef class Parser:
             new_tag = decode_pos(s.parse[i].tag)
         beam.fill_parse(sent.tokens)
         py_sent.segment()
-        sent.score = beam.score
+        # TODO: Fix this when we fix beam score thingy with "prior" for nbest
+        # parsing
+        sent.score = beam.beam[0].score
+        #sent.score = beam.score
 
     cdef int _score_classes(self, State* s, Transition* classes) except -1:
         assert not is_final(s)
@@ -273,8 +276,9 @@ cdef class Parser:
                     self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
                     self._score_classes(s, p_beam.moves[i])
                     # Fill costs so we can see whether the prediction is gold-standard
-                    fill_costs(s, sent.lattice, p_beam.moves[i], self.nr_moves,
-                               gold_parse)
+                    if s.cost == 0:
+                        fill_costs(s, sent.lattice, p_beam.moves[i], self.nr_moves,
+                                   gold_parse)
             p_beam.extend()
         if p_beam.beam[0].cost == 0:
             self.guide.now += 1
@@ -374,20 +378,20 @@ cdef class Parser:
         return counts
 
 
-
-"""
     cdef int train_nbest(self, object nbest) except -1:
         cdef Input py_sent
         cdef Sentence* psent
         cdef Sentence* gsent
         cdef Sentence* sent
         cdef size_t i
+        cdef State* s
         self.guide.cache.flush()
         # Identify best-scoring candidate, so we can search for max. violation
         # update within it.
         cdef Beam p_beam = None
         cdef Beam g_beam = None
         for py_sent in nbest:
+            self.tagger.tag(py_sent)
             sent = py_sent.c_sent
             beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
             while not beam.is_finished:
@@ -395,11 +399,9 @@ cdef class Parser:
                     s = beam.beam[i]
                     if not is_final(s):
                         fill_valid(s, sent.lattice, beam.moves[i], self.nr_moves) 
-                        self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
-                        self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
                         self._score_classes(s, beam.moves[i])
                         # Fill costs so we can see whether the prediction is gold-standard
-                        if py_sent.wer == 0:
+                        if py_sent.wer == 0 and s.cost == 0:
                             fill_costs(s, sent.lattice, beam.moves[i], self.nr_moves,
                                        sent.tokens)
                 beam.extend()
@@ -417,8 +419,6 @@ cdef class Parser:
                         fill_valid(s, sent.lattice, beam.moves[i], self.nr_moves) 
                         fill_costs(s, sent.lattice, beam.moves[i], self.nr_moves,
                                    sent.tokens)
-                        self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
-                        self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
                         for j in range(self.nr_moves):
                             if beam.moves[i][j].cost != 0:
                                 beam.moves[i][j].is_valid = False
@@ -435,4 +435,3 @@ cdef class Parser:
         else:
             self.guide.n_corr += 1
             self.guide.now += 1
-""" 

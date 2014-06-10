@@ -90,6 +90,7 @@ cdef class Beam:
             s.score = data.first 
             if not is_final(s):
                 t = &self.moves[parent_idx][move_idx]
+                assert t.cost >= 0
                 s.cost += t.cost
                 transition(t, s, self.lattice)
                 assert s.m != 0
