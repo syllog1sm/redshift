@@ -272,6 +272,9 @@ cdef class Parser:
             self.guide.now += 1
             self.guide.total += 1
             self.guide.n_corr += 1
+            for i in range(sent.n):
+                sent.tokens[i].tag = gold_tags[i]
+            free(gold_tags)
             return 0
         g_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
         while not g_beam.is_finished:
