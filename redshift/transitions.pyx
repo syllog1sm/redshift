@@ -168,7 +168,10 @@ cdef int transition(Transition* t, State *s, Step* lattice) except -1:
     s.string_prob = 0
     if t.move == SHIFT:
         push_stack(s, t.label, lattice)
-        s.string_prob = lattice[s.i].probs[t.label]
+        if lattice[s.i].probs[t.label] == 0:
+            s.string_prob = 1
+        else:
+            s.string_prob = lattice[s.i].probs[t.label]
     elif t.move == LEFT:
         add_dep(s, s.i, s.top, t.label)
         pop_stack(s)
@@ -200,7 +203,8 @@ cdef int transition(Transition* t, State *s, Step* lattice) except -1:
         raise StandardError(t.move)
 
 
-cdef size_t get_nr_moves(size_t lattice_width, list left_labels, list right_labels,
+cdef size_t get_nr_moves(size_t shift_classes, size_t lattice_width,
+                         list left_labels, list right_labels,
                          list dfl_labels, bint use_break):
     global USE_BREAK, USE_EDIT
     USE_BREAK = use_break
@@ -208,20 +212,26 @@ cdef size_t get_nr_moves(size_t lattice_width, list left_labels, list right_labe
     return lattice_width + use_break + len(left_labels) + len(right_labels) + len(dfl_labels)
 
 
-cdef int fill_moves(size_t lattice_width, list left_labels, list right_labels,
-                    list dfl_labels, bint use_break, Transition* moves):
-    cdef size_t root_label = index.hashes.encode_label('ROOT')
+cdef int fill_moves(size_t shift_classes, size_t lattice_width, list left_labels,
+                    list right_labels, list dfl_labels, bint use_break, Transition* moves):
+    cdef size_t label
     cdef size_t i = 0
     cdef size_t clas = 0
-    for i in range(lattice_width):
-        moves[i].move = SHIFT
-        moves[i].label = i
-        moves[i].clas = clas
-    i += 1; clas += 1
+    cdef size_t root_label = index.hashes.encode_label(b'ROOT')
+    # These Shift moves are distinct as far as the learner is concerned;
+    # they receive their own feature space.
+    for label in range(shift_classes):
+        moves[i].move = SHIFT; moves[i].label = label; i += 1
+        moves[i].clas = clas; clas += 1
+    # These Shift moves are collapsed together as far as the learner is
+    # concerned, we search between them with the beam.
+    for label in range(shift_classes, lattice_width):
+        moves[i].move = SHIFT; moves[i].label = label; i += 1
+        moves[i].clas = clas # DON'T increment class for lattice moves
+    clas += 1
     if use_break:
         moves[i].move = BREAK; moves[i].label = root_label; i += 1
         moves[i].clas = clas; clas += 1
-    cdef size_t label
     for label in dfl_labels:
         moves[i].move = EDIT; moves[i].label = label; i += 1
         moves[i].clas = clas; clas += 1

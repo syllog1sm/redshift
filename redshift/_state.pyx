@@ -111,9 +111,11 @@ cdef int fill_slots(State *s) except -1:
 
     # Force to int values between 0 and -10
     if s.string_prob < -10:
-        s.slots.n0_prob = 10
+        s.slots.n0_prob = -10
+    elif s.string_prob == 1:
+        s.slots.n0_prob = 1
     elif s.string_prob != 0:
-        s.slots.n0_prob = -<int>floor(s.string_prob)
+        s.slots.n0_prob = <int>floor(s.string_prob)
     else:
         s.slots.n0_prob = 0
     cdef size_t n0ledge = s.slots.n0.left_edge
