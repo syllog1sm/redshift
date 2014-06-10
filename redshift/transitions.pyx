@@ -51,18 +51,12 @@ cdef bint can_break(State* s):
 # - You can always Shift an Edit word
 
 
-cdef int shift_cost(State* s, size_t label, Token* gold, Step* lattice) except -1:
+cdef int shift_cost(State* s, Token* gold) except -1:
     assert not at_eol(s)
     cost = 0
     cdef size_t w
     if can_break(s):
         cost += gold[s.top].sent_id != gold[s.i].sent_id
-    # We'll shift the word at s.i+1 in from the lattice, choosing the word indicated
-    # by label. So, check that either s.i+1 is an edit, or we're shifting in the
-    # right word
-    if (s.i + 1) < s.n and not gold[s.i+1].is_edit and \
-      gold[s.i+1].word != lattice[s.i+1].nodes[label]:
-        cost += 1
     if gold[s.i].head == s.top:
         return cost
     if gold[s.i].is_edit:
@@ -71,23 +65,34 @@ cdef int shift_cost(State* s, size_t label, Token* gold, Step* lattice) except -
     cost += has_child_in_stack(s, s.i, gold)
     return cost
 
+cdef int shift_label_cost(State* s, size_t label, Step* lattice, Token* gold) except -1:
+    # We'll shift the word at s.i+1 in from the lattice, choosing the word indicated
+    # by label. So, check that either s.i+1 is an edit, or we're shifting in the
+    # right word
+    if (s.i + 1) < s.n and not gold[s.i+1].is_edit and \
+      gold[s.i+1].word != lattice[s.i+1].nodes[label]:
+        return 1
+    else:
+        return 0
+ 
 
-cdef int right_cost(State* s, size_t label, Token* gold, Step* lattice) except -1:
-    assert s.stack_len >= 2
-    assert not can_break(s)
+cdef int right_cost(State* s, Token* gold) except -1:
     cost = 0
-    if gold[get_s1(s)].is_edit and gold[s.top].is_edit:
+    cdef size_t s1 = get_s1(s)
+    if gold[s1].is_edit and gold[s.top].is_edit:
         return cost
-    elif gold[get_s1(s)].is_edit or gold[s.top].is_edit:
+    elif gold[s1].is_edit or gold[s.top].is_edit:
         cost += 1
     cost += has_head_in_buffer(s, s.top, gold)
     cost += has_child_in_buffer(s, s.top, gold)
-    if gold[s.top].head == get_s1(s) and gold[s.top].label != label:
-        cost += 1
     return cost
 
 
-cdef int left_cost(State* s, size_t label, Token* gold, Step* lattice) except -1:
+cdef int right_label_cost(State* s, size_t label, Step* lattice, Token* gold) except -1:
+    return gold[s.top].head == get_s1(s) and gold[s.top].label != label
+
+
+cdef int left_cost(State* s, Token* gold) except -1:
     assert s.stack_len
     cost = 0
     if can_break(s):
@@ -97,7 +102,6 @@ cdef int left_cost(State* s, size_t label, Token* gold, Step* lattice) except -1
     if not gold[s.i].is_edit and gold[s.top].is_edit:
         return cost + 1
     if gold[s.top].head == s.i:
-        cost += gold[s.top].label != label
         return cost
     cost += gold[s.top].head == get_s1(s)
     cost += has_head_in_buffer(s, s.top, gold)
@@ -105,28 +109,26 @@ cdef int left_cost(State* s, size_t label, Token* gold, Step* lattice) except -1
     return cost
 
 
-cdef int edit_cost(State *s, size_t label, Token* gold, Step* lattice) except -1:
-    if gold[s.top].is_edit:
-        return 0
-    else:
-        return 1
+cdef int left_label_cost(State* s, size_t label, Step* lattice, Token* gold) except -1:
+    return gold[s.top].head == s.i and gold[s.top].label != label
 
 
-cdef int break_cost(State* s, size_t label, Token* gold, Step* lattice) except -1:
+cdef int edit_cost(State *s, Token* gold) except -1:
+    return not gold[s.top].is_edit
+
+cdef int edit_label_cost(State* s, size_t label, Step* lattice, Token* gold) except -1:
+    return 0
+
+
+cdef int break_cost(State* s, Token* gold) except -1:
     assert s.stack_len == 1
     assert not at_eol(s)
     return 0 if gold[s.top].sent_id != gold[s.i].sent_id else 1
 
 
-ctypedef int (*cost_func)(State* s, size_t label, Token* gold, Step* lattice) except -1
+cdef int break_label_cost(State* s, size_t label, Step* lattice, Token* gold) except -1:
+    return 0
 
-cdef cost_func[N_MOVES] cost_getters
-
-cost_getters[SHIFT] = shift_cost
-cost_getters[RIGHT] = right_cost
-cost_getters[LEFT] = left_cost
-cost_getters[EDIT] = edit_cost
-cost_getters[BREAK] = break_cost
 
 
 cdef int fill_valid(State* s, Step* lattice, Transition* classes, size_t n) except -1:
@@ -150,17 +152,45 @@ cdef int fill_valid(State* s, Step* lattice, Transition* classes, size_t n) exce
         print s.i, s.n, s.stack_len, is_final(s)
         raise StandardError
 
+ctypedef int (*label_cost_func)(State* s, size_t label, Step* lattice, Token* gold) except -1
 
 cdef int fill_costs(State* s, Step* lattice, Transition* classes,
                     size_t n, Token* gold) except -1:
+    cdef bint[N_MOVES] validity
+    validity[SHIFT] = can_shift(s)
+    validity[RIGHT] = can_right(s)
+    validity[LEFT] = can_left(s)
+    validity[EDIT] = can_edit(s)
+    validity[BREAK] = can_break(s)
+ 
+    cdef int costs[N_MOVES]
+    costs[SHIFT] = shift_cost(s, gold) if validity[SHIFT] else -1
+    costs[LEFT] = left_cost(s, gold) if validity[LEFT] else -1
+    costs[RIGHT] = right_cost(s, gold) if validity[RIGHT] else -1
+    costs[EDIT] = edit_cost(s, gold) if validity[EDIT] else -1
+    costs[BREAK] = break_cost(s, gold) if validity[BREAK] else -1
+
+    cdef label_cost_func[N_MOVES] label_costs
+    # These get their own functions for efficiency, so that we don't have to call
+    # the cost functions for each labelled move --- we memoise the move costs,
+    # and invoke the label costs for zero-cost moves.
+    label_costs[SHIFT] = shift_label_cost
+    label_costs[RIGHT] = right_label_cost
+    label_costs[LEFT] = left_label_cost
+    label_costs[EDIT] = edit_label_cost
+    label_costs[BREAK] = break_label_cost
+
+    cdef size_t lattice_n = lattice[s.i+1].n
+    cdef size_t i
     cdef Transition* t
-    fill_valid(s, lattice, classes, n)
     for i in range(n):
         t = &classes[i]
-        if t.is_valid:
-            t.cost = cost_getters[t.move](s, t.label, gold, lattice)
-        else:
+        t.cost = costs[t.move]
+        if t.move == SHIFT and t.label >= lattice_n:
+            t.is_valid = False
             t.cost = -1
+        elif t.cost == 0:
+            t.cost += label_costs[t.move](s, t.label, lattice, gold)
 
 
 cdef int transition(Transition* t, State *s, Step* lattice) except -1:
