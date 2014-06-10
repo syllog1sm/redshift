@@ -1,3 +1,4 @@
+# cython: profile=True
 from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
 import index.hashes
