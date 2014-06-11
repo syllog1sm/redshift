@@ -148,6 +148,7 @@ cdef size_t _fill_tags(size_t* string, size_t start, int n, size_t stop, Token* 
     return i
 
 cdef bint _fill_match(size_t* match_len, size_t* s1, size_t* s2, size_t n):
+    cdef size_t i = 0
     for i in range(n):
         if s1[i] == s2[i]:
             match_len[0] += 1
