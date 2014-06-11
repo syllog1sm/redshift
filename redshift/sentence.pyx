@@ -28,7 +28,7 @@ cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
         s.tokens[i].word = s.lattice[i].nodes[word_idx]
         assert s.tokens[i].word != NULL
         if tag is not None:
-            s.tokens[i].tag = index.hashes.encode_pos(tag) 
+            s.tokens[i].tag = index.hashes.encode_pos(tag)
         if head is not None:
             s.tokens[i].head = head if head != 0 else s.n - 1
         if label is not None:
@@ -132,7 +132,7 @@ cdef class Input:
             is_edit = len(feats) >= 3 and feats[2] == '1'
             #if len(feats) >= 5 and feats[4] == 'RM':
             #    is_edit = True
-            is_fill = len(feats) >= 2 and feats[1] in ('D', 'E', 'F', 'A') 
+            is_fill = len(feats) >= 2 and feats[1] in ('D', 'E', 'F', 'A')
             is_ns = len(feats) >= 4 and feats[3] == 'N_S'
             is_ns = False
             if '.' in feats[0]:
@@ -277,6 +277,5 @@ cdef object conll_line_from_token(size_t i, Token* a, Step* lattice):
     fill_tag = label[-1] if label.startswith('filler') else '-'
     feats = '0.%d|%s|%d|-' % (a.sent_id, fill_tag, label == 'erased')
     cdef bytes tag = index.hashes.decode_pos(a.tag)
-    assert tag.strip()
-    return '\t'.join((str(i), word, '_', tag, tag, feats, 
-                     str(a.head), label, '_', '_'))
+    return <bytes>'\t'.join((str(i), word, '_', tag, tag, feats,
+                             str(a.head), label, '_', '_'))
