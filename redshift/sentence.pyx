@@ -119,6 +119,14 @@ cdef class Input:
         return cls.from_tokens(tokens)
 
     @classmethod
+    def from_strings(cls, token_strs):
+        # Passing a string instead of a list is super annoying.
+        if isinstance(token_strs, str):
+            raise TypeError("Need: list/tuple/etc, Got: %s" % repr(token_strs))
+        tokens = [(w, None, None, None, None, None) for w in token_strs]
+        return cls.from_tokens(tokens)
+
+    @classmethod
     def from_conll(cls, conll_str):
         tokens = []
         turn_id = None
