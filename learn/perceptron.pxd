@@ -16,14 +16,12 @@ cdef struct DenseParams:
 cdef struct SquareFeature:
     DenseParams* parts    
     bint* seen
-    double total
     size_t nr_seen
 
 
 cdef struct DenseFeature:
     double* w
     double* acc
-    double total
     size_t* last_upd
     uint64_t id
     size_t nr_seen
