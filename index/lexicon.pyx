@@ -6,7 +6,7 @@ from libc.limits cimport ULONG_MAX
 import os.path
 
 
-BLANK_WORD = Lexeme(0, 0, 0, 0, False, False, False)
+BLANK_WORD = Lexeme(0, 0, 0, 0, 0, False, False, False)
 
 cdef Lexicon _LEXICON = None
 
@@ -16,7 +16,7 @@ def load(): # Called in index/__init__.py
         _LEXICON = Lexicon()
 
 
-cpdef size_t lookup(bytes word) except ULONG_MAX:
+cpdef size_t lookup(bytes word):
     global _LEXICON
     return _LEXICON.lookup(word)
 
@@ -60,7 +60,7 @@ cdef class Lexicon:
         for word_addr in self.values():
             free(<Lexeme*>word_addr)
 
-    cdef size_t lookup(self, bytes word) except ULONG_MAX:
+    cdef size_t lookup(self, bytes word):
         cdef uint64_t hashed = _hash_str(word)
         cdef size_t addr = self.words[hashed]
         if addr == 0:

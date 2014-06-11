@@ -1,9 +1,7 @@
 from libc.stdint cimport uint64_t
 from ext.sparsehash cimport * 
 
-from libc.limits cimport ULONG_MAX
-
-cpdef size_t lookup(bytes word) except ULONG_MAX
+cpdef size_t lookup(bytes word) 
 
 cpdef bytes get_str(size_t word)
 
@@ -23,4 +21,4 @@ cdef Lexeme BLANK_WORD
 cdef class Lexicon:
     cdef dense_hash_map[uint64_t, size_t] words
     cdef dict strings
-    cdef size_t lookup(self, bytes word) except ULONG_MAX
+    cdef size_t lookup(self, bytes word)
