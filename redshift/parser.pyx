@@ -96,7 +96,7 @@ def train_nbest(sents, nbests, model_dir, n_iter=15, beam_width=8,
     lattice_classes, lattice_width, left_labels, right_labels, dfl_labels = get_labels(gold_sents)
     Config.write(model_dir, 'config', beam_width=beam_width, features=feat_set,
                  feat_thresh=feat_thresh,
-                 lattice_classes=lattice_classes,
+                 shift_classes=0,
                  lattice_width=lattice_width,
                  left_labels=left_labels, right_labels=right_labels,
                  dfl_labels=dfl_labels, use_break=use_break)
