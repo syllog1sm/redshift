@@ -48,8 +48,7 @@ cdef class Beam:
 
     property score:
         def __get__(self):
-            raise StandardError
-            #return (self.beam[0].score / self.t) * self.prior
+            return self.beam[0].score
 
     @cython.cdivision(True)
     cdef int extend(self):
