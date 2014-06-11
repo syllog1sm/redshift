@@ -115,7 +115,7 @@ def get_nbest_loc(turn_id, nbest_dir):
     speaker = turn_num[0]
     turn_num = turn_num[1:]
     turn_id = '%s%s~%s' % (filename, speaker, turn_num)
-    nbest_loc = nbest_dir.join(filename).join(speaker).join('nbest').join(turn_id)
+    nbest_loc = nbest_dir.joinpath(filename).joinpath(speaker).joinpath('nbest').joinpath(turn_id)
     return str(nbest_loc) if nbest_loc.exists() else None
 
 
