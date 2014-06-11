@@ -141,7 +141,7 @@ def read_lattice(lattice_loc, add_gold=False):
         z = 1 / sum(p for p, w in step)
         normed.append([(p * z, w) for p, w in step])
         assert 0.9 < sum(p for p, w in normed[-1]) < 1.1
-    return Input(normed, parse, prior=1.0, turn_id=turn_id, wer=0)
+    return Input(normed, parse, turn_id=turn_id, wer=0)
 
 
 def _make_new_step(word_probs, ref):
