@@ -33,7 +33,7 @@ def clean():
 
 def make():
     with lcd(str(LOCAL_REPO)):
-        local('python setup.py build_ext --inplace')
+        local('python setup.py build_ext --inplace > /tmp/compile 2> /tmp/warnings')
 
 def test():
     with lcd(str(LOCAL_REPO)):
