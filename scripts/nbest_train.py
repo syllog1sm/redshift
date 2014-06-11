@@ -4,7 +4,7 @@ import plac
 from pathlib import Path
 import math
 
-import redshift.parser
+import redshift.nbest_parser
 from redshift.sentence import Input
 
 
@@ -243,7 +243,7 @@ def main(train_loc, nbest_dir, model_loc, n_iter=15,
              train_str.strip().split('\n\n') if s.strip()]
     nbests = [get_nbest(sent, nbest_dir, limit=limit) for sent in sents]
     print "Train"
-    redshift.parser.train_nbest(sents, nbests, model_loc,
+    redshift.nbest_parser.train(sents, nbests, model_loc,
         n_iter=n_iter,
         beam_width=beam_width,
         feat_set=feat_set,
