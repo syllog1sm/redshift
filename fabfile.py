@@ -31,9 +31,14 @@ def clean():
     with lcd(str(LOCAL_REPO)):
         local('python setup.py clean --all')
 
-def make():
+def qmake():
     with lcd(str(LOCAL_REPO)):
         local('python setup.py build_ext --inplace > /tmp/compile 2> /tmp/warnings')
+
+def make():
+    with lcd(str(LOCAL_REPO)):
+        local('python setup.py build_ext --inplace')
+
 
 def test():
     with lcd(str(LOCAL_REPO)):
