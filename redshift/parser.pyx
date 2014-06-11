@@ -213,15 +213,17 @@ cdef class Parser:
         cdef size_t p_idx, i
         cdef Beam beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves,
                               py_sent)
+        for i in range(self.beam_width):
+            self._prepare_state(beam.beam[i], sent.tokens, sent.lattice)
         self.guide.cache.flush()
         while not beam.is_finished:
             for i in range(beam.bsize):
                 if not is_final(beam.beam[i]):
                     fill_valid(beam.beam[i], sent.lattice, beam.moves[i], self.nr_moves) 
-                    self.tagger.tag_word(beam.beam[i].parse, beam.beam[i].i+1,
-                                         sent.lattice, sent.n)
-                    self.tagger.tag_word(beam.beam[i].parse, beam.beam[i].i+2,
-                                         sent.lattice, sent.n)
+                    #self.tagger.tag_word(beam.beam[i].parse, beam.beam[i].i+1,
+                    #                     sent.lattice, sent.n)
+                    #self.tagger.tag_word(beam.beam[i].parse, beam.beam[i].i+2,
+                    #                     sent.lattice, sent.n)
                     self._score_classes(beam.beam[i], beam.moves[i])
             beam.extend()
         cdef State* s = beam.beam[0]
@@ -232,10 +234,7 @@ cdef class Parser:
             new_tag = decode_pos(s.parse[i].tag)
         beam.fill_parse(sent.tokens)
         py_sent.segment()
-        # TODO: Fix this when we fix beam score thingy with "prior" for nbest
-        # parsing
         sent.score = beam.beam[0].score
-        #sent.score = beam.score
 
     cdef int _score_classes(self, State* s, Transition* classes) except -1:
         assert not is_final(s)
@@ -350,10 +349,10 @@ cdef class Parser:
         cdef Token* gword
         cdef Token* pword
         for i in range(max((pt, gt))):
-            self.tagger.tag_word(gold_state.parse, gold_state.i+1, gsent.lattice, gsent.n)
-            self.tagger.tag_word(gold_state.parse, gold_state.i+2, gsent.lattice, gsent.n)
-            self.tagger.tag_word(pred_state.parse, pred_state.i+1, psent.lattice, psent.n)
-            self.tagger.tag_word(pred_state.parse, pred_state.i+2, psent.lattice, psent.n)
+            #self.tagger.tag_word(gold_state.parse, gold_state.i+1, gsent.lattice, gsent.n)
+            #self.tagger.tag_word(gold_state.parse, gold_state.i+2, gsent.lattice, gsent.n)
+            #self.tagger.tag_word(pred_state.parse, pred_state.i+1, psent.lattice, psent.n)
+            #self.tagger.tag_word(pred_state.parse, pred_state.i+2, psent.lattice, psent.n)
             # Find where the states diverge
             gword = &gsent.tokens[gold_state.i]
             pword = &psent.tokens[pred_state.i]
@@ -377,62 +376,3 @@ cdef class Parser:
         free_state(gold_state)
         free_state(pred_state)
         return counts
-
-
-    cdef int train_nbest(self, object nbest) except -1:
-        cdef Input py_sent
-        cdef Sentence* psent
-        cdef Sentence* gsent
-        cdef Sentence* sent
-        cdef size_t i
-        cdef State* s
-        self.guide.cache.flush()
-        # Identify best-scoring candidate, so we can search for max. violation
-        # update within it.
-        cdef Beam p_beam = None
-        cdef Beam g_beam = None
-        for py_sent in nbest:
-            self.tagger.tag(py_sent)
-            sent = py_sent.c_sent
-            beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
-            while not beam.is_finished:
-                for i in range(beam.bsize):
-                    s = beam.beam[i]
-                    if not is_final(s):
-                        fill_valid(s, sent.lattice, beam.moves[i], self.nr_moves) 
-                        self._score_classes(s, beam.moves[i])
-                        # Fill costs so we can see whether the prediction is gold-standard
-                        if py_sent.wer == 0 and s.cost == 0:
-                            fill_costs(s, sent.lattice, beam.moves[i], self.nr_moves,
-                                       sent.tokens)
-                beam.extend()
-            if p_beam is None or beam.score > p_beam.score:
-                p_beam = beam
-                psent = sent
-            
-            if py_sent.wer != 0:
-                continue
-            beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
-            while not beam.is_finished:
-                for i in range(beam.bsize):
-                    s = beam.beam[i]
-                    if not is_final(s):
-                        fill_valid(s, sent.lattice, beam.moves[i], self.nr_moves) 
-                        fill_costs(s, sent.lattice, beam.moves[i], self.nr_moves,
-                                   sent.tokens)
-                        for j in range(self.nr_moves):
-                            if beam.moves[i][j].cost != 0:
-                                beam.moves[i][j].is_valid = False
-                        self._score_classes(s, beam.moves[i])
-                beam.extend()
-            if g_beam is None or beam.score > g_beam.score:
-                g_beam = beam
-                gsent = sent
-        assert p_beam is not None and g_beam is not None
-        self.guide.total += 1
-        if p_beam.beam[0].cost > 0:
-            counts = self._count_feats(psent, gsent, p_beam, g_beam)
-            self.guide.batch_update(counts)
-        else:
-            self.guide.n_corr += 1
-            self.guide.now += 1
