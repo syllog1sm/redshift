@@ -2,3 +2,5 @@ cython
 plac
 python-cjson
 pytest
+pathlib
+sh
