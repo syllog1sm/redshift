@@ -249,29 +249,31 @@ cdef int fill_moves(size_t shift_classes, size_t lattice_width, list left_labels
     cdef size_t i = 0
     cdef size_t clas = 0
     cdef size_t root_label = index.hashes.encode_label(b'ROOT')
+    print shift_classes, lattice_width
     # These Shift moves are distinct as far as the learner is concerned;
     # they receive their own feature space.
     for label in range(shift_classes):
-        moves[i].move = SHIFT; moves[i].label = label; i += 1
         moves[i].clas = clas; clas += 1
+        moves[i].move = SHIFT; moves[i].label = label; i += 1
     # These Shift moves are collapsed together as far as the learner is
     # concerned, we search between them with the beam.
     for label in range(shift_classes, lattice_width):
-        moves[i].move = SHIFT; moves[i].label = label; i += 1
         moves[i].clas = clas # DON'T increment class for lattice moves
-    clas += 1
+        moves[i].move = SHIFT; moves[i].label = label; i += 1
+    if lattice_width > shift_classes:
+        clas += 1
     if use_break:
+        moves[i].clas = clas; clas += 1
         moves[i].move = BREAK; moves[i].label = root_label; i += 1
-        moves[i].clas = clas; clas += 1
     for label in dfl_labels:
+        moves[i].clas = clas; clas += 1
         moves[i].move = EDIT; moves[i].label = label; i += 1
-        moves[i].clas = clas; clas += 1
     for label in left_labels:
+        moves[i].clas = clas; clas += 1
         moves[i].move = LEFT; moves[i].label = label; i += 1
-        moves[i].clas = clas; clas += 1
     for label in right_labels:
-        moves[i].move = RIGHT; moves[i].label = label; i += 1
         moves[i].clas = clas; clas += 1
+        moves[i].move = RIGHT; moves[i].label = label; i += 1
     for m in range(i):
         moves[m].score = 0
         moves[m].cost = 0
