@@ -14,6 +14,7 @@ ctypedef Transition* History
 
 cdef class Beam:
     cdef Step* lattice
+    cdef Sentence* sent
 
     cdef State** parents
     cdef State** beam
@@ -33,8 +34,6 @@ cdef class Beam:
     cdef size_t psize
     cdef bint is_full
     cdef bint is_finished
-
-    cdef double prior
 
     cdef int extend(self) except -1
     cdef int fill_parse(self, Token* parse) except -1

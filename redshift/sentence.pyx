@@ -81,7 +81,7 @@ cdef void free_step(Step* s):
 
 
 cdef class Input:
-    def __init__(self, list lattice, list parse, prior=1.0, turn_id=None, wer=0):
+    def __init__(self, list lattice, list parse, turn_id=None, wer=0):
         # Pad lattice with start and end tokens
         lattice.insert(0, [(1.0, '<start>')])
         parse.insert(0, (0, None, None, None, False, False))
@@ -90,33 +90,33 @@ cdef class Input:
         self.c_sent = init_sent(lattice, parse)
         self.wer = wer
         self.turn_id = turn_id
-        self.prior = prior
 
     def __dealloc__(self):
         free_sent(self.c_sent)
 
     @classmethod
-    def from_tokens(cls, tokens, turn_id=None, wer=0, prior=1.0):
+    def from_tokens(cls, tokens, turn_id=None, wer=0):
         """
         Create sentence from a flat list of unambiguous tokens, instead of a lattice.
         Tokens should be a list of (word, tag, head, label, sent_id, is_edit)
         tuples
         """
+
         lattice = []
         parse = []
         for word, tag, head, label, sent_id, is_edit in tokens:
             lattice.append([(1.0, word)])
             parse.append((0, tag, head, label, sent_id, is_edit))
-        return cls(lattice, parse, turn_id=turn_id, wer=wer, prior=prior)
+        return cls(lattice, parse, turn_id=turn_id, wer=wer)
 
     @classmethod
-    def from_pos(cls, pos_str, prior=1.0):
+    def from_pos(cls, pos_str):
         assert pos_str
         tokens = []
         for token_str in pos_str.split():
             word, pos = token_str.rsplit('/', 1)
             tokens.append((word, pos, None, None, None, None))
-        return cls.from_tokens(tokens, prior=prior)
+        return cls.from_tokens(tokens)
 
     @classmethod
     def from_conll(cls, conll_str):

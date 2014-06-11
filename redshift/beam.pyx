@@ -22,8 +22,8 @@ cdef class Beam:
         self.k = k
         self.i = 0
         self.lattice = py_sent.c_sent.lattice
+        self.sent = py_sent.c_sent
         self.is_finished = False
-        self.prior = py_sent.prior
         cdef size_t i
         self.parents = <State**>malloc(k * sizeof(State*))
         self.beam = <State**>malloc(k * sizeof(State*))
@@ -40,7 +40,7 @@ cdef class Beam:
                 self.moves[i][j].label = moves[j].label
                 self.moves[i][j].is_valid = True
                 self.moves[i][j].score = 0
-                self.moves[i][j].cost = py_sent.wer
+                self.moves[i][j].cost = 0
         self.bsize = 1
         self.psize = 0
         self.t = 0
@@ -49,6 +49,10 @@ cdef class Beam:
     property score:
         def __get__(self):
             return self.beam[0].score
+
+    property cost:
+        def __get__(self):
+            return self.beam[0].cost
 
     @cython.cdivision(True)
     cdef int extend(self):
@@ -149,6 +153,3 @@ cdef int get_violation(Beam pred, Beam gold):
             max_violn = delta
             v = i
     return v
-
-
-
