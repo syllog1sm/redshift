@@ -3,6 +3,10 @@
 import plac
 from pathlib import Path
 import math
+import cProfile
+import pstats
+import sys
+
 
 import redshift.nbest_parser
 from redshift.sentence import Input
@@ -10,8 +14,18 @@ from redshift.util import read_nbest, get_nbest_loc
 from redshift.util import get_oracle_alignment
 
 
-def _edit_cost(edits):
-    return edits.count('f')
+def profile_training(sents, nbests, model_loc, n_iter, beam_width, feat_set):
+    cProfile.runctx(
+        """redshift.nbest_parser.train(sents, nbests, model_loc,
+            n_iter=n_iter,
+            beam_width=beam_width,
+            feat_set=feat_set,
+        )""", globals(), locals()
+    )
+
+    s = pstats.Stats("/tmp/Profile.prof")
+    s.strip_dirs().sort_stats("time").print_stats()
+ 
 
 
 def get_nbest(gold_sent, nbest_dir, limit=0):
@@ -139,14 +153,15 @@ def _guess_label(word, last_word, next_word):
     n_sents=("Number of sentences to train from", "option", "n", int),
     limit=("Limit nbest list to N", "option", "N", int),
     use_break=("Use the Break transition", "flag", "b", bool),
-    seed=("Random seed", "option", "s", int)
+    seed=("Random seed", "option", "s", int),
+    profile=("Profile run-time", "flag", "p", bool)
 )
 def main(train_loc, nbest_dir, model_loc, n_iter=15,
          feat_set="disfl", feat_thresh=10,
          n_sents=0,
          limit=0,
          use_break=False,
-         debug=False, seed=0, beam_width=4):
+         debug=False, seed=0, beam_width=4, profile=False):
     nbest_dir = Path(nbest_dir)
     if debug:
         redshift.parser.set_debug(True)
@@ -155,10 +170,13 @@ def main(train_loc, nbest_dir, model_loc, n_iter=15,
     if n_sents != 0:
         print "Using %d sents for training" % n_sents
         train_str = '\n\n'.join(train_str.split('\n\n')[:n_sents])
-    print "Get sents"
     sents = [Input.from_conll(s) for s in
              train_str.strip().split('\n\n') if s.strip()]
     nbests = [get_nbest(sent, nbest_dir, limit=limit) for sent in sents]
+    if profile:
+        profile_training(sents, nbests, model_loc, beam_width, n_iter, feat_set)
+        sys.exit(1)
+
     print "Train"
     redshift.nbest_parser.train(sents, nbests, model_loc,
         n_iter=n_iter,
