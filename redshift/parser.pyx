@@ -40,7 +40,6 @@ from libc.stdint cimport uint64_t, int64_t
 VOCAB_SIZE = 1e6
 TAG_SET_SIZE = 50
 
-
 DEBUG = False 
 def set_debug(val):
     global DEBUG
