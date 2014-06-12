@@ -222,10 +222,10 @@ cdef class Parser:
         cdef State* s
         cdef Sentence* sent = py_sent.c_sent
         cdef size_t* gold_tags = <size_t*>calloc(sent.n, sizeof(size_t))
+        cdef Token* gold_parse = sent.tokens
         for i in range(sent.n):
             gold_tags[i] = sent.tokens[i].tag
         self.tagger.tag(py_sent)
-        cdef Token* gold_parse = sent.tokens
         self.guide.cache.flush()
         p_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
         for i in range(self.beam_width):
