@@ -125,10 +125,11 @@ def train(sents, nbests, model_dir, n_iter=15, beam_width=8,
 
 
 def mix_weights(probs, scores, mix_weight=1.0):
-    shift = min(scores)
+    shift = abs(min(scores)) + 1
     scores = [score + shift for score in scores]
     mean = sum(scores) / len(scores)
-    return [score + (mix_weight * mean * prob) for prob in probs]
+    mixed = [score * prob for score, prob in zip(scores, probs)]
+    return mixed
 
 
 cdef class NBestParser:
@@ -182,7 +183,7 @@ cdef class NBestParser:
             scores.append(beam.score)
             probs.append(prob)
             sents.append(py_sent)
-        weights = mix_weights(probs, scores)
+        weights = mix_weights(probs, scores, mix_weight=mix_weight)
         for weight, py_sent in zip(weights, sents):
             py_sent.c_sent.score = weight
         return sents
