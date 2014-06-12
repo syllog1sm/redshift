@@ -94,7 +94,7 @@ def _guess_label(word, last_word, next_word):
 
 
 
-def read_lattice(lattice_loc, add_gold=False):
+def read_lattice(lattice_loc, add_gold=False, limit=0):
     lines = open(lattice_loc).read().strip().split('\n')
     turn_id = lines.pop(0).split()[-1]
     numaligns = lines.pop(0)
@@ -121,6 +121,9 @@ def read_lattice(lattice_loc, add_gold=False):
         # step, do deduplication, where we simply sum the probabilities for
         # each word. Also re-sorts the step, ensuring the right order
         step = _deduplicate_step(step)
+        # Apply limit, if any
+        if limit and not add_gold:
+            step = step[:limit]
         # Find the (retokenized) reference if we're using gold-standard
         ref, extra_ref = _adjust_word(ref)
         idx = [w for p, w in step].index(ref) if add_gold else 0

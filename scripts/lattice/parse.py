@@ -10,7 +10,7 @@ from redshift.lattice_utils import read_lattice, add_gold_parse
 from redshift.lattice_utils import levenshtein
 
 
-def get_gold_lattice(conll_str, asr_dir):
+def get_gold_lattice(conll_str, asr_dir, limit):
     gold_sent = Input.from_conll(conll_str)
     turn_id = gold_sent.turn_id
     filename, turn_num = gold_sent.turn_id.split('~')
@@ -19,9 +19,10 @@ def get_gold_lattice(conll_str, asr_dir):
     turn_id = '%s%s~%s' % (filename, speaker, turn_num)
     lattice_loc = asr_dir.join(filename).join(speaker).join('raw').join(turn_id)
     if lattice_loc.exists(): 
-        lattice = read_lattice(str(lattice_loc), add_gold=True)
-        add_gold_parse(lattice, gold_sent)
-        return lattice
+        gold_lattice = read_lattice(str(lattice_loc), add_gold=True, limit=0)
+        add_gold_parse(gold_lattice, gold_sent)
+        lattice = read_lattice(str(lattice_loc), add_gold=False, limit=limit)
+        return lattice, gold_lattice
     else:
         return None
     
@@ -46,11 +47,12 @@ def _get_deps(tokens):
 
 
 @plac.annotations(
+    limit=("Prune lattice to N", "option", "N", int),
 )
-def main(parser_dir, conll_loc, asr_dir):
+def main(parser_dir, conll_loc, asr_dir, limit=0):
     asr_dir = Path(asr_dir)
     print "Get sents"
-    sents = [get_gold_lattice(s, asr_dir) for s in
+    sents = [get_gold_lattice(s, asr_dir, limit=limit) for s in
              open(conll_loc).read().strip().split('\n\n') if s.strip()]
     sents = [s for s in sents if s is not None]
     print len(sents)
@@ -63,9 +65,9 @@ def main(parser_dir, conll_loc, asr_dir):
     tp_deps = 0
     fn_deps = 0
     n_deps = 0
-    for sent in sents:
+    for sent, gold in sents:
         asr_tokens = list(t.word for t in sent.lattice_baseline_tokens)
-        gold_tokens = list(sent.tokens)
+        gold_tokens = list(gold.tokens)
         gold_verbatim_tokens = list([t.word for t in gold_tokens if t.word != '*DELETE*'])
         parser.parse(sent)
         guess_tokens = list(sent.tokens)
