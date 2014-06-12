@@ -152,6 +152,7 @@ cdef int fill_valid(State* s, Step* lattice, Transition* classes, size_t n) exce
         print s.i, s.n, s.stack_len, is_final(s)
         raise StandardError
 
+
 ctypedef int (*label_cost_func)(State* s, size_t label, Step* lattice, Token* gold) except -1
 
 cdef int fill_costs(State* s, Step* lattice, Transition* classes,
@@ -189,7 +190,7 @@ cdef int fill_costs(State* s, Step* lattice, Transition* classes,
         if t.move == SHIFT and t.label >= lattice_n:
             t.is_valid = False
             t.cost = 0
-        elif t.cost == 0:
+        elif t.is_valid and t.cost == 0:
             t.cost += label_costs[t.move](s, t.label, lattice, gold)
 
 
