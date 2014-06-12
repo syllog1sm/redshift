@@ -219,10 +219,10 @@ cdef class Parser:
             for i in range(beam.bsize):
                 if not is_final(beam.beam[i]):
                     fill_valid(beam.beam[i], sent.lattice, beam.moves[i], self.nr_moves) 
-                    #self.tagger.tag_word(beam.beam[i].parse, beam.beam[i].i+1,
-                    #                     sent.lattice, sent.n)
-                    #self.tagger.tag_word(beam.beam[i].parse, beam.beam[i].i+2,
-                    #                     sent.lattice, sent.n)
+                    self.tagger.tag_word(beam.beam[i].parse, beam.beam[i].i+1,
+                                         sent.lattice, sent.n)
+                    self.tagger.tag_word(beam.beam[i].parse, beam.beam[i].i+2,
+                                         sent.lattice, sent.n)
                     self._score_classes(beam.beam[i], beam.moves[i])
             beam.extend()
         cdef State* s = beam.beam[0]
@@ -348,10 +348,10 @@ cdef class Parser:
         cdef Token* gword
         cdef Token* pword
         for i in range(max((pt, gt))):
-            #self.tagger.tag_word(gold_state.parse, gold_state.i+1, gsent.lattice, gsent.n)
-            #self.tagger.tag_word(gold_state.parse, gold_state.i+2, gsent.lattice, gsent.n)
-            #self.tagger.tag_word(pred_state.parse, pred_state.i+1, psent.lattice, psent.n)
-            #self.tagger.tag_word(pred_state.parse, pred_state.i+2, psent.lattice, psent.n)
+            self.tagger.tag_word(gold_state.parse, gold_state.i+1, gsent.lattice, gsent.n)
+            self.tagger.tag_word(gold_state.parse, gold_state.i+2, gsent.lattice, gsent.n)
+            self.tagger.tag_word(pred_state.parse, pred_state.i+1, psent.lattice, psent.n)
+            self.tagger.tag_word(pred_state.parse, pred_state.i+2, psent.lattice, psent.n)
             # Find where the states diverge
             gword = &gsent.tokens[gold_state.i]
             pword = &psent.tokens[pred_state.i]
