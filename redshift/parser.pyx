@@ -80,43 +80,6 @@ def train(sents, model_dir, n_iter=15, beam_width=8,
     return parser
 
 
-def train_nbest(sents, nbests, model_dir, n_iter=15, beam_width=8,
-                feat_set='basic', feat_thresh=10,
-                use_break=False):
-    if os.path.exists(model_dir):
-        shutil.rmtree(model_dir)
-    os.mkdir(model_dir)
-    gold_sents = list(sents)
-    cdef Input sent
-    for nbest in nbests:
-        for sent in nbest:
-            if sent.wer == 0:
-                gold_sents.append(sent)
-    lattice_classes, lattice_width, left_labels, right_labels, dfl_labels = get_labels(gold_sents)
-    Config.write(model_dir, 'config', beam_width=beam_width, features=feat_set,
-                 feat_thresh=feat_thresh,
-                 shift_classes=0,
-                 lattice_width=lattice_width,
-                 left_labels=left_labels, right_labels=right_labels,
-                 dfl_labels=dfl_labels, use_break=use_break)
-    Config.write(model_dir, 'tagger', beam_width=4, features='basic',
-                 feat_thresh=5)
-    parser = Parser(model_dir)
-    indices = list(range(len(sents)))
-    for n in range(n_iter):
-        for i in indices:
-            parser.tagger.train_sent(sents[i])
-            parser.train_nbest(nbests[i])
-        parser.guide.end_train_iter(n, feat_thresh)
-        parser.tagger.guide.end_train_iter(n, feat_thresh)
-        random.shuffle(indices)
-    parser.guide.end_training(pjoin(model_dir, 'model.gz'))
-    parser.tagger.guide.end_training(pjoin(model_dir, 'tagger.gz'))
-    index.hashes.save_pos_idx(pjoin(model_dir, 'pos'))
-    index.hashes.save_label_idx(pjoin(model_dir, 'labels'))
-    return parser
-
-
 def get_labels(sents):
     left_labels = set()
     right_labels = set()
@@ -212,6 +175,7 @@ cdef class Parser:
         cdef size_t p_idx, i
         cdef Beam beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves,
                               py_sent)
+        self.tagger.tag(py_sent)
         for i in range(self.beam_width):
             self._prepare_state(beam.beam[i], sent.tokens, sent.lattice)
         self.guide.cache.flush()
