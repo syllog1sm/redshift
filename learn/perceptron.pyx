@@ -140,7 +140,7 @@ cdef double score_square_feat(double* scores, size_t div, size_t nr_class,
                 if (part_idx + k) >= nr_class:
                     break
                 scores[part_idx + k] += feat.parts[j].w[k]
-                t += scores[part_idx + k]
+                t += feat.parts[j].w[k]
     return t
 
 
