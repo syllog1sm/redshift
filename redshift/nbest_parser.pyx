@@ -217,8 +217,11 @@ cdef class NBestParser:
         self.tagger.tag(py_sent)
         cdef Sentence* sent = py_sent.c_sent
         cdef Beam b = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
-
-        cdef size_t i
+        cdef size_t i, w
+        for i in range(self.beam_width):
+            for w in range(sent.n):
+                b.beam[i].parse[w].tag = sent.tokens[w].tag
+                
         cdef State* s
         while not b.is_finished:
             for i in range(b.bsize):
@@ -296,6 +299,10 @@ cdef class NBestParser:
         cdef size_t clas
         cdef State* gold_state = init_state(gsent.n)
         cdef State* pred_state = init_state(psent.n)
+        for w in range(gsent.n):
+            gold_state.parse[w].tag = gsent.tokens[w].tag
+        for w in range(psent.n):
+            pred_state.parse[w].tag = psent.tokens[w].tag
         cdef dict counts = {}
         for clas in range(self.nr_moves):
             counts[clas] = {}
