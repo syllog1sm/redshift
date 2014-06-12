@@ -125,11 +125,10 @@ def train(sents, nbests, model_dir, n_iter=15, beam_width=8,
 
 
 def mix_weights(probs, scores, mix_weight=1.0):
-    return scores
-    #shift = min(scores)
-    #scores = [score + shift for score in scores]
-    #mean = sum(scores) / len(scores)
-    #return [score + (mix_weight * mean * prob) for prob in probs]
+    shift = min(scores)
+    scores = [score + shift for score in scores]
+    mean = sum(scores) / len(scores)
+    return [score + (mix_weight * mean * prob) for prob in probs]
 
 
 cdef class NBestParser:
@@ -261,6 +260,7 @@ cdef class NBestParser:
             if force_gold and py_sent.wer != 0:
                 continue
             beam = self.search(py_sent, force_gold, py_sent.wer == 0)
+            beam.beam[0].cost += py_sent.wer
             scores.append(beam.score)
             probs.append(prob)
             beams.append(beam)
