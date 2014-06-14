@@ -17,7 +17,7 @@ def get_gold_lattice(conll_str, asr_dir, limit):
     speaker = turn_num[0]
     turn_num = turn_num[1:]
     turn_id = '%s%s~%s' % (filename, speaker, turn_num)
-    lattice_loc = asr_dir.join(filename).join(speaker).join('raw').join(turn_id)
+    lattice_loc = asr_dir.joinpath(filename).joinpath(speaker).joinpath('raw').joinpath(turn_id)
     if lattice_loc.exists(): 
         gold_lattice = read_lattice(str(lattice_loc), add_gold=True, limit=0)
         add_gold_parse(gold_lattice, gold_sent)
