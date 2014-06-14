@@ -99,12 +99,10 @@ cdef class Beam:
                 assert s.m != 0
             self.bsize += 1
             queue.pop()
-        hist = <Transition*>malloc(self.beam[0].m * sizeof(Transition))
-        memcpy(hist, self.beam[0].history, self.beam[0].m * sizeof(Transition))
+        cdef vector[Transition] hist = vector[Transition](self.beam[0].history)
         self.history.push_back(hist)
         self.scores.push_back(self.beam[0].score)
         self.costs.push_back(self.beam[0].cost)
-        self.lengths.push_back(self.beam[0].m)
         self.t += 1
         self.is_full = self.bsize >= self.k
         assert self.beam[0].m != 0
@@ -134,8 +132,8 @@ cdef class Beam:
             free(self.moves[i])
             free_state(self.beam[i])
             free_state(self.parents[i])
-        for i in range(self.t):
-            free(self.history[i])
+        #for i in range(self.t):
+        #    free(self.history[i])
         free(self.beam)
         free(self.parents)
         free(self.moves)

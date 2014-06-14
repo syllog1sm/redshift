@@ -255,7 +255,7 @@ cdef State* init_state(size_t length) except NULL:
         s.parse[i].word = &BLANK_WORD
         s.l_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
         s.r_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
-    s.history = <Transition*>calloc(n * 20, sizeof(Transition))
+    s.history = vector[Transition]()
     return s
 
 
@@ -282,7 +282,7 @@ cdef int copy_state(State* s, State* old) except -1:
     # TODO: This seems to change feature calculations, if we limit to (old.i + 1)
     # Why?
     memcpy(s.parse, old.parse, old.n * sizeof(Token))
-    memcpy(s.history, old.history, old.m * sizeof(Transition))
+    s.history = old.history
 
 
 cdef free_state(State* s):
@@ -293,5 +293,4 @@ cdef free_state(State* s):
     free(s.l_children)
     free(s.r_children)
     free(s.parse)
-    free(s.history)
     free(s)

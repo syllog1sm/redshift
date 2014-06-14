@@ -20,11 +20,12 @@ cdef class Beam:
     cdef State** beam
 
     cdef Transition** moves
-    cdef vector[History] history
+    cdef vector[vector[Transition]] history
     cdef vector[double] scores
     cdef vector[int] costs
     cdef vector[size_t] lengths
 
+    cdef double beta
     cdef size_t k
     cdef size_t i
     cdef size_t t

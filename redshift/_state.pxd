@@ -1,5 +1,6 @@
 from libc.string cimport const_void
 from libc.stdint cimport uint64_t, int64_t
+from libcpp.vector cimport vector
 
 from sentence cimport Sentence, Token, Step
 from transitions cimport Transition
@@ -64,7 +65,7 @@ cdef struct State:
     size_t** l_children
     size_t** r_children
     Token* parse
-    Transition* history
+    vector[Transition] history
     SlotTokens slots
 
 
