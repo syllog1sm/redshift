@@ -162,8 +162,7 @@ cdef class Parser:
                    self.cfg.use_break, self.moves)
         # One class for the distinct shift classes each, and 1 between the rest of the shifts
         nr_class = (self.nr_moves - self.cfg.lattice_width) + self.cfg.shift_classes + 1 
-        self.guide = Perceptron(nr_class,
-                                pjoin(model_dir, 'model.gz'))
+        self.guide = Perceptron(nr_class, pjoin(model_dir, 'model.gz'))
         if os.path.exists(pjoin(model_dir, 'model.gz')):
             self.guide.load(pjoin(model_dir, 'model.gz'), thresh=int(self.cfg.feat_thresh))
         if os.path.exists(pjoin(model_dir, 'pos')):
@@ -189,12 +188,6 @@ cdef class Parser:
                                          sent.lattice, sent.n)
                     self._score_classes(beam.beam[i], beam.moves[i])
             beam.extend()
-        cdef State* s = beam.beam[0]
-        for i in range(sent.n):
-            tag = decode_pos(s.parse[i].tag)
-            word = get_str(<size_t>s.parse[i].word)
-            self.tagger.tag_word(s.parse, i, sent.lattice, sent.n)
-            new_tag = decode_pos(s.parse[i].tag)
         beam.fill_parse(sent.tokens)
         py_sent.segment()
         sent.score = beam.beam[0].score
@@ -300,6 +293,10 @@ cdef class Parser:
 
         cdef size_t d, i, f
         cdef uint64_t* feats
+        for i in range(gt):
+            assert ghist[i].move != 0
+        for i in range(pt):
+            assert phist[i].move != 0
         cdef size_t clas
         cdef State* gold_state = init_state(gsent.n)
         cdef State* pred_state = init_state(psent.n)
