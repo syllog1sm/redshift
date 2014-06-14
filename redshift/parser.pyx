@@ -46,13 +46,14 @@ def set_debug(val):
     DEBUG = val
 
 
-def train(sents, model_dir, n_iter=15, beam_width=8,
+def train(sents, model_dir, n_iter=15, beam_width=8, beam_factor=0.5,
           feat_set='basic', feat_thresh=10, use_break=False):
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
     os.mkdir(model_dir)
     shift_classes, lattice_width, left_labels, right_labels, dfl_labels = get_labels(sents)
-    Config.write(model_dir, 'config', beam_width=beam_width, features=feat_set,
+    Config.write(model_dir, 'config', beam_width=beam_width, beam_factor=beam_factor,
+                 features=feat_set,
                  feat_thresh=feat_thresh,
                  shift_classes=shift_classes,
                  lattice_width=lattice_width,
@@ -64,12 +65,15 @@ def train(sents, model_dir, n_iter=15, beam_width=8,
     indices = list(range(len(sents)))
     cdef Input py_sent
     for n in range(n_iter):
+        parser.total_bsize = 0
+        parser.beam_iters = 0
         for i in indices:
             py_sent = sents[i]
             # TODO: Should this be sensitive to whether we've hit max trainign
             # iters for tagger?
             parser.tagger.train_sent(py_sent)
             parser.train_sent(py_sent)
+        print parser.avg_bsize, parser.guide.W.size()
         parser.guide.end_train_iter(n, feat_thresh)
         parser.tagger.guide.end_train_iter(n, feat_thresh)
         random.shuffle(indices)
@@ -133,11 +137,14 @@ cdef class Parser:
     cdef Perceptron guide
     cdef Tagger tagger
     cdef size_t beam_width
+    cdef double beta
     cdef int feat_thresh
     cdef Transition* moves
     cdef uint64_t* _features
     cdef size_t* _context
     cdef size_t nr_moves
+    cdef size_t total_bsize
+    cdef size_t beam_iters
 
     def __cinit__(self, model_dir):
         assert os.path.exists(model_dir) and os.path.isdir(model_dir)
@@ -145,9 +152,12 @@ cdef class Parser:
         self.extractor = Extractor(*get_templates(self.cfg.features))
         self._features = <uint64_t*>calloc(self.extractor.nr_feat, sizeof(uint64_t))
         self._context = <size_t*>calloc(_parse_features.context_size(), sizeof(size_t))
-
+        
+        self.total_bsize = 0
+        self.beam_iters = 0
         self.feat_thresh = self.cfg.feat_thresh
         self.beam_width = self.cfg.beam_width
+        self.beta = self.cfg.beam_factor
  
         if os.path.exists(pjoin(model_dir, 'labels')):
             index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
@@ -169,11 +179,15 @@ cdef class Parser:
             index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
         self.tagger = Tagger(model_dir)
 
+    property avg_bsize:
+        def __get__(self):
+            return float(self.total_bsize) / self.beam_iters
+
     cpdef int parse(self, Input py_sent) except -1:
         cdef Sentence* sent = py_sent.c_sent
         cdef size_t p_idx, i
-        cdef Beam beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves,
-                              py_sent)
+        cdef Beam beam = Beam(self.beta, self.beam_width, <size_t>self.moves,
+                              self.nr_moves, py_sent)
         self.tagger.tag(py_sent)
         for i in range(self.beam_width):
             self._prepare_state(beam.beam[i], sent.tokens, sent.lattice)
@@ -197,16 +211,19 @@ cdef class Parser:
         assert not is_final(s)
         cdef bint cache_hit = False
         fill_slots(s)
-        scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
-        if not cache_hit:
-            fill_context(self._context, &s.slots)
-            self.extractor.extract(self._features, self._context)
-            self.guide.fill_scores(self._features, scores)
+        #scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
+        scores = self.guide.scores
+        #cache_hit = False
+        #if not cache_hit:
+        fill_context(self._context, &s.slots)
+        self.extractor.extract(self._features, self._context)
+        self.guide.fill_scores(self._features, scores)
         for i in range(self.nr_moves):
             classes[i].score = s.score + scores[classes[i].clas]
         return 0
 
     cdef int _prepare_state(self, State* s, Token* tokens, Step* lattice) except -1:
+        cdef size_t i
         for i in range(s.n):
             s.parse[i].tag = tokens[i].tag
             s.parse[i].word = lattice[i].nodes[0]
@@ -221,7 +238,8 @@ cdef class Parser:
             gold_tags[i] = sent.tokens[i].tag
         self.tagger.tag(py_sent)
         self.guide.cache.flush()
-        p_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+        p_beam = Beam(self.beta, self.beam_width, <size_t>self.moves, self.nr_moves,
+                      py_sent)
         for i in range(self.beam_width):
             self._prepare_state(p_beam.beam[i], sent.tokens, sent.lattice)
         while not p_beam.is_finished:
@@ -237,6 +255,8 @@ cdef class Parser:
                     if s.cost == 0:
                         fill_costs(s, sent.lattice, p_beam.moves[i], self.nr_moves,
                                    gold_parse)
+            self.total_bsize += p_beam.bsize
+            self.beam_iters += 1
             p_beam.extend()
         if p_beam.beam[0].cost == 0:
             self.guide.now += 1
@@ -246,7 +266,8 @@ cdef class Parser:
                 sent.tokens[i].tag = gold_tags[i]
             free(gold_tags)
             return 0
-        g_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+        g_beam = Beam(self.beta, self.beam_width, <size_t>self.moves, self.nr_moves,
+                      py_sent)
         for i in range(self.beam_width):
             self._prepare_state(g_beam.beam[i], sent.tokens, sent.lattice)
   

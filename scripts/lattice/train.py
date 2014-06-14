@@ -11,10 +11,11 @@ from redshift.sentence import Input
 from redshift.lattice_utils import read_lattice, add_gold_parse
 
 
-def profile_training(sents, model_loc, n_iter, beam_width, feat_set, feat_thresh):
+def profile_training(sents, model_loc, n_iter, beam_width, beam_factor, feat_set, feat_thresh):
     cProfile.runctx("""redshift.parser.train(sents, model_loc,
                         n_iter=n_iter,
                         beam_width=beam_width,
+                        beam_factor=beam_factor,
                         feat_set=feat_set,
                         feat_thresh=feat_thresh)""", globals(), locals(), 
                         "/tmp/Profile.prof"
@@ -44,6 +45,7 @@ def get_gold_lattice(conll_str, asr_dir):
     n_iter=("Number of Perceptron iterations", "option", "i", int),
     feat_thresh=("Feature pruning threshold", "option", "f", int),
     beam_width=("Beam width", "option", "k", int),
+    beam_factor=("Cut beam when lowest score * beta < max score.", "option", "b", float),
     feat_set=("Name of feat set [zhang, iso, full]", "option", "x", str),
     n_sents=("Number of sentences to train from", "option", "n", int),
     seed=("Random seed", "option", "s", int),
@@ -51,7 +53,8 @@ def get_gold_lattice(conll_str, asr_dir):
 )
 def main(train_loc, asr_dir, model_loc, n_iter=15,
          feat_set="disfl", feat_thresh=10,
-         n_sents=0, seed=0, beam_width=4, profile=False):
+         n_sents=0, seed=0, beam_width=4, beam_factor=0.0,
+         profile=False):
     asr_dir = Path(asr_dir)
     train_str = open(train_loc).read()
 
@@ -62,11 +65,12 @@ def main(train_loc, asr_dir, model_loc, n_iter=15,
              train_str.strip().split('\n\n') if s.strip()]
     sents = [s for s in sents if s is not None]
     if profile:
-        profile_training(sents, model_loc, n_iter, beam_width, feat_set, feat_thresh)
+        profile_training(sents, model_loc, n_iter, beam_width, beam_factor, feat_set, feat_thresh)
     else:
         redshift.parser.train(sents, model_loc,
             n_iter=n_iter,
             beam_width=beam_width,
+            beam_factor=beam_factor,
             feat_set=feat_set,
             feat_thresh=feat_thresh,
         )

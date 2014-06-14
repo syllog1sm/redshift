@@ -16,10 +16,12 @@ cimport cython
 
 
 cdef class Beam:
-    def __cinit__(self, size_t k, size_t moves_addr, size_t nr_class, Input py_sent):
+    def __cinit__(self, float beta, size_t k, size_t moves_addr,
+                  size_t nr_class, Input py_sent):
         self.length = py_sent.length
         self.nr_class = nr_class
         self.k = k
+        self.beta = beta
         self.i = 0
         self.lattice = py_sent.c_sent.lattice
         self.sent = py_sent.c_sent
@@ -81,8 +83,17 @@ cdef class Beam:
         cdef ScoredMove data
         cdef size_t move_idx
         cdef size_t parent_idx
+        cdef double cutoff
+        if queue.empty():
+            cutoff = 0
+        elif queue.top().first >= 0:
+            cutoff = queue.top().first * self.beta
+        else:
+            cutoff = queue.top().first / self.beta
         while not queue.empty() and self.bsize < self.k:
             data = queue.top()
+            if self.beta and data.first < cutoff:
+                break
             parent_idx = data.second / self.nr_class
             move_idx = data.second % self.nr_class
             # We've got two arrays of states, and we swap beam-for-parents.

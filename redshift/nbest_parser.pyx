@@ -216,7 +216,7 @@ cdef class NBestParser:
     cdef Beam search(self, Input py_sent, bint force_gold, bint set_costs):
         self.tagger.tag(py_sent)
         cdef Sentence* sent = py_sent.c_sent
-        cdef Beam b = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+        cdef Beam b = Beam(0.0, self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
         cdef size_t i, w
         for i in range(self.beam_width):
             for w in range(sent.n):
