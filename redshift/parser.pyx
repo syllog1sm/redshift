@@ -178,14 +178,15 @@ cdef class Parser:
         for i in range(self.beam_width):
             self._prepare_state(beam.beam[i], sent.tokens, sent.lattice)
         self.guide.cache.flush()
+        cdef State* s
         while not beam.is_finished:
             for i in range(beam.bsize):
-                if not is_final(beam.beam[i]):
-                    fill_valid(beam.beam[i], sent.lattice, beam.moves[i], self.nr_moves) 
-                    self.tagger.tag_word(beam.beam[i].parse, beam.beam[i].i+1,
-                                         sent.lattice, sent.n)
-                    self.tagger.tag_word(beam.beam[i].parse, beam.beam[i].i+2,
-                                         sent.lattice, sent.n)
+                s = beam.beam[i]
+                if not is_final(s):
+                    fill_valid(s, sent.lattice, beam.moves[i], self.nr_moves) 
+                    if s.parse[s.i].word != sent.lattice[s.i].nodes[0]:
+                        self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
+                        self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
                     self._score_classes(beam.beam[i], beam.moves[i])
             beam.extend()
         beam.fill_parse(sent.tokens)
@@ -228,8 +229,9 @@ cdef class Parser:
                 s = p_beam.beam[i]
                 if not is_final(s):
                     fill_valid(s, sent.lattice, p_beam.moves[i], self.nr_moves) 
-                    self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
-                    self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
+                    if s.parse[s.i].word != sent.lattice[s.i].nodes[0]:
+                        self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
+                        self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
                     self._score_classes(s, p_beam.moves[i])
                     # Fill costs so we can see whether the prediction is gold-standard
                     if s.cost == 0:
@@ -252,8 +254,9 @@ cdef class Parser:
             for i in range(g_beam.bsize):
                 s = g_beam.beam[i]
                 if not is_final(s):
-                    self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
-                    self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
+                    if s.parse[s.i].word != sent.lattice[s.i].nodes[0]:
+                        self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
+                        self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
                     fill_valid(s, sent.lattice, g_beam.moves[i], self.nr_moves) 
                     fill_costs(s, sent.lattice, g_beam.moves[i], self.nr_moves,
                                gold_parse)
@@ -309,10 +312,13 @@ cdef class Parser:
         cdef Token* gword
         cdef Token* pword
         for i in range(max((pt, gt))):
-            self.tagger.tag_word(gold_state.parse, gold_state.i+1, gsent.lattice, gsent.n)
-            self.tagger.tag_word(gold_state.parse, gold_state.i+2, gsent.lattice, gsent.n)
-            self.tagger.tag_word(pred_state.parse, pred_state.i+1, psent.lattice, psent.n)
-            self.tagger.tag_word(pred_state.parse, pred_state.i+2, psent.lattice, psent.n)
+
+            if gold_state.parse[gold_state.i].word != gsent.lattice[gold_state.i].nodes[0]:
+                self.tagger.tag_word(gold_state.parse, gold_state.i+1, gsent.lattice, gsent.n)
+                self.tagger.tag_word(gold_state.parse, gold_state.i+2, gsent.lattice, gsent.n)
+            if pred_state.parse[pred_state.i].word != psent.lattice[pred_state.i].nodes[0]:
+                self.tagger.tag_word(pred_state.parse, pred_state.i+1, psent.lattice, psent.n)
+                self.tagger.tag_word(pred_state.parse, pred_state.i+2, psent.lattice, psent.n)
             # Find where the states diverge
             gword = &gsent.tokens[gold_state.i]
             pword = &psent.tokens[pred_state.i]
