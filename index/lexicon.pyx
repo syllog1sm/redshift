@@ -7,6 +7,7 @@ import os.path
 
 
 BLANK_WORD = Lexeme(0, 0, 0, 0, 0, False, False, False)
+DELETED_WORD = Lexeme(1, 1, 0, 0, 0, False, False, False)
 
 cdef Lexicon _LEXICON = None
 
@@ -54,6 +55,8 @@ cdef class Lexicon:
             w = <size_t>init_word(word, cluster, upper_pc, title_pc, int(freq_str))
             self.words[_hash_str(word)] = w
             self.strings[<size_t>w] = word
+        self.words[_hash_str(b'*DELETE*')] = <size_t>&DELETED_WORD
+        self.strings[<size_t>&DELETED_WORD] = b'*DELETE*'
 
     def __dealloc__(self):
         cdef size_t word_addr

@@ -17,6 +17,7 @@ cdef struct Lexeme:
 
 
 cdef Lexeme BLANK_WORD
+cdef Lexeme DELETED_WORD
 
 cdef class Lexicon:
     cdef dense_hash_map[uint64_t, size_t] words
