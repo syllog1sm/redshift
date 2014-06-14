@@ -15,6 +15,33 @@ cimport cython
 cimport index.hashes
 
 
+cdef double score_dense_feat(double* scores, DenseFeature* feat) nogil:
+    feat.nr_seen += 1
+    cdef size_t c
+    cdef double* w = feat.w
+    cdef double t = 0
+    for c in range(feat.s, feat.e):
+        scores[c] += w[c]
+        t += w[c]
+    return t
+
+
+cdef double score_square_feat(double* scores, size_t div, size_t nr_class,
+                                   SquareFeature* feat) nogil:
+    cdef size_t j, k, part_idx
+    feat.nr_seen  += 1
+    cdef double t = 0
+    for j in range(div):
+        if feat.seen[j]:
+            part_idx = j * div
+            for k in range(div):
+                if (part_idx + k) >= nr_class:
+                    break
+                scores[part_idx + k] += feat.parts[j].w[k]
+                t += feat.parts[j].w[k]
+    return t
+
+
 cdef DenseFeature* init_dense_feat(uint64_t feat_id, size_t nr_class):
     """A DenseFeature has a flat weight array, with length equal to the
     number of classes.  This is inefficient for rare features when many
@@ -55,16 +82,6 @@ cdef void free_dense_feat(DenseFeature* feat):
     free(feat.last_upd)
     free(feat)
 
-
-cdef double score_dense_feat(double* scores, DenseFeature* feat) nogil:
-    feat.nr_seen += 1
-    cdef size_t c
-    cdef double* w = feat.w
-    cdef double t = 0
-    for c in range(feat.s, feat.e):
-        scores[c] += w[c]
-        t += w[c]
-    return t
 
 
 cdef void update_dense(size_t now, double w, size_t clas, DenseFeature* raw):
@@ -126,22 +143,6 @@ cdef void free_square_feat(SquareFeature* feat, size_t div):
     free(feat.parts)
     free(feat.seen)
     free(feat)
-
-
-cdef double score_square_feat(double* scores, size_t div, size_t nr_class,
-                                   SquareFeature* feat) nogil:
-    cdef size_t j, k, part_idx
-    feat.nr_seen  += 1
-    cdef double t = 0
-    for j in range(div):
-        if feat.seen[j]:
-            part_idx = j * div
-            for k in range(div):
-                if (part_idx + k) >= nr_class:
-                    break
-                scores[part_idx + k] += feat.parts[j].w[k]
-                t += feat.parts[j].w[k]
-    return t
 
 
 cdef inline void update_square(size_t nr_class, size_t div,
@@ -480,7 +481,10 @@ cdef class Perceptron:
             inc(it)
             f_id = data.first
             feat_addr = data.second
-            if f_id == 0 or (feat_addr <= self.nr_raws):
+            if f_id == 0:
+                continue
+            elif (feat_addr <= self.nr_raws):
+                n_feats += 1
                 continue
             feat = <SquareFeature*>feat_addr
             if feat.nr_seen < thresh:
