@@ -186,7 +186,7 @@ cdef int has_child_in_buffer(State *s, size_t word, Token* gold) except -1:
     assert word != 0
     cdef size_t buff_i
     # For efficiency, don't search past the word's head, if its head is to the right
-    cdef size_t stop = gold[word].head if gold[word].head < word else s.n
+    cdef size_t stop = gold[word].head if gold[word].head > word else s.n
     for buff_i in range(s.i, stop):
         if gold[buff_i].head == word:
             return 1
