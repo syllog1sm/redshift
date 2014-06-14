@@ -90,7 +90,7 @@ cdef class Beam:
             # parents later.
             copy_state(self.beam[self.bsize], self.parents[parent_idx])
             s = self.beam[self.bsize]
-            s.score += self.moves[parent_idx][move_idx].score 
+            s.score = data.first
             if not is_final(s):
                 t = &self.moves[parent_idx][move_idx]
                 assert t.cost >= 0
