@@ -343,7 +343,6 @@ cdef class Parser:
         cdef Token* gword
         cdef Token* pword
         for i in range(max((pt, gt))):
-
             if gold_state.parse[gold_state.i].word != gsent.lattice[gold_state.i].nodes[0]:
                 self.tagger.tag_word(gold_state.parse, gold_state.i+1, gsent.lattice, gsent.n)
                 self.tagger.tag_word(gold_state.parse, gold_state.i+2, gsent.lattice, gsent.n)
@@ -354,8 +353,10 @@ cdef class Parser:
             gword = &gsent.tokens[gold_state.i]
             pword = &psent.tokens[pred_state.i]
             if not seen_diff and gword.word == pword.word and ghist[i].clas == phist[i].clas:
-                transition(&ghist[i], gold_state, gsent.lattice)
-                transition(&phist[i], pred_state, psent.lattice)
+                if i < gt:
+                    transition(&ghist[i], gold_state, gsent.lattice)
+                if i < pt:
+                    transition(&phist[i], pred_state, psent.lattice)
                 continue
             seen_diff = True
             if i < gt:
