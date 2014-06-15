@@ -291,8 +291,6 @@ cdef class NBestParser:
         else:
             phist = p_beam.history[v]
             pt = p_beam.lengths[v]
-
-
         cdef size_t d, i, f
         cdef uint64_t* feats
         cdef size_t clas
