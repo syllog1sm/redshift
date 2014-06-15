@@ -293,7 +293,6 @@ cdef class Perceptron:
         while features[i] != 0:
             f = features[i]
             i += 1
-
             feat_addr = self.W[f]
             if feat_addr >= nr_raws:
                 active_square[nr_square] = <SquareFeature*>feat_addr
