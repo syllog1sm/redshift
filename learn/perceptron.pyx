@@ -394,7 +394,7 @@ cdef class Perceptron:
                         params = &feat.parts[i]
                         for j in range(self.div):
                             clas = (i * self.div) + j
-                            if params.w[j]:
+                            if params.w[j] != 0:
                                 unary_weight += params.w[j]
                                 non_zeroes.append('%d=%.3f ' % (clas, params.w[j]))
                  
