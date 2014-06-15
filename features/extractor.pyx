@@ -51,6 +51,29 @@ cdef class Extractor:
             counts[value] += inc
             f += 1
 
+    def get_strings(self, list names, list context):
+        features = []
+        for i in range(self.nr_template):
+            pred = &self.templates[i]
+            seen_non_zero = False
+            feat = []
+            for j in range(pred.n):
+                value = context[pred.args[j]]
+                if value:
+                    feat.append('%s=%s' % (names[pred.args[j]], value))
+                    seen_non_zero = True
+            if seen_non_zero:
+                features.append(feat)
+        cdef MatchPred* match_pred
+        cdef size_t match_id
+        for match_id in range(self.nr_match):
+            match_pred = &self.match_preds[match_id]
+            value = context[match_pred.idx1]
+            if value is not None and value == context[match_pred.idx2]:
+                features.append('M %s/%s=%s' % (names[match_pred.idx1], names[match_pred.idx2], value))
+                features.append('M %s/%s' % (names[match_pred.idx1], names[match_pred.idx2]))
+        return features
+
     cdef int extract(self, uint64_t* features, size_t* context) except -1:
         cdef:
             size_t i, j, size
