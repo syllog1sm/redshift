@@ -20,6 +20,16 @@ cdef enum:
     BREAK
     N_MOVES
 
+names = ['?', 'S', 'L', 'R', 'E', 'B']
+
+cdef move_name(Transition* t):
+    if t.move == SHIFT:
+        return 'S-%d' % t.label
+    elif t.move == BREAK:
+        return 'B'
+    else:
+        return '%s-%s' % (names[t.move], index.hashes.decode_label(t.label))
+
 
 cdef bint can_shift(State* s):
     return not at_eol(s)
