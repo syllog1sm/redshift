@@ -65,7 +65,7 @@ cdef struct State:
     size_t** l_children
     size_t** r_children
     Token* parse
-    vector[Transition] history
+    Transition* history
     SlotTokens slots
 
 

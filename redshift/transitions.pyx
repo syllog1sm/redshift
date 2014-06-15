@@ -195,7 +195,7 @@ cdef int fill_costs(State* s, Step* lattice, Transition* classes,
 
 
 cdef int transition(Transition* t, State *s, Step* lattice) except -1:
-    s.history.push_back(t[0])
+    s.history[s.m] = t[0]
     s.m += 1 
     s.string_prob = 0
     if t.move == SHIFT:

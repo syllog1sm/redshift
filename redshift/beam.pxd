@@ -12,6 +12,7 @@ ctypedef pair[double, size_t] ScoredMove
 ctypedef pair[size_t, Transition] Candidate
 ctypedef Transition* History
 
+
 cdef class Beam:
     cdef Step* lattice
     cdef Sentence* sent
@@ -20,7 +21,7 @@ cdef class Beam:
     cdef State** beam
 
     cdef Transition** moves
-    cdef vector[vector[Transition]] history
+    cdef vector[History] history
     cdef vector[double] scores
     cdef vector[int] costs
     cdef vector[size_t] lengths

@@ -278,19 +278,20 @@ cdef class NBestParser:
             return {}
         cdef Sentence* psent = p_beam.sent
         cdef Sentence* gsent = g_beam.sent
-        cdef vector[Transition] phist
-        cdef vector[Transition] ghist
-        cdef size_t pt, gt
-        if v < g_beam.t:
-            ghist = g_beam.history[v]
-        else:
+
+        if v >= g_beam.t:
             ghist = g_beam.history[g_beam.t - 1]
-        if v < p_beam.t:
-            phist = p_beam.history[v]
+            gt = g_beam.lengths[g_beam.t - 1]
         else:
+            ghist = g_beam.history[v]
+            gt = g_beam.lengths[v]
+        if v >= p_beam.t:
             phist = p_beam.history[p_beam.t - 1]
-        gt = ghist.size()
-        pt = phist.size()
+            pt = p_beam.lengths[p_beam.t - 1]
+        else:
+            phist = p_beam.history[v]
+            pt = p_beam.lengths[v]
+
 
         cdef size_t d, i, f
         cdef uint64_t* feats
