@@ -1,7 +1,7 @@
 from collections import defaultdict
 
 from redshift.sentence cimport Input, Sentence, Step, Token
-from index.lexicon cimport Lexeme
+from index.lexicon cimport Lexeme, DELETED_WORD
 from index.lexicon cimport lookup, get_str
 from index.hashes import encode_pos, encode_label
 
@@ -9,14 +9,13 @@ from index.hashes import encode_pos, encode_label
 def add_gold_parse(Input py_lattice, Input py_gold):
     cdef Sentence* gold = py_gold.c_sent
     cdef Sentence* asr = py_lattice.c_sent
-    cdef Lexeme* delete = <Lexeme*>lookup(b'*DELETE*')
     cdef Lexeme* word
     offset = 0
     asr_to_gold = {}
     gold_to_asr = {}
     for i in range(1, asr.n):
         word = asr.tokens[i].word
-        if word == delete:
+        if word == &DELETED_WORD:
             offset += 1
         else:
             assert i-offset not in gold_to_asr
@@ -24,19 +23,19 @@ def add_gold_parse(Input py_lattice, Input py_gold):
             asr_to_gold[i] = i - offset
             gold_to_asr[i-offset] = i
     cdef size_t del_tag = encode_pos(b'DEL')
-    cdef size_t erased_label = encode_label(b'erased')
+    cdef size_t del_label = encode_label(b'*delete*')
     cdef Token* g
     for i in range(1, asr.n-1):
-        if asr.tokens[i].word == delete:
+        if asr.tokens[i].word == &DELETED_WORD:
             asr.tokens[i].is_edit = True
-            asr.tokens[i].label = erased_label
+            asr.tokens[i].label = del_label
             asr.tokens[i].head = i
             asr.tokens[i].tag = del_tag
         else:
             g = &gold.tokens[asr_to_gold[i]]
             asr.tokens[i].tag = g.tag
             asr.tokens[i].head = gold_to_asr[g.head]
-            asr.tokens[i].label = g.label
+            asr.tokens[i].label = g.label if not g.is_edit else del_label
             asr.tokens[i].is_edit = g.is_edit
     
 
