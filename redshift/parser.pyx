@@ -18,7 +18,6 @@ from _state cimport *
 from sentence cimport Input, Sentence, Token, Step
 from transitions cimport Transition, transition, fill_valid, fill_costs
 from transitions cimport get_nr_moves, fill_moves
-from transitions cimport move_name
 from transitions cimport *
 from index.lexicon cimport get_str
 from index.hashes import decode_pos
@@ -190,8 +189,6 @@ cdef class Parser:
         cdef Beam beam = Beam(self.beta, self.beam_width, <size_t>self.moves,
                               self.nr_moves, py_sent)
         self.tagger.tag(py_sent)
-        if DEBUG:
-            print ' '.join(['%s|%s' % (w.word, w.tag) for w in py_sent.tokens])
         for i in range(self.beam_width):
             self._prepare_state(beam.beam[i], sent.tokens, sent.lattice)
         self.guide.cache.flush()
@@ -199,20 +196,12 @@ cdef class Parser:
         while not beam.is_finished:
             for i in range(beam.bsize):
                 s = beam.beam[i]
-                if DEBUG:
-                    words = []
-                    if (s.i+1) < s.n:
-                        for w in range(sent.lattice[s.i+1].n):
-                            words.append(get_str(<size_t>sent.lattice[s.i+1].nodes[w]))
-                    print ', '.join(words)
                 if not is_final(s):
                     fill_valid(s, sent.lattice, beam.moves[i], self.nr_moves) 
                     if s.parse[s.i].word != sent.lattice[s.i].nodes[0]:
                         self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
                         self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
                     self._score_classes(beam.beam[i], beam.moves[i])
-                if DEBUG:
-                    print "%d: %.3f" % (i, s.score)
             beam.extend()
         beam.fill_parse(sent.tokens)
         py_sent.segment()
@@ -228,17 +217,9 @@ cdef class Parser:
         #if not cache_hit:
         fill_context(self._context, &s.slots)
         self.extractor.extract(self._features, self._context)
-        if DEBUG:
-            names = open('/tmp/feats').read().strip().split()
-            context_strings = get_context_strings(&s.slots)
-            feature_strings = self.extractor.get_strings(names, context_strings)
-        #for feat in feature_strings:
-        #    print feat
         self.guide.fill_scores(self._features, scores)
         for i in range(self.nr_moves):
             classes[i].score = s.score + scores[classes[i].clas]
-            if DEBUG and classes[i].is_valid:
-                print move_name(&classes[i]), scores[classes[i].clas]
         return 0
 
     cdef int _prepare_state(self, State* s, Token* tokens, Step* lattice) except -1:
