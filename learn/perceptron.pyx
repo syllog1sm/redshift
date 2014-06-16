@@ -311,7 +311,7 @@ cdef class Perceptron:
         cdef size_t div = self.div
         for i in range(nr_square):
             inst_weight += score_square_feat(scores, div, nr_class, active_square[i])
-        inst_weight = inst_weight / 2
+        #inst_weight = inst_weight / 2
         for i in range(nr_class):
             scores[i] += inst_weight
 
