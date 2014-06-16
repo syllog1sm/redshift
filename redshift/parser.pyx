@@ -100,7 +100,7 @@ def get_labels(sents):
                 right_labels.add(sent.c_sent.tokens[j].label)
             if sent.c_sent.lattice[j].n > lattice_width:
                 lattice_width = sent.c_sent.lattice[j].n
-    nr_lattice_classes = min(2, lattice_width)
+    nr_lattice_classes = min(1, lattice_width)
     output = (
         nr_lattice_classes,
         lattice_width,
@@ -198,9 +198,8 @@ cdef class Parser:
                 s = beam.beam[i]
                 if not is_final(s):
                     fill_valid(s, sent.lattice, beam.moves[i], self.nr_moves) 
-                    if s.parse[s.i].word != sent.lattice[s.i].nodes[0]:
-                        self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
-                        self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
+                    self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
+                    self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
                     self._score_classes(beam.beam[i], beam.moves[i])
             beam.extend()
         beam.fill_parse(sent.tokens)
@@ -211,22 +210,21 @@ cdef class Parser:
         assert not is_final(s)
         cdef bint cache_hit = False
         fill_slots(s)
-        #scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
-        scores = self.guide.scores
-        #cache_hit = False
-        #if not cache_hit:
-        fill_context(self._context, &s.slots)
-        self.extractor.extract(self._features, self._context)
-        self.guide.fill_scores(self._features, scores)
+        scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
+        if not cache_hit:
+            fill_context(self._context, &s.slots)
+            self.extractor.extract(self._features, self._context)
+            self.guide.fill_scores(self._features, scores)
         for i in range(self.nr_moves):
             classes[i].score = s.score + scores[classes[i].clas]
         return 0
 
     cdef int _prepare_state(self, State* s, Token* tokens, Step* lattice) except -1:
-        cdef size_t i
-        for i in range(s.n):
-            s.parse[i].tag = tokens[i].tag
-            s.parse[i].word = lattice[i].nodes[0]
+        return 0
+        #cdef size_t i
+        #for i in range(s.n):
+        #    s.parse[i].tag = tokens[i].tag
+        #    s.parse[i].word = lattice[i].nodes[0]
 
     cdef int train_sent(self, Input py_sent) except -1:
         cdef size_t i
@@ -247,9 +245,8 @@ cdef class Parser:
                 s = p_beam.beam[i]
                 if not is_final(s):
                     fill_valid(s, sent.lattice, p_beam.moves[i], self.nr_moves) 
-                    if s.parse[s.i].word != sent.lattice[s.i].nodes[0]:
-                        self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
-                        self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
+                    self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
+                    self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
                     self._score_classes(s, p_beam.moves[i])
                     # Fill costs so we can see whether the prediction is gold-standard
                     if s.cost == 0:
@@ -275,9 +272,8 @@ cdef class Parser:
             for i in range(g_beam.bsize):
                 s = g_beam.beam[i]
                 if not is_final(s):
-                    if s.parse[s.i].word != sent.lattice[s.i].nodes[0]:
-                        self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
-                        self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
+                    self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
+                    self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
                     fill_valid(s, sent.lattice, g_beam.moves[i], self.nr_moves) 
                     fill_costs(s, sent.lattice, g_beam.moves[i], self.nr_moves,
                                gold_parse)
@@ -334,12 +330,10 @@ cdef class Parser:
         cdef Token* gword
         cdef Token* pword
         for i in range(max((pt, gt))):
-            if gold_state.parse[gold_state.i].word != gsent.lattice[gold_state.i].nodes[0]:
-                self.tagger.tag_word(gold_state.parse, gold_state.i+1, gsent.lattice, gsent.n)
-                self.tagger.tag_word(gold_state.parse, gold_state.i+2, gsent.lattice, gsent.n)
-            if pred_state.parse[pred_state.i].word != psent.lattice[pred_state.i].nodes[0]:
-                self.tagger.tag_word(pred_state.parse, pred_state.i+1, psent.lattice, psent.n)
-                self.tagger.tag_word(pred_state.parse, pred_state.i+2, psent.lattice, psent.n)
+            self.tagger.tag_word(gold_state.parse, gold_state.i+1, gsent.lattice, gsent.n)
+            self.tagger.tag_word(gold_state.parse, gold_state.i+2, gsent.lattice, gsent.n)
+            self.tagger.tag_word(pred_state.parse, pred_state.i+1, psent.lattice, psent.n)
+            self.tagger.tag_word(pred_state.parse, pred_state.i+2, psent.lattice, psent.n)
             # Find where the states diverge
             gword = &gsent.tokens[gold_state.i]
             pword = &psent.tokens[pred_state.i]
