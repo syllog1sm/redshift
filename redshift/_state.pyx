@@ -107,6 +107,15 @@ cdef int fill_slots(State *s) except -1:
     else:
         s.slots.n0_prob = 0
 
+    s.slots.w_f_exact = 0
+    s.slots.w_b_exact = 0
+    s.slots.p_f_exact = 0
+    s.slots.p_b_exact = 0
+    s.slots.w_f_copy = 0
+    s.slots.w_b_copy = 0
+    s.slots.p_f_copy = 0
+    s.slots.p_b_copy = 0
+    """
     # Match features
     cdef size_t[5] s1
     cdef size_t[5] s2
@@ -125,7 +134,7 @@ cdef int fill_slots(State *s) except -1:
     len1 = _fill_tags(s1, s.top, -5, 0, s.parse)
     len2 = _fill_tags(s2, s.i, -5, s.top, s.parse)
     s.slots.p_b_exact = _fill_match(&s.slots.p_b_copy, s1, s2, min(len1, len2))
-
+    """
  
 cdef size_t _fill_words(size_t* string, size_t start, int n, size_t stop, Token* tokens):
     cdef size_t i = 0
