@@ -13,10 +13,6 @@ from redshift._state cimport SlotTokens
 from redshift.sentence cimport Token
 from index.lexicon cimport Lexeme
 from itertools import combinations
-
-from index.lexicon cimport get_str
-from index.hashes import decode_pos
-from index.hashes import decode_label
 # Context elements
 # Ensure _context_size is always last; it ensures our compile-time setting
 # is in synch with the enum
@@ -330,17 +326,6 @@ cdef inline void fill_token(size_t* context, size_t i, Token token):
     context[i+6] = token.l_valency
     context[i+7] = token.r_valency
 
-
-cdef get_token_str(list context, size_t i, Token token):
-    context[i] = get_str(<size_t>token.word) if token.word.orig != 0 else None
-    context[i+1] = decode_pos(token.tag) if token.tag != 0 else None
-    context[i+2] = str(token.word.cluster) if token.word.cluster != 0 else None
-    context[i+3] = str(token.word.cluster & 63) if token.word.cluster != 0 else None
-    context[i+4] = str(token.word.cluster & 15) if token.word.cluster != 0 else None
-    context[i+5] = decode_label(token.label) if token.label != 0 else None
-    context[i+6] = str('lval=%d' % token.l_valency) if token.l_valency != 0 else None
-    context[i+7] = str('rval=%d' % token.r_valency) if token.r_valency != 0 else None
-
 cdef inline void zero_token(size_t* context, size_t i):
     cdef size_t j
     for j in range(9):
@@ -415,77 +400,6 @@ cdef int fill_context(size_t* context, SlotTokens* t) except -1:
     else:
         for lp_feat in range(-t.n0_prob):
             context[lp1 + lp_feat] = 1
-
-
-cdef list get_context_strings(SlotTokens* t):
-    cdef list context = []
-    for c in range(CONTEXT_SIZE):
-        context.append(None)
-    # This fills in the basic properties of each of our "slot" tokens, e.g.
-    # word on top of the stack, word at the front of the buffer, etc.
-    get_token_str(context, S2w, t.s2)
-    get_token_str(context, S1w, t.s1)
-    get_token_str(context, S1rw, t.s1r)
-    get_token_str(context, S0le_w, t.s0le)
-    get_token_str(context, S0lw, t.s0l)
-    get_token_str(context, S0l2w, t.s0l2)
-    get_token_str(context, S0l0w, t.s0l0)
-    get_token_str(context, S0w, t.s0)
-    get_token_str(context, S0nw, t.s0n)
-    get_token_str(context, S0nnw, t.s0nn)
-    get_token_str(context, S0r0w, t.s0r0)
-    get_token_str(context, S0r2w, t.s0r2)
-    get_token_str(context, S0rw, t.s0r)
-    get_token_str(context, S0re_w, t.s0re)
-    get_token_str(context, N0le_w, t.n0le)
-    get_token_str(context, N0lw, t.n0l)
-    get_token_str(context, N0l2w, t.n0l2)
-    get_token_str(context, N0l0w, t.n0l0)
-    get_token_str(context, P2w, t.p2)
-    get_token_str(context, P1w, t.p1)
-    get_token_str(context, N0w, t.n0)
-    get_token_str(context, N1w, t.n1)
-    get_token_str(context, N2w, t.n2)
-    # TODO: Distance
-    if t.s0.i != 0:
-        assert t.n0.i > t.s0.i
-        context[dist] = str(t.n0.i - t.s0.i)
-    else:
-        context[dist] = None
-    # Disfluency match features
-    context[prev_edit] = t.p1.is_edit
-    context[prev_edit_wmatch] = t.p1.is_edit and t.p1.word == t.n0.word
-    context[prev_edit_pmatch] = t.p1.is_edit and t.p1.tag == t.n0.tag
-    context[prev_prev_edit] = t.p1.is_edit and t.p2.is_edit
-    context[prev_edit_word] = get_str(t.p1.word.norm) if t.p1.is_edit else None
-    context[prev_edit_pos] = get_str(t.p1.tag) if t.p1.is_edit else None
-    
-    context[next_edit] = t.s0n.is_edit
-    context[next_edit_wmatch] = t.s0n.is_edit and t.s0n.word == t.s0.word
-    context[next_edit_pmatch] = t.s0n.is_edit and t.s0n.tag == t.s0.tag
-    context[next_next_edit] = t.s0n.is_edit and t.s0nn.is_edit
-    context[next_edit_word] = t.s0n.is_edit and t.s0n.word.norm
-    context[next_edit_pos] = t.s0n.is_edit and t.s0n.tag
-
-    # These features find how much of S0's span matches N0's span, starting from
-    # the left.
-    # 
-    context[w_f_copy] = t.w_f_copy
-    context[w_f_exact] = t.w_f_exact
-    context[p_f_copy] = t.p_f_copy
-    context[p_f_exact] = t.p_f_exact
-    context[w_b_copy] = t.w_b_copy
-    context[w_b_exact] = t.w_b_exact
-    context[p_b_copy] = t.p_b_copy
-    context[p_b_exact] = t.p_b_exact
-
-    cdef size_t lp_feat
-    if t.n0_prob == 1:
-        context[prob1] = 1
-    else:
-        for lp_feat in range(-t.n0_prob):
-            context[lp1 + lp_feat] = 1
-    return context
 
 
 arc_hybrid = (
