@@ -117,7 +117,8 @@ cdef int edit_cost(State *s, Token* gold) except -1:
     return not gold[s.top].is_edit
 
 cdef int edit_label_cost(State* s, size_t label, Step* lattice, Token* gold) except -1:
-    return gold[s.top].label != label
+    return 0
+    #return gold[s.top].label != label
 
 
 cdef int break_cost(State* s, Token* gold) except -1:
