@@ -8,6 +8,7 @@ import random
 import index.lexicon
 from index.lexicon cimport Lexeme
 from index.lexicon cimport BLANK_WORD
+from index.lexicon cimport get_str
 
 from index.hashes import encode_pos
 from index.hashes import encode_label
@@ -150,6 +151,7 @@ cdef class Input:
                 sent_id = '0'
             head = int(fields[6])
             label = fields[7]
+            is_del = label == '*delete*'
             if is_edit:
                 label = 'erased'
             elif is_fill:
@@ -157,7 +159,7 @@ cdef class Input:
             elif is_ns:
                 label = 'fillerNS'
             tokens.append((word, pos, head, label, int(sent_id),
-                          is_edit or is_fill or is_ns))
+                          is_edit or is_fill or is_ns or is_del))
         return cls.from_tokens(tokens, turn_id=turn_id)
 
     def segment(self):
@@ -284,6 +286,11 @@ cdef object conll_line_from_token(size_t i, Token* a, Step* lattice):
     label = decode_label(a.label)
     fill_tag = label[-1] if label.startswith('filler') else '-'
     feats = '0.%d|%s|%d|-' % (a.sent_id, fill_tag, label == 'erased')
+    if lattice[i].n >= 2:
+        lattice_step = '|'.join([get_str(<size_t>lattice[i].nodes[w])
+                                for w in range(lattice[i].n)])
+    else:
+        lattice_step = '_'
     cdef bytes tag = index.hashes.decode_pos(a.tag)
-    return <bytes>'\t'.join((str(i), word, '_', tag, tag, feats,
+    return <bytes>'\t'.join((str(i), word, lattice_step, tag, tag, feats,
                              str(a.head), label, '_', '_'))
