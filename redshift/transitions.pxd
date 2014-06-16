@@ -6,6 +6,7 @@ from redshift.sentence cimport Step
 from libcpp.vector cimport vector
 
 
+
 cdef struct Transition:
     size_t clas
     size_t move
@@ -13,8 +14,6 @@ cdef struct Transition:
     double score
     int cost
     bint is_valid
-
-cdef object move_name(Transition* t)
 
 cdef size_t get_nr_moves(size_t shift_classes, size_t lattice_width, list left_labels,
                          list right_labels, list dfl_labels, bint use_break)
