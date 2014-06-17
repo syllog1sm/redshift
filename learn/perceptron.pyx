@@ -14,6 +14,10 @@ from cython.operator cimport dereference as deref, preincrement as inc
 cimport cython
 cimport index.hashes
 
+DEF LINE = 8
+
+cdef size_t get_div(size_t nr_class):
+    return (nr_class / LINE) + 1
 
 cdef double score_dense_feat(double* scores, DenseFeature* feat) nogil:
     feat.nr_seen += 1
@@ -26,19 +30,20 @@ cdef double score_dense_feat(double* scores, DenseFeature* feat) nogil:
     return t
 
 
-cdef double score_square_feat(double* scores, size_t div, size_t nr_class,
-                                   SquareFeature* feat) nogil:
-    cdef size_t j, k, part_idx
+cdef double score_square_feat(double* scores, size_t nr_class, SquareFeature* feat):
+    cdef size_t i, j, part_idx, clas
     feat.nr_seen  += 1
     cdef double t = 0
-    for j in range(div):
-        if feat.seen[j]:
-            part_idx = j * div
-            for k in range(div):
-                if (part_idx + k) >= nr_class:
-                    break
-                scores[part_idx + k] += feat.parts[j].w[k]
-                t += feat.parts[j].w[k]
+    cdef size_t div = get_div(nr_class)
+    cdef double* weights
+    cdef bint* seen = feat.seen
+    for i in range(div):
+        if seen[i]:
+            weights = feat.parts[i].w
+            part_idx = i * LINE
+            for j in range(LINE if nr_class - part_idx >= LINE else nr_class - part_idx):
+                scores[part_idx + j] += weights[j]
+                t += weights[j]
     return t
 
 
@@ -94,7 +99,7 @@ cdef void update_dense(size_t now, double w, size_t clas, DenseFeature* raw):
         raw.e = clas + 1
 
 
-cdef inline SquareFeature* init_square_feat(uint64_t feat_id, size_t div):
+cdef inline SquareFeature* init_square_feat(uint64_t feat_id, size_t nr_class):
     """A SquareFeature divides its parameters into a square 2d array of parameters,
     so that regions which are unoccupied do not need to be allocated or examined.
     This is a compromise between a sparse array and a dense array, and works best
@@ -106,59 +111,51 @@ cdef inline SquareFeature* init_square_feat(uint64_t feat_id, size_t div):
     row, and re-construct the class index by (i * div) + j. We then fetch
     feat.parts[i].w[j].
     """
+    cdef size_t div = get_div(nr_class)
     cdef SquareFeature* feat = <SquareFeature*>malloc(sizeof(SquareFeature))
     feat.nr_seen = 1
-    feat.parts = <DenseParams*>malloc(div * sizeof(DenseParams))
+    feat.parts = <DenseParams**>calloc(div, sizeof(DenseParams*))
     feat.seen = <bint*>calloc(div, sizeof(bint))
     return feat
 
 
 cdef size_t load_square_feat(size_t nr_class, double unary_weight, double* weights,
-                             size_t nr_seen, size_t div, SquareFeature* feat):
+                             size_t nr_seen, SquareFeature* feat):
     cdef DenseParams* params
     feat.nr_seen = nr_seen
     cdef size_t nr_weight = 0
-    for clas in range(nr_class):
-        part_idx = clas / div
-        if not feat.seen[part_idx]:
-            params = <DenseParams*>malloc(sizeof(DenseParams))
-            params.w = <double*>calloc(div, sizeof(double))
-            params.acc = <double*>calloc(div, sizeof(double))
-            params.last_upd = <size_t*>calloc(div, sizeof(size_t))
-            feat.parts[part_idx] = params[0]
-            feat.seen[part_idx] = True
-        idx = clas % div
-        feat.parts[part_idx].w[idx] = weights[clas]
-        nr_weight += 1
+    cdef size_t part
+    cdef size_t div = get_div(nr_class)
+    for part in range(div):
+        for i in range(LINE):
+            if weights[(part * div) + i] != 0:
+                if not feat.seen[part]:
+                    feat.parts[part] = <DenseParams*>calloc(1, sizeof(DenseParams))
+                feat.parts[part].w[i] = weights[(part * div) + i]
+                feat.seen[part] = True
+                nr_weight += 1
     return nr_weight
 
 
-cdef void free_square_feat(SquareFeature* feat, size_t div):
+cdef void free_square_feat(SquareFeature* feat, size_t nr_class):
+    cdef size_t div = get_div(nr_class)
     cdef size_t i
     for i in range(div):
         if feat.seen[i]:
-            free(feat.parts[i].w)
-            free(feat.parts[i].acc)
-            free(feat.parts[i].last_upd)
+            free(feat.parts[i])
     free(feat.parts)
     free(feat.seen)
     free(feat)
 
 
-cdef inline void update_square(size_t nr_class, size_t div,
+cdef inline void update_square(size_t nr_class,
                                size_t now, double weight, size_t clas, SquareFeature* feat):
-    cdef DenseParams* params
-    cdef size_t part_idx = clas / div
+    cdef size_t part_idx = clas / LINE
     if not feat.seen[part_idx]:
-        params = <DenseParams*>malloc(sizeof(DenseParams))
-        params.w = <double*>calloc(div, sizeof(double))
-        params.acc = <double*>calloc(div, sizeof(double))
-        params.last_upd = <size_t*>calloc(div, sizeof(size_t))
-        feat.parts[part_idx] = params[0]
+        feat.parts[part_idx] = <DenseParams*>calloc(1, sizeof(DenseParams))
         feat.seen[part_idx] = True
-    else:
-        params = &feat.parts[part_idx]
-    cdef size_t i = clas % div
+    cdef DenseParams* params = feat.parts[part_idx]
+    cdef size_t i = clas % LINE
     params.acc[i] += (now - params.last_upd[i]) * params.w[i]
     params.w[i] += weight
     params.last_upd[i] = now
@@ -174,9 +171,6 @@ cdef class Perceptron:
         self.scores = <double *>calloc(max_classes, sizeof(double))
         self.W = dense_hash_map[uint64_t, size_t]()
         self.W.set_empty_key(0)
-        self.div = <size_t>math.sqrt(max_classes)
-        if (self.div * self.div) < max_classes:
-            self.div += 1
         self.now = 0
         self.nr_raws = 20000
         self.raws = <DenseFeature**>malloc(self.nr_raws * sizeof(DenseFeature*))
@@ -199,7 +193,7 @@ cdef class Perceptron:
             data = deref(it)
             inc(it)
             if data.second >= self.nr_raws:
-                free_square_feat(<SquareFeature*>data.second, self.div)
+                free_square_feat(<SquareFeature*>data.second, self.nr_class)
         cdef size_t i
         for i in range(self.nr_raws):
             free_dense_feat(self.raws[i])
@@ -222,14 +216,13 @@ cdef class Perceptron:
 
     def set_classes(self, labels):
         self.nr_class = len(labels)
-        self.div = <size_t>math.sqrt(self.nr_class) + 1
         for i in range(1, self.nr_raws):
             free(self.raws[i])
             self.raws[i] = init_dense_feat(0, self.nr_class)
 
     cdef int add_feature(self, uint64_t f) except -1:
         cdef size_t i
-        cdef SquareFeature* feat = init_square_feat(f, self.div)
+        cdef SquareFeature* feat = init_square_feat(f, self.nr_class)
         self.W[f] = <size_t>feat
 
     def batch_update(self, deltas):
@@ -246,7 +239,7 @@ cdef class Perceptron:
                     if feat_addr < self.nr_raws:
                         update_dense(self.now, d, clas, self.raws[feat_addr])
                     else:
-                        update_square(self.nr_class, self.div,
+                        update_square(self.nr_class,
                                       self.now, d, clas, <SquareFeature*>feat_addr)
 
     cdef int64_t update(self, size_t pred_i, size_t gold_i,
@@ -272,9 +265,9 @@ cdef class Perceptron:
                 update_dense(self.now, 1.0, gold_i, self.raws[feat_addr])
                 update_dense(self.now, -1.0, pred_i, self.raws[feat_addr])
             else:
-                update_square(self.nr_class, self.div,
+                update_square(self.nr_class,
                               self.now, 1.0, gold_i, <SquareFeature*>feat_addr)
-                update_square(self.nr_class, self.div,
+                update_square(self.nr_class,
                               self.now, -1.0, pred_i, <SquareFeature*>feat_addr)
    
     cdef inline int fill_scores(self, uint64_t* features, double* scores) except -1:
@@ -288,7 +281,6 @@ cdef class Perceptron:
         cdef size_t nr_dense = 0
         cdef size_t nr_raws = self.nr_raws
         # First collect the active features, in two lots --- dense and square
-
         cdef size_t i
         while features[i] != 0:
             f = features[i]
@@ -308,9 +300,8 @@ cdef class Perceptron:
             scores[i] = 0
         for i in range(nr_dense):
             inst_weight += score_dense_feat(scores, active_dense[i])
-        cdef size_t div = self.div
         for i in range(nr_square):
-            inst_weight += score_square_feat(scores, div, nr_class, active_square[i])
+            inst_weight += score_square_feat(scores, nr_class, active_square[i])
         #inst_weight = inst_weight / 2
         for i in range(nr_class):
             scores[i] += inst_weight
@@ -319,7 +310,6 @@ cdef class Perceptron:
         cdef uint64_t f
         cdef double tmp
         cdef SquareFeature* feat
-        cdef DenseParams* params
         cdef pair[uint64_t, size_t] data
         cdef dense_hash_map[uint64_t, size_t].iterator it
         it = self.W.begin()
@@ -328,10 +318,10 @@ cdef class Perceptron:
             inc(it)
             if data.second >= self.nr_raws:
                 feat = <SquareFeature*>data.second
-                for i in range(self.div):
+                for i in range(get_div(self.nr_class)):
                     if feat.seen[i]:
-                        params = &feat.parts[i]
-                        for j in range(self.div):
+                        params = feat.parts[i]
+                        for j in range(LINE):
                             # Save the unaveraged value in accs
                             tmp = params.w[j]
                             params.acc[j] += (self.now - params.last_upd[j]) * params.w[j]
@@ -373,7 +363,6 @@ cdef class Perceptron:
         out = gzip.open(str(out_loc), 'w')
         out.write(u'nr_class %d\n' % (self.nr_class))
         zeroes = '0 ' * self.nr_class 
-        cdef DenseParams* params
         cdef double unary_weight
         for nr_seen, feat_id in by_nr_seen:
             feat_addr = self.W[feat_id]
@@ -388,11 +377,11 @@ cdef class Perceptron:
                         non_zeroes.append('%d=%.3f' % (i, self.raws[feat_addr].w[i]))
             else:
                 feat = <SquareFeature*>feat_addr
-                for i in range(self.div):
+                for i in range(get_div(self.nr_class)):
                     if feat.seen[i]:
-                        params = &feat.parts[i]
-                        for j in range(self.div):
-                            clas = (i * self.div) + j
+                        params = feat.parts[i]
+                        for j in range(LINE):
+                            clas = (i * get_div(self.nr_class) + j)
                             if params.w[j] != 0:
                                 unary_weight += params.w[j]
                                 non_zeroes.append('%d=%.3f ' % (clas, params.w[j]))
@@ -411,9 +400,6 @@ cdef class Perceptron:
         in_ = gzip.open(in_, 'rb')
         header = in_.readline()
         self.nr_class = int(header.split()[1])
-        self.div = <int>math.sqrt(self.nr_class)
-        if (self.div * self.div) < self.nr_class:
-            self.div += 1
         free(self.scores)
         self.scores = <double *>malloc(self.nr_class * sizeof(double))
         cdef uint64_t f
@@ -459,7 +445,7 @@ cdef class Perceptron:
             else:
                 self.add_feature(f)
                 nr_weight += load_square_feat(self.nr_class, unary_weight, weights,
-                                              nr_seen, self.div, <SquareFeature*>self.W[f])
+                                              nr_seen, <SquareFeature*>self.W[f])
                 nr_feat += 1
         free(weights)
         print "%d weights for %d features" % (nr_weight, nr_feat)
@@ -487,7 +473,7 @@ cdef class Perceptron:
                 continue
             feat = <SquareFeature*>feat_addr
             if feat.nr_seen < thresh:
-                free_square_feat(feat, self.div)
+                free_square_feat(feat, self.nr_class)
                 self.W[f_id] = 0
                 n_pruned += 1
             n_feats += 1
@@ -533,7 +519,7 @@ cdef class Perceptron:
                 vacancies.append(i)
             elif self.raws[i].nr_seen < cutoff:
                 assert self.raws[i].id != 0
-                self._raw_to_dense(self.raws[i].id, i)
+                self._dense_to_square(self.raws[i].id, i)
                 vacancies.append(i)
         for freq, f_id in q[:self.nr_raws]:
             if not vacancies:
@@ -541,10 +527,10 @@ cdef class Perceptron:
             assert f_id != 0
             f_addr = self.W[f_id]
             if f_addr > self.nr_raws:
-                self._dense_to_raw(f_id, f_addr, vacancies.pop())
+                self._square_to_dense(f_id, f_addr, vacancies.pop())
         assert not vacancies, str(vacancies)
 
-    def _raw_to_dense(self, uint64_t f_id, size_t raw_idx):
+    def _dense_to_square(self, uint64_t f_id, size_t raw_idx):
         self.add_feature(f_id)
         feat = <SquareFeature*>self.W[f_id]
         feat.nr_seen = self.raws[raw_idx].nr_seen
@@ -555,26 +541,21 @@ cdef class Perceptron:
         cdef double* accs = self.raws[raw_idx].acc
         cdef size_t* last_upd = self.raws[raw_idx].last_upd
         cdef size_t i, clas, part_idx
-        cdef DenseParams* params
-        for clas in range(self.nr_class):
-            if weights[clas] == 0:
-                continue
-            part_idx = clas / self.div
-            if not feat.seen[part_idx]:
-                params = <DenseParams*>malloc(sizeof(DenseParams))
-                params.w = <double*>calloc(self.div, sizeof(double))
-                params.acc = <double*>calloc(self.div, sizeof(double))
-                params.last_upd = <size_t*>calloc(self.div, sizeof(size_t))
-                feat.parts[part_idx] = params[0]
-                feat.seen[part_idx] = True
-            else:
-                params = &feat.parts[part_idx]
-            i = clas % self.div
-            params.acc[i] = accs[clas]
-            params.w[i] = weights[clas]
-            params.last_upd[i] = last_upd[i]
+        cdef size_t div = get_div(self.nr_class)
+        for part_idx in range(div):
+            for i in range(LINE):
+                clas = (part_idx * LINE) + i
+                if weights[clas] == 0:
+                    continue
+                if not feat.seen[part_idx]:
+                    feat.parts[part_idx] = <DenseParams*>calloc(1, sizeof(DenseParams))
+                    feat.seen[part_idx] = True
+                params = feat.parts[part_idx]
+                params.acc[i] = accs[clas]
+                params.w[i] = weights[clas]
+                params.last_upd[i] = last_upd[i]
 
-    def _dense_to_raw(self, uint64_t f_id, size_t feat_addr, size_t i):
+    def _square_to_dense(self, uint64_t f_id, size_t feat_addr, size_t i):
         cdef double* w
         cdef double* accs
         cdef size_t* last_upd
@@ -585,13 +566,14 @@ cdef class Perceptron:
         raw.s = 0
         raw.e = 0
         cdef size_t j, k
-        for j in range(self.div):
+        cdef size_t div = get_div(self.nr_class)
+        for j in range(div):
             if feat.seen[j]:
-                part_idx = j * self.div
+                part_idx = j * LINE
                 w = feat.parts[j].w
                 accs = feat.parts[j].acc
                 last_upd = feat.parts[j].last_upd
-                for k in range(self.div):
+                for k in range(LINE):
                     clas = part_idx + k
                     if clas >= self.nr_class:
                         break
@@ -603,7 +585,7 @@ cdef class Perceptron:
                     raw.acc[clas] = accs[k]
                     raw.last_upd[clas] = last_upd[k]
 
-        free_square_feat(feat, self.div)
+        free_square_feat(feat, self.nr_class)
         self.W[f_id] = i
         assert self.W[f_id] < self.nr_raws
         assert raw.e <= self.nr_class, raw.e
