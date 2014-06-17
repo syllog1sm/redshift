@@ -68,7 +68,8 @@ def train(sents, model_dir, n_iter=15, beam_width=8, beam_factor=0.5,
     for n in range(n_iter):
         parser.total_bsize = 0
         parser.beam_iters = 0
-        parser.total_viol = 0
+        parser.total_delta = 0
+        parser.total_v = 0
         for i in indices:
             py_sent = sents[i]
             # TODO: Should this be sensitive to whether we've hit max trainign
@@ -76,7 +77,8 @@ def train(sents, model_dir, n_iter=15, beam_width=8, beam_factor=0.5,
             parser.tagger.train_sent(py_sent)
             parser.train_sent(py_sent)
         print 'Avg beam: %.2f' % parser.avg_bsize
-        print 'Avg delta: %.1f' % parser.avg_viol
+        print 'Avg delta: %.1f' % parser.avg_delta
+        print 'Avg V: %.1f' % parser.avg_v
         parser.guide.end_train_iter(n, feat_thresh)
         parser.tagger.guide.end_train_iter(n, feat_thresh)
         random.shuffle(indices)
@@ -121,6 +123,9 @@ def get_templates(feats_str):
     templates += _parse_features.clusters
     templates += _parse_features.edges
     templates += _parse_features.string_probs
+    if 'ngram' in feats_str:
+        templates += _parse_features.bigrams
+        templates += _parse_features.trigrams
     return templates, match_feats
 
 
@@ -137,7 +142,8 @@ cdef class Parser:
     cdef size_t* _context
     cdef size_t nr_moves
     cdef size_t total_bsize
-    cdef double total_viol
+    cdef double total_delta
+    cdef size_t total_v
     cdef size_t beam_iters
 
     def __cinit__(self, model_dir):
@@ -148,7 +154,8 @@ cdef class Parser:
         self._context = <size_t*>calloc(_parse_features.context_size(), sizeof(size_t))
         
         self.total_bsize = 0
-        self.total_viol = 0
+        self.total_delta = 0
+        self.total_v = 0
         self.beam_iters = 0
         self.feat_thresh = self.cfg.feat_thresh
         self.beam_width = self.cfg.beam_width
@@ -178,9 +185,13 @@ cdef class Parser:
         def __get__(self):
             return float(self.total_bsize) / self.beam_iters
 
-    property avg_viol:
+    property avg_delta:
         def __get__(self):
-            return float(self.total_viol) / self.beam_iters
+            return float(self.total_delta) / self.beam_iters
+
+    property avg_v:
+        def __get__(self):
+            return float(self.total_v) / (self.guide.total - self.guide.n_corr)
 
     cpdef int parse(self, Input py_sent) except -1:
         cdef Sentence* sent = py_sent.c_sent
@@ -188,8 +199,6 @@ cdef class Parser:
         cdef Beam beam = Beam(self.beta, self.beam_width, <size_t>self.moves,
                               self.nr_moves, py_sent)
         self.tagger.tag(py_sent)
-        for i in range(self.beam_width):
-            self._prepare_state(beam.beam[i], sent.tokens, sent.lattice)
         self.guide.cache.flush()
         cdef State* s
         while not beam.is_finished:
@@ -197,8 +206,8 @@ cdef class Parser:
                 s = beam.beam[i]
                 if not is_final(s):
                     fill_valid(s, sent.lattice, beam.moves[i], self.nr_moves) 
-                    self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
-                    self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
+                    self.tagger.tag_word(s.parse, s.i-1, sent.lattice, sent.n)
+                    self.tagger.tag_word(s.parse, s.i, sent.lattice, sent.n)
                     self._score_classes(beam.beam[i], beam.moves[i])
             beam.extend()
         beam.fill_parse(sent.tokens)
@@ -218,13 +227,6 @@ cdef class Parser:
             classes[i].score = s.score + scores[classes[i].clas]
         return 0
 
-    cdef int _prepare_state(self, State* s, Token* tokens, Step* lattice) except -1:
-        return 0
-        #cdef size_t i
-        #for i in range(s.n):
-        #    s.parse[i].tag = tokens[i].tag
-        #    s.parse[i].word = lattice[i].nodes[0]
-
     cdef int train_sent(self, Input py_sent) except -1:
         cdef size_t i
         cdef State* s
@@ -237,21 +239,18 @@ cdef class Parser:
         self.guide.cache.flush()
         p_beam = Beam(self.beta, self.beam_width, <size_t>self.moves, self.nr_moves,
                       py_sent)
-        for i in range(self.beam_width):
-            self._prepare_state(p_beam.beam[i], sent.tokens, sent.lattice)
         while not p_beam.is_finished:
             for i in range(p_beam.bsize):
                 s = p_beam.beam[i]
                 if not is_final(s):
                     fill_valid(s, sent.lattice, p_beam.moves[i], self.nr_moves) 
-                    self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
-                    self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
+                    self.tagger.tag_word(s.parse, s.i-1, sent.lattice, sent.n)
+                    self.tagger.tag_word(s.parse, s.i, sent.lattice, sent.n)
                     self._score_classes(s, p_beam.moves[i])
                     # Fill costs so we can see whether the prediction is gold-standard
                     if s.cost == 0:
                         fill_costs(s, sent.lattice, p_beam.moves[i], self.nr_moves,
                                    gold_parse)
-
             self.total_bsize += p_beam.bsize
             self.beam_iters += 1
             p_beam.extend()
@@ -265,15 +264,13 @@ cdef class Parser:
             return 0
         g_beam = Beam(self.beta, self.beam_width, <size_t>self.moves, self.nr_moves,
                       py_sent)
-        for i in range(self.beam_width):
-            self._prepare_state(g_beam.beam[i], sent.tokens, sent.lattice)
   
         while not g_beam.is_finished:
             for i in range(g_beam.bsize):
                 s = g_beam.beam[i]
                 if not is_final(s):
-                    self.tagger.tag_word(s.parse, s.i+1, sent.lattice, sent.n)
-                    self.tagger.tag_word(s.parse, s.i+2, sent.lattice, sent.n)
+                    self.tagger.tag_word(s.parse, s.i-1, sent.lattice, sent.n)
+                    self.tagger.tag_word(s.parse, s.i, sent.lattice, sent.n)
                     fill_valid(s, sent.lattice, g_beam.moves[i], self.nr_moves) 
                     fill_costs(s, sent.lattice, g_beam.moves[i], self.nr_moves,
                                gold_parse)
@@ -296,6 +293,7 @@ cdef class Parser:
         cdef int v = get_violation(p_beam, g_beam)
         if v < 1:
             return {}
+        self.total_v += v
         cdef size_t pt, gt
         cdef double ps, gs
         cdef Transition* ghist
@@ -307,7 +305,7 @@ cdef class Parser:
         ps = p_beam.score_at(v)
         gs = g_beam.score_at(v)
         
-        self.total_viol += ps - gs
+        self.total_delta += ps - gs
         if (ps - gs) < -1:
             print pt, gt
             print ps, gs
@@ -322,29 +320,14 @@ cdef class Parser:
         cdef size_t clas
         cdef State* gold_state = init_state(gsent.n)
         cdef State* pred_state = init_state(psent.n)
-        self._prepare_state(gold_state, gsent.tokens, gsent.lattice)
-        self._prepare_state(pred_state, psent.tokens, psent.lattice)
         cdef dict counts = {}
         for clas in range(self.nr_moves):
             counts[clas] = {}
-        cdef bint seen_diff = False
-        cdef Token* gword
-        cdef Token* pword
         for i in range(max(pt, gt) + 1):
-            self.tagger.tag_word(gold_state.parse, gold_state.i+1, gsent.lattice, gsent.n)
-            self.tagger.tag_word(gold_state.parse, gold_state.i+2, gsent.lattice, gsent.n)
-            self.tagger.tag_word(pred_state.parse, pred_state.i+1, psent.lattice, psent.n)
-            self.tagger.tag_word(pred_state.parse, pred_state.i+2, psent.lattice, psent.n)
-            # Find where the states diverge
-            gword = &gsent.tokens[gold_state.i]
-            pword = &psent.tokens[pred_state.i]
-            if not seen_diff and gword.word == pword.word and ghist[i].clas == phist[i].clas:
-                if i < gt:
-                    transition(&ghist[i], gold_state, gsent.lattice)
-                if i < pt:
-                    transition(&phist[i], pred_state, psent.lattice)
-                continue
-            seen_diff = True
+            self.tagger.tag_word(gold_state.parse, gold_state.i-1, gsent.lattice, gsent.n)
+            self.tagger.tag_word(gold_state.parse, gold_state.i, gsent.lattice, gsent.n)
+            self.tagger.tag_word(pred_state.parse, pred_state.i-1, psent.lattice, psent.n)
+            self.tagger.tag_word(pred_state.parse, pred_state.i, psent.lattice, psent.n)
             if i < gt:
                 fill_slots(gold_state)
                 fill_context(self._context, &gold_state.slots)
