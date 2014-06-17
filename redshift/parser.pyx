@@ -26,8 +26,9 @@ from tagger cimport Tagger
 from util import Config
 
 from features.extractor cimport Extractor
-import _parse_features
-from _parse_features cimport *
+
+import _lattice_features as _parse_features
+from redshift._lattice_features cimport *
 
 import index.hashes
 cimport index.hashes
@@ -67,13 +68,15 @@ def train(sents, model_dir, n_iter=15, beam_width=8, beam_factor=0.5,
     for n in range(n_iter):
         parser.total_bsize = 0
         parser.beam_iters = 0
+        parser.total_viol = 0
         for i in indices:
             py_sent = sents[i]
             # TODO: Should this be sensitive to whether we've hit max trainign
             # iters for tagger?
             parser.tagger.train_sent(py_sent)
             parser.train_sent(py_sent)
-        print parser.avg_bsize, parser.guide.W.size()
+        print 'Avg beam: %.2f' % parser.avg_bsize
+        print 'Avg delta: %.1f' % parser.avg_viol
         parser.guide.end_train_iter(n, feat_thresh)
         parser.tagger.guide.end_train_iter(n, feat_thresh)
         random.shuffle(indices)
@@ -114,20 +117,10 @@ def get_labels(sents):
 def get_templates(feats_str):
     match_feats = []
     templates = _parse_features.arc_hybrid
-    if 'disfl' in feats_str:
-        templates += _parse_features.disfl
-        templates += _parse_features.new_disfl
-        templates += _parse_features.suffix_disfl
-        templates += _parse_features.extra_labels
-        templates += _parse_features.clusters
-        templates += _parse_features.edges
-        templates += _parse_features.prev_next
-        templates += _parse_features.string_probs
-        match_feats = _parse_features.match_templates()
-    elif 'clusters' in feats_str:
-        templates += _parse_features.clusters
-    if 'bitags' in feats_str:
-        templates += _parse_features.pos_bigrams()
+    templates += _parse_features.disfl
+    templates += _parse_features.clusters
+    templates += _parse_features.edges
+    templates += _parse_features.string_probs
     return templates, match_feats
 
 
@@ -144,6 +137,7 @@ cdef class Parser:
     cdef size_t* _context
     cdef size_t nr_moves
     cdef size_t total_bsize
+    cdef double total_viol
     cdef size_t beam_iters
 
     def __cinit__(self, model_dir):
@@ -154,6 +148,7 @@ cdef class Parser:
         self._context = <size_t*>calloc(_parse_features.context_size(), sizeof(size_t))
         
         self.total_bsize = 0
+        self.total_viol = 0
         self.beam_iters = 0
         self.feat_thresh = self.cfg.feat_thresh
         self.beam_width = self.cfg.beam_width
@@ -182,6 +177,10 @@ cdef class Parser:
     property avg_bsize:
         def __get__(self):
             return float(self.total_bsize) / self.beam_iters
+
+    property avg_viol:
+        def __get__(self):
+            return float(self.total_viol) / self.beam_iters
 
     cpdef int parse(self, Input py_sent) except -1:
         cdef Sentence* sent = py_sent.c_sent
@@ -252,6 +251,7 @@ cdef class Parser:
                     if s.cost == 0:
                         fill_costs(s, sent.lattice, p_beam.moves[i], self.nr_moves,
                                    gold_parse)
+
             self.total_bsize += p_beam.bsize
             self.beam_iters += 1
             p_beam.extend()
@@ -281,6 +281,7 @@ cdef class Parser:
                         if g_beam.moves[i][j].cost != 0:
                             g_beam.moves[i][j].is_valid = False
                     self._score_classes(s, g_beam.moves[i])
+
             g_beam.extend()
         self.guide.total += 1
         counts = self._count_feats(sent, sent, p_beam, g_beam)
@@ -293,25 +294,25 @@ cdef class Parser:
                            Beam p_beam, Beam g_beam):
         # TODO: Improve this...
         cdef int v = get_violation(p_beam, g_beam)
-        if v < 0:
+        if v < 1:
             return {}
         cdef size_t pt, gt
+        cdef double ps, gs
         cdef Transition* ghist
         cdef Transition* phist
-
-        if v >= g_beam.t:
-            ghist = g_beam.history[g_beam.t - 1]
-            gt = g_beam.lengths[g_beam.t - 1]
-        else:
-            ghist = g_beam.history[v]
-            gt = g_beam.lengths[v]
-        if v >= p_beam.t:
-            phist = p_beam.history[p_beam.t - 1]
-            pt = p_beam.lengths[p_beam.t - 1]
-        else:
-            phist = p_beam.history[v]
-            pt = p_beam.lengths[v]
-
+        phist = p_beam.hist_at(v)
+        ghist = g_beam.hist_at(v)
+        pt = p_beam.length_at(v)
+        gt = g_beam.length_at(v)
+        ps = p_beam.score_at(v)
+        gs = g_beam.score_at(v)
+        
+        self.total_viol += ps - gs
+        if (ps - gs) < 0:
+            print pt, gt
+            print ps, gs
+            print v
+            raise StandardError
         cdef size_t d, i, f
         cdef uint64_t* feats
         for i in range(gt):
@@ -329,7 +330,7 @@ cdef class Parser:
         cdef bint seen_diff = False
         cdef Token* gword
         cdef Token* pword
-        for i in range(max((pt, gt))):
+        for i in range(max(pt, gt) + 1):
             self.tagger.tag_word(gold_state.parse, gold_state.i+1, gsent.lattice, gsent.n)
             self.tagger.tag_word(gold_state.parse, gold_state.i+2, gsent.lattice, gsent.n)
             self.tagger.tag_word(pred_state.parse, pred_state.i+1, psent.lattice, psent.n)

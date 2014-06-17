@@ -8,6 +8,7 @@ from libcpp.queue cimport priority_queue
 from libcpp.pair cimport pair
 from libcpp.vector cimport vector
 
+
 ctypedef pair[double, size_t] ScoredMove
 ctypedef pair[size_t, Transition] Candidate
 ctypedef Transition* History
@@ -39,6 +40,12 @@ cdef class Beam:
 
     cdef int extend(self) except -1
     cdef int fill_parse(self, Token* parse) except -1
+
+    # Violation helpers
+    cdef Transition* hist_at(self, size_t i)
+    cdef size_t length_at(self, size_t i)
+    cdef double score_at(self, size_t i)
+    cdef int cost_at(self, size_t i)
 
 
 cdef int get_violation(Beam pred, Beam gold)

@@ -151,16 +151,50 @@ cdef class Beam:
         free(self.parents)
         free(self.moves)
 
+    # Violation helpers
+    # TODO: Is ternary assignment out of the vector a Cython bug??
+    cdef History hist_at(self, size_t i):
+        cdef History hist
+        if i < self.t:
+            hist = self.history[i]
+        else:
+            hist = self.history[self.t - 1]
+        return hist
+
+    cdef size_t length_at(self, size_t i):
+        cdef size_t length
+        if i < self.t:
+            length = self.lengths[i]
+        else:
+            length = self.lengths[self.t - 1]
+        return length
+
+    cdef double score_at(self, size_t i):
+        cdef double score
+        if i < self.t:
+            score = self.scores[i]
+        else:
+            score = self.scores[self.t - 1]
+        return score
+
+    cdef int cost_at(self, size_t i):
+        cdef int cost
+        if i < self.t:
+            cost = self.costs[i]
+        else:
+            cost = self.costs[self.t - 1]
+        return cost
+
 
 cdef int get_violation(Beam pred, Beam gold):
-    cdef State* p = pred.beam[0]
-    cdef State* g = gold.beam[0]
-
     cdef double max_violn = -1
     cdef int v = -1
-    for i in range(max((pred.t, gold.t))):
-        delta = pred.scores[i] - gold.scores[i]
-        if delta > max_violn and pred.costs[i] >= 1:
-            max_violn = delta
-            v = i
+    for i in range(max(pred.t, gold.t)):
+        if pred.cost_at(i) < 1:
+                continue
+        pred_score = pred.score_at(i)
+        gold_score = gold.score_at(i)
+        if pred_score - gold_score > max_violn:
+            max_violn = pred_score - gold_score
+            v = i 
     return v
