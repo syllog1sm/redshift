@@ -387,7 +387,7 @@ cdef class Perceptron:
                             clas = i * LINE + j
                             if params.w[j] != 0:
                                 unary_weight += params.w[j]
-                                non_zeroes.append('%d=%.3f ' % (clas, params.w[j]))
+                                non_zeroes.append('%d=%.3f' % (clas, params.w[j]))
                  
             if non_zeroes:
                 out.write(u'%d\t%d\t%.3f\t%s\n' % (feat_id, nr_seen, unary_weight,
@@ -426,8 +426,9 @@ cdef class Perceptron:
             unary_weight = atof(token)
             if f == 0:
                 continue
+            # Assume sorted
             if nr_seen < thresh:
-                continue
+                break
             for cls in range(self.nr_class):
                 weights[cls] = 0
             token = strtok(NULL, '=')
