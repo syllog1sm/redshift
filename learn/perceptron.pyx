@@ -73,11 +73,11 @@ cdef size_t load_dense_feat(size_t nr_class, double unary_weight, double* weight
     feat.nr_seen = nr_seen
     for clas in range(nr_class):
         if weights[clas] != 0:
-            nr_weight += 1
             feat.e = clas + 1
+            if nr_weight == 0:
+                feat.s = clas
+            nr_weight += 1
         feat.w[clas] = weights[clas]
-        if nr_weight == 0:
-            feat.s = clas
     return nr_weight
 
 
@@ -219,7 +219,7 @@ cdef class Perceptron:
 
     def set_classes(self, labels):
         self.nr_class = len(labels)
-        for i in range(1, self.nr_raws):
+        for i in range(self.nr_raws):
             free(self.raws[i])
             self.raws[i] = init_dense_feat(0, self.nr_class)
 
@@ -284,7 +284,7 @@ cdef class Perceptron:
         cdef size_t nr_dense = 0
         cdef size_t nr_raws = self.nr_raws
         # First collect the active features, in two lots --- dense and square
-        cdef size_t i
+        cdef size_t i = 0
         while features[i] != 0:
             f = features[i]
             i += 1
@@ -384,7 +384,7 @@ cdef class Perceptron:
                     if feat.seen[i]:
                         params = feat.parts[i]
                         for j in range(LINE):
-                            clas = (i * get_div(self.nr_class) + j)
+                            clas = i * LINE + j
                             if params.w[j] != 0:
                                 unary_weight += params.w[j]
                                 non_zeroes.append('%d=%.3f ' % (clas, params.w[j]))
@@ -408,7 +408,6 @@ cdef class Perceptron:
         cdef uint64_t f
         cdef size_t nr_raws = 1
         print "Loading %d class..." % self.nr_class,
-        return None
         cdef double* weights = <double*>calloc(self.nr_class, sizeof(double))
         cdef char* param_str
         cdef char* line
