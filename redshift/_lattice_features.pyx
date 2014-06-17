@@ -119,6 +119,15 @@ cdef enum:
     N0llv
     N0lrv
 
+    P3w
+    P3p
+    P3c
+    P3c6
+    P3c4
+    P3L
+    P3lv
+    P3rv
+ 
     P2w
     P2p
     P2c
@@ -259,6 +268,7 @@ cdef int fill_context(size_t* context, SlotTokens* t) except -1:
     fill_token(context, N0le_w, t.n0le)
     fill_token(context, N0lw, t.n0l)
     fill_token(context, N0l2w, t.n0l2)
+    fill_token(context, P3w, t.p2)
     fill_token(context, P2w, t.p2)
     fill_token(context, P1w, t.p1)
     fill_token(context, N0w, t.n0)
@@ -482,4 +492,17 @@ string_probs = (
     (lp8,),
     (lp9,),
     (lp10,)
+)
+
+
+bigrams = (
+    (P1p, N0p),
+    (P1p, N0w),
+    (P1w, N0p),
+    (P1w, N0w),
+)
+
+trigrams = (
+    (P2p, P1p, N0p),
+    (P2p, P1p, N0w),
 )

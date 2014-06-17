@@ -92,11 +92,22 @@ cdef int fill_slots(State *s) except -1:
     s.slots.n0 = s.parse[s.i]
     s.slots.n1 = s.parse[s.i + 1 if s.n >= 1 and  s.i < (s.n - 1) else 0]
     s.slots.n2 = s.parse[s.i + 2 if s.n >= 2 and s.i < (s.n - 2) else 0]
-    s.slots.p1 = s.parse[s.i - 1 if s.i >= 1 else 0]
-    s.slots.p2 = s.parse[s.i - 2 if s.i >= 2 else 0]
     s.slots.s0n = s.parse[s.top + 1 if s.top and s.n >= 1 and s.top < (s.n - 1) else 0]
     s.slots.s0nn = s.parse[s.top + 2 if s.top and s.n >= 2 and s.top < (s.n - 2) else 0]
 
+    cdef int i = s.i
+    i = i-1 if i >= 1 else 0
+    while i >= 1 and s.parse[i].is_edit:
+        i -= 1
+    s.slots.p1 = s.parse[i]
+    i = i-1 if i >= 1 else 0
+    while i >= 1 and s.parse[i].is_edit:
+        i -= 1
+    s.slots.p2 = s.parse[i]
+    i = i-1 if i >= 1 else 0
+    while i >= 1 and s.parse[i].is_edit:
+        i -= 1
+    s.slots.p3 = s.parse[i]
     # Force to int values between 0 and -10
     if s.string_prob < -10:
         s.slots.n0_prob = -10

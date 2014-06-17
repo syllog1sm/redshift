@@ -30,9 +30,10 @@ cdef struct SlotTokens:
     Token n1
     Token n2
 
-    # Previous to n0
+    # Previous _fluent words_ behind n0
     Token p1
     Token p2
+    Token p3
     # After S0
     Token s0n
     Token s0nn
