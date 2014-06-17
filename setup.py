@@ -76,6 +76,11 @@ exts = [
               language="c++", include_dirs=includes,
               extra_compile_args=compile_args,
               extra_link_args=link_args),
+    Extension('redshift._lattice_features', ["redshift/_lattice_features.pyx"],
+              language="c++", include_dirs=includes,
+              extra_compile_args=compile_args,
+              extra_link_args=link_args),
+ 
     Extension('redshift.transitions', ["redshift/transitions.pyx"],
         language="c++", include_dirs=includes,
         extra_compile_args=compile_args,
