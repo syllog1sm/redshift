@@ -308,7 +308,7 @@ cdef class Parser:
         gs = g_beam.score_at(v)
         
         self.total_viol += ps - gs
-        if (ps - gs) < 0:
+        if (ps - gs) < -1:
             print pt, gt
             print ps, gs
             print v
