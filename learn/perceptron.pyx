@@ -121,18 +121,21 @@ cdef inline SquareFeature* init_square_feat(uint64_t feat_id, size_t nr_class):
 
 cdef size_t load_square_feat(size_t nr_class, double unary_weight, double* weights,
                              size_t nr_seen, SquareFeature* feat):
-    cdef DenseParams* params
     feat.nr_seen = nr_seen
     cdef size_t nr_weight = 0
     cdef size_t part
+    cdef size_t clas
     cdef size_t div = get_div(nr_class)
     for part in range(div):
         for i in range(LINE):
-            if weights[(part * div) + i] != 0:
+            clas = (part * LINE) + i
+            if clas >= nr_class:
+                break
+            if weights[clas] != 0:
                 if not feat.seen[part]:
                     feat.parts[part] = <DenseParams*>calloc(1, sizeof(DenseParams))
-                feat.parts[part].w[i] = weights[(part * div) + i]
-                feat.seen[part] = True
+                    feat.seen[part] = True
+                feat.parts[part].w[i] = weights[clas]
                 nr_weight += 1
     return nr_weight
 
@@ -405,6 +408,7 @@ cdef class Perceptron:
         cdef uint64_t f
         cdef size_t nr_raws = 1
         print "Loading %d class..." % self.nr_class,
+        return None
         cdef double* weights = <double*>calloc(self.nr_class, sizeof(double))
         cdef char* param_str
         cdef char* line
