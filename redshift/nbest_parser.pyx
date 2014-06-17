@@ -272,37 +272,40 @@ cdef class NBestParser:
         return max(zip(weights, beams))[1]
 
     cdef dict _count_feats(self, Beam p_beam, Beam g_beam):
-        # TODO: Improve this...
         cdef int v = get_violation(p_beam, g_beam)
-        if v < 0:
+        if v < 1:
             return {}
-        cdef Sentence* psent = p_beam.sent
-        cdef Sentence* gsent = g_beam.sent
-
-        if v >= g_beam.t:
-            ghist = g_beam.history[g_beam.t - 1]
-            gt = g_beam.lengths[g_beam.t - 1]
-        else:
-            ghist = g_beam.history[v]
-            gt = g_beam.lengths[v]
-        if v >= p_beam.t:
-            phist = p_beam.history[p_beam.t - 1]
-            pt = p_beam.lengths[p_beam.t - 1]
-        else:
-            phist = p_beam.history[v]
-            pt = p_beam.lengths[v]
+        cdef size_t pt, gt
+        cdef double ps, gs
+        cdef Transition* ghist
+        cdef Transition* phist
+        phist = p_beam.hist_at(v)
+        ghist = g_beam.hist_at(v)
+        pt = p_beam.length_at(v)
+        gt = g_beam.length_at(v)
+        ps = p_beam.score_at(v)
+        gs = g_beam.score_at(v)
+        
+        if (ps - gs) < -1:
+            print pt, gt
+            print ps, gs
+            print v
+            raise StandardError
         cdef size_t d, i, f
         cdef uint64_t* feats
-        cdef size_t clas
+        for i in range(gt):
+            assert ghist[i].move != 0
+        for i in range(pt):
+            assert phist[i].move != 0
+        cdef Sentence* psent = p_beam.sent
+        cdef Sentence* gsent = g_beam.sent
         cdef State* gold_state = init_state(gsent.n)
         cdef State* pred_state = init_state(psent.n)
-        for w in range(gsent.n):
-            gold_state.parse[w].tag = gsent.tokens[w].tag
-        for w in range(psent.n):
-            pred_state.parse[w].tag = psent.tokens[w].tag
         cdef dict counts = {}
+        cdef size_t clas
         for clas in range(self.nr_moves):
             counts[clas] = {}
+    
         cdef bint seen_diff = False
         cdef Token* gword
         cdef Token* pword
