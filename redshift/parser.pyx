@@ -182,6 +182,10 @@ cdef class Parser:
             index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
         self.tagger = Tagger(model_dir)
 
+    property cfg:
+        def __get__(self):
+            return self.cfg
+
     property avg_bsize:
         def __get__(self):
             return float(self.total_bsize) / self.beam_iters
