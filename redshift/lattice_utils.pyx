@@ -93,7 +93,7 @@ def _guess_label(word, last_word, next_word):
 
 
 
-def read_lattice(lattice_loc, add_gold=False, limit=0, beta=0.1):
+def read_lattice(lattice_loc, add_gold=False, limit=0, beta=0.0):
     lines = open(lattice_loc).read().strip().split('\n')
     turn_id = lines.pop(0).split()[-1]
     numaligns = lines.pop(0)
@@ -137,7 +137,7 @@ def read_lattice(lattice_loc, add_gold=False, limit=0, beta=0.1):
         z = 1 / sum(p for p, w in step)
         normed.append([(p * z, w) for p, w in step])
         assert 0.9 < sum(p for p, w in normed[-1]) < 1.1
-    normed = _prune_lattice(normed, beta, limit)
+    normed = prune_lattice(normed, beta, limit)
     parse = []
     assert len(normed) == len(ref_words)
     for step, ref in zip(normed, ref_words):
@@ -153,7 +153,7 @@ def read_lattice(lattice_loc, add_gold=False, limit=0, beta=0.1):
     return Input(normed, parse, turn_id=turn_id, wer=0)
 
 
-def _prune_lattice(unpruned, beta, limit):
+def prune_lattice(unpruned, beta, limit):
     if beta == 0.0 and limit == 0:
         return unpruned
     pruned = []

@@ -10,7 +10,7 @@ from redshift.lattice_utils import read_lattice, add_gold_parse
 from redshift.lattice_utils import levenshtein
 
 
-def get_gold_lattice(conll_str, asr_dir, limit):
+def get_gold_lattice(conll_str, asr_dir, limit, beta):
     gold_sent = Input.from_conll(conll_str)
     turn_id = gold_sent.turn_id
     filename, turn_num = gold_sent.turn_id.split('~')
@@ -21,7 +21,8 @@ def get_gold_lattice(conll_str, asr_dir, limit):
     if lattice_loc.exists(): 
         gold_lattice = read_lattice(str(lattice_loc), add_gold=True, limit=0)
         add_gold_parse(gold_lattice, gold_sent)
-        lattice = read_lattice(str(lattice_loc), add_gold=False, limit=limit)
+        lattice = read_lattice(str(lattice_loc), add_gold=False, limit=limit,
+                               beta=beta)
         return lattice, gold_lattice
     else:
         return None
@@ -48,16 +49,20 @@ def _get_deps(tokens):
 
 @plac.annotations(
     limit=("Prune lattice to N", "option", "N", int),
+    beta=("Prune lattice at factor", "option", "b", float)
 )
-def main(parser_dir, conll_loc, asr_dir, limit=0):
+def main(parser_dir, conll_loc, asr_dir, limit=0, beta=None):
     asr_dir = Path(asr_dir)
     print "Get sents"
-    sents = [get_gold_lattice(s, asr_dir, limit=limit) for s in
+    sents = [get_gold_lattice(s, asr_dir, limit=limit, beta=beta) for s in
              open(conll_loc).read().strip().split('\n\n') if s.strip()]
     sents = [s for s in sents if s is not None]
     print len(sents)
     print "Loading parser"
     parser = redshift.parser.Parser(parser_dir)
+    if beta is None:
+        beta = parser.cfg.lattice_factor
+    print "Prune lattice at", beta
     wer = 0
     n = 0
     bl_wer = 0

@@ -48,7 +48,8 @@ def set_debug(val):
     DEBUG = val
 
 
-def train(sents, model_dir, n_iter=15, beam_width=8, beam_factor=0.5,
+def train(sents, model_dir, n_iter=15, beam_width=8, beam_factor=0.0,
+          lattice_factor=0.0,
           feat_set='basic', feat_thresh=10, use_break=False):
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
@@ -59,6 +60,7 @@ def train(sents, model_dir, n_iter=15, beam_width=8, beam_factor=0.5,
                  feat_thresh=feat_thresh,
                  shift_classes=shift_classes,
                  lattice_width=lattice_width,
+                 lattice_factor=lattice_factor,
                  left_labels=left_labels, right_labels=right_labels,
                  dfl_labels=dfl_labels, use_break=use_break)
     tags, tag_freqs = get_tagset(sents)
