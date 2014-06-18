@@ -9,7 +9,8 @@ import os.path
 
 cdef class Index:
     def __init__(self, entries):
-        self.i = 0
+        # Reserve 0 as a special value
+        self.i = 1
         self.table = {}
         self.reverse = {}
         for entry in entries:
