@@ -217,11 +217,7 @@ cdef class NBestParser:
         self.tagger.tag(py_sent)
         cdef Sentence* sent = py_sent.c_sent
         cdef Beam b = Beam(0.0, self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
-        cdef size_t i, w
-        for i in range(self.beam_width):
-            for w in range(sent.n):
-                b.beam[i].parse[w].tag = sent.tokens[w].tag
-                
+ 
         cdef State* s
         while not b.is_finished:
             for i in range(b.bsize):
@@ -301,23 +297,18 @@ cdef class NBestParser:
         cdef Sentence* gsent = g_beam.sent
         cdef State* gold_state = init_state(gsent.n)
         cdef State* pred_state = init_state(psent.n)
+        for i in range(gold_state.n):
+            gold_state.parse[i].word = gsent.tokens[i].word
+            gold_state.parse[i].tag = gsent.tokens[i].tag
+        for i in range(pred_state.n):
+            pred_state.parse[i].word = psent.tokens[i].word
+            pred_state.parse[i].tag = psent.tokens[i].tag
         cdef dict counts = {}
         cdef size_t clas
         for clas in range(self.nr_moves):
             counts[clas] = {}
     
-        cdef bint seen_diff = False
-        cdef Token* gword
-        cdef Token* pword
         for i in range(max((pt, gt))):
-            # Find where the states diverge
-            gword = &gsent.tokens[gold_state.i]
-            pword = &psent.tokens[pred_state.i]
-            if not seen_diff and gword.word == pword.word and ghist[i].clas == phist[i].clas:
-                transition(&ghist[i], gold_state, gsent.lattice)
-                transition(&phist[i], pred_state, psent.lattice)
-                continue
-            seen_diff = True
             if i < gt:
                 fill_slots(gold_state)
                 fill_context(self._context, &gold_state.slots)
