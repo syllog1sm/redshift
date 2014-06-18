@@ -93,13 +93,13 @@ def _guess_label(word, last_word, next_word):
 
 
 
-def read_lattice(lattice_loc, add_gold=False, limit=0):
+def read_lattice(lattice_loc, add_gold=False, limit=0, beta=0.1):
     lines = open(lattice_loc).read().strip().split('\n')
     turn_id = lines.pop(0).split()[-1]
     numaligns = lines.pop(0)
     posterior = lines.pop(0)
     lattice = []
-    parse = []
+    ref_words = []
     while lines:
         guesses = lines.pop(0).split()[2:]
         ref = lines.pop(0).split()[-1]
@@ -120,31 +120,55 @@ def read_lattice(lattice_loc, add_gold=False, limit=0):
         # step, do deduplication, where we simply sum the probabilities for
         # each word. Also re-sorts the step, ensuring the right order
         step = _deduplicate_step(step)
-        # Apply limit, if any
-        if limit and not add_gold:
-            step = step[:limit]
         # Find the (retokenized) reference if we're using gold-standard
         ref, extra_ref = _adjust_word(ref)
-        idx = [w for p, w in step].index(ref) if add_gold else 0
+        ref_words.append(ref)
         lattice.append(step)
-        parse.append((idx, None, None, None, None, None))
         # Extra-tokens will always have an entry for *DELETE* --- if that's the
         # only entry, don't add the extra step.
         if len(extra_tokens) >= 2:
             step = _make_new_step(extra_tokens, extra_ref)
-            idx = [w for p, w in step].index(extra_ref) if add_gold else 0
+            ref_words.append(extra_ref)
             lattice.append(step)
-            parse.append((idx, None, None, None, None, None))
     if not lattice:
         return None
-    assert len(lattice) == len(parse)
     normed = []
     for step in lattice:
         z = 1 / sum(p for p, w in step)
         normed.append([(p * z, w) for p, w in step])
         assert 0.9 < sum(p for p, w in normed[-1]) < 1.1
+    normed = _prune_lattice(normed, beta, limit)
+    parse = []
+    assert len(normed) == len(ref_words)
+    for step, ref in zip(normed, ref_words):
+        words = [w for p, w in step]
+        if ref in words:
+            idx = words.index(ref)
+        elif add_gold:
+            idx = len(step)
+            step.append((0.0, ref))
+        else:
+            idx = 0
+        parse.append((idx, None, None, None, None, None))
     return Input(normed, parse, turn_id=turn_id, wer=0)
 
+
+def _prune_lattice(unpruned, beta, limit):
+    if beta == 0.0 and limit == 0:
+        return unpruned
+    pruned = []
+    width_before = 0
+    width_after = 0
+    for step in unpruned:
+        width_before += len(step)
+        if limit != 0:
+            step = step[:limit]
+        if beta != 0:
+            cutoff = step[0][0] * beta
+            step = [(p, w) for p, w in step if p >= cutoff]
+        pruned.append(step)
+        width_after += len(step)
+    return pruned
 
 def _make_new_step(word_probs, ref):
     if ref != '*DELETE*' and word_probs['*DELETE*'] == 0:
