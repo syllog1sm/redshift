@@ -22,7 +22,8 @@ from transitions cimport *
 from index.lexicon cimport get_str
 from index.hashes import decode_pos
 from beam cimport Beam, get_violation
-from tagger cimport Tagger
+from greedy_tagger cimport Tagger
+from greedy_tagger import get_tagset
 from util import Config
 
 from features.extractor cimport Extractor
@@ -60,8 +61,9 @@ def train(sents, model_dir, n_iter=15, beam_width=8, beam_factor=0.5,
                  lattice_width=lattice_width,
                  left_labels=left_labels, right_labels=right_labels,
                  dfl_labels=dfl_labels, use_break=use_break)
-    Config.write(model_dir, 'tagger', beam_width=1, features='basic',
-                 feat_thresh=5)
+    tags, tag_freqs = get_tagset(sents)
+    Config.write(model_dir, 'tagger', tags=tags, freqdist=tag_freqs,
+                 features='basic', feat_thresh=5)
     parser = Parser(model_dir)
     indices = list(range(len(sents)))
     cdef Input py_sent
@@ -72,9 +74,6 @@ def train(sents, model_dir, n_iter=15, beam_width=8, beam_factor=0.5,
         parser.total_v = 0
         for i in indices:
             py_sent = sents[i]
-            # TODO: Should this be sensitive to whether we've hit max trainign
-            # iters for tagger?
-            parser.tagger.train_sent(py_sent)
             parser.train_sent(py_sent)
         print 'Avg beam: %.2f' % parser.avg_bsize
         print 'Avg delta: %.1f' % parser.avg_delta
@@ -197,8 +196,7 @@ cdef class Parser:
         cdef Sentence* sent = py_sent.c_sent
         cdef size_t p_idx, i
         cdef Beam beam = Beam(self.beta, self.beam_width, <size_t>self.moves,
-                              self.nr_moves, py_sent)
-        self.tagger.tag(py_sent)
+                              self.nr_moves, py_sent, init_words=False)
         self.guide.cache.flush()
         cdef State* s
         while not beam.is_finished:
@@ -206,13 +204,21 @@ cdef class Parser:
                 s = beam.beam[i]
                 if not is_final(s):
                     fill_valid(s, sent.lattice, beam.moves[i], self.nr_moves) 
-                    self.tagger.tag_word(s.parse, s.i-1, sent.lattice, sent.n)
-                    self.tagger.tag_word(s.parse, s.i, sent.lattice, sent.n)
+                    self.add_tags(s, sent, False)
                     self._score_classes(beam.beam[i], beam.moves[i])
             beam.extend()
         beam.fill_parse(sent.tokens)
         py_sent.segment()
         sent.score = beam.beam[0].score
+
+    cdef int add_tags(self, State* s, Sentence* sent, bint train) except -1:
+        if s.i != 0:
+            self.tagger.tag_word(s.parse, s.i-1, sent.lattice, sent.n)
+            if train and s.parse[s.i-1].word == sent.tokens[s.i-1].word:
+                self.tagger.tell_gold(sent.tokens[s.i-1].tag)
+        self.tagger.tag_word(s.parse, s.i, sent.lattice, sent.n)
+        if train and s.parse[s.i].word == sent.tokens[s.i].word:
+            self.tagger.tell_gold(sent.tokens[s.i].tag)
 
     cdef int _score_classes(self, State* s, Transition* classes) except -1:
         assert not is_final(s)
@@ -231,26 +237,19 @@ cdef class Parser:
         cdef size_t i
         cdef State* s
         cdef Sentence* sent = py_sent.c_sent
-        cdef size_t* gold_tags = <size_t*>calloc(sent.n, sizeof(size_t))
-        cdef Token* gold_parse = sent.tokens
-        for i in range(sent.n):
-            gold_tags[i] = sent.tokens[i].tag
-        self.tagger.tag(py_sent)
         self.guide.cache.flush()
         p_beam = Beam(self.beta, self.beam_width, <size_t>self.moves, self.nr_moves,
-                      py_sent)
+                      py_sent, init_words=False)
         while not p_beam.is_finished:
             for i in range(p_beam.bsize):
                 s = p_beam.beam[i]
                 if not is_final(s):
                     fill_valid(s, sent.lattice, p_beam.moves[i], self.nr_moves) 
-                    self.tagger.tag_word(s.parse, s.i-1, sent.lattice, sent.n)
-                    self.tagger.tag_word(s.parse, s.i, sent.lattice, sent.n)
+                    self.add_tags(s, sent, True)
                     self._score_classes(s, p_beam.moves[i])
                     # Fill costs so we can see whether the prediction is gold-standard
-                    if s.cost == 0:
-                        fill_costs(s, sent.lattice, p_beam.moves[i], self.nr_moves,
-                                   gold_parse)
+                    fill_costs(s, sent.lattice, p_beam.moves[i], self.nr_moves,
+                               sent.tokens)
             self.total_bsize += p_beam.bsize
             self.beam_iters += 1
             p_beam.extend()
@@ -258,38 +257,35 @@ cdef class Parser:
             self.guide.now += 1
             self.guide.total += 1
             self.guide.n_corr += 1
-            for i in range(sent.n):
-                sent.tokens[i].tag = gold_tags[i]
-            free(gold_tags)
             return 0
         g_beam = Beam(self.beta, self.beam_width, <size_t>self.moves, self.nr_moves,
-                      py_sent)
+                      py_sent, init_words=False)
   
         while not g_beam.is_finished:
             for i in range(g_beam.bsize):
                 s = g_beam.beam[i]
                 if not is_final(s):
-                    self.tagger.tag_word(s.parse, s.i-1, sent.lattice, sent.n)
-                    self.tagger.tag_word(s.parse, s.i, sent.lattice, sent.n)
                     fill_valid(s, sent.lattice, g_beam.moves[i], self.nr_moves) 
                     fill_costs(s, sent.lattice, g_beam.moves[i], self.nr_moves,
-                               gold_parse)
+                               sent.tokens)
                     for j in range(self.nr_moves):
                         if g_beam.moves[i][j].cost != 0:
                             g_beam.moves[i][j].is_valid = False
+
+                    self.add_tags(s, sent, False)
                     self._score_classes(s, g_beam.moves[i])
 
             g_beam.extend()
         self.guide.total += 1
         counts = self._count_feats(sent, sent, p_beam, g_beam)
-        self.guide.batch_update(counts)
-        for i in range(sent.n):
-            sent.tokens[i].tag = gold_tags[i]
-        free(gold_tags)
+        if counts:
+            self.guide.batch_update(counts)
+        else:
+            self.guide.n_corr += 1
+            self.guide.now += 1
    
     cdef dict _count_feats(self, Sentence* psent, Sentence* gsent,
                            Beam p_beam, Beam g_beam):
-        # TODO: Improve this...
         cdef int v = get_violation(p_beam, g_beam)
         if v < 1:
             return {}
@@ -324,17 +320,15 @@ cdef class Parser:
         for clas in range(self.nr_moves):
             counts[clas] = {}
         for i in range(max(pt, gt) + 1):
-            self.tagger.tag_word(gold_state.parse, gold_state.i-1, gsent.lattice, gsent.n)
-            self.tagger.tag_word(gold_state.parse, gold_state.i, gsent.lattice, gsent.n)
-            self.tagger.tag_word(pred_state.parse, pred_state.i-1, psent.lattice, psent.n)
-            self.tagger.tag_word(pred_state.parse, pred_state.i, psent.lattice, psent.n)
             if i < gt:
+                self.add_tags(gold_state, gsent, False)
                 fill_slots(gold_state)
                 fill_context(self._context, &gold_state.slots)
                 self.extractor.extract(self._features, self._context)
                 self.extractor.count(counts[ghist[i].clas], self._features, 1.0)
                 transition(&ghist[i], gold_state, gsent.lattice)
             if i < pt:
+                self.add_tags(pred_state, psent, False)
                 fill_slots(pred_state)
                 fill_context(self._context, &pred_state.slots)
                 self.extractor.extract(self._features, self._context)
