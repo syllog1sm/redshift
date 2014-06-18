@@ -250,7 +250,9 @@ cdef class Perceptron:
         cdef size_t i
         cdef uint64_t f
         self.now += 1
+        self.total += 1
         if gold_i == pred_i:
+            self.n_corr += 1
             return 0
         cdef size_t feat_addr
         cdef SquareFeature* feat
