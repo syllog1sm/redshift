@@ -107,6 +107,10 @@ exts = [
     Extension("redshift.tagger", ["redshift/tagger.pyx", "ext/MurmurHash2.cpp",
                                   "ext/MurmurHash3.cpp"], include_dirs=includes,
         language="c++", extra_compile_args=compile_args, extra_link_args=link_args),
+    Extension("redshift.greedy_tagger", ["redshift/greedy_tagger.pyx", "ext/MurmurHash2.cpp",
+                                  "ext/MurmurHash3.cpp"], include_dirs=includes,
+        language="c++", extra_compile_args=compile_args, extra_link_args=link_args),
+ 
     #Extension("redshift.tester", ["redshift/tester.pyx"], include_dirs=includes)
 ]
 
