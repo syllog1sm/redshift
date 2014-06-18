@@ -24,7 +24,7 @@ def profile_training(sents, model_loc, n_iter, beam_width, beam_factor, feat_set
     s.strip_dirs().sort_stats("time").print_stats()
  
 
-def get_gold_lattice(conll_str, asr_dir, beta=beta):
+def get_gold_lattice(conll_str, asr_dir, beta=0.0):
     gold_sent = Input.from_conll(conll_str)
     turn_id = gold_sent.turn_id
     filename, turn_num = gold_sent.turn_id.split('~')
@@ -61,7 +61,7 @@ def main(train_loc, asr_dir, model_loc, n_iter=15,
     if n_sents != 0:
         print "Using %d sents for training" % n_sents
         train_str = '\n\n'.join(train_str.split('\n\n')[:n_sents])
-    sents = [get_gold_lattice(s, asr_dir, beta=beta) for s in
+    sents = [get_gold_lattice(s, asr_dir, beta=lattice_factor) for s in
              train_str.strip().split('\n\n') if s.strip()]
     sents = [s for s in sents if s is not None]
     if profile:

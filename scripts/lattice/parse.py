@@ -53,15 +53,16 @@ def _get_deps(tokens):
 )
 def main(parser_dir, conll_loc, asr_dir, limit=0, beta=None):
     asr_dir = Path(asr_dir)
+    print "Loading parser"
+    parser = redshift.parser.Parser(parser_dir)
+    if beta is None:
+        beta = parser.cfg.lattice_factor
     print "Get sents"
     sents = [get_gold_lattice(s, asr_dir, limit=limit, beta=beta) for s in
              open(conll_loc).read().strip().split('\n\n') if s.strip()]
     sents = [s for s in sents if s is not None]
     print len(sents)
-    print "Loading parser"
-    parser = redshift.parser.Parser(parser_dir)
-    if beta is None:
-        beta = parser.cfg.lattice_factor
+ 
     print "Prune lattice at", beta
     wer = 0
     n = 0
