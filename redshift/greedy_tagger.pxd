@@ -14,6 +14,8 @@ cdef struct Slots:
     Lexeme* p_word
     Lexeme* n0
     Lexeme* n1
+    Lexeme* n2
+    Lexeme* n3
 
 
 cdef class Tagger:

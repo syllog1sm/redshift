@@ -68,12 +68,11 @@ def train(train_str, model_dir, features='basic', nr_iter=10,
 cdef class Tagger:
     def __cinit__(self, model_dir):
         self.cfg = Config.read(model_dir, 'tagger')
-        self.extractor = Extractor(basic + case + clusters + orth, [], bag_of_words=[])
+        self.extractor = Extractor(basic + clusters + orth + case, [], bag_of_words=[])
         self._guessed = 0
         self._features = <uint64_t*>calloc(self.extractor.nr_feat, sizeof(uint64_t))
         self._context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
         self.tagdict.set_empty_key(0)
-
         if path.exists(path.join(model_dir, 'pos')):
             index.hashes.load_pos_idx(path.join(model_dir, 'pos'))
         nr_tag = index.hashes.get_nr_pos()
@@ -119,7 +118,7 @@ cdef class Tagger:
         if not self._cache_hit:
             fill_context(self._context, self.slots.pp_tag, self.slots.p_tag,
                          self.slots.pp_word, self.slots.p_word, self.slots.n0,
-                         self.slots.n1)
+                         self.slots.n1, self.slots.n2, self.slots.n3)
             self.extractor.extract(self._features, self._context)
             self.guide.fill_scores(self._features, scores)
         cdef size_t clas
@@ -136,7 +135,7 @@ cdef class Tagger:
         if self._guessed != gold and self._cache_hit:
             fill_context(self._context, self.slots.pp_tag, self.slots.p_tag,
                          self.slots.pp_word, self.slots.p_word, self.slots.n0,
-                         self.slots.n1)
+                         self.slots.n1, self.slots.n2, self.slots.n3)
             self.extractor.extract(self._features, self._context)
         self.guide.update(self._guessed, gold, self._features, 1.0)
  
@@ -148,6 +147,8 @@ cdef int fill_slots(Slots* slots, Token* state, size_t i, Step* lattice, size_t 
     slots.p_word = state[i - 1].word if i >= 1 else NULL
     slots.n0 = state[i].word
     slots.n1 = lattice[i+1].nodes[0] if (i+1) < n else NULL
+    slots.n2 = lattice[i+2].nodes[0] if (i+2) < n else NULL
+    slots.n3 = lattice[i+3].nodes[0] if (i+3) < n else NULL
 
 
 cdef enum:
@@ -173,6 +174,26 @@ cdef enum:
     N1title
     N1upper
     N1alpha
+
+    N2w
+    N2c
+    N2c6
+    N2c4
+    N2pre
+    N2suff
+    N2title
+    N2upper
+    N2alpha
+
+    N3w
+    N3c
+    N3c6
+    N3c4
+    N3pre
+    N3suff
+    N3title
+    N3upper
+    N3alpha
 
     P1w
     P1c
@@ -200,7 +221,8 @@ cdef enum:
 cdef int fill_context(size_t* context,
                       size_t pptag, size_t ptag,
                       Lexeme* p2, Lexeme* p1,
-                      Lexeme* n0, Lexeme* n1):
+                      Lexeme* n0,
+                      Lexeme* n1, Lexeme* n2, Lexeme* n3):
     for j in range(CONTEXT_SIZE):
         context[j] = 0
     context[P1p] = ptag
@@ -208,6 +230,8 @@ cdef int fill_context(size_t* context,
     
     fill_token(context, N0w, n0)
     fill_token(context, N1w, n1)
+    fill_token(context, N2w, n2)
+    fill_token(context, N3w, n3)
     fill_token(context, P1w, p1)
     fill_token(context, P2w, p2)
 
@@ -249,6 +273,8 @@ basic = (
     (N0suff,),
     (N1suff,),
     (P1suff,),
+    (N2w,),
+    (N3w,),
     (P1p,),
 )
 
@@ -268,6 +294,7 @@ clusters = (
     (N1c,),
     (N1c4,),
     (N1c6,),
+    (N2c,),
     (P1c, N0w),
     (P1p, P1c6, N0w),
     (P1c6, N0w),
