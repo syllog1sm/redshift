@@ -17,7 +17,7 @@ cimport cython
 
 cdef class Beam:
     def __cinit__(self, float beta, size_t k, size_t moves_addr,
-                  size_t nr_class, Input py_sent):
+                  size_t nr_class, Input py_sent, init_words=True):
         self.length = py_sent.length
         self.nr_class = nr_class
         self.k = k
@@ -34,6 +34,10 @@ cdef class Beam:
         for i in range(k):
             self.parents[i] = init_state(py_sent.length)
             self.beam[i] = init_state(py_sent.length)
+            if init_words:
+                for w in range(self.beam[i].n):
+                    self.beam[i].parse[w].word = self.sent.tokens[w].word
+                    self.beam[i].parse[w].tag = self.sent.tokens[w].tag
             self.moves[i] = <Transition*>calloc(self.nr_class, sizeof(Transition))
             for j in range(self.nr_class):
                 assert moves[j].clas < nr_class
