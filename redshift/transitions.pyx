@@ -130,7 +130,6 @@ cdef int break_label_cost(State* s, size_t label, Step* lattice, Token* gold) ex
     return 0
 
 
-
 cdef int fill_valid(State* s, Step* lattice, Transition* classes, size_t n) except -1:
     cdef Transition* t
     cdef size_t lattice_n = lattice[s.i+1].n
@@ -141,6 +140,7 @@ cdef int fill_valid(State* s, Step* lattice, Transition* classes, size_t n) exce
     validity[EDIT] = can_edit(s)
     validity[BREAK] = can_break(s)
     seen_valid = True
+    cdef size_t i
     for i in range(n):
         t = &classes[i]
         t.is_valid = validity[t.move]
