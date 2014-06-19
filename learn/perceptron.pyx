@@ -307,7 +307,7 @@ cdef class Perceptron:
             inst_weight += score_dense_feat(scores, active_dense[i])
         for i in range(nr_square):
             inst_weight += score_square_feat(scores, nr_class, active_square[i])
-        #inst_weight = inst_weight / 2
+        inst_weight = inst_weight / 2
         for i in range(nr_class):
             scores[i] += inst_weight
 
