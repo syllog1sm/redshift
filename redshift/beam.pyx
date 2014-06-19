@@ -46,6 +46,9 @@ cdef class Beam:
                 self.moves[i][j].label = moves[j].label
                 self.moves[i][j].is_valid = True
                 self.moves[i][j].score = 0
+                # All beam candidates need to know whether they're on a non-gold
+                # sentence, because we're going to look for the violation back
+                # over the beam history --- not just on the final best path.
                 self.moves[i][j].cost = py_sent.wer
         self.bsize = 1
         self.psize = 0

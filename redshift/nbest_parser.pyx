@@ -216,12 +216,27 @@ cdef class NBestParser:
             self.guide.n_corr += 1
             self.guide.now += 1
 
+    cdef Beam _nbest_search(self, list nbest, bint force_gold):
+        cdef Input py_sent
+        beams = []
+        scores = []
+        probs = []
+        for prob, py_sent in nbest:
+            if force_gold and py_sent.wer != 0:
+                continue
+            beam = self.search(py_sent, force_gold, py_sent.wer == 0)
+            scores.append(beam.score)
+            probs.append(prob)
+            beams.append(beam)
+        #weights = mix_weights(probs, scores)
+        weights = scores
+        return max(zip(weights, beams))[1]
+
     cdef Beam search(self, Input py_sent, bint force_gold, bint set_costs):
         self.tagger.tag(py_sent)
         cdef Sentence* sent = py_sent.c_sent
         cdef Beam b = Beam(0.0, self.beam_width, <size_t>self.moves,
                            self.nr_moves, py_sent, init_words=True)
- 
         cdef State* s
         while not b.is_finished:
             for i in range(b.bsize):
@@ -254,22 +269,6 @@ cdef class NBestParser:
         for i in range(self.nr_moves):
             classes[i].score = s.score + scores[classes[i].clas]
         return 0
-
-    cdef Beam _nbest_search(self, list nbest, bint force_gold):
-        cdef Input py_sent
-        beams = []
-        scores = []
-        probs = []
-        for prob, py_sent in nbest:
-            if force_gold and py_sent.wer != 0:
-                continue
-            beam = self.search(py_sent, force_gold, py_sent.wer == 0)
-            beam.beam[0].cost += py_sent.wer
-            scores.append(beam.score)
-            probs.append(prob)
-            beams.append(beam)
-        weights = mix_weights(probs, scores)
-        return max(zip(weights, beams))[1]
 
     cdef dict _count_feats(self, Beam p_beam, Beam g_beam):
         cdef int v = get_violation(p_beam, g_beam)
