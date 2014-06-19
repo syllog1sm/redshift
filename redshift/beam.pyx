@@ -46,7 +46,7 @@ cdef class Beam:
                 self.moves[i][j].label = moves[j].label
                 self.moves[i][j].is_valid = True
                 self.moves[i][j].score = 0
-                self.moves[i][j].cost = 0
+                self.moves[i][j].cost = py_sent.wer
         self.bsize = 1
         self.psize = 0
         self.t = 0
@@ -195,7 +195,7 @@ cdef int get_violation(Beam pred, Beam gold):
     cdef int v = -1
     for i in range(max(pred.t, gold.t)):
         if pred.cost_at(i) < 1:
-                continue
+            continue
         pred_score = pred.score_at(i)
         gold_score = gold.score_at(i)
         if pred_score - gold_score > max_violn:
