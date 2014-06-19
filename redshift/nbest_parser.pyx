@@ -208,6 +208,9 @@ cdef class NBestParser:
 
         if p_beam.cost > 0:
             counts = self._count_feats(p_beam, g_beam)
+        else:
+            counts = {}
+        if counts:
             self.guide.batch_update(counts)
         else:
             self.guide.n_corr += 1
@@ -216,7 +219,8 @@ cdef class NBestParser:
     cdef Beam search(self, Input py_sent, bint force_gold, bint set_costs):
         self.tagger.tag(py_sent)
         cdef Sentence* sent = py_sent.c_sent
-        cdef Beam b = Beam(0.0, self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+        cdef Beam b = Beam(0.0, self.beam_width, <size_t>self.moves,
+                           self.nr_moves, py_sent, init_words=True)
  
         cdef State* s
         while not b.is_finished:
@@ -308,7 +312,7 @@ cdef class NBestParser:
         for clas in range(self.nr_moves):
             counts[clas] = {}
     
-        for i in range(max((pt, gt))):
+        for i in range(max(pt, gt) + 1):
             if i < gt:
                 fill_slots(gold_state)
                 fill_context(self._context, &gold_state.slots)
