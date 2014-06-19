@@ -118,10 +118,10 @@ cdef int fill_slots(State *s) except -1:
     else:
         s.slots.n0_prob = 0
 
-    s.slots.w_f_exact = 0
-    s.slots.w_b_exact = 0
-    s.slots.p_f_exact = 0
-    s.slots.p_b_exact = 0
+    s.slots.w_f_exact = 1
+    s.slots.w_b_exact = 1
+    s.slots.p_f_exact = 1
+    s.slots.p_b_exact = 1
     s.slots.w_f_copy = 0
     s.slots.w_b_copy = 0
     s.slots.p_f_copy = 0
@@ -146,6 +146,38 @@ cdef int fill_slots(State *s) except -1:
     len2 = _fill_tags(s2, s.i, -5, s.top, s.parse)
     s.slots.p_b_exact = _fill_match(&s.slots.p_b_copy, s1, s2, min(len1, len2))
     """
+
+    # Old version
+    # These features find how much of S0's span matches N0's span, starting from
+    # the left.
+    # 
+    
+    cdef size_t n0ledge = s.slots.n0.left_edge
+    cdef size_t s0ledge = s.slots.s0.left_edge
+    for i in range(5):
+        if ((n0ledge + i) > s.slots.n0.i) or ((s0ledge + i) > s.slots.s0.i):
+            break
+        if s.slots.w_f_exact:
+            if s.parse[n0ledge + i].word.orig == s.parse[s0ledge + i].word.orig:
+                s.slots.w_f_copy += 1
+            else:
+                s.slots.w_f_exact = 0
+        if s.slots.p_f_exact:
+            if s.parse[n0ledge + i].tag == s.parse[s0ledge + i].tag:
+                s.slots.p_f_copy += 1
+            else:
+                s.slots.p_f_exact = 0
+        if s.slots.w_b_exact:
+            if s.parse[s.slots.s0.i - i].word.orig == s.parse[s.slots.n0.i - i].word.orig:
+                s.slots.w_b_copy += 1
+            else:
+                s.slots.w_b_exact = 0
+        if s.slots.p_b_exact:
+            if s.parse[s.slots.s0.i - i].tag == s.parse[s.slots.n0.i - i].tag:
+                s.slots.p_b_copy += 1
+            else:
+                s.slots.p_b_exact = 0
+    
  
 cdef size_t _fill_words(size_t* string, size_t start, int n, size_t stop, Token* tokens):
     cdef size_t i = 0
