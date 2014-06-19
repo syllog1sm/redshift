@@ -233,9 +233,6 @@ cdef class Input:
                 sent_id = self.c_sent.tokens[i].sent_id
                 yield Token(i, word, tag, head, label, sent_id, is_edit)
 
-
-
-
     property turn_id:
         def __get__(self):
             return self.turn_id
