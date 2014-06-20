@@ -19,6 +19,7 @@ train
 *.html
 Profile.prof
 _paths.py
+_secret_paths.py
 tests/model/*
 tests/model/
 *.orig
