@@ -178,6 +178,7 @@ cdef class NBestParser:
         cdef Input py_sent
         for prob, tokens in candidates:
             py_sent = Input.from_strings(tokens)
+            self.tagger.tag(py_sent)
             beam = self.search(py_sent, False, False)
             beam.fill_parse(py_sent.c_sent.tokens)
             scores.append(beam.score)
@@ -201,6 +202,11 @@ cdef class NBestParser:
         cdef size_t i
         self.guide.total += 1
         self.guide.cache.flush()
+        # First, tag the sentences
+        # These are separate from the ones the tagger is trained off, so we
+        # don't have to worry about saving the tags.
+        for _, py_sent in nbest:
+            self.tagger.tag(py_sent)
         # Identify best-scoring candidate, so we can search for max. violation
         # update within it.
         cdef Beam p_beam = self._nbest_search(nbest, False)
@@ -228,12 +234,10 @@ cdef class NBestParser:
             scores.append(beam.score)
             probs.append(prob)
             beams.append(beam)
-        #weights = mix_weights(probs, scores)
-        weights = scores
+        weights = mix_weights(probs, scores)
         return max(zip(weights, beams))[1]
 
     cdef Beam search(self, Input py_sent, bint force_gold, bint set_costs):
-        self.tagger.tag(py_sent)
         cdef Sentence* sent = py_sent.c_sent
         cdef Beam b = Beam(0.0, self.beam_width, <size_t>self.moves,
                            self.nr_moves, py_sent, init_words=True)
