@@ -6,15 +6,17 @@ from ext.sparsehash cimport *
 
 DEF MAX_PARAMS = 5000000
 
+DEF LINE = 8
+
 
 cdef struct DenseParams:
-    double* w
-    double* acc
-    size_t* last_upd
+    double[LINE] w
+    double[LINE] acc
+    size_t[LINE] last_upd
 
 
 cdef struct SquareFeature:
-    DenseParams* parts    
+    DenseParams** parts    
     bint* seen
     size_t nr_seen
 
@@ -41,7 +43,6 @@ cdef class Perceptron:
     cdef size_t nr_raws
     cdef DenseFeature** raws
 
-    cdef size_t div
     cdef size_t now
  
     cdef dense_hash_map[uint64_t, size_t] W
