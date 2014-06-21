@@ -181,6 +181,18 @@ cdef enum:
     P1L
     P1lv
     P1rv
+
+    fl_P2w
+    fl_P2p
+    fl_P2c
+    fl_P2c6
+    fl_P2c4
+
+    fl_P1w
+    fl_P1p
+    fl_P1c
+    fl_P1c6
+    fl_P1c4
  
     N0w
     N0p
@@ -358,6 +370,8 @@ cdef int fill_context(size_t* context, SlotTokens* t) except -1:
     fill_token(context, N0l0w, t.n0l0)
     fill_token(context, P2w, t.p2)
     fill_token(context, P1w, t.p1)
+    fill_token(context, fl_P2w, t.fluent_p2)
+    fill_token(context, fl_P1w, t.fluent_p1)
     fill_token(context, N0w, t.n0)
     fill_token(context, N1w, t.n1)
     fill_token(context, N2w, t.n2)
@@ -686,6 +700,16 @@ disfl = (
     (prev_prev_edit, w_f_copy),
     (prev_edit, p_f_copy),
     (prev_prev_edit, p_f_copy)
+)
+
+
+fluent_lm = (
+    (fl_P1p, N0p),
+    (fl_P1p, N0w),
+    (fl_P1w, N0p),
+    (fl_P1w, N0w),
+    (fl_P2p, fl_P1p, N0p),
+    (fl_P2c4, fl_P1c4, N0c4),
 )
 
 
