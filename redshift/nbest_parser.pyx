@@ -64,6 +64,9 @@ def get_templates(feats_str):
         templates += _parse_features.clusters
     if 'bitags' in feats_str:
         templates += _parse_features.pos_bigrams()
+    # Untested
+    if 'fluent_lm' in feats_str:
+        templates += _parse_features.fluent_lm
     return templates, match_feats
 
 
@@ -112,6 +115,7 @@ def train(sents, nbests, model_dir, n_iter=15, beam_width=8,
     indices = list(range(len(sents)))
     for n in range(n_iter):
         for i in indices:
+            # TODO: Shouldn't we train the tagger _after_ the parser?
             parser.tagger.train_sent(sents[i])
             parser.train_sent(nbests[i])
         parser.guide.end_train_iter(n, feat_thresh)
