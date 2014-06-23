@@ -321,7 +321,7 @@ cdef class NBestParser:
         for clas in range(self.nr_moves):
             counts[clas] = {}
     
-        for i in range(max(pt, gt) + 1):
+        for i in range(max(pt, gt)):
             if i < gt:
                 fill_slots(gold_state)
                 fill_context(self._context, &gold_state.slots)
