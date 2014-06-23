@@ -98,13 +98,14 @@ def get_labels(golds, nbests):
 
 
 def train(sents, nbests, model_dir, n_iter=15, beam_width=8,
-          feat_set='basic', feat_thresh=10, use_break=False):
+          feat_set='basic', unary_factor=1.0, feat_thresh=10, use_break=False):
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
     os.mkdir(model_dir)
     left_labels, right_labels, dfl_labels = get_labels(sents, nbests)
     Config.write(model_dir, 'config', beam_width=beam_width, features=feat_set,
                  feat_thresh=feat_thresh,
+                 unary_factor=unary_factor,
                  shift_classes=0,
                  lattice_width=1,
                  left_labels=left_labels, right_labels=right_labels,
@@ -116,8 +117,8 @@ def train(sents, nbests, model_dir, n_iter=15, beam_width=8,
     for n in range(n_iter):
         for i in indices:
             # TODO: Shouldn't we train the tagger _after_ the parser?
-            parser.tagger.train_sent(sents[i])
             parser.train_sent(nbests[i])
+            parser.tagger.train_sent(sents[i])
         parser.guide.end_train_iter(n, feat_thresh)
         parser.tagger.guide.end_train_iter(n, feat_thresh)
         random.shuffle(indices)
@@ -168,7 +169,8 @@ cdef class NBestParser:
         self.moves = <Transition*>calloc(self.nr_moves, sizeof(Transition))
         fill_moves(0, 1, self.cfg.left_labels, self.cfg.right_labels,
                    self.cfg.dfl_labels, self.cfg.use_break, self.moves)
-        self.guide = Perceptron(self.nr_moves, pjoin(model_dir, 'model.gz'))
+        self.guide = Perceptron(self.nr_moves, pjoin(model_dir, 'model.gz'),
+                                unary_weight_factor=self.cfg.unary_factor)
         if os.path.exists(pjoin(model_dir, 'model.gz')):
             self.guide.load(pjoin(model_dir, 'model.gz'), thresh=int(self.cfg.feat_thresh))
         if os.path.exists(pjoin(model_dir, 'pos')):

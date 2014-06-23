@@ -37,6 +37,7 @@ cdef class Perceptron:
     cdef DenseFeature** _active_dense
     cdef SquareFeature** _active_square
     cdef object path
+    cdef double unary_weight_factor
     cdef double n_corr
     cdef double total
 

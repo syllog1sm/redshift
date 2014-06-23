@@ -168,13 +168,14 @@ cdef size_t MAX_ACTIVE = 1000
 
 
 cdef class Perceptron:
-    def __cinit__(self, max_classes, model_loc):
+    def __cinit__(self, max_classes, model_loc, unary_weight_factor=0.0):
         self.path = model_loc
         self.nr_class = max_classes
         self.scores = <double *>calloc(max_classes, sizeof(double))
         self.W = dense_hash_map[uint64_t, size_t]()
         self.W.set_empty_key(0)
         self.now = 0
+        self.unary_weight_factor = unary_weight_factor
         self.nr_raws = 20000
         self.raws = <DenseFeature**>malloc(self.nr_raws * sizeof(DenseFeature*))
         cdef size_t i
@@ -307,8 +308,10 @@ cdef class Perceptron:
             inst_weight += score_dense_feat(scores, active_dense[i])
         for i in range(nr_square):
             inst_weight += score_square_feat(scores, nr_class, active_square[i])
-        for i in range(nr_class):
-            scores[i] += inst_weight
+        inst_weight *= self.unary_weight_factor
+        if inst_weight:
+            for i in range(nr_class):
+                scores[i] += inst_weight
 
     def end_training(self, loc):
         cdef uint64_t f
