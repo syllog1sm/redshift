@@ -50,7 +50,7 @@ def get_nbest(gold_sent, nbest_dir, limit=0):
         nbest.append((prob, sent))
     # TODO: Should we always include this?
     if not seen_gold:
-        nbest.append((0.0, gold_copy))
+        nbest.append((0.0001, gold_copy))
     return nbest
 
 
