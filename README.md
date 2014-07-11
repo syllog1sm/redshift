@@ -91,6 +91,3 @@ The parser currently has Cython as a requirement, instead of distributing
 the "compiled" .cpp files as part of the release (against Cython's recommendation). This could change in future,
 but currently it feels strange to have a "source" release that users wouldn't be able to modify. 
 
-
-    You should have received a copy of the GNU Lesser General Public License
-    along with this program.  If not, see <http://www.gnu.org/licenses/>.
