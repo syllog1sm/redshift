@@ -12,6 +12,7 @@ from index.hashes import encode_label
 from index.hashes import decode_pos
 from index.hashes import decode_label
 
+
 cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
     cdef Sentence* s = <Sentence*>malloc(sizeof(Sentence))
     s.n = len(words_lattice)
