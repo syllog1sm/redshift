@@ -5,7 +5,7 @@ import plac
 import codecs
 
 import redshift.parser
-
+from redshift.sentence import Input
 
 
 @plac.annotations(
@@ -17,19 +17,14 @@ import redshift.parser
     beam_width=("Beam width", "option", "k", int),
     feat_set=("Name of feat set [zhang, iso, full]", "option", "x", str),
     n_sents=("Number of sentences to train from", "option", "n", int),
-    train_tagger=("Train tagger alongside parser", "flag", "p", bool),
-    use_edit=("Use the Edit transition", "flag", "e", bool),
     use_break=("Use the Break transition", "flag", "b", bool),
-    use_filler=("Use the Filler transition", "flag", "F", bool),
     seed=("Random seed", "option", "s", int)
 )
 def main(train_loc, model_loc, n_iter=15,
-         feat_set="zhang", feat_thresh=10,
          codec="utf8",
+         feat_set="", feat_thresh=10,
          n_sents=0,
-         use_edit=False,
          use_break=False,
-         use_filler=False,
          debug=False, seed=0, beam_width=4,
          train_tagger=False):
     if debug:
@@ -41,13 +36,10 @@ def main(train_loc, model_loc, n_iter=15,
         train_str = '\n\n'.join(train_str.split('\n\n')[:n_sents])
     redshift.parser.train(train_str.encode(codec), model_loc,
         n_iter=n_iter,
-        train_tagger=train_tagger,
         beam_width=beam_width,
         feat_set=feat_set,
         feat_thresh=feat_thresh,
-        use_edit=use_edit,
         use_break=use_break,
-        use_filler=use_filler
     )
 
 
