@@ -1,7 +1,6 @@
 # cython: profile=True
 from _state cimport *
 from libc.stdlib cimport malloc, calloc, free
-import redshift.io_parse
 import index.hashes
 
 # TODO: Link these with other compile constants
