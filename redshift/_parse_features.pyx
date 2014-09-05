@@ -181,18 +181,6 @@ cdef enum:
     P1L
     P1lv
     P1rv
-
-    fl_P2w
-    fl_P2p
-    fl_P2c
-    fl_P2c6
-    fl_P2c4
-
-    fl_P1w
-    fl_P1p
-    fl_P1c
-    fl_P1c6
-    fl_P1c4
  
     N0w
     N0p
@@ -248,6 +236,18 @@ cdef enum:
     N0le_lv
     N0le_rv
 
+    dist
+    
+    prev_edit
+    prev_edit_wmatch
+    prev_edit_pmatch
+    prev_edit_word
+    prev_edit_pos
+    prev_prev_edit
+
+    next_edit
+    next_edit_wmatch
+    next_edit_pmatch
     dist
     
     prev_edit
@@ -750,25 +750,3 @@ string_probs = (
     (lp7,),
     (lp8,),
     (lp9,),
-    (lp10,)
-)
-
-def pos_bigrams():
-    kernels = [S2w, S1w, S0w, S0lw, S0rw, N0w, N0lw, N1w]
-    bitags = []
-    for t1, t2 in combinations(kernels, 2):
-        feat = (t1 + 1, t2 + 1)
-        bitags.append(feat)
-    print "Adding %d bitags" % len(bitags)
-    return tuple(bitags)
-
-
-def match_templates():
-    match_feats = []
-    kernel_tokens = get_kernel_tokens()
-    for w1, w2 in combinations(kernel_tokens, 2):
-        # Words match
-        match_feats.append((w1, w2))
-        # POS match
-        match_feats.append((w1 + 1, w2 + 1))
-    return tuple(match_feats)

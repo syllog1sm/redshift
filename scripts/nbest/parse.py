@@ -115,6 +115,8 @@ def main(parser_dir, conll_loc, nbest_dir, out_dir, mix_weight=0.0, limit=0):
         verbatim += verb_scores[0]
         verbatim_oracle += min(verb_scores)
         v_n += len(gold_tokens)
+
+
         parse_scores = sparseval(list(guess.tokens), gold_tokens)
         tp_deps += parse_scores[0]
         fn_deps += parse_scores[1]

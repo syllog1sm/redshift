@@ -155,6 +155,7 @@ cdef class Tagger:
             if scores[clas] > mode:
                 best = clas
                 mode = scores[clas]
+        # TODO Isn't this missing the assignment?
 
 
 
