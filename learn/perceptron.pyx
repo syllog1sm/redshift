@@ -262,6 +262,8 @@ cdef class Perceptron:
             i += 1
             if f == 0:
                 break
+            if self.W.count(f) == 0:
+                continue
             feat_addr = self.W[f]
             if feat_addr == 0:
                 self.add_feature(f)
@@ -290,6 +292,8 @@ cdef class Perceptron:
         while features[i] != 0:
             f = features[i]
             i += 1
+            if self.W.count(f) == 0:
+                continue
             feat_addr = self.W[f]
             if feat_addr >= nr_raws:
                 active_square[nr_square] = <SquareFeature*>feat_addr
