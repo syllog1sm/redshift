@@ -3,6 +3,7 @@ from libcpp.vector cimport vector
 from libc.stdint cimport uint64_t, int64_t
 from ext.murmurhash cimport *
 from ext.sparsehash cimport *
+from redshift.memory cimport Pool
 
 
 cdef class Index:
@@ -20,7 +21,8 @@ cdef class ScoresCache:
     cdef uint64_t i
     cdef uint64_t pool_size
     cdef size_t scores_size
-    cdef double** _pool
+    cdef Pool _pool
+    cdef double** _arrays
     cdef dense_hash_map[uint64_t, size_t] _cache
     cdef size_t n_hit
     cdef size_t n_miss
