@@ -2,8 +2,8 @@
 """
 Handle parser features
 """
-from libc.stdlib cimport malloc, free, calloc
 from libc.stdint cimport uint64_t
+from redshift.memory cimport Pool
 
 from ext.murmurhash cimport *
 
@@ -13,11 +13,12 @@ DEF MAX_FEAT_LEN = 10
 cdef class Extractor:
     def __cinit__(self, templates, match_templates, bag_of_words=None):
         assert not bag_of_words
+        self._pool = Pool()
         # Value that indicates the value has been "masked", e.g. it was pruned
         # as a rare word. If a feature contains any masked values, it is dropped.
         templates = tuple(sorted(set([tuple(sorted(f)) for f in templates])))
         self.nr_template = len(templates)
-        self.templates = <Template*>calloc(self.nr_template, sizeof(Template))
+        self.templates = <Template*>self._pool.alloc(self.nr_template, sizeof(Template))
         # Sort each feature, and sort and unique the set of them
         cdef Template* pred
         for id_, args in enumerate(templates):
@@ -28,7 +29,7 @@ cdef class Extractor:
             for i, element in enumerate(sorted(args)):
                 pred.args[i] = element
         self.nr_match = len(match_templates)
-        self.match_preds = <MatchPred*>calloc(self.nr_match, sizeof(MatchPred))
+        self.match_preds = <MatchPred*>self._pool.alloc(self.nr_match, sizeof(MatchPred))
         cdef MatchPred* match_pred
         for id_, (idx1, idx2) in enumerate(match_templates):
             match_pred = &self.match_preds[id_]
@@ -36,10 +37,6 @@ cdef class Extractor:
             match_pred.idx1 = idx1
             match_pred.idx2 = idx2
         self.nr_feat = self.nr_template + (self.nr_match * 2) + 2
-
-    def __dealloc__(self):
-        free(self.templates)
-        free(self.match_preds)
 
     cdef int count(self, dict counts, uint64_t* features, double inc) except -1:
         cdef size_t f = 0

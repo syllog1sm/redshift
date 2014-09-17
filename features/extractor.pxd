@@ -1,4 +1,5 @@
 from libc.stdint cimport uint64_t, int64_t
+from redshift.memory cimport Pool
 
 from ext.murmurhash cimport *
 
@@ -19,6 +20,7 @@ cdef struct MatchPred:
 
 
 cdef class Extractor:
+    cdef Pool _pool
     cdef size_t nr_template
     cdef Template* templates
     cdef size_t nr_match
