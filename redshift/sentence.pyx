@@ -90,6 +90,14 @@ cdef class Input:
         return cls(lattice, parse)
 
     @classmethod
+    def from_untagged(cls, word_str):
+        assert word_str
+        tokens = []
+        for word in word_str.split():
+            tokens.append((word, 'NN', None, None, None, None))
+        return cls.from_tokens(tokens)
+
+    @classmethod
     def from_pos(cls, pos_str):
         assert pos_str
         tokens = []
