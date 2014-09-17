@@ -1,4 +1,3 @@
-from libc.stdlib cimport malloc, calloc, free
 from collections import namedtuple
 
 cimport index.lexicon
@@ -12,16 +11,18 @@ from index.hashes import encode_label
 from index.hashes import decode_pos
 from index.hashes import decode_label
 
+from memsafe cimport Pool
 
-cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
-    cdef Sentence* s = <Sentence*>malloc(sizeof(Sentence))
+
+cdef Sentence* init_sent(list words_lattice, list parse, Pool pool) except NULL:
+    cdef Sentence* s = <Sentence*>pool.safe_alloc(1, sizeof(Sentence))
     s.n = len(words_lattice)
     assert s.n >= 3, words_lattice
-    s.lattice = <Step*>calloc(s.n, sizeof(Step))
-    s.tokens = <Token*>calloc(s.n, sizeof(Token))
+    s.lattice = <Step*>pool.safe_alloc(s.n, sizeof(Step))
+    s.tokens = <Token*>pool.safe_alloc(s.n, sizeof(Token))
     cdef Token t
     for i in range(s.n):
-        init_lattice_step(words_lattice[i], &s.lattice[i])
+        init_lattice_step(words_lattice[i], &s.lattice[i], pool)
     cdef bint is_edit
     for i, (word_idx, tag, head, label, sent_id, is_edit) in enumerate(parse):
         s.tokens[i].word = s.lattice[i].nodes[word_idx]
@@ -53,34 +54,15 @@ cdef Sentence* init_sent(list words_lattice, list parse) except NULL:
     return s
 
 
-cdef int init_lattice_step(list lattice_step, Step* step) except -1:
+cdef int init_lattice_step(list lattice_step, Step* step, Pool pool) except -1:
     step.n = len(lattice_step)
-    step.nodes = <Lexeme**>calloc(step.n, sizeof(Lexeme*))
-    step.probs = <double*>calloc(step.n, sizeof(double))
+    step.nodes = <Lexeme**>pool.safe_alloc(step.n, sizeof(Lexeme*))
+    step.probs = <double*>pool.safe_alloc(step.n, sizeof(double))
     cdef size_t lex_addr
     for i, (p, word) in enumerate(lattice_step):
         step.probs[i] = p
         lex_addr = index.lexicon.lookup(word)
         step.nodes[i] = <Lexeme*>lex_addr
-
-
-cdef void free_sent(Sentence* s):
-    cdef size_t i, j
-    for i in range(s.n):
-        free(&s.tokens[i])
-        free_step(&s.lattice[i])
-    free(s.lattice)
-    free(s.tokens)
-
-
-cdef void free_step(Step* s):
-    # TODO: When we pass in pointers to these from a central vocab, remove this
-    # free
-    cdef size_t i
-    for i in range(s.n):
-        free(s.nodes[i])
-    free(s.nodes)
-    free(s.probs)
 
 
 cdef class Input:
@@ -90,13 +72,8 @@ cdef class Input:
         parse.insert(0, (0, None, None, None, False, False))
         lattice.append([(1.0, '<end>')])
         parse.append((0, 'EOL', None, None, False, False))
-        self.c_sent = init_sent(lattice, parse)
-
-    def __dealloc__(self):
-        # TODO: Fix memory
-        pass
-        #free_sent(self.c_sent)
-
+        self._pool = Pool()
+        self.c_sent = init_sent(lattice, parse, self._pool)
 
     @classmethod
     def from_tokens(cls, tokens):

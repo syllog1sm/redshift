@@ -3,8 +3,8 @@ from _state cimport *
 from redshift.sentence cimport Input, Sentence, Token
 
 from transitions cimport Transition, transition
+from redshift.memsafe cimport Pool
 
-from libc.stdlib cimport malloc, calloc, free
 from libc.string cimport memcpy
 from libc.stdint cimport uint64_t, int64_t
 
@@ -22,14 +22,15 @@ cdef class Beam:
         self.i = 0
         self.is_finished = False
         cdef size_t i
-        self.parents = <State**>malloc(k * sizeof(State*))
-        self.beam = <State**>malloc(k * sizeof(State*))
-        self.moves = <Transition**>malloc(k * sizeof(Transition*))
+        self._pool = Pool()
+        self.parents = <State**>self._pool.safe_alloc(k, sizeof(State*))
+        self.beam = <State**>self._pool.safe_alloc(k, sizeof(State*))
+        self.moves = <Transition**>self._pool.safe_alloc(k, sizeof(Transition*))
         cdef Transition* moves = <Transition*>moves_addr
         for i in range(k):
-            self.parents[i] = init_state(py_sent.c_sent)
-            self.beam[i] = init_state(py_sent.c_sent)
-            self.moves[i] = <Transition*>calloc(self.nr_class, sizeof(Transition))
+            self.parents[i] = init_state(py_sent.c_sent, self._pool)
+            self.beam[i] = init_state(py_sent.c_sent, self._pool)
+            self.moves[i] = <Transition*>self._pool.safe_alloc(self.nr_class, sizeof(Transition))
             for j in range(self.nr_class):
                 assert moves[j].clas < nr_class
                 self.moves[i][j].clas = moves[j].clas
@@ -115,10 +116,4 @@ cdef class Beam:
             parse[i] = s.parse[i]
  
     def __dealloc__(self):
-        for i in range(self.k):
-            free_state(self.beam[i])
-            free_state(self.parents[i])
-            free(self.moves[i])
-        free(self.beam)
-        free(self.parents)
-        free(self.moves)
+        pass

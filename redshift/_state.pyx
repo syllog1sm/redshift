@@ -1,6 +1,6 @@
 # cython: profile=True
-from libc.stdlib cimport malloc, free, calloc
 from libc.string cimport memcpy, memset
+from redshift.memsafe cimport Pool
 
 DEF MAX_VALENCY = 200
 
@@ -163,9 +163,9 @@ cdef bint is_final(State *s):
 DEF PADDING = 5
 
 
-cdef State* init_state(Sentence* sent):
+cdef State* init_state(Sentence* sent, Pool pool):
     cdef size_t i
-    cdef State* s = <State*>calloc(1, sizeof(State))
+    cdef State* s = <State*>pool.safe_alloc(1, sizeof(State))
     s.n = sent.n
     s.m = 0
     s.i = 1
@@ -174,19 +174,19 @@ cdef State* init_state(Sentence* sent):
     s.top = 0
     s.stack_len = 0
     n = sent.n + PADDING
-    s.stack = <size_t*>calloc(n, sizeof(size_t))
-    s.l_children = <size_t**>malloc(n * sizeof(size_t*))
-    s.r_children = <size_t**>malloc(n * sizeof(size_t*))
-    s.parse = <Token*>calloc(n, sizeof(Token))
+    s.stack = <size_t*>pool.safe_alloc(n, sizeof(size_t))
+    s.l_children = <size_t**>pool.safe_alloc(n, sizeof(size_t*))
+    s.r_children = <size_t**>pool.safe_alloc(n, sizeof(size_t*))
+    s.parse = <Token*>pool.safe_alloc(n, sizeof(Token))
     for i in range(n):
         s.parse[i].i = i
         # TODO: Control whether these get filled
         s.parse[i].word = sent.tokens[i].word
         s.parse[i].tag = sent.tokens[i].tag
         s.parse[i].left_edge = i
-        s.l_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
-        s.r_children[i] = <size_t*>calloc(MAX_VALENCY, sizeof(size_t))
-    s.history = <Transition*>calloc(n * 3, sizeof(Transition))
+        s.l_children[i] = <size_t*>pool.safe_alloc(MAX_VALENCY, sizeof(size_t))
+        s.r_children[i] = <size_t*>pool.safe_alloc(MAX_VALENCY, sizeof(size_t))
+    s.history = <Transition*>pool.safe_alloc(n * 3, sizeof(Transition))
     return s
 
 
@@ -213,15 +213,3 @@ cdef int copy_state(State* s, State* old) except -1:
     # Why?
     memcpy(s.parse, old.parse, old.n * sizeof(Token))
     memcpy(s.history, old.history, old.m * sizeof(Transition))
-
-
-cdef free_state(State* s):
-    free(s.stack)
-    for i in range(s.n + PADDING):
-        free(s.l_children[i])
-        free(s.r_children[i])
-    free(s.l_children)
-    free(s.r_children)
-    free(s.parse)
-    free(s.history)
-    free(s)

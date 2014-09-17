@@ -2,12 +2,14 @@ from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
 from redshift.sentence cimport Input, Sentence, Token
 from ext.sparsehash cimport dense_hash_map
+from memsafe cimport Pool
 
 from libc.stdint cimport uint64_t, int64_t
 
 
 cdef class Tagger:
     cdef object cfg
+    cdef Pool _pool
     cdef Extractor extractor
     cdef Perceptron guide
     cdef object model_dir
@@ -33,10 +35,12 @@ cdef class TaggerBeam:
     cdef set seen_states
     cdef TagState** beam
     cdef TagState** parents
+    cdef Pool _pool
     cdef int extend_states(self, double** scores) except -1
 
 
-cdef TagState* extend_state(TagState* s, size_t clas, double* scores, size_t n)
+cdef TagState* extend_state(TagState* s, size_t clas, double* scores, size_t n,
+                            Pool pool)
 
 cdef int fill_hist(Token* hist, TagState* s, int t) except -1
 

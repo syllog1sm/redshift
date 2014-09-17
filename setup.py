@@ -68,6 +68,8 @@ exts = [
     Extension("redshift.tagger", ["redshift/tagger.pyx", "ext/MurmurHash2.cpp",
                                   "ext/MurmurHash3.cpp"], include_dirs=includes,
         language="c++"),
+    Extension("redshift.memsafe", ["redshift/memsafe.pyx"], include_dirs=includes,
+              language="c++")
     #Extension("redshift.tester", ["redshift/tester.pyx"], include_dirs=includes)
 ]
 

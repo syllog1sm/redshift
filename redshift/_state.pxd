@@ -3,6 +3,7 @@ from libc.stdint cimport uint64_t, int64_t
 
 from sentence cimport Sentence, Token
 from transitions cimport Transition
+from memsafe cimport Pool
 
 # From left-to-right in the string, the slot tokens are:
 # S2, S1, S0le, S0l, S0l2, S0l0, S0, S0r0, S0r2, S0r, S0re
@@ -79,6 +80,5 @@ cdef int has_head_in_buffer(State *s, size_t word, Token* gold) except -1
 cdef int has_child_in_stack(State *s, size_t word, Token* gold) except -1
 cdef int has_head_in_stack(State *s, size_t word, Token* gold) except -1
 
-cdef State* init_state(Sentence* sent)
-cdef free_state(State* s)
+cdef State* init_state(Sentence* sent, Pool pool)
 cdef int copy_state(State* s, State* old) except -1
