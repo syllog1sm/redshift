@@ -1,5 +1,5 @@
 from ext.murmurhash cimport *
-from libc.stdlib cimport malloc, calloc, free
+from cymem.cymem cimport Pool
 from libc.stdint cimport uint64_t
 
 import os.path
@@ -26,9 +26,16 @@ cpdef bytes get_str(size_t word):
         _LEXICON = Lexicon()
     return _LEXICON.strings.get(word, '')
 
+def lexicon_size():
+    global _LEXICON
+    if _LEXICON is None:
+        _LEXICON = Lexicon()
+    return _LEXICON.mem.size
+
 
 cdef class Lexicon:
     def __cinit__(self, loc=None):
+        self.mem = Pool()
         self.words.set_empty_key(0)
         self.strings = {}
         cdef object line
@@ -50,20 +57,15 @@ cdef class Lexicon:
             #upper_pc = float(pieces[1])
             #title_pc = float(pieces[2])
             upper_pc, title_pc = case_stats.get(word.lower(), (0.0, 0.0))
-            w = <size_t>init_word(word, cluster, upper_pc, title_pc, int(freq_str))
+            w = <size_t>init_word(self.mem, word, cluster, upper_pc, title_pc, int(freq_str))
             self.words[_hash_str(word)] = w
             self.strings[<size_t>w] = word
-
-    def __dealloc__(self):
-        cdef size_t word_addr
-        for word_addr in self.values():
-            free(<Lexeme*>word_addr)
 
     cdef size_t lookup(self, bytes word):
         cdef uint64_t hashed = _hash_str(word)
         cdef size_t addr = self.words[hashed]
         if addr == 0:
-            addr = <size_t>init_word(word, 0, 0.0, 0.0, 0)
+            addr = <size_t>init_word(self.mem, word, 0, 0.0, 0.0, 0)
             self.words[hashed] = addr
             self.strings[addr] = word
         return addr
@@ -80,9 +82,9 @@ cpdef bytes normalize_word(word):
         return word.lower()
     
 
-cdef Lexeme* init_word(bytes py_word, size_t cluster,
+cdef Lexeme* init_word(Pool mem, bytes py_word, size_t cluster,
                      float upper_pc, float title_pc, size_t freq) except NULL:
-    cdef Lexeme* word = <Lexeme*>malloc(sizeof(Lexeme))
+    cdef Lexeme* word = <Lexeme*>mem.alloc(1, sizeof(Lexeme))
     word.orig = _hash_str(py_word)
     if freq < 10:
         word.norm = 0
