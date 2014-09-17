@@ -15,6 +15,7 @@ cdef extern from "sparsehash/dense_hash_map" namespace "google":
             iterator operator--() nogil
             bint operator==(iterator) nogil
             bint operator!=(iterator) nogil
+        uint64_t count(K& key)
         iterator begin()
         iterator end()
         uint64_t size()
