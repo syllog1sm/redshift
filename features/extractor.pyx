@@ -3,7 +3,7 @@
 Handle parser features
 """
 from libc.stdint cimport uint64_t
-from redshift.memory cimport Pool
+from cymem.cymem cimport Pool
 
 from ext.murmurhash cimport *
 
