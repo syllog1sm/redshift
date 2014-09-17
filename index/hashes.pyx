@@ -2,7 +2,7 @@
 
 from libc.stdint cimport uint64_t
 from libc.string cimport memcpy
-from redshift.memory cimport Pool
+from cymem.cymem cimport Pool
 
 import os.path
 

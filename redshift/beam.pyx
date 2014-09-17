@@ -3,7 +3,7 @@ from _state cimport *
 from redshift.sentence cimport Input, Sentence, Token
 
 from transitions cimport Transition, transition
-from memory cimport Pool
+from cymem.cymem cimport Pool
 
 from libc.string cimport memcpy
 from libc.stdint cimport uint64_t, int64_t

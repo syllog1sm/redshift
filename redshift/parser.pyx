@@ -16,7 +16,7 @@ from transitions cimport Transition, transition, fill_valid, fill_costs
 from transitions cimport get_nr_moves, fill_moves
 from transitions cimport *
 
-from memory cimport Pool, Address
+from cymem.cymem cimport Pool, Address
 from beam cimport Beam
 from tagger cimport Tagger
 from util import Config

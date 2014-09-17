@@ -1,4 +1,5 @@
 cython
+cymem
 plac
 python-cjson
 pytest

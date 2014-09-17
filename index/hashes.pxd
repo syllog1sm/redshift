@@ -3,7 +3,7 @@ from libcpp.vector cimport vector
 from libc.stdint cimport uint64_t, int64_t
 from ext.murmurhash cimport *
 from ext.sparsehash cimport *
-from redshift.memory cimport Pool
+from cymem.cymem cimport Pool
 
 
 cdef class Index:

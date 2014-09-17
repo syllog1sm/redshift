@@ -6,7 +6,7 @@ from .util import Config
 
 from redshift.sentence cimport Input, Sentence
 from index.lexicon cimport Lexeme
-from memory cimport Pool
+from cymem.cymem cimport Pool
 
 from libc.stdint cimport uint64_t, int64_t
 from libcpp.queue cimport priority_queue

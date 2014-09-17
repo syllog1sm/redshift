@@ -1,6 +1,6 @@
 # cython: profile=True
 from libc.string cimport memcpy, memset
-from memory cimport Pool
+from cymem.cymem cimport Pool
 
 DEF MAX_VALENCY = 200
 

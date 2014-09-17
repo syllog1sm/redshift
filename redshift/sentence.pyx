@@ -11,7 +11,7 @@ from index.hashes import encode_label
 from index.hashes import decode_pos
 from index.hashes import decode_label
 
-from memory cimport Pool
+from cymem.cymem cimport Pool
 
 
 cdef Sentence* init_sent(list words_lattice, list parse, Pool pool) except NULL:
