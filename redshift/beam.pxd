@@ -1,7 +1,7 @@
 from _state cimport *
 from transitions cimport Transition
 from sentence cimport Token
-from memsafe cimport Pool
+from memory cimport Pool
 
 
 from libcpp.queue cimport priority_queue

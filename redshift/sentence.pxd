@@ -1,5 +1,5 @@
 from index.lexicon cimport Lexeme
-from memsafe cimport Pool
+from memory cimport Pool
 
 
 cdef struct Token:

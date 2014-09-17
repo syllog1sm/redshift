@@ -3,7 +3,7 @@ from _state cimport *
 from redshift.sentence cimport Input, Sentence, Token
 
 from transitions cimport Transition, transition
-from redshift.memsafe cimport Pool
+from memory cimport Pool
 
 from libc.string cimport memcpy
 from libc.stdint cimport uint64_t, int64_t
@@ -23,14 +23,14 @@ cdef class Beam:
         self.is_finished = False
         cdef size_t i
         self._pool = Pool()
-        self.parents = <State**>self._pool.safe_alloc(k, sizeof(State*))
-        self.beam = <State**>self._pool.safe_alloc(k, sizeof(State*))
-        self.moves = <Transition**>self._pool.safe_alloc(k, sizeof(Transition*))
+        self.parents = <State**>self._pool.alloc(k, sizeof(State*))
+        self.beam = <State**>self._pool.alloc(k, sizeof(State*))
+        self.moves = <Transition**>self._pool.alloc(k, sizeof(Transition*))
         cdef Transition* moves = <Transition*>moves_addr
         for i in range(k):
             self.parents[i] = init_state(py_sent.c_sent, self._pool)
             self.beam[i] = init_state(py_sent.c_sent, self._pool)
-            self.moves[i] = <Transition*>self._pool.safe_alloc(self.nr_class, sizeof(Transition))
+            self.moves[i] = <Transition*>self._pool.alloc(self.nr_class, sizeof(Transition))
             for j in range(self.nr_class):
                 assert moves[j].clas < nr_class
                 self.moves[i][j].clas = moves[j].clas

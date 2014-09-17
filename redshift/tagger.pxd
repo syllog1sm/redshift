@@ -2,7 +2,7 @@ from features.extractor cimport Extractor
 from learn.perceptron cimport Perceptron
 from redshift.sentence cimport Input, Sentence, Token
 from ext.sparsehash cimport dense_hash_map
-from memsafe cimport Pool
+from memory cimport Pool
 
 from libc.stdint cimport uint64_t, int64_t
 

@@ -3,7 +3,7 @@ from libc.stdint cimport uint64_t, int64_t
 
 from sentence cimport Sentence, Token
 from transitions cimport Transition
-from memsafe cimport Pool
+from memory cimport Pool
 
 # From left-to-right in the string, the slot tokens are:
 # S2, S1, S0le, S0l, S0l2, S0l0, S0, S0r0, S0r2, S0r, S0re

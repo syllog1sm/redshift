@@ -11,15 +11,15 @@ from index.hashes import encode_label
 from index.hashes import decode_pos
 from index.hashes import decode_label
 
-from memsafe cimport Pool
+from memory cimport Pool
 
 
 cdef Sentence* init_sent(list words_lattice, list parse, Pool pool) except NULL:
-    cdef Sentence* s = <Sentence*>pool.safe_alloc(1, sizeof(Sentence))
+    cdef Sentence* s = <Sentence*>pool.alloc(1, sizeof(Sentence))
     s.n = len(words_lattice)
     assert s.n >= 3, words_lattice
-    s.lattice = <Step*>pool.safe_alloc(s.n, sizeof(Step))
-    s.tokens = <Token*>pool.safe_alloc(s.n, sizeof(Token))
+    s.lattice = <Step*>pool.alloc(s.n, sizeof(Step))
+    s.tokens = <Token*>pool.alloc(s.n, sizeof(Token))
     cdef Token t
     for i in range(s.n):
         init_lattice_step(words_lattice[i], &s.lattice[i], pool)
@@ -56,8 +56,8 @@ cdef Sentence* init_sent(list words_lattice, list parse, Pool pool) except NULL:
 
 cdef int init_lattice_step(list lattice_step, Step* step, Pool pool) except -1:
     step.n = len(lattice_step)
-    step.nodes = <Lexeme**>pool.safe_alloc(step.n, sizeof(Lexeme*))
-    step.probs = <double*>pool.safe_alloc(step.n, sizeof(double))
+    step.nodes = <Lexeme**>pool.alloc(step.n, sizeof(Lexeme*))
+    step.probs = <double*>pool.alloc(step.n, sizeof(double))
     cdef size_t lex_addr
     for i, (p, word) in enumerate(lattice_step):
         step.probs[i] = p

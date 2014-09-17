@@ -16,7 +16,7 @@ from transitions cimport Transition, transition, fill_valid, fill_costs
 from transitions cimport get_nr_moves, fill_moves
 from transitions cimport *
 
-from memsafe cimport Pool, Memory
+from memory cimport Pool, Address
 from beam cimport Beam
 from tagger cimport Tagger
 from util import Config
@@ -129,8 +129,8 @@ cdef class Parser:
         self.cfg = Config.read(model_dir, 'config')
         self.extractor = Extractor(*get_templates(self.cfg.features))
         self._pool = Pool()
-        self._features = <uint64_t*>self._pool.safe_alloc(self.extractor.nr_feat, sizeof(uint64_t))
-        self._context = <size_t*>self._pool.safe_alloc(_parse_features.context_size(), sizeof(size_t))
+        self._features = <uint64_t*>self._pool.alloc(self.extractor.nr_feat, sizeof(uint64_t))
+        self._context = <size_t*>self._pool.alloc(_parse_features.context_size(), sizeof(size_t))
 
         self.feat_thresh = self.cfg.feat_thresh
         self.beam_width = self.cfg.beam_width
@@ -139,7 +139,7 @@ cdef class Parser:
             index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
         self.nr_moves = get_nr_moves(self.cfg.left_labels, self.cfg.right_labels,
                                      self.cfg.dfl_labels, self.cfg.use_break)
-        self.moves = <Transition*>self._pool.safe_alloc(self.nr_moves, sizeof(Transition))
+        self.moves = <Transition*>self._pool.alloc(self.nr_moves, sizeof(Transition))
         fill_moves(self.cfg.left_labels, self.cfg.right_labels, self.cfg.dfl_labels,
                    self.cfg.use_break, self.moves)
         
@@ -189,7 +189,7 @@ cdef class Parser:
         cdef Transition[1000] g_hist
         cdef Transition[1000] p_hist
         cdef Sentence* sent = py_sent.c_sent
-        cdef Memory tags_mem = Memory(sent.n, sizeof(size_t))
+        cdef Address tags_mem = Address(sent.n, sizeof(size_t))
         cdef size_t* gold_tags = <size_t*>tags_mem.addr
         for i in range(sent.n):
             gold_tags[i] = sent.tokens[i].tag
