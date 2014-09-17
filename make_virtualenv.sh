@@ -9,7 +9,7 @@ mkdir ~/.localpython
 make
 make install
 cd /tmp
-wget --no-check-certificate https://pypi.python.org/packages/source/v/virtualenv/virtualenv-1.5.2    .tar.gz
+wget --no-check-certificate https://pypi.python.org/packages/source/v/virtualenv/virtualenv-1.5.2.tar.gz
 tar -zxvf virtualenv-1.5.2.tar.gz
 cd virtualenv-1.5.2/
 ~/.localpython/bin/python setup.py install
