@@ -1,5 +1,7 @@
 from features.extractor cimport Extractor
 from learn.thinc cimport LinearModel
+from learn.thinc cimport W as weight_t
+
 import index.hashes
 cimport index.hashes
 from .util import Config
@@ -67,9 +69,9 @@ cdef class Tagger:
         if path.exists(path.join(model_dir, 'tagger.gz')):
             with open(path.join(model_dir, 'tagger.gz'), 'r') as file_:
                 self.guide.load(file_)
-        self._beam_scores = <double**>self._pool.alloc(self.beam_width, sizeof(double*))
+        self._beam_scores = <weight_t**>self._pool.alloc(self.beam_width, sizeof(weight_t*))
         for i in range(self.beam_width):
-            self._beam_scores[i] = <double*>self._pool.alloc(nr_tag, sizeof(double))
+            self._beam_scores[i] = <weight_t*>self._pool.alloc(nr_tag, sizeof(weight_t))
 
     cpdef int tag(self, Input py_sent) except -1:
         cdef Sentence* sent = py_sent.c_sent
@@ -90,7 +92,7 @@ cdef class Tagger:
         cdef size_t  i, j 
         cdef Sentence* sent = py_sent.c_sent
         cdef size_t nr_class = self.guide.nr_class
-        cdef double* scores = self.guide.scores
+        cdef weight_t* scores = self.guide.scores
         cdef Pool tmp_mem = Pool()
         cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.n, nr_class)
         cdef TagState* gold = extend_state(NULL, 0, NULL, 0, tmp_mem)
@@ -113,7 +115,7 @@ cdef class Tagger:
                                          self.extractor)
             self.guide.update(counts)
 
-    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, double* scores):
+    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores):
         fill_context(self._context, sent, s.clas, get_p(s), i)
         cdef size_t n = self.extractor.extract(self._features, self._context)
         self.guide.score(scores, self._features, n)
@@ -123,7 +125,7 @@ cdef class MaxViolnUpd:
     cdef TagState* pred
     cdef TagState* gold
     cdef Sentence* sent
-    cdef double delta
+    cdef weight_t delta
     cdef int length
     cdef size_t nr_class
     cdef size_t tmp
@@ -176,7 +178,7 @@ cdef class MaxViolnUpd:
             i -= 1
         return counts
 
-    cdef int _inc_feats(self, dict counts, uint64_t* feats, double inc) except -1:
+    cdef int _inc_feats(self, dict counts, uint64_t* feats, weight_t inc) except -1:
         cdef size_t f = 0
         while feats[f] != 0:
             if feats[f] not in counts:
@@ -376,20 +378,20 @@ cdef class TaggerBeam:
             self.parents[i] = extend_state(NULL, 0, NULL, 0, self._pool)
 
     @cython.cdivision(True)
-    cdef int extend_states(self, double** ext_scores) except -1:
+    cdef int extend_states(self, weight_t** ext_scores) except -1:
         # Former states are now parents, beam will hold the extensions
         cdef size_t i, clas, move_id
-        cdef double parent_score, score
-        cdef double* scores
-        cdef priority_queue[pair[double, size_t]] next_moves
-        next_moves = priority_queue[pair[double, size_t]]()
+        cdef weight_t parent_score, score
+        cdef weight_t* scores
+        cdef priority_queue[pair[weight_t, size_t]] next_moves
+        next_moves = priority_queue[pair[weight_t, size_t]]()
         for i in range(self.bsize):
             scores = ext_scores[i]
             for clas in range(self.nr_class):
                 score = self.parents[i].score + scores[clas]
                 move_id = (i * self.nr_class) + clas
-                next_moves.push(pair[double, size_t](score, move_id))
-        cdef pair[double, size_t] data
+                next_moves.push(pair[weight_t, size_t](score, move_id))
+        cdef pair[weight_t, size_t] data
         # Apply extensions for best continuations
         cdef TagState* s
         cdef TagState* prev
@@ -417,9 +419,9 @@ cdef class TaggerBeam:
         self.t += 1
 
 
-cdef TagState* extend_state(TagState* s, size_t clas, double* scores,
+cdef TagState* extend_state(TagState* s, size_t clas, weight_t* scores,
                             size_t nr_class, Pool pool):
-    cdef double score
+    cdef weight_t score
     ext = <TagState*>pool.alloc(1, sizeof(TagState))
     ext.prev = s
     ext.clas = clas

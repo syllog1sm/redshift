@@ -5,6 +5,7 @@ from cymem.cymem cimport Pool
 from trustyc.maps cimport PointerMap
 
 from libc.stdint cimport uint64_t, int64_t
+from learn.thinc cimport W as weight_t
 
 
 cdef class Tagger:
@@ -17,12 +18,12 @@ cdef class Tagger:
 
     cdef size_t* _context
     cdef uint64_t* _features
-    cdef double** _beam_scores
+    cdef weight_t** _beam_scores
 
     cpdef int tag(self, Input py_sent) except -1
     cdef int train_sent(self, Input py_sent) except -1
 
-    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, double* scores)
+    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores)
 
 
 cdef class TaggerBeam:
@@ -34,10 +35,10 @@ cdef class TaggerBeam:
     cdef TagState** beam
     cdef TagState** parents
     cdef Pool _pool
-    cdef int extend_states(self, double** scores) except -1
+    cdef int extend_states(self, weight_t** scores) except -1
 
 
-cdef TagState* extend_state(TagState* s, size_t clas, double* scores, size_t n,
+cdef TagState* extend_state(TagState* s, size_t clas, weight_t* scores, size_t n,
                             Pool pool)
 
 cdef int fill_hist(Token* hist, TagState* s, int t) except -1
@@ -47,7 +48,7 @@ cdef size_t get_p(TagState* s)
 cdef size_t get_pp(TagState* s)
 
 cdef struct TagState:
-    double score
+    weight_t score
     TagState* prev
     size_t clas
     size_t length
