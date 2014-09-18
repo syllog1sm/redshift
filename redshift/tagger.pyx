@@ -366,7 +366,6 @@ cdef class TaggerBeam:
         self.t = 0
         self.bsize = 1
         self.is_full = self.bsize >= self.k
-        self.seen_states = set()
         self._pool = Pool()
         self.beam = <TagState**>self._pool.alloc(k, sizeof(TagState*))
         self.parents = <TagState**>self._pool.alloc(k, sizeof(TagState*))
@@ -393,8 +392,7 @@ cdef class TaggerBeam:
         cdef TagState* s
         cdef TagState* prev
         cdef size_t addr
-        cdef dense_hash_map[uint64_t, bint] seen_equivs = dense_hash_map[uint64_t, bint]()
-        seen_equivs.set_empty_key(0)
+        cdef PointerMap seen_equivs = PointerMap(self.k ** 2)
         self.bsize = 0
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
@@ -402,14 +400,13 @@ cdef class TaggerBeam:
             clas = data.second % self.nr_class
             prev = self.parents[i]
             hashed = (clas * self.nr_class) + prev.clas
-            if seen_equivs[hashed]:
+            if seen_equivs.get(hashed):
                 next_moves.pop()
                 continue
-            seen_equivs[hashed] = 1
+            seen_equivs.set(hashed, <void*>1)
             self.beam[self.bsize] = extend_state(prev, clas, ext_scores[i],
                                                  self.nr_class, self._pool)
             addr = <size_t>self.beam[self.bsize]
-            self.seen_states.add(addr)
             next_moves.pop()
             self.bsize += 1
         for i in range(self.bsize):
