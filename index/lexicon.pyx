@@ -1,6 +1,6 @@
-from ext.murmurhash cimport *
 from cymem.cymem cimport Pool
 from libc.stdint cimport uint64_t
+from murmurhash.mrmr cimport hash64
 
 import os.path
 
@@ -103,4 +103,4 @@ cdef Lexeme* init_word(Pool mem, bytes py_word, size_t cluster,
 
 
 cdef inline uint64_t _hash_str(bytes s):
-    return MurmurHash64A(<char*>s, len(s), 0)
+    return hash64(<char*>s, len(s), 0)

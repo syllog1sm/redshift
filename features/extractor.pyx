@@ -5,7 +5,7 @@ Handle parser features
 from libc.stdint cimport uint64_t
 from cymem.cymem cimport Pool
 
-from ext.murmurhash cimport *
+from murmurhash.mrmr cimport hash64
 
 DEF MAX_FEAT_LEN = 10
 
@@ -67,7 +67,7 @@ cdef class Extractor:
                 pred.raws[j] = value
             if seen_non_zero:
                 pred.raws[pred.n] = pred.id
-                features[f] = MurmurHash64A(pred.raws, sizeof(pred.raws), i)
+                features[f] = hash64(pred.raws, sizeof(pred.raws), i)
                 f += 1
         cdef MatchPred* match_pred
         cdef size_t match_id
@@ -77,12 +77,12 @@ cdef class Extractor:
             if value != 0 and value == context[match_pred.idx2]:
                 match_pred.raws[0] = value
                 match_pred.raws[1] = match_pred.id
-                features[f] = MurmurHash64A(match_pred.raws, sizeof(match_pred.raws),
-                                            match_pred.id)
+                features[f] = hash64(match_pred.raws, sizeof(match_pred.raws),
+                                     match_pred.id)
                 f += 1
                 match_pred.raws[0] = 0
-                features[f] = MurmurHash64A(match_pred.raws, sizeof(match_pred.raws),
-                                            match_pred.id)
+                features[f] = hash64(match_pred.raws, sizeof(match_pred.raws),
+                                     match_pred.id)
                 f += 1
         features[f] = 0
         return f

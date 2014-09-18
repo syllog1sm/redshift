@@ -1,8 +1,6 @@
 from libc.stdint cimport uint64_t, int64_t
 from cymem.cymem cimport Pool
 
-from ext.murmurhash cimport *
-
 DEF MAX_FEAT_LEN = 10
 
 cdef struct Template:

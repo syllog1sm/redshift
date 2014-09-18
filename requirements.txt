@@ -1,5 +1,6 @@
 cython
 cymem
+murmurhash
 trustyc
 plac
 python-cjson
