@@ -209,8 +209,8 @@ cdef class Perceptron:
         print msg
         if iter_num % 2 == 1 and feat_thresh > 1:
             self.prune(feat_thresh)
-        if iter_num < 3:
-            self.reindex()
+        #if iter_num < 3:
+        #    self.reindex()
         self.n_corr = 0.0
         self.total = 0.0
 
