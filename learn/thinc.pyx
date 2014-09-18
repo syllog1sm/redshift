@@ -1,3 +1,4 @@
+# cython: profile=True
 from libc.stdlib cimport strtoull, strtoul, atof
 from libc.string cimport strtok
 
