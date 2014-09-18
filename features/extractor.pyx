@@ -85,3 +85,4 @@ cdef class Extractor:
                                             match_pred.id)
                 f += 1
         features[f] = 0
+        return f
