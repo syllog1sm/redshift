@@ -28,7 +28,9 @@ from _parse_features cimport *
 import index.hashes
 cimport index.hashes
 
-from learn.perceptron cimport Perceptron
+from learn.thinc cimport LinearModel
+from learn.thinc cimport W
+
 
 from libc.stdint cimport uint64_t, int64_t
 
@@ -66,11 +68,15 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
             py_sent = sents[i]
             parser.tagger.train_sent(py_sent)
             parser.train_sent(py_sent)
-        parser.guide.end_train_iter(n, feat_thresh)
-        parser.tagger.guide.end_train_iter(n, feat_thresh)
+        print(parser.guide.end_train_iter(n, feat_thresh) + '\t' +
+              parser.tagger.guide.end_train_iter(n, feat_thresh))
         random.shuffle(indices)
-    parser.guide.end_training(pjoin(model_dir, 'model.gz'))
-    parser.tagger.guide.end_training(pjoin(model_dir, 'tagger.gz'))
+    parser.guide.end_training()
+    parser.tagger.guide.end_training()
+    with open(pjoin(model_dir, 'model.gz'), 'w') as file_:
+        parser.guide.dump(file_)
+    with open(pjoin(model_dir, 'tagger.gz'), 'w') as file_:
+        parser.tagger.guide.dump(file_)
     index.hashes.save_pos_idx(pjoin(model_dir, 'pos'))
     index.hashes.save_label_idx(pjoin(model_dir, 'labels'))
     return parser
@@ -115,7 +121,7 @@ cdef class Parser:
     cdef object cfg
     cdef Pool _pool
     cdef Extractor extractor
-    cdef Perceptron guide
+    cdef LinearModel guide
     cdef Tagger tagger
     cdef size_t beam_width
     cdef int feat_thresh
@@ -143,9 +149,10 @@ cdef class Parser:
         fill_moves(self.cfg.left_labels, self.cfg.right_labels, self.cfg.dfl_labels,
                    self.cfg.use_break, self.moves)
         
-        self.guide = Perceptron(self.nr_moves, pjoin(model_dir, 'model.gz'))
+        self.guide = LinearModel(self.nr_moves)
         if os.path.exists(pjoin(model_dir, 'model.gz')):
-            self.guide.load(pjoin(model_dir, 'model.gz'), thresh=int(self.cfg.feat_thresh))
+            with open(pjoin(model_dir, 'model.gz')) as file_:
+                self.guide.load(file_)
         if os.path.exists(pjoin(model_dir, 'pos')):
             index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
         self.tagger = Tagger(model_dir)
@@ -170,15 +177,15 @@ cdef class Parser:
         sent.score = beam.beam[0].score
 
     cdef int _predict(self, State* s, Transition* classes) except -1:
-        cdef bint cache_hit = False
         if is_final(s):
             return 0
+        cdef bint cache_hit = False
         fill_slots(s)
         scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
         if not cache_hit:
             fill_context(self._context, &s.slots, s.parse)
-            self.extractor.extract(self._features, self._context)
-            self.guide.fill_scores(self._features, scores)
+            nr_active = self.extractor.extract(self._features, self._context)
+            self.guide.score(scores, self._features, nr_active)
         fill_valid(s, classes, self.nr_moves)
         cdef size_t i
         for i in range(self.nr_moves):
@@ -205,8 +212,8 @@ cdef class Parser:
         cdef State* p
         cdef State* g
         cdef Transition* moves
-        self.guide.cache.flush()
         words = py_sent.words
+        self.guide.cache.flush()
         while not p_beam.is_finished and not g_beam.is_finished:
             for i in range(p_beam.bsize):
                 self._predict(p_beam.beam[i], p_beam.moves[i])
@@ -232,11 +239,13 @@ cdef class Parser:
                 memcpy(g_hist, g.history, gt * sizeof(Transition))
         if max_violn >= 0:
             counted = self._count_feats(sent, pt, gt, p_hist, g_hist)
-            self.guide.batch_update(counted)
+            self.guide.update(counted)
         else:
-            self.guide.now += 1
+            self.guide.time += 1
         for i in range(sent.n):
             sent.tokens[i].tag = gold_tags[i]
+        self.guide.n_corr += p_beam.beam[0].cost == 0
+        self.guide.total += 1
 
     cdef dict _count_feats(self, Sentence* sent, size_t pt, size_t gt,
                            Transition* phist, Transition* ghist):
@@ -251,10 +260,8 @@ cdef class Parser:
             counts[clas] = {}
         cdef bint seen_diff = False
         for i in range(max((pt, gt))):
-            self.guide.total += 1.0
             # Find where the states diverge
             if not seen_diff and ghist[i].clas == phist[i].clas:
-                self.guide.n_corr += 1.0
                 transition(&ghist[i], gold_state)
                 transition(&phist[i], pred_state)
                 continue

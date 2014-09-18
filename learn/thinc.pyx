@@ -1,7 +1,9 @@
 # cython: profile=True
 from libc.stdlib cimport strtoull, strtoul, atof
 from libc.string cimport strtok
+from libc.string cimport memcpy
 
+from murmurhash.mrmr cimport hash64
 from cymem.cymem cimport Address
 
 import random
@@ -131,10 +133,11 @@ cdef class LinearModel:
         self.n_corr = 0
         self.nr_class = nr_class
         self.time = 0
+        self.cache = ScoresCache(nr_class)
         self.weights = PointerMap()
         self.train_weights = PointerMap()
         self.mem = Pool()
-        self.scores = <double*>self.mem.alloc(self.nr_class, sizeof(double))
+        self.scores = <W*>self.mem.alloc(self.nr_class, sizeof(W))
         print self.nr_class, get_nr_rows(self.nr_class)
 
     def __call__(self, list py_feats):
@@ -143,12 +146,10 @@ cdef class LinearModel:
         cdef F feat
         for i, feat in enumerate(py_feats):
             features[i] = feat
-        scores_mem = Address(self.nr_class, sizeof(double))
-        scores = <double*>scores_mem.addr
-        self.score(scores, features, len(py_feats))
+        self.score(self.scores, features, len(py_feats))
         py_scores = []
         for i in range(self.nr_class):
-            py_scores.append(scores[i])
+            py_scores.append(self.scores[i])
         return py_scores
 
     cdef TrainFeat* new_feat(self, F feat_id) except NULL:
@@ -226,13 +227,18 @@ cdef class LinearModel:
                 if feat[row] == NULL:
                     continue
                 line = []
-                line.append(feat_id)
-                line.append(row)
-                line.append(feat[row].start)
+                line.append(str(feat_id))
+                line.append(str(row))
+                line.append(str(feat[row].start))
+                seen_non_zero = False
                 for col in range(LINE_SIZE):
-                    line.append(feat[row].line[col])
-                file_.write('\t'.join([str(p) for p in line]))
-                file_.write('\n')
+                    val = '%.3f' % feat[row].line[col]
+                    line.append(val)
+                    if val != '0.000':
+                        seen_non_zero = True
+                if seen_non_zero:
+                    file_.write('\t'.join(line))
+                    file_.write('\n')
 
     def load(self, file_):
         cdef F feat_id
@@ -240,7 +246,10 @@ cdef class LinearModel:
         cdef I col
         cdef bytes py_line
         cdef bytes token
+        cdef WeightLine** feature
         nr_rows = get_nr_rows(self.nr_class)
+        nr_feats = 0
+        nr_weights = 0
         for py_line in file_:
             line = <char*>py_line
             token = strtok(line, '\t')
@@ -249,11 +258,62 @@ cdef class LinearModel:
             row = strtoul(token, NULL, 10)
             token = strtok(NULL, '\t')
             start = strtoul(token, NULL, 10)
-            if self.weights.get(feat_id) == NULL:
-                self.weights.set(feat_id, self.mem.alloc(nr_rows, sizeof(WeightLine*)))
             feature = <WeightLine**>self.weights.get(feat_id)
+            if feature == NULL:
+                nr_feats += 1
+                feature = <WeightLine**>self.mem.alloc(nr_rows, sizeof(WeightLine*))
+                self.weights.set(feat_id, feature)
             feature[row] = <WeightLine*>self.mem.alloc(1, sizeof(WeightLine))
             feature[row].start = start
             for col in range(LINE_SIZE):
                 token = strtok(NULL, '\t')
                 feature[row].line[col] = atof(token)
+                nr_weights += 1
+        print "Loading %d class... %d weights for %d features" % (self.nr_class, nr_weights, nr_feats)
+
+
+cdef class ScoresCache:
+    def __cinit__(self, size_t scores_size, size_t pool_size=10000):
+        self._cache = PointerMap()
+        self._pool = Pool()
+        self._arrays = <W**>self._pool.alloc(pool_size, sizeof(W*))
+        for i in range(pool_size):
+            self._arrays[i] = <W*>self._pool.alloc(scores_size, sizeof(W))
+        self.i = 0
+        self.pool_size = pool_size
+        self.scores_size = scores_size
+        self.n_hit = 0
+        self.n_miss = 0
+        
+    cdef W* lookup(self, size_t size, void* kernel, bint* is_hit):
+        cdef W** resized
+        cdef uint64_t hashed = hash64(kernel, size, 0)
+        cdef W* scores = <W*>self._cache.get(hashed)
+        if scores != NULL:
+            self.n_hit += 1
+            is_hit[0] = True
+            return scores
+        else:
+            if self.i == self.pool_size:
+                self._resize(self.pool_size * 2)
+            scores = self._arrays[self.i]
+            self.i += 1
+            self._cache.set(hashed, scores)
+            self.n_miss += 1
+            is_hit[0] = False
+            return scores
+    
+    def flush(self):
+        self.i = 0
+        self._cache = PointerMap(self._cache.size)
+
+    cdef int _resize(self, size_t new_size):
+        cdef size_t i
+        self.pool_size = new_size
+        cdef Pool new_mem = Pool()
+        resized = <W**>new_mem.alloc(self.pool_size, sizeof(W*))
+        memcpy(resized, self._arrays, self.i * sizeof(W*))
+        for i in range(self.i, self.pool_size):
+            resized[i] = <W*>new_mem.alloc(self.scores_size, sizeof(W))
+        self._arrays = resized
+        self._pool = new_mem
