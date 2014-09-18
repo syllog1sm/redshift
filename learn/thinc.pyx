@@ -230,7 +230,7 @@ cdef class LinearModel:
 
     def load(self, file_):
         cdef F feat_id
-        cdef C nr_rows, row
+        cdef C nr_rows, row, start
         cdef I col
         cdef bytes py_line
         cdef bytes token
@@ -239,13 +239,15 @@ cdef class LinearModel:
             line = <char*>py_line
             token = strtok(line, '\t')
             feat_id = strtoull(token, NULL, 10)
+            token = strtok(NULL, '\t')
+            row = strtoul(token, NULL, 10)
+            token = strtok(NULL, '\t')
+            start = strtoul(token, NULL, 10)
             if self.weights.get(feat_id) == NULL:
                 self.weights.set(feat_id, self.mem.alloc(nr_rows, sizeof(WeightLine*)))
             feature = <WeightLine**>self.weights.get(feat_id)
-            token = strtok(NULL, '\t')
-            row = strtoul(token, NULL, 10)
             feature[row] = <WeightLine*>self.mem.alloc(1, sizeof(WeightLine))
-            feature[row].start = strtoul(token, NULL, 10)
+            feature[row].start = start
             for col in range(LINE_SIZE):
                 token = strtok(NULL, '\t')
                 feature[row].line[col] = atof(token)

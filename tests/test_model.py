@@ -1,5 +1,6 @@
 from __future__ import division
 
+import StringIO
 import pytest
 
 from learn.thinc import LinearModel
@@ -22,9 +23,7 @@ def test_basic():
 
 
 @pytest.fixture
-def model():
-    m = LinearModel(3)
-    classes = range(3)
+def instances():
     instances = [
         {
             0: {1: -1, 2: 1},
@@ -42,7 +41,13 @@ def model():
             2: {4: 1, 5: -7, 2: 1}
         }
     ]
+    return instances
 
+
+@pytest.fixture
+def model(instances):
+    m = LinearModel(3)
+    classes = range(3)
     for counts in instances:
         m.update(counts)
     return m
@@ -71,12 +76,19 @@ def test_averaging(model):
     assert model([5])[2] == sum([0, 0, -7]) / 3
 
 
-
-
-
-
-def test_dump():
-    pass
+def test_dump_load(model):
+    output = StringIO.StringIO()
+    model.dump(output)
+    string = output.getvalue()
+    assert string
+    new_model = LinearModel(3)
+    assert model([1, 3, 4]) != new_model([1, 3, 4])
+    assert model([2, 5]) != new_model([2, 5])
+    assert model([3, 4, 2]) != new_model([2, 3, 4])
+    new_model.load(StringIO.StringIO(string))
+    assert model([1, 3, 4]) == new_model([1, 3, 4])
+    assert model([2, 5]) == new_model([2, 5])
+    assert model([3, 4, 2]) == new_model([2, 3, 4])
 
 
 def test_load():
