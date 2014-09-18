@@ -1,5 +1,6 @@
 cython
 cymem
+trustyc
 plac
 python-cjson
 pytest

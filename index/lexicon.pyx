@@ -36,7 +36,7 @@ def lexicon_size():
 cdef class Lexicon:
     def __cinit__(self, loc=None):
         self.mem = Pool()
-        self.words.set_empty_key(0)
+        self.words = PointerMap()
         self.strings = {}
         cdef object line
         cdef size_t i, word_id, freq
@@ -48,7 +48,7 @@ cdef class Lexicon:
             word, upper, title = line.split()
             case_stats[word] = (float(upper), float(title))
         print "Loading vocab from ", loc 
-        cdef size_t w
+        cdef Lexeme* w
         for line in open(loc):
             cluster_str, word, freq_str = line.split()
             # Decode as a little-endian string, so that we can do & 15 to get
@@ -57,18 +57,18 @@ cdef class Lexicon:
             #upper_pc = float(pieces[1])
             #title_pc = float(pieces[2])
             upper_pc, title_pc = case_stats.get(word.lower(), (0.0, 0.0))
-            w = <size_t>init_word(self.mem, word, cluster, upper_pc, title_pc, int(freq_str))
-            self.words[_hash_str(word)] = w
+            w = init_word(self.mem, word, cluster, upper_pc, title_pc, int(freq_str))
+            self.words.set(_hash_str(word), w)
             self.strings[<size_t>w] = word
 
     cdef size_t lookup(self, bytes word):
         cdef uint64_t hashed = _hash_str(word)
-        cdef size_t addr = self.words[hashed]
-        if addr == 0:
-            addr = <size_t>init_word(self.mem, word, 0, 0.0, 0.0, 0)
-            self.words[hashed] = addr
-            self.strings[addr] = word
-        return addr
+        cdef Lexeme* w = <Lexeme*>self.words.get(hashed)
+        if w == NULL:
+            w = init_word(self.mem, word, 0, 0.0, 0.0, 0)
+            self.words.set(hashed, w)
+            self.strings[<size_t>w] = word
+        return <size_t>w
 
 
 cpdef bytes normalize_word(word):

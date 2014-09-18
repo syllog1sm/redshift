@@ -1,6 +1,6 @@
 from libc.stdint cimport uint64_t
-from ext.sparsehash cimport * 
 from cymem.cymem cimport Pool
+from trustyc.maps cimport PointerMap
 
 
 cpdef size_t lookup(bytes word)
@@ -22,6 +22,6 @@ cdef Lexeme BLANK_WORD
 
 cdef class Lexicon:
     cdef Pool mem
-    cdef dense_hash_map[uint64_t, size_t] words
+    cdef PointerMap words
     cdef dict strings
     cdef size_t lookup(self, bytes word)
