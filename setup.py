@@ -34,8 +34,6 @@ libs = [os.path.join(pwd, 'ext')]
 exts = [
     Extension('ext.murmurhash', ["ext/murmurhash.pyx", "ext/MurmurHash2.cpp",
               "ext/MurmurHash3.cpp"], language="c++", include_dirs=includes),
-    Extension('ext.sparsehash', ["ext/sparsehash.pyx"], language="c++",
-              include_dirs=includes),
     Extension('redshift.parser', ["redshift/parser.pyx"], language="c++",
               include_dirs=includes),
     Extension('redshift.beam', ["redshift/beam.pyx"], language="c++",
@@ -68,6 +66,8 @@ exts = [
     Extension("redshift.tagger", ["redshift/tagger.pyx", "ext/MurmurHash2.cpp",
                                   "ext/MurmurHash3.cpp"], include_dirs=includes,
         language="c++"),
+    Extension("learn.thinc", ["learn/thinc.pyx"], include_dirs=includes, language="c++")
+ 
     #Extension("redshift.tester", ["redshift/tester.pyx"], include_dirs=includes)
 ]
 
