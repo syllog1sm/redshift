@@ -12,14 +12,12 @@ DEF LINE_SIZE = 7
 cdef WeightLine* new_weight_line(Pool mem, const C start) except NULL:
     cdef WeightLine* line = <WeightLine*>mem.alloc(1, sizeof(WeightLine))
     line.start = start
-    assert start < 1000
     return line
 
 
 cdef CountLine* new_count_line(Pool mem, const C start) except NULL:
     cdef CountLine* line = <CountLine*>mem.alloc(1, sizeof(CountLine))
     line.start = start
-    assert start < 1000
     return line
 
 
@@ -52,7 +50,7 @@ cdef I get_col(const C clas):
 
 cdef I get_nr_rows(const C n) except 0:
     cdef I nr_lines = get_row(n)
-    if nr_lines == 0 or n % nr_lines != 0:
+    if nr_lines == 0 or n % LINE_SIZE != 0:
         nr_lines += 1
     return nr_lines
 
@@ -80,7 +78,8 @@ cdef int update_accumulator(Pool mem, TrainFeat* feat, const C clas, const I tim
     if feat.times[row] == NULL:
         feat.times[row] = new_count_line(mem, clas - col)
     cdef W weight = feat.weights[row].line[col]
-    feat.totals[row].line[col] += (time - feat.times[row].line[col]) * weight
+    cdef I unchanged = time - feat.times[row].line[col]
+    feat.totals[row].line[col] += unchanged * weight
     feat.times[row].line[col] = time
 
 
@@ -95,14 +94,14 @@ cdef int update_count(Pool mem, TrainFeat* feat, const C clas, const I inc) exce
     feat.counts[row].line[col] += inc
 
 
-cdef int set_scores(W* scores, WeightLine* weight_lines, I nr_rows) except -1:
+cdef int set_scores(W* scores, WeightLine* weight_lines, I nr_rows, C nr_class) except -1:
     cdef:
         I row
         I col
     cdef size_t start
     for row in range(nr_rows):
         start = weight_lines[row].start
-        for col in range(LINE_SIZE):
+        for col in range(0, min(nr_class - start, LINE_SIZE)):
             scores[weight_lines[row].start + col] += weight_lines[row].line[col]
 
 
@@ -129,6 +128,7 @@ cdef class LinearModel:
         self.weights = PointerMap()
         self.train_weights = PointerMap()
         self.mem = Pool()
+        self.scores = <double*>self.mem.alloc(self.nr_class, sizeof(double))
 
     def __call__(self, list py_feats):
         feat_mem = Address(len(py_feats), sizeof(F))
@@ -171,7 +171,7 @@ cdef class LinearModel:
         cdef Address weights_mem = Address(nr_rows, sizeof(WeightLine))
         cdef WeightLine* weights = <WeightLine*>weights_mem.addr
         cdef I f_i = self.gather_weights(weights, features, nr_active)
-        set_scores(scores, weights, f_i)
+        set_scores(scores, weights, f_i, self.nr_class)
 
     cpdef int update(self, dict updates) except -1:
         cdef C clas
@@ -181,6 +181,7 @@ cdef class LinearModel:
         self.time += 1
         for clas, features in updates.items():
             for feat_id, upd in features.items():
+                assert feat_id != 0
                 feat = <TrainFeat*>self.train_weights.get(feat_id)
                 if feat == NULL:
                     feat = self.new_feat(feat_id)
@@ -194,7 +195,6 @@ cdef class LinearModel:
             if self.train_weights.cells[i].key == 0:
                 continue
             feat = <TrainFeat*>self.train_weights.cells[i].value
-            print "Feat", self.train_weights.cells[i].key
             average_weight(feat, self.nr_class, self.time)
 
 
@@ -202,7 +202,6 @@ cdef class LinearModel:
         pc = lambda a, b: '%.1f' % ((float(a) / (b + 1e-100)) * 100)
         acc = pc(self.n_corr, self.total)
         msg = "#%d: Moves %d/%d=%s" % (iter_num, self.n_corr, self.total, acc)
-        print msg
         self.n_corr = 0
         self.total = 0
 

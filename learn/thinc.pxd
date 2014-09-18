@@ -7,7 +7,7 @@ from trustyc.maps cimport PointerMap
 
 # Typedef numeric types, to make them easier to change and ensure consistency
 ctypedef uint64_t F # Feature ID
-ctypedef uint16_t C # Class
+ctypedef size_t C # Class
 ctypedef double W # Weight
 ctypedef size_t I # Index
 
@@ -43,6 +43,7 @@ cdef class LinearModel:
     cdef Pool mem
     cdef PointerMap weights
     cdef PointerMap train_weights
+    cdef double* scores
 
     cdef TrainFeat* new_feat(self, F feat_id) except NULL
     cdef I gather_weights(self, WeightLine* w_lines, F* feat_ids, I nr_active) except *
