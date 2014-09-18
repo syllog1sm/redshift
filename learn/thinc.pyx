@@ -3,6 +3,8 @@ from libc.string cimport strtok
 
 from cymem.cymem cimport Address
 
+import random
+
 
 DEF LINE_SIZE = 7
 
@@ -93,13 +95,14 @@ cdef int update_count(Pool mem, TrainFeat* feat, const C clas, const I inc) exce
     feat.counts[row].line[col] += inc
 
 
-cdef int set_scores(W* scores, WeightLine* weight_lines, I nr_rows):
+cdef int set_scores(W* scores, WeightLine* weight_lines, I nr_rows) except -1:
     cdef:
         I row
         I col
+    cdef size_t start
     for row in range(nr_rows):
+        start = weight_lines[row].start
         for col in range(LINE_SIZE):
-            print "Set", weight_lines[row].start + col, weight_lines[row].line[col]
             scores[weight_lines[row].start + col] = weight_lines[row].line[col]
 
 
@@ -141,7 +144,7 @@ cdef class LinearModel:
         cdef Address weights_mem = Address(nr_rows, sizeof(WeightLine))
         cdef WeightLine* weights = <WeightLine*>weights_mem.addr
         cdef I f_i = self.gather_weights(weights, features, nr_active)
-        #set_scores(scores, weights, f_i)
+        set_scores(scores, weights, f_i)
 
     cdef int update(self, dict updates) except -1:
         cdef C clas
