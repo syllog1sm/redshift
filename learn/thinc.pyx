@@ -101,8 +101,10 @@ cdef int set_scores(W* scores, WeightLine* weight_lines, I nr_rows, C nr_class) 
     cdef size_t start
     for row in range(nr_rows):
         start = weight_lines[row].start
-        for col in range(0, min(nr_class - start, LINE_SIZE)):
-            scores[weight_lines[row].start + col] += weight_lines[row].line[col]
+        for col in range(LINE_SIZE):
+            if start + col >= nr_class:
+                break
+            scores[start + col] += weight_lines[row].line[col]
 
 
 cdef int average_weight(TrainFeat* feat, const C nr_class, const I time) except -1:
@@ -129,6 +131,7 @@ cdef class LinearModel:
         self.train_weights = PointerMap()
         self.mem = Pool()
         self.scores = <double*>self.mem.alloc(self.nr_class, sizeof(double))
+        print self.nr_class, get_nr_rows(self.nr_class)
 
     def __call__(self, list py_feats):
         feat_mem = Address(len(py_feats), sizeof(F))
@@ -197,13 +200,13 @@ cdef class LinearModel:
             feat = <TrainFeat*>self.train_weights.cells[i].value
             average_weight(feat, self.nr_class, self.time)
 
-
     def end_train_iter(self, iter_num, feat_thresh):
         pc = lambda a, b: '%.1f' % ((float(a) / (b + 1e-100)) * 100)
         acc = pc(self.n_corr, self.total)
         msg = "#%d: Moves %d/%d=%s" % (iter_num, self.n_corr, self.total, acc)
         self.n_corr = 0
         self.total = 0
+        return msg
 
     def dump(self, file_):
         cdef F feat_id
