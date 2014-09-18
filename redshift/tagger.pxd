@@ -1,5 +1,5 @@
 from features.extractor cimport Extractor
-from learn.perceptron cimport Perceptron
+from learn.thinc cimport LinearModel
 from redshift.sentence cimport Input, Sentence, Token
 from cymem.cymem cimport Pool
 from trustyc.maps cimport PointerMap
@@ -11,7 +11,7 @@ cdef class Tagger:
     cdef object cfg
     cdef Pool _pool
     cdef Extractor extractor
-    cdef Perceptron guide
+    cdef LinearModel guide
     cdef object model_dir
     cdef size_t beam_width
 

@@ -1,5 +1,5 @@
 from features.extractor cimport Extractor
-from learn.perceptron cimport Perceptron
+from learn.thinc cimport LinearModel
 import index.hashes
 cimport index.hashes
 from .util import Config
@@ -42,7 +42,9 @@ def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
             tagger.train_sent(sent)
         tagger.guide.end_train_iter(n, feat_thresh)
         random.shuffle(indices)
-    tagger.guide.end_training(path.join(model_dir, 'tagger.gz'))
+    tagger.guide.end_training()
+    with open(path.join(model_dir, 'tagger.gz'), 'w') as file_:
+        tagger.guide.dump(file_)
     index.hashes.save_pos_idx(path.join(model_dir, 'pos'))
     return tagger
 
@@ -61,11 +63,11 @@ cdef class Tagger:
         if path.exists(path.join(model_dir, 'pos')):
             index.hashes.load_pos_idx(path.join(model_dir, 'pos'))
         nr_tag = index.hashes.get_nr_pos()
-        self.guide = Perceptron(nr_tag, path.join(model_dir, 'tagger.gz'))
+        self.guide = LinearModel(nr_tag)
         if path.exists(path.join(model_dir, 'tagger.gz')):
-            self.guide.load(path.join(model_dir, 'tagger.gz'),
-                            thresh=self.cfg.feat_thresh)
-        self._beam_scores = <double**>self._pool.alloc(sizeof(double*), self.beam_width)
+            with open(path.join(model_dir, 'tagger.gz'), 'r') as file_:
+                self.guide.load(file_)
+        self._beam_scores = <double**>self._pool.alloc(self.beam_width, sizeof(double*))
         for i in range(self.beam_width):
             self._beam_scores[i] = <double*>self._pool.alloc(nr_tag, sizeof(double))
 
@@ -109,12 +111,12 @@ cdef class Tagger:
         if updater.delta != -1:
             counts = updater.count_feats(self._features, self._context, sent,
                                          self.extractor)
-            self.guide.batch_update(counts)
+            self.guide.update(counts)
 
     cdef int _predict(self, size_t i, TagState* s, Sentence* sent, double* scores):
         fill_context(self._context, sent, s.clas, get_p(s), i)
-        self.extractor.extract(self._features, self._context)
-        self.guide.fill_scores(self._features, scores)
+        cdef size_t n = self.extractor.extract(self._features, self._context)
+        self.guide.score(scores, self._features, n)
 
 
 cdef class MaxViolnUpd:
