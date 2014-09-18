@@ -47,4 +47,4 @@ cdef class LinearModel:
     cdef TrainFeat* new_feat(self, F feat_id) except NULL
     cdef I gather_weights(self, WeightLine* w_lines, F* feat_ids, I nr_active) except *
     cdef int score(self, W* inplace, F* features, I nr_active) except -1
-    cdef int update(self, dict counts) except -1
+    cpdef int update(self, dict counts) except -1

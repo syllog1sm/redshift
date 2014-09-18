@@ -103,7 +103,21 @@ cdef int set_scores(W* scores, WeightLine* weight_lines, I nr_rows) except -1:
     for row in range(nr_rows):
         start = weight_lines[row].start
         for col in range(LINE_SIZE):
-            scores[weight_lines[row].start + col] = weight_lines[row].line[col]
+            scores[weight_lines[row].start + col] += weight_lines[row].line[col]
+
+
+cdef int average_weight(TrainFeat* feat, const C nr_class, const I time) except -1:
+    cdef I unchanged
+    cdef I row
+    cdef I col
+    for row in range(get_nr_rows(nr_class)):
+        if feat.weights[row] == NULL:
+            continue
+        for col in range(LINE_SIZE):
+            unchanged = (time + 1) - feat.times[row].line[col]
+            feat.totals[row].line[col] += unchanged * feat.weights[row].line[col]
+            feat.weights[row].line[col] = feat.totals[row].line[col] / time
+
 
 
 cdef class LinearModel:
@@ -116,6 +130,19 @@ cdef class LinearModel:
         self.train_weights = PointerMap()
         self.mem = Pool()
 
+    def __call__(self, list py_feats):
+        feat_mem = Address(len(py_feats), sizeof(F))
+        cdef F* features = <F*>feat_mem.addr
+        cdef F feat
+        for i, feat in enumerate(py_feats):
+            features[i] = feat
+        scores_mem = Address(self.nr_class, sizeof(double))
+        scores = <double*>scores_mem.addr
+        self.score(scores, features, len(py_feats))
+        py_scores = []
+        for i in range(self.nr_class):
+            py_scores.append(scores[i])
+        return py_scores
 
     cdef TrainFeat* new_feat(self, F feat_id) except NULL:
         cdef TrainFeat* feat = new_train_feat(self.mem, self.nr_class)
@@ -146,7 +173,7 @@ cdef class LinearModel:
         cdef I f_i = self.gather_weights(weights, features, nr_active)
         set_scores(scores, weights, f_i)
 
-    cdef int update(self, dict updates) except -1:
+    cpdef int update(self, dict updates) except -1:
         cdef C clas
         cdef F feat_id
         cdef TrainFeat* feat
@@ -162,7 +189,14 @@ cdef class LinearModel:
                 update_weight(self.mem, feat, clas, upd)
 
     def end_training(self):
-        pass
+        cdef size_t i
+        for i in range(self.train_weights.size):
+            if self.train_weights.cells[i].key == 0:
+                continue
+            feat = <TrainFeat*>self.train_weights.cells[i].value
+            print "Feat", self.train_weights.cells[i].key
+            average_weight(feat, self.nr_class, self.time)
+
 
     def end_train_iter(self, iter_num, feat_thresh):
         pc = lambda a, b: '%.1f' % ((float(a) / (b + 1e-100)) * 100)
@@ -172,48 +206,46 @@ cdef class LinearModel:
         self.n_corr = 0
         self.total = 0
 
-    def serialize(self, loc):
+    def dump(self, file_):
         cdef F feat_id
         cdef C row
         cdef I i
         cdef C nr_rows = get_nr_rows(self.nr_class)
-        with open(loc, 'w') as file_:
-            for i in range(self.weights.size):
-                if self.weights.cells[i].key == 0:
+        for i in range(self.weights.size):
+            if self.weights.cells[i].key == 0:
+                continue
+            feat_id = self.weights.cells[i].key
+            feat = <WeightLine**>self.weights.cells[i].value
+            for row in range(nr_rows):
+                if feat[row] == NULL:
                     continue
-                feat_id = self.weights.cells[i].key
-                feat = <WeightLine**>self.weights.cells[i].value
-                for row in range(nr_rows):
-                    if feat[row] == NULL:
-                        continue
-                    line = []
-                    line.append(feat_id)
-                    line.append(row)
-                    line.append(feat[row].start)
-                    for col in range(LINE_SIZE):
-                        line.append(feat[row].line[col])
-                    file_.write('\t'.join([str(p) for p in line]))
-                    file_.write('\n')
+                line = []
+                line.append(feat_id)
+                line.append(row)
+                line.append(feat[row].start)
+                for col in range(LINE_SIZE):
+                    line.append(feat[row].line[col])
+                file_.write('\t'.join([str(p) for p in line]))
+                file_.write('\n')
 
-    def deserialize(self, loc):
+    def load(self, file_):
         cdef F feat_id
         cdef C nr_rows, row
         cdef I col
         cdef bytes py_line
         cdef bytes token
         nr_rows = get_nr_rows(self.nr_class)
-        with open(loc) as file_:
-            for py_line in file_:
-                line = <char*>py_line
-                token = strtok(line, '\t')
-                feat_id = strtoull(token, NULL, 10)
-                if self.weights.get(feat_id) == NULL:
-                    self.weights.set(feat_id, self.mem.alloc(nr_rows, sizeof(WeightLine*)))
-                feature = <WeightLine**>self.weights.get(feat_id)
+        for py_line in file_:
+            line = <char*>py_line
+            token = strtok(line, '\t')
+            feat_id = strtoull(token, NULL, 10)
+            if self.weights.get(feat_id) == NULL:
+                self.weights.set(feat_id, self.mem.alloc(nr_rows, sizeof(WeightLine*)))
+            feature = <WeightLine**>self.weights.get(feat_id)
+            token = strtok(NULL, '\t')
+            row = strtoul(token, NULL, 10)
+            feature[row] = <WeightLine*>self.mem.alloc(1, sizeof(WeightLine))
+            feature[row].start = strtoul(token, NULL, 10)
+            for col in range(LINE_SIZE):
                 token = strtok(NULL, '\t')
-                row = strtoul(token, NULL, 10)
-                feature[row] = <WeightLine*>self.mem.alloc(1, sizeof(WeightLine))
-                feature[row].start = strtoul(token, NULL, 10)
-                for col in range(LINE_SIZE):
-                    token = strtok(NULL, '\t')
-                    feature[row].line[col] = atof(token)
+                feature[row].line[col] = atof(token)
