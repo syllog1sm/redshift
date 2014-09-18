@@ -234,5 +234,6 @@ cdef object conll_line_from_token(size_t i, Token* a, Step* lattice):
     fill_tag = label[-1] if label.startswith('filler') else '-'
     feats = '0.%d|%s|%d|-' % (a.sent_id, fill_tag, label == 'erased')
     cdef bytes tag = index.hashes.decode_pos(a.tag)
+    assert tag
     return <bytes>'\t'.join((str(i), word, '_', tag, tag, feats,
                              str(a.head), label, '_', '_'))
