@@ -50,7 +50,7 @@ cdef I get_col(const C clas):
 
 cdef I get_nr_rows(const C n) except 0:
     cdef I nr_lines = get_row(n)
-    if nr_lines == 0 or n % LINE_SIZE != 0:
+    if nr_lines == 0 or nr_lines * LINE_SIZE < n:
         nr_lines += 1
     return nr_lines
 
@@ -99,6 +99,9 @@ cdef int set_scores(W* scores, WeightLine* weight_lines, I nr_rows, C nr_class) 
         I row
         I col
     cdef size_t start
+    cdef size_t i
+    for i in range(nr_class):
+        scores[i] = 0
     for row in range(nr_rows):
         start = weight_lines[row].start
         for col in range(LINE_SIZE):
