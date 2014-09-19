@@ -2,6 +2,7 @@
 from libc.stdlib cimport strtoull, strtoul, atof
 from libc.string cimport strtok
 from libc.string cimport memcpy
+from libc.string cimport memset
 
 from murmurhash.mrmr cimport hash64
 from cymem.cymem cimport Address
@@ -103,14 +104,20 @@ cdef int set_scores(W* scores, WeightLine* weight_lines, I nr_rows, C nr_class) 
         I col
     cdef size_t start
     cdef size_t i
-    for i in range(nr_class):
-        scores[i] = 0
+    memset(scores, 0, nr_class * sizeof(W))
     for row in range(nr_rows):
         start = weight_lines[row].start
-        for col in range(LINE_SIZE):
-            if start + col >= nr_class:
-                break
-            scores[start + col] += weight_lines[row].line[col]
+        if (start + LINE_SIZE) < nr_class:
+            scores[start + 0] += weight_lines[row].line[0]
+            scores[start + 1] += weight_lines[row].line[1]
+            scores[start + 2] += weight_lines[row].line[2]
+            scores[start + 3] += weight_lines[row].line[3]
+            scores[start + 4] += weight_lines[row].line[4]
+            scores[start + 5] += weight_lines[row].line[5]
+            scores[start + 6] += weight_lines[row].line[6]
+        else:
+            for col in range(nr_class - start):
+                scores[start + col] += weight_lines[row].line[col]
 
 
 cdef int average_weight(TrainFeat* feat, const C nr_class, const I time) except -1:
@@ -159,11 +166,15 @@ cdef class LinearModel:
     cdef I gather_weights(self, WeightLine* w_lines, F* feat_ids, I nr_active) except *:
         cdef:
             WeightLine** feature
+            F feat_id
             I i, j
+            PointerMap weights
         
         cdef I nr_rows = get_nr_rows(self.nr_class)
         cdef I f_i = 0
+        weights = self.weights
         for i in range(nr_active):
+            feat_id = feat_ids[i]
             feature = <WeightLine**>self.weights.get(feat_ids[i])
             if feature != NULL:
                 for row in range(nr_rows):
