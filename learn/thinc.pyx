@@ -126,7 +126,6 @@ cdef int average_weight(TrainFeat* feat, const C nr_class, const I time) except 
             feat.weights[row].line[col] = feat.totals[row].line[col] / time
 
 
-
 cdef class LinearModel:
     def __cinit__(self, nr_class):
         self.total = 0
@@ -138,7 +137,6 @@ cdef class LinearModel:
         self.train_weights = PointerMap()
         self.mem = Pool()
         self.scores = <W*>self.mem.alloc(self.nr_class, sizeof(W))
-        print self.nr_class, get_nr_rows(self.nr_class)
 
     def __call__(self, list py_feats):
         feat_mem = Address(len(py_feats), sizeof(F))
