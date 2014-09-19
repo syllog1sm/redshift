@@ -44,6 +44,20 @@ cdef TrainFeat* new_train_feat(Pool mem, const C n) except NULL:
     return output
 
 
+cdef I get_total_count(TrainFeat* feat, const C n):
+    cdef I nr_rows = get_nr_rows(n)
+    cdef I row
+    cdef I col
+
+    cdef I total = 0
+    for row in range(nr_rows):
+        if feat.counts[row] == NULL:
+            continue
+        for col in range(LINE_SIZE):
+            total += feat.counts[row].line[col]
+    return total
+
+
 cdef I get_row(const C clas):
     return clas / LINE_SIZE
 
@@ -222,26 +236,30 @@ cdef class LinearModel:
         self.total = 0
         return msg
 
-    def dump(self, file_):
+    def dump(self, file_, size_t freq_thresh=0):
         cdef F feat_id
         cdef C row
         cdef I i
         cdef C nr_rows = get_nr_rows(self.nr_class)
-        for i in range(self.weights.size):
-            if self.weights.cells[i].key == 0:
+        for i in range(self.train_weights.size):
+            if self.train_weights.cells[i].key == 0:
                 continue
             feat_id = self.weights.cells[i].key
-            feat = <WeightLine**>self.weights.cells[i].value
+            feat = <TrainFeat*>self.train_weights.cells[i].value
+            if feat == NULL:
+                continue
+            if freq_thresh >= 1 and get_total_count(feat, self.nr_class) < freq_thresh:
+                continue
             for row in range(nr_rows):
-                if feat[row] == NULL:
+                if feat.weights[row] == NULL:
                     continue
                 line = []
                 line.append(str(feat_id))
                 line.append(str(row))
-                line.append(str(feat[row].start))
+                line.append(str(feat.weights[row].start))
                 seen_non_zero = False
                 for col in range(LINE_SIZE):
-                    val = '%.3f' % feat[row].line[col]
+                    val = '%.3f' % feat.weights[row].line[col]
                     line.append(val)
                     if val != '0.000':
                         seen_non_zero = True
@@ -319,10 +337,6 @@ cdef class ScoresCache:
     cdef int _resize(self, size_t new_size):
         cdef size_t i
         self.pool_size = new_size
-        cdef Pool new_mem = Pool()
-        resized = <W**>new_mem.alloc(self.pool_size, sizeof(W*))
-        memcpy(resized, self._arrays, self.i * sizeof(W*))
+        self._pool.realloc(self._arrays, new_size)
         for i in range(self.i, self.pool_size):
-            resized[i] = <W*>new_mem.alloc(self.scores_size, sizeof(W))
-        self._arrays = resized
-        self._pool = new_mem
+            self._arrays[i] = <W*>self._pool.alloc(self.scores_size, sizeof(W))
