@@ -6,8 +6,10 @@ from libc.string cimport memset
 
 from murmurhash.mrmr cimport hash64
 from cymem.cymem cimport Address
+from trustyc.maps cimport Cell
 
 import random
+import humanize
 
 
 DEF LINE_SIZE = 7
@@ -212,6 +214,8 @@ cdef class LinearModel:
         self.time += 1
         for clas, features in updates.items():
             for feat_id, upd in features.items():
+                if upd == 0:
+                    continue
                 assert feat_id != 0
                 feat = <TrainFeat*>self.train_weights.get(feat_id)
                 if feat == NULL:
@@ -231,7 +235,12 @@ cdef class LinearModel:
     def end_train_iter(self, iter_num, feat_thresh):
         pc = lambda a, b: '%.1f' % ((float(a) / (b + 1e-100)) * 100)
         acc = pc(self.n_corr, self.total)
-        msg = "#%d: Moves %d/%d=%s" % (iter_num, self.n_corr, self.total, acc)
+
+        map_size = (self.weights.size * sizeof(Cell)) + (self.train_weights.size * sizeof(Cell))
+        size_str = humanize.naturalsize(self.mem.size, gnu=True)
+        size_str += ', ' + humanize.naturalsize(map_size, gnu=True)
+        msg = "#%d: Moves %d/%d=%s. %s" % (iter_num, self.n_corr, self.total, acc,
+                                           size_str)
         self.n_corr = 0
         self.total = 0
         return msg
