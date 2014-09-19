@@ -62,7 +62,8 @@ exts = [
               language="c++", include_dirs=includes),
     Extension("redshift.tagger", ["redshift/tagger.pyx"], include_dirs=includes,
               language="c++"),
-    Extension("learn.thinc", ["learn/thinc.pyx"], include_dirs=includes, language="c++")
+    Extension("learn.thinc", ["learn/thinc.pyx"], include_dirs=includes, language="c++",
+              extra_compile_args=['-O2'], extra_link_args=['-O2']), 
  
     #Extension("redshift.tester", ["redshift/tester.pyx"], include_dirs=includes)
 ]
