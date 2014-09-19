@@ -6,7 +6,6 @@ from libc.string cimport memset
 
 from murmurhash.mrmr cimport hash64
 from cymem.cymem cimport Address
-from trustyc.maps cimport Cell
 
 import random
 import humanize
@@ -15,34 +14,11 @@ import humanize
 DEF LINE_SIZE = 7
 
 
-cdef WeightLine* new_weight_line(Pool mem, const C start) except NULL:
-    cdef WeightLine* line = <WeightLine*>mem.alloc(1, sizeof(WeightLine))
-    line.start = start
-    return line
-
-
-cdef CountLine* new_count_line(Pool mem, const C start) except NULL:
-    cdef CountLine* line = <CountLine*>mem.alloc(1, sizeof(CountLine))
-    line.start = start
-    return line
-
-
-cdef WeightLine** new_weight_matrix(Pool mem, C nr_class):
-    cdef I nr_lines = get_nr_rows(nr_class)
-    return <WeightLine**>mem.alloc(nr_lines, sizeof(WeightLine*))
- 
-
-cdef CountLine** new_count_matrix(Pool mem, C nr_class):
-    cdef I nr_lines = get_nr_rows(nr_class)
-    return <CountLine**>mem.alloc(nr_lines, sizeof(CountLine*))
- 
-
-cdef TrainFeat* new_train_feat(Pool mem, const C n) except NULL:
+cdef TrainFeat* new_train_feat(Pool mem, const C nr_class) except NULL:
     cdef TrainFeat* output = <TrainFeat*>mem.alloc(1, sizeof(TrainFeat))
-    output.weights = new_weight_matrix(mem, n)
-    output.totals = new_weight_matrix(mem, n)
-    output.counts = new_count_matrix(mem, n)
-    output.times = new_count_matrix(mem, n)
+    cdef I nr_lines = get_nr_rows(nr_class)
+    output.weights = <WeightLine**>mem.alloc(nr_lines, sizeof(WeightLine*))
+    output.meta = <MetaData**>mem.alloc(nr_lines, sizeof(MetaData*))
     return output
 
 
@@ -53,10 +29,10 @@ cdef I get_total_count(TrainFeat* feat, const C n):
 
     cdef I total = 0
     for row in range(nr_rows):
-        if feat.counts[row] == NULL:
+        if feat.meta[row] == NULL:
             continue
         for col in range(LINE_SIZE):
-            total += feat.counts[row].line[col]
+            total += feat.meta[row][col].count
     return total
 
 
@@ -75,43 +51,33 @@ cdef I get_nr_rows(const C n) except 0:
     return nr_lines
 
 
-cdef int update_weight(Pool mem, TrainFeat* feat, const C clas, const W inc) except -1:
+cdef int update_weight(TrainFeat* feat, const C clas, const W inc) except -1:
     '''Update the weight for a parameter (a {feature, class} pair).'''
     cdef I row = get_row(clas)
     cdef I col = get_col(clas)
-    if feat.weights[row] == NULL:
-        feat.weights[row] = new_weight_line(mem, clas - col)
     feat.weights[row].line[col] += inc
 
 
-cdef int update_accumulator(Pool mem, TrainFeat* feat, const C clas, const I time) except -1:
+cdef int update_accumulator(TrainFeat* feat, const C clas, const I time) except -1:
     '''Help a weight update for one (class, feature) pair for averaged models,
     e.g. Average Perceptron. Efficient averaging requires tracking the total
     weight for the feature, which requires a time-stamp so we can fast-forward
     through iterations where the weight was unchanged.'''
     cdef I row = get_row(clas)
     cdef I col = get_col(clas)
-    if feat.weights[row] == NULL:
-        feat.weights[row] = new_weight_line(mem, clas - col)
-    if feat.totals[row] == NULL:
-        feat.totals[row] = new_weight_line(mem, clas - col)
-    if feat.times[row] == NULL:
-        feat.times[row] = new_count_line(mem, clas - col)
     cdef W weight = feat.weights[row].line[col]
-    cdef I unchanged = time - feat.times[row].line[col]
-    feat.totals[row].line[col] += unchanged * weight
-    feat.times[row].line[col] = time
+    cdef I unchanged = time - feat.meta[row][col].time
+    feat.meta[row][col].total += unchanged * weight
+    feat.meta[row][col].time = time
 
 
-cdef int update_count(Pool mem, TrainFeat* feat, const C clas, const I inc) except -1:
+cdef int update_count(TrainFeat* feat, const C clas, const I inc) except -1:
     '''Help a weight update for one (class, feature) pair by tracking how often
     the feature has been updated.  Used in Adagrad and others.
     '''
     cdef I row = get_row(clas)
     cdef I col = get_col(clas)
-    if feat.counts[row] == NULL:
-        feat.counts[row] = new_count_line(mem, clas - col)
-    feat.counts[row].line[col] += inc
+    feat.meta[row][col].count += inc
 
 
 cdef int set_scores(W* scores, WeightLine* weight_lines, I nr_rows, C nr_class) except -1:
@@ -144,9 +110,9 @@ cdef int average_weight(TrainFeat* feat, const C nr_class, const I time) except 
         if feat.weights[row] == NULL:
             continue
         for col in range(LINE_SIZE):
-            unchanged = (time + 1) - feat.times[row].line[col]
-            feat.totals[row].line[col] += unchanged * feat.weights[row].line[col]
-            feat.weights[row].line[col] = feat.totals[row].line[col] / time
+            unchanged = (time + 1) - feat.meta[row][col].time
+            feat.meta[row][col].total += unchanged * feat.weights[row].line[col]
+            feat.weights[row].line[col] = feat.meta[row][col].total / time
 
 
 cdef class LinearModel:
@@ -191,7 +157,7 @@ cdef class LinearModel:
         weights = self.weights
         for i in range(nr_active):
             feat_id = feat_ids[i]
-            feature = <WeightLine**>self.weights.get(feat_ids[i])
+            feature = <WeightLine**>weights.get(feat_id)
             if feature != NULL:
                 for row in range(nr_rows):
                     if feature[row] != NULL:
@@ -207,12 +173,16 @@ cdef class LinearModel:
         set_scores(scores, weights, f_i, self.nr_class)
 
     cpdef int update(self, dict updates) except -1:
+        cdef I row
+        cdef I col
         cdef C clas
         cdef F feat_id
         cdef TrainFeat* feat
         cdef double upd
         self.time += 1
         for clas, features in updates.items():
+            row = get_row(clas)
+            col = get_col(clas)
             for feat_id, upd in features.items():
                 if upd == 0:
                     continue
@@ -220,9 +190,13 @@ cdef class LinearModel:
                 feat = <TrainFeat*>self.train_weights.get(feat_id)
                 if feat == NULL:
                     feat = self.new_feat(feat_id)
-                update_accumulator(self.mem, feat, clas, self.time)
-                update_count(self.mem, feat, clas, 1)
-                update_weight(self.mem, feat, clas, upd)
+                if feat.weights[row] == NULL:
+                    feat.weights[row] = <WeightLine*>self.mem.alloc(1, sizeof(WeightLine))
+                    feat.meta[row] = <MetaData*>self.mem.alloc(LINE_SIZE, sizeof(MetaData))
+                    feat.weights[row].start = clas - col
+                update_accumulator(feat, clas, self.time)
+                update_count(feat, clas, 1)
+                update_weight(feat, clas, upd)
 
     def end_training(self):
         cdef size_t i

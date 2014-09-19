@@ -3,6 +3,7 @@ from libc.stdint cimport uint16_t
 
 from cymem.cymem cimport Pool
 from trustyc.maps cimport PointerMap
+from trustyc.maps cimport Cell
 
 
 # Typedef numeric types, to make them easier to change and ensure consistency
@@ -23,16 +24,15 @@ cdef struct WeightLine:
     W[LINE_SIZE] line
 
 
-cdef struct CountLine:
-    C start
-    I[LINE_SIZE] line
-
+cdef struct MetaData:
+    W total
+    I count
+    I time
+    
 
 cdef struct TrainFeat:
     WeightLine** weights
-    WeightLine** totals
-    CountLine** counts
-    CountLine** times
+    MetaData** meta
 
 
 cdef class ScoresCache:
