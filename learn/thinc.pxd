@@ -8,7 +8,7 @@ from trustyc.maps cimport PointerMap
 # Typedef numeric types, to make them easier to change and ensure consistency
 ctypedef uint64_t F # Feature ID
 ctypedef size_t C # Class
-ctypedef float W # Weight
+ctypedef double W # Weight
 ctypedef size_t I # Index
 
 
