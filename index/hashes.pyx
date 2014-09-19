@@ -25,7 +25,7 @@ cdef class Index:
             return self.i
 
     cpdef bytes get_str(self, size_t code):
-        return self.reverse.get(code, '')
+        return self.reverse.get(code, 'UNK')
 
     cpdef save(self, path):
         with open(path, 'w') as out_file:
@@ -45,7 +45,7 @@ cdef class Index:
         self.i = i + 1
 
 
-_pos_idx = Index(['ROOT', 'NONE', 'OOB'])
+_pos_idx = Index(['ROOT', 'NONE', 'OOB', 'UNK'])
 _label_idx = Index(['ERR', 'ROOT', 'P', 'erased'])
 
 
