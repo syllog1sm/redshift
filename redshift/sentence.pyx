@@ -178,7 +178,6 @@ cdef class Input:
             for j in range(start, end):
                 self.c_sent.tokens[j].sent_id = i
 
-
     property tokens:
         def __get__(self):
             Token = namedtuple('Token', 'id word tag head label sent_id is_edit')
