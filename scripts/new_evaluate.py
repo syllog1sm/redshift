@@ -106,8 +106,8 @@ def score_sbd(gold, test):
 def main(gold_loc, test_loc):
     gold = ParsedFile(gold_loc)
     test = ParsedFile(test_loc)
-    uas_scorer = Scorer(lambda g, t: g.is_edit or g.label == 'discourse', eval_uas, gold, test)
-    las_scorer = Scorer(lambda g, t: g.is_edit or g.label == 'discourse', eval_las, gold, test)
+    uas_scorer = Scorer(lambda g, t: g.label == 'P' or g.is_edit or g.label == 'discourse', eval_uas, gold, test)
+    las_scorer = Scorer(lambda g, t: g.label == 'P' or g.is_edit or g.label == 'discourse', eval_las, gold, test)
     print uas_scorer.t
     print 'U: %.3f' % uas_scorer.percent
     print 'L: %.3f' % las_scorer.percent

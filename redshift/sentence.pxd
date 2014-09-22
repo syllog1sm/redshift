@@ -1,4 +1,5 @@
 from index.lexicon cimport Lexeme
+from cymem.cymem cimport Pool
 
 
 cdef struct Token:
@@ -27,9 +28,8 @@ cdef struct Sentence:
     double score
     
 
-cdef Sentence* init_sent(list words_lattice, list parse) except NULL
-
-cdef void free_sent(Sentence* s)
+cdef Sentence* init_sent(list words_lattice, list parse, Pool pool) except NULL
 
 cdef class Input:
+    cdef Pool _pool
     cdef Sentence* c_sent

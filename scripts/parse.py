@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from __future__ import unicode_literals
 import os
 import os.path
 import sys
@@ -6,6 +7,7 @@ import plac
 import time
 import pstats
 import cProfile
+import codecs
 
 import redshift.parser
 from redshift.sentence import Input
@@ -18,17 +20,20 @@ def parse(parser, sentences):
 
 @plac.annotations(
     profile=("Do profiling", "flag", "p", bool),
+    codec=("Input codec", "option", "c", str),
     debug=("Set debug", "flag", "d", bool)
 )
-def main(parser_dir, text_loc, out_dir, profile=False, debug=False):
+def main(parser_dir, text_loc, out_dir, codec="utf8", profile=False, debug=False):
     if debug:
         redshift.parser.set_debug(debug)
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
     print "Loading parser"
     parser = redshift.parser.Parser(parser_dir)
-    sentences = [Input.from_pos(p.strip()) for i, p in
-                 enumerate(open(text_loc).read().strip().split('\n'))
+    with codecs.open(text_loc, 'r', 'utf8') as file_:
+        input_text = file_.read()
+    sentences = [Input.from_pos(p.strip().encode(codec)) for i, p in
+                 enumerate(input_text.split('\n'))
                  if p.strip()]
     if profile:
         cProfile.runctx("parse(parser, sentences)",

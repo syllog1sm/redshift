@@ -1,4 +1,8 @@
 cython
+cymem
+murmurhash
+trustyc
+humanize
 plac
 python-cjson
 pytest

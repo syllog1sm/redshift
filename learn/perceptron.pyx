@@ -172,8 +172,7 @@ cdef class Perceptron:
         self.path = model_loc
         self.nr_class = max_classes
         self.scores = <double *>calloc(max_classes, sizeof(double))
-        self.W = dense_hash_map[uint64_t, size_t]()
-        self.W.set_empty_key(0)
+        self.W = PointerMap()
         self.now = 0
         self.nr_raws = 20000
         self.raws = <DenseFeature**>malloc(self.nr_raws * sizeof(DenseFeature*))
@@ -186,18 +185,16 @@ cdef class Perceptron:
         self._active_square = <SquareFeature**>calloc(MAX_ACTIVE, sizeof(size_t))
 
     def __dealloc__(self):
-        cdef pair[uint64_t, size_t] data
-        cdef dense_hash_map[uint64_t, size_t].iterator it
         free(self.scores)
         free(self._active_dense)
         free(self._active_square)
-        it = self.W.begin()
-        while it != self.W.end():
-            data = deref(it)
-            inc(it)
-            if data.second >= self.nr_raws:
-                free_square_feat(<SquareFeature*>data.second, self.nr_class)
         cdef size_t i
+        for i in range(self.W.size):
+            if self.W.cells[i].key == 0:
+                continue
+            addr = <size_t>self.W.cells[i].value
+            if addr >= self.nr_raws:
+                free_square_feat(<SquareFeature*>addr, self.nr_class)
         for i in range(self.nr_raws):
             free_dense_feat(self.raws[i])
         free(self.raws)
@@ -212,8 +209,8 @@ cdef class Perceptron:
         print msg
         if iter_num % 2 == 1 and feat_thresh > 1:
             self.prune(feat_thresh)
-        if iter_num < 3:
-            self.reindex()
+        #if iter_num < 3:
+        #    self.reindex()
         self.n_corr = 0.0
         self.total = 0.0
 
@@ -226,7 +223,7 @@ cdef class Perceptron:
     cdef int add_feature(self, uint64_t f) except -1:
         cdef size_t i
         cdef SquareFeature* feat = init_square_feat(f, self.nr_class)
-        self.W[f] = <size_t>feat
+        self.W.set(f, feat)
 
     def batch_update(self, deltas):
         cdef size_t feat_addr
@@ -235,10 +232,10 @@ cdef class Perceptron:
             for f, d in feats.items():
                 assert f != 0
                 if d != 0:
-                    feat_addr = self.W[f]
+                    feat_addr = <size_t>self.W.get(f)
                     if feat_addr == 0:
                         self.add_feature(f)
-                        feat_addr = self.W[f]
+                        feat_addr = <size_t>self.W.get(f)
                     if feat_addr < self.nr_raws:
                         update_dense(self.now, d, clas, self.raws[feat_addr])
                     else:
@@ -262,10 +259,10 @@ cdef class Perceptron:
             i += 1
             if f == 0:
                 break
-            feat_addr = self.W[f]
+            feat_addr = <size_t>self.W.get(f)
             if feat_addr == 0:
                 self.add_feature(f)
-                feat_addr = self.W[f]
+                feat_addr = <size_t>self.W.get(f)
             if feat_addr < self.nr_raws:
                 update_dense(self.now, 1.0, gold_i, self.raws[feat_addr])
                 update_dense(self.now, -1.0, pred_i, self.raws[feat_addr])
@@ -290,7 +287,7 @@ cdef class Perceptron:
         while features[i] != 0:
             f = features[i]
             i += 1
-            feat_addr = self.W[f]
+            feat_addr = <size_t>self.W.get(f)
             if feat_addr >= nr_raws:
                 active_square[nr_square] = <SquareFeature*>feat_addr
                 nr_square += 1
@@ -314,14 +311,15 @@ cdef class Perceptron:
         cdef uint64_t f
         cdef double tmp
         cdef SquareFeature* feat
-        cdef pair[uint64_t, size_t] data
-        cdef dense_hash_map[uint64_t, size_t].iterator it
-        it = self.W.begin()
-        while it != self.W.end():
-            data = deref(it)
-            inc(it)
-            if data.second >= self.nr_raws:
-                feat = <SquareFeature*>data.second
+        cdef size_t i
+        cdef size_t addr
+
+        for i in range(self.W.size):
+            if self.W.cells[i].key == 0:
+                continue
+            addr = <size_t>self.W.cells[i].value
+            if addr >= self.nr_raws:
+                feat = <SquareFeature*>addr
                 for i in range(get_div(self.nr_class)):
                     if feat.seen[i]:
                         params = feat.parts[i]
@@ -352,24 +350,21 @@ cdef class Perceptron:
         by_nr_seen = []
         for i in range(1, self.nr_raws):
             by_nr_seen.append((self.raws[i].nr_seen, self.raws[i].id))
-        cdef dense_hash_map[uint64_t, size_t].iterator it
-        cdef pair[uint64_t, size_t] data
         cdef SquareFeature* feat
-        it = self.W.begin()
-        while it != self.W.end():
-            data = deref(it)
-            inc(it)
-            feat_addr = data.second
+        for i in range(self.W.size):
+            if self.W.cells[i].key == 0:
+                continue
+            feat_addr = <size_t>self.W.cells[i].value
             if feat_addr >= self.nr_raws:
                 feat = <SquareFeature*>feat_addr
-                by_nr_seen.append((feat.nr_seen, data.first))
+                by_nr_seen.append((feat.nr_seen, self.W.cells[i].key))
         by_nr_seen.sort(reverse=True)
         out = gzip.open(str(out_loc), 'w')
         out.write(u'nr_class %d\n' % (self.nr_class))
         zeroes = '0 ' * self.nr_class 
         cdef double unary_weight
         for nr_seen, feat_id in by_nr_seen:
-            feat_addr = self.W[feat_id]
+            feat_addr = <size_t>self.W.get(feat_id)
             non_zeroes = []
             unary_weight = 0.0
             if feat_addr == 0:
@@ -445,14 +440,14 @@ cdef class Perceptron:
                 nr_weight += load_dense_feat(self.nr_class, unary_weight, weights,
                                              nr_seen, self.raws[nr_raws])
                 self.raws[nr_raws].id = f
-                self.W[f] = nr_raws
+                self.W.set(f, <void*>nr_raws)
                 nr_raws += 1
                 nr_feat += 1
                 continue
             else:
                 self.add_feature(f)
                 nr_weight += load_square_feat(self.nr_class, unary_weight, weights,
-                                              nr_seen, <SquareFeature*>self.W[f])
+                                              nr_seen, <SquareFeature*>self.W.get(f))
                 nr_feat += 1
         free(weights)
         print "%d weights for %d features" % (nr_weight, nr_feat)
@@ -462,29 +457,28 @@ cdef class Perceptron:
 
     def prune(self, size_t thresh):
         assert thresh > 1
-        cdef dense_hash_map[uint64_t, size_t].iterator it = self.W.begin()
-        cdef pair[uint64_t, size_t] data
         cdef uint64_t f_id
         cdef SquareFeature* feat
         cdef size_t n_pruned = 0
         cdef size_t n_feats = 0
-        while it != self.W.end():
-            data = deref(it)
-            inc(it)
-            f_id = data.first
-            feat_addr = data.second
-            if f_id == 0:
+        cdef size_t feat_addr
+        cdef size_t i
+        for i in range(self.W.size):
+            if self.W.cells[i].key == 0:
                 continue
-            elif (feat_addr <= self.nr_raws):
+            f_id = self.W.cells[i].key
+            feat_addr = <size_t>self.W.cells[i].value
+            if (feat_addr <= self.nr_raws):
                 n_feats += 1
                 continue
             feat = <SquareFeature*>feat_addr
             if feat.nr_seen < thresh:
                 free_square_feat(feat, self.nr_class)
-                self.W[f_id] = 0
+                self.W.cells[i].key = 0
+                self.W.cells[i].value = NULL
+                self.W.filled -= 1
                 n_pruned += 1
             n_feats += 1
-        self.W.clear_deleted_key()
         print "%d/%d pruned (f=%d)" % (n_pruned, n_feats, thresh)
 
     def reindex(self):
@@ -497,17 +491,14 @@ cdef class Perceptron:
             else:
                 feat = <SquareFeature*>feat_addr
                 return feat.nr_seen
-        cdef dense_hash_map[uint64_t, size_t].iterator it = self.W.begin()
-        cdef pair[uint64_t, size_t] data
         # Build priority queue of the top N scores
         cdef uint64_t f_id
         cdef uint64_t feat_nr_seen
+        cdef size_t i
         q = []
-        while it != self.W.end():
-            data = deref(it)
-            inc(it)
-            f_id = data.first
-            feat_addr = data.second
+        for i in range(self.W.size):
+            f_id = self.W.cells[i].key
+            feat_addr = <size_t>self.W.cells[i].value
             if f_id == 0 or feat_addr == 0:
                 continue
             feat_nr_seen = get_nr_seen(feat_addr)
@@ -532,14 +523,14 @@ cdef class Perceptron:
             if not vacancies:
                 break
             assert f_id != 0
-            f_addr = self.W[f_id]
+            f_addr = <size_t>self.W.get(f_id)
             if f_addr > self.nr_raws:
                 self._square_to_dense(f_id, f_addr, vacancies.pop())
         assert not vacancies, str(vacancies)
 
     def _dense_to_square(self, uint64_t f_id, size_t raw_idx):
         self.add_feature(f_id)
-        feat = <SquareFeature*>self.W[f_id]
+        feat = <SquareFeature*>self.W.get(f_id)
         feat.nr_seen = self.raws[raw_idx].nr_seen
         self.raws[raw_idx].id = 0
         self.raws[raw_idx].nr_seen = 0
@@ -593,6 +584,5 @@ cdef class Perceptron:
                     raw.last_upd[clas] = last_upd[k]
 
         free_square_feat(feat, self.nr_class)
-        self.W[f_id] = i
-        assert self.W[f_id] < self.nr_raws
+        self.W.set(f_id, <void*>i)
         assert raw.e <= self.nr_class, raw.e

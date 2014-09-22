@@ -1,8 +1,8 @@
+from trustyc.maps cimport PointerMap
+
 cimport index.hashes
-from libcpp.utility cimport pair
 
 from libc.stdint cimport int64_t, uint64_t
-from ext.sparsehash cimport *
 
 DEF MAX_PARAMS = 5000000
 
@@ -45,7 +45,7 @@ cdef class Perceptron:
 
     cdef size_t now
  
-    cdef dense_hash_map[uint64_t, size_t] W
+    cdef PointerMap W
     cdef index.hashes.ScoresCache cache
 
     cdef int add_feature(self, uint64_t f)

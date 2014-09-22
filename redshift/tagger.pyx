@@ -1,13 +1,15 @@
 from features.extractor cimport Extractor
-from learn.perceptron cimport Perceptron
+from learn.thinc cimport LinearModel
+from learn.thinc cimport W as weight_t
+
 import index.hashes
 cimport index.hashes
 from .util import Config
 
 from redshift.sentence cimport Input, Sentence
 from index.lexicon cimport Lexeme
+from cymem.cymem cimport Pool
 
-from libc.stdlib cimport malloc, calloc, free
 from libc.stdint cimport uint64_t, int64_t
 from libcpp.queue cimport priority_queue
 from libcpp.utility cimport pair
@@ -42,7 +44,9 @@ def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
             tagger.train_sent(sent)
         tagger.guide.end_train_iter(n, feat_thresh)
         random.shuffle(indices)
-    tagger.guide.end_training(path.join(model_dir, 'tagger.gz'))
+    tagger.guide.end_training()
+    with open(path.join(model_dir, 'tagger.gz'), 'w') as file_:
+        tagger.guide.dump(file_)
     index.hashes.save_pos_idx(path.join(model_dir, 'pos'))
     return tagger
 
@@ -50,23 +54,24 @@ def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
 cdef class Tagger:
     def __cinit__(self, model_dir):
         self.cfg = Config.read(model_dir, 'tagger')
+        self._pool = Pool()
         self.extractor = Extractor(basic + clusters + case + orth, [],
                                    bag_of_words=[])
-        self._features = <uint64_t*>calloc(self.extractor.nr_feat, sizeof(uint64_t))
-        self._context = <size_t*>calloc(CONTEXT_SIZE, sizeof(size_t))
+        self._features = <uint64_t*>self._pool.alloc(self.extractor.nr_feat, sizeof(uint64_t))
+        self._context = <size_t*>self._pool.alloc(CONTEXT_SIZE, sizeof(size_t))
 
         self.beam_width = self.cfg.beam_width
 
         if path.exists(path.join(model_dir, 'pos')):
             index.hashes.load_pos_idx(path.join(model_dir, 'pos'))
         nr_tag = index.hashes.get_nr_pos()
-        self.guide = Perceptron(nr_tag, path.join(model_dir, 'tagger.gz'))
+        self.guide = LinearModel(nr_tag)
         if path.exists(path.join(model_dir, 'tagger.gz')):
-            self.guide.load(path.join(model_dir, 'tagger.gz'),
-                            thresh=self.cfg.feat_thresh)
-        self._beam_scores = <double**>malloc(sizeof(double*) * self.beam_width)
+            with open(path.join(model_dir, 'tagger.gz'), 'r') as file_:
+                self.guide.load(file_)
+        self._beam_scores = <weight_t**>self._pool.alloc(self.beam_width, sizeof(weight_t*))
         for i in range(self.beam_width):
-            self._beam_scores[i] = <double*>calloc(nr_tag, sizeof(double))
+            self._beam_scores[i] = <weight_t*>self._pool.alloc(nr_tag, sizeof(weight_t))
 
     cpdef int tag(self, Input py_sent) except -1:
         cdef Sentence* sent = py_sent.c_sent
@@ -87,14 +92,15 @@ cdef class Tagger:
         cdef size_t  i, j 
         cdef Sentence* sent = py_sent.c_sent
         cdef size_t nr_class = self.guide.nr_class
-        cdef double* scores = self.guide.scores
+        cdef weight_t* scores = self.guide.scores
+        cdef Pool tmp_mem = Pool()
         cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.n, nr_class)
-        cdef TagState* gold = extend_state(NULL, 0, NULL, 0)
+        cdef TagState* gold = extend_state(NULL, 0, NULL, 0, tmp_mem)
         cdef MaxViolnUpd updater = MaxViolnUpd(nr_class)
         for i in range(sent.n - 1):
             # Extend gold
             self._predict(i, gold, sent, scores)
-            gold = extend_state(gold, sent.tokens[i].tag, scores, nr_class)
+            gold = extend_state(gold, sent.tokens[i].tag, scores, nr_class, tmp_mem)
             # Extend beam
             for j in range(beam.bsize):
                 # At this point, beam.clas is the _last_ prediction, not the
@@ -107,24 +113,19 @@ cdef class Tagger:
         if updater.delta != -1:
             counts = updater.count_feats(self._features, self._context, sent,
                                          self.extractor)
-            self.guide.batch_update(counts)
-        cdef TagState* prev
-        while gold != NULL:
-            prev = gold.prev
-            free(gold)
-            gold = prev
+            self.guide.update(counts)
 
-    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, double* scores):
+    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores):
         fill_context(self._context, sent, s.clas, get_p(s), i)
-        self.extractor.extract(self._features, self._context)
-        self.guide.fill_scores(self._features, scores)
+        cdef size_t n = self.extractor.extract(self._features, self._context)
+        self.guide.score(scores, self._features, n)
 
 
 cdef class MaxViolnUpd:
     cdef TagState* pred
     cdef TagState* gold
     cdef Sentence* sent
-    cdef double delta
+    cdef weight_t delta
     cdef int length
     cdef size_t nr_class
     cdef size_t tmp
@@ -177,7 +178,7 @@ cdef class MaxViolnUpd:
             i -= 1
         return counts
 
-    cdef int _inc_feats(self, dict counts, uint64_t* feats, double inc) except -1:
+    cdef int _inc_feats(self, dict counts, uint64_t* feats, weight_t inc) except -1:
         cdef size_t f = 0
         while feats[f] != 0:
             if feats[f] not in counts:
@@ -369,35 +370,33 @@ cdef class TaggerBeam:
         self.t = 0
         self.bsize = 1
         self.is_full = self.bsize >= self.k
-        self.seen_states = set()
-        self.beam = <TagState**>malloc(k * sizeof(TagState*))
-        self.parents = <TagState**>malloc(k * sizeof(TagState*))
+        self._pool = Pool()
+        self.beam = <TagState**>self._pool.alloc(k, sizeof(TagState*))
+        self.parents = <TagState**>self._pool.alloc(k, sizeof(TagState*))
         cdef size_t i
         for i in range(k):
-            self.parents[i] = extend_state(NULL, 0, NULL, 0)
-            self.seen_states.add(<size_t>self.parents[i])
+            self.parents[i] = extend_state(NULL, 0, NULL, 0, self._pool)
 
     @cython.cdivision(True)
-    cdef int extend_states(self, double** ext_scores) except -1:
+    cdef int extend_states(self, weight_t** ext_scores) except -1:
         # Former states are now parents, beam will hold the extensions
         cdef size_t i, clas, move_id
-        cdef double parent_score, score
-        cdef double* scores
-        cdef priority_queue[pair[double, size_t]] next_moves
-        next_moves = priority_queue[pair[double, size_t]]()
+        cdef weight_t parent_score, score
+        cdef weight_t* scores
+        cdef priority_queue[pair[weight_t, size_t]] next_moves
+        next_moves = priority_queue[pair[weight_t, size_t]]()
         for i in range(self.bsize):
             scores = ext_scores[i]
             for clas in range(self.nr_class):
                 score = self.parents[i].score + scores[clas]
                 move_id = (i * self.nr_class) + clas
-                next_moves.push(pair[double, size_t](score, move_id))
-        cdef pair[double, size_t] data
+                next_moves.push(pair[weight_t, size_t](score, move_id))
+        cdef pair[weight_t, size_t] data
         # Apply extensions for best continuations
         cdef TagState* s
         cdef TagState* prev
         cdef size_t addr
-        cdef dense_hash_map[uint64_t, bint] seen_equivs = dense_hash_map[uint64_t, bint]()
-        seen_equivs.set_empty_key(0)
+        cdef PointerMap seen_equivs = PointerMap(self.k ** 2)
         self.bsize = 0
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
@@ -405,14 +404,13 @@ cdef class TaggerBeam:
             clas = data.second % self.nr_class
             prev = self.parents[i]
             hashed = (clas * self.nr_class) + prev.clas
-            if seen_equivs[hashed]:
+            if seen_equivs.get(hashed):
                 next_moves.pop()
                 continue
-            seen_equivs[hashed] = 1
+            seen_equivs.set(hashed, <void*>1)
             self.beam[self.bsize] = extend_state(prev, clas, ext_scores[i],
-                                                 self.nr_class)
+                                                 self.nr_class, self._pool)
             addr = <size_t>self.beam[self.bsize]
-            self.seen_states.add(addr)
             next_moves.pop()
             self.bsize += 1
         for i in range(self.bsize):
@@ -420,20 +418,11 @@ cdef class TaggerBeam:
         self.is_full = self.bsize >= self.k
         self.t += 1
 
-    def __dealloc__(self):
-        cdef TagState* s
-        cdef size_t addr
-        for addr in self.seen_states:
-            s = <TagState*>addr
-            free(s)
-        free(self.parents)
-        free(self.beam)
 
-
-cdef TagState* extend_state(TagState* s, size_t clas, double* scores,
-                            size_t nr_class):
-    cdef double score
-    ext = <TagState*>calloc(1, sizeof(TagState))
+cdef TagState* extend_state(TagState* s, size_t clas, weight_t* scores,
+                            size_t nr_class, Pool pool):
+    cdef weight_t score
+    ext = <TagState*>pool.alloc(1, sizeof(TagState))
     ext.prev = s
     ext.clas = clas
     if s == NULL:
