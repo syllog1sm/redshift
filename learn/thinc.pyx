@@ -17,7 +17,7 @@ DEF LINE_SIZE = 7
 cdef TrainFeat* new_train_feat(Pool mem, const C nr_class) except NULL:
     cdef TrainFeat* output = <TrainFeat*>mem.alloc(1, sizeof(TrainFeat))
     cdef I nr_lines = get_nr_rows(nr_class)
-    output.weights = <WeightLine**>mem.alloc(nr_lines, sizeof(WeightLine*))
+    output.weights = <W**>mem.alloc(nr_lines, sizeof(W*))
     output.meta = <MetaData**>mem.alloc(nr_lines, sizeof(MetaData*))
     return output
 
@@ -55,7 +55,7 @@ cdef int update_weight(TrainFeat* feat, const C clas, const W inc) except -1:
     '''Update the weight for a parameter (a {feature, class} pair).'''
     cdef I row = get_row(clas)
     cdef I col = get_col(clas)
-    feat.weights[row].line[col] += inc
+    feat.weights[row][col] += inc
 
 
 cdef int update_accumulator(TrainFeat* feat, const C clas, const I time) except -1:
@@ -65,7 +65,7 @@ cdef int update_accumulator(TrainFeat* feat, const C clas, const I time) except 
     through iterations where the weight was unchanged.'''
     cdef I row = get_row(clas)
     cdef I col = get_col(clas)
-    cdef W weight = feat.weights[row].line[col]
+    cdef W weight = feat.weights[row][col]
     cdef I unchanged = time - feat.meta[row][col].time
     feat.meta[row][col].total += unchanged * weight
     feat.meta[row][col].time = time
@@ -111,8 +111,8 @@ cdef int average_weight(TrainFeat* feat, const C nr_class, const I time) except 
             continue
         for col in range(LINE_SIZE):
             unchanged = (time + 1) - feat.meta[row][col].time
-            feat.meta[row][col].total += unchanged * feat.weights[row].line[col]
-            feat.weights[row].line[col] = feat.meta[row][col].total / time
+            feat.meta[row][col].total += unchanged * feat.weights[row][col]
+            feat.weights[row][col] = feat.meta[row][col].total / time
 
 
 cdef class LinearModel:
@@ -147,9 +147,9 @@ cdef class LinearModel:
 
     cdef I gather_weights(self, WeightLine* w_lines, F* feat_ids, I nr_active) except *:
         cdef:
-            WeightLine** feature
+            W** feature
             F feat_id
-            I i, j
+            I i, j, row
             PointerMap weights
         
         cdef I nr_rows = get_nr_rows(self.nr_class)
@@ -157,11 +157,12 @@ cdef class LinearModel:
         weights = self.weights
         for i in range(nr_active):
             feat_id = feat_ids[i]
-            feature = <WeightLine**>weights.get(feat_id)
+            feature = <W**>weights.get(feat_id)
             if feature != NULL:
                 for row in range(nr_rows):
                     if feature[row] != NULL:
-                        w_lines[f_i] = feature[row][0]
+                        w_lines[f_i].start = row * LINE_SIZE
+                        memcpy(w_lines[f_i].line, feature[row], LINE_SIZE * sizeof(W))
                         f_i += 1
         return f_i
 
@@ -178,7 +179,7 @@ cdef class LinearModel:
         cdef C clas
         cdef F feat_id
         cdef TrainFeat* feat
-        cdef double upd
+        cdef W upd
         self.time += 1
         for clas, features in updates.items():
             row = get_row(clas)
@@ -191,9 +192,8 @@ cdef class LinearModel:
                 if feat == NULL:
                     feat = self.new_feat(feat_id)
                 if feat.weights[row] == NULL:
-                    feat.weights[row] = <WeightLine*>self.mem.alloc(1, sizeof(WeightLine))
+                    feat.weights[row] = <W*>self.mem.alloc(LINE_SIZE, sizeof(W))
                     feat.meta[row] = <MetaData*>self.mem.alloc(LINE_SIZE, sizeof(MetaData))
-                    feat.weights[row].start = clas - col
                 update_accumulator(feat, clas, self.time)
                 update_count(feat, clas, 1)
                 update_weight(feat, clas, upd)
@@ -239,10 +239,10 @@ cdef class LinearModel:
                 line = []
                 line.append(str(feat_id))
                 line.append(str(row))
-                line.append(str(feat.weights[row].start))
+                line.append(str(row * LINE_SIZE))
                 seen_non_zero = False
                 for col in range(LINE_SIZE):
-                    val = '%.3f' % feat.weights[row].line[col]
+                    val = '%.3f' % feat.weights[row][col]
                     line.append(val)
                     if val != '0.000':
                         seen_non_zero = True
@@ -256,7 +256,7 @@ cdef class LinearModel:
         cdef I col
         cdef bytes py_line
         cdef bytes token
-        cdef WeightLine** feature
+        cdef W** feature
         nr_rows = get_nr_rows(self.nr_class)
         nr_feats = 0
         nr_weights = 0
@@ -268,16 +268,15 @@ cdef class LinearModel:
             row = strtoul(token, NULL, 10)
             token = strtok(NULL, '\t')
             start = strtoul(token, NULL, 10)
-            feature = <WeightLine**>self.weights.get(feat_id)
+            feature = <W**>self.weights.get(feat_id)
             if feature == NULL:
                 nr_feats += 1
-                feature = <WeightLine**>self.mem.alloc(nr_rows, sizeof(WeightLine*))
+                feature = <W**>self.mem.alloc(nr_rows, sizeof(W*))
                 self.weights.set(feat_id, feature)
-            feature[row] = <WeightLine*>self.mem.alloc(1, sizeof(WeightLine))
-            feature[row].start = start
+            feature[row] = <W*>self.mem.alloc(LINE_SIZE, sizeof(W))
             for col in range(LINE_SIZE):
                 token = strtok(NULL, '\t')
-                feature[row].line[col] = atof(token)
+                feature[row][col] = atof(token)
                 nr_weights += 1
         print "Loading %d class... %d weights for %d features" % (self.nr_class, nr_weights, nr_feats)
 

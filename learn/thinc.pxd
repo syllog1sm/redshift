@@ -31,7 +31,7 @@ cdef struct MetaData:
     
 
 cdef struct TrainFeat:
-    WeightLine** weights
+    W** weights
     MetaData** meta
 
 
