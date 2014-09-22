@@ -74,9 +74,9 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
     parser.guide.end_training()
     parser.tagger.guide.end_training()
     with open(pjoin(model_dir, 'model.gz'), 'w') as file_:
-        parser.guide.dump(file_, freq_thresh=1)
+        parser.guide.dump(file_, freq_thresh=2)
     with open(pjoin(model_dir, 'tagger.gz'), 'w') as file_:
-        parser.tagger.guide.dump(file_, freq_thresh=1)
+        parser.tagger.guide.dump(file_, freq_thresh=2)
     index.hashes.save_pos_idx(pjoin(model_dir, 'pos'))
     index.hashes.save_label_idx(pjoin(model_dir, 'labels'))
     return parser
