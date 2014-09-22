@@ -6,20 +6,14 @@ import pytest
 from learn.thinc import LinearModel
 
 def test_basic():
-    model = LinearModel(5)
-    model.update({0: {1: 1, 3: -5}, 1: {2: 5, 3: 5}})
-    s1 = model([1])
-    assert s1[0] == 1
-    assert s1[1] == 0
-    s2 = model([2])
-    assert s2[0] == 0
-    assert s2[1] == 5
-    s3 = model([3])
-    assert s3[0] == -5
-    assert s3[1] == 5
+    model = LinearModel(7)
+    model.update({0: {1: 1, 3: -5}, 1: {2: 4, 3: 5}})
+    assert model([2])[:2] == [0, 4]
+    assert model([1])[:2] == [1, 0]
+    assert model([3])[:2] == [-5, 5]
     scores = model([1, 2, 3])
-    assert scores[0] == sum((s1[0], s2[0], s3[0]))
-    assert scores[1] == sum((s1[1], s2[1], s3[1]))
+    assert scores[0] == sum([1, 0, -5])
+    assert scores[1] == sum([0, 4, 5])
 
 
 @pytest.fixture
@@ -89,7 +83,3 @@ def test_dump_load(model):
     assert model([1, 3, 4]) == new_model([1, 3, 4])
     assert model([2, 5]) == new_model([2, 5])
     assert model([3, 4, 2]) == new_model([2, 3, 4])
-
-
-def test_load():
-    pass
