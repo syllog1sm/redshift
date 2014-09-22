@@ -211,10 +211,11 @@ cdef class LinearModel:
         acc = pc(self.n_corr, self.total)
 
         map_size = (self.weights.size * sizeof(Cell)) + (self.train_weights.size * sizeof(Cell))
+        cache_str = '%s cache hit' % self.cache.utilization
         size_str = humanize.naturalsize(self.mem.size, gnu=True)
         size_str += ', ' + humanize.naturalsize(map_size, gnu=True)
-        msg = "#%d: Moves %d/%d=%s. %s" % (iter_num, self.n_corr, self.total, acc,
-                                           size_str)
+        msg = "#%d: Moves %d/%d=%s. %s. %s" % (iter_num, self.n_corr, self.total, acc,
+                                               cache_str, size_str)
         self.n_corr = 0
         self.total = 0
         return msg
@@ -282,43 +283,46 @@ cdef class LinearModel:
 
 
 cdef class ScoresCache:
-    def __cinit__(self, size_t scores_size, size_t pool_size=10000):
+    def __cinit__(self, size_t scores_size, size_t max_size=10000):
         self._cache = PointerMap()
         self._pool = Pool()
-        self._arrays = <W**>self._pool.alloc(pool_size, sizeof(W*))
-        for i in range(pool_size):
+        self._arrays = <W**>self._pool.alloc(max_size, sizeof(W*))
+        cdef size_t i
+        for i in range(max_size):
             self._arrays[i] = <W*>self._pool.alloc(scores_size, sizeof(W))
+        self._scores_if_full = <W*>self._pool.alloc(scores_size, sizeof(W))
         self.i = 0
-        self.pool_size = pool_size
+        self.max_size = max_size
         self.scores_size = scores_size
         self.n_hit = 0
-        self.n_miss = 0
+        self.n_total = 0
+
+    @property
+    def utilization(self):
+        if self.n_total == 0:
+            return '0'
+        return '%.2f' % ((float(self.n_hit) / self.n_total) * 100)
         
     cdef W* lookup(self, size_t size, void* kernel, bint* is_hit):
         cdef W** resized
         cdef uint64_t hashed = hash64(kernel, size, 0)
         cdef W* scores = <W*>self._cache.get(hashed)
+        self.n_total += 1
         if scores != NULL:
             self.n_hit += 1
             is_hit[0] = True
             return scores
+        elif self.i == self.max_size:
+            return self._scores_if_full
         else:
-            if self.i == self.pool_size:
-                self._resize(self.pool_size * 2)
             scores = self._arrays[self.i]
             self.i += 1
             self._cache.set(hashed, scores)
-            self.n_miss += 1
             is_hit[0] = False
             return scores
     
     def flush(self):
         self.i = 0
+        self.n_hit = 0
+        self.n_total = 0
         self._cache = PointerMap(self._cache.size)
-
-    cdef int _resize(self, size_t new_size):
-        cdef size_t i
-        self.pool_size = new_size
-        self._pool.realloc(self._arrays, new_size)
-        for i in range(self.i, self.pool_size):
-            self._arrays[i] = <W*>self._pool.alloc(self.scores_size, sizeof(W))
