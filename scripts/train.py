@@ -25,8 +25,7 @@ def main(train_loc, model_loc, n_iter=15,
          feat_set="", feat_thresh=10,
          n_sents=0,
          use_break=False,
-         debug=False, seed=0, beam_width=4,
-         train_tagger=False):
+         debug=False, seed=0, beam_width=4):
     if debug:
         redshift.parser.set_debug(True)
     with codecs.open(train_loc, 'r', codec) as file_:
