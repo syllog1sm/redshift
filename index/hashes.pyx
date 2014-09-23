@@ -1,8 +1,8 @@
 # cython: profile=True
 
 from libc.stdint cimport uint64_t
-from libc.stdlib cimport calloc, malloc, free
 from libc.string cimport memcpy
+from cymem.cymem cimport Pool
 
 import os.path
 
@@ -25,7 +25,7 @@ cdef class Index:
             return self.i
 
     cpdef bytes get_str(self, size_t code):
-        return self.reverse.get(code, '')
+        return self.reverse.get(code, 'UNK')
 
     cpdef save(self, path):
         with open(path, 'w') as out_file:
@@ -45,61 +45,7 @@ cdef class Index:
         self.i = i + 1
 
 
-cdef class ScoresCache:
-    def __cinit__(self, size_t scores_size, size_t pool_size=10000):
-        self._cache = dense_hash_map[uint64_t, size_t]()
-        self._cache.set_empty_key(0)
-        self._pool = <double**>malloc(pool_size * sizeof(double*))
-        for i in range(pool_size):
-            self._pool[i] = <double*>malloc(scores_size * sizeof(double))
-        self.i = 0
-        self.pool_size = pool_size
-        self.scores_size = scores_size
-        self.n_hit = 0
-        self.n_miss = 0
-        
-    cdef double* lookup(self, size_t size, void* kernel, bint* is_hit):
-        cdef double** resized
-        cdef uint64_t hashed = MurmurHash64A(kernel, size, 0)
-        # Mix with a second hash for extra security -- collisions hurt here!!
-        hashed += MurmurHash64B(kernel, size, 1)
-        cdef size_t addr = self._cache[hashed]
-        if addr != 0:
-            self.n_hit += 1
-            is_hit[0] = True
-            return <double*>addr
-        else:
-            if self.i == self.pool_size:
-                self._resize(self.pool_size * 2)
-            addr = <size_t>self._pool[self.i]
-            self.i += 1
-            self._cache[hashed] = addr
-            self.n_miss += 1
-            is_hit[0] = False
-            return <double*>addr
-    
-    def flush(self):
-        self.i = 0
-        self._cache.clear_no_resize()
-
-    cdef int _resize(self, size_t new_size):
-        cdef size_t i
-        self.pool_size = new_size
-        resized = <double**>malloc(self.pool_size * sizeof(double*))
-        memcpy(resized, self._pool, self.i * sizeof(double*))
-        for i in range(self.i, self.pool_size):
-            resized[i] = <double*>malloc(self.scores_size * sizeof(double))
-        free(self._pool)
-        self._pool = resized
-
-    def __dealloc__(self):
-        for i in range(self.pool_size):
-            free(self._pool[i])
-        free(self._pool)
-
-
-
-_pos_idx = Index(['ROOT', 'NONE', 'OOB'])
+_pos_idx = Index(['ROOT', 'NONE', 'OOB', 'UNK'])
 _label_idx = Index(['ERR', 'ROOT', 'P', 'erased'])
 
 

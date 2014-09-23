@@ -6,6 +6,8 @@ import distutils.core
 import sys
 import os
 from os.path import join as pjoin
+from os import path
+from glob import glob
 
 
 def clean(ext):
@@ -25,23 +27,22 @@ def clean(ext):
 pwd = os.path.dirname(__file__)
 virtual_env = os.environ.get('VIRTUAL_ENV', '')
 
-includes = [os.path.join(virtual_env, 'include'),
-            os.path.join(pwd, 'include'),
-            os.path.join(pwd, 'ext'),
-            os.path.join(pwd, 'ext/include')]
-libs = [os.path.join(pwd, 'ext')]
+includes = []
+
+if 'VIRTUAL_ENV' in os.environ:
+    includes += glob(path.join(os.environ['VIRTUAL_ENV'], 'include', 'site', '*'))
+else:
+    # If you're not using virtualenv, set your include dir here.
+    pass
+
+libs = []
 
 exts = [
-    Extension('ext.murmurhash', ["ext/murmurhash.pyx", "ext/MurmurHash2.cpp",
-              "ext/MurmurHash3.cpp"], language="c++", include_dirs=includes),
-    Extension('ext.sparsehash', ["ext/sparsehash.pyx"], language="c++",
-              include_dirs=includes),
     Extension('redshift.parser', ["redshift/parser.pyx"], language="c++",
               include_dirs=includes),
     Extension('redshift.beam', ["redshift/beam.pyx"], language="c++",
               include_dirs=includes),
-    Extension('redshift._state', ["redshift/_state.pyx", "ext/MurmurHash2.cpp",
-                                  "ext/MurmurHash3.cpp"],
+    Extension('redshift._state', ["redshift/_state.pyx"],
                                   language="c++", include_dirs=includes),
     Extension('redshift.sentence', ["redshift/sentence.pyx"], language="c++",
                include_dirs=includes),
@@ -52,15 +53,9 @@ exts = [
               language="c++", include_dirs=includes),
     Extension('redshift.transitions', ["redshift/transitions.pyx"],
         language="c++", include_dirs=includes),
-    Extension('learn.perceptron', ['learn/perceptron.pyx'], language="c++",
-              include_dirs=includes,
-              extra_compile_args=['-O3'],
-              extra_link_args=['-O3']),
-    Extension("index.hashes", ["index/hashes.pyx", "ext/MurmurHash2.cpp",
-                               "ext/MurmurHash3.cpp"], language="c++",
+    Extension("index.hashes", ["index/hashes.pyx"], language="c++",
               include_dirs=includes),
-    Extension("index.lexicon", ["index/lexicon.pyx", "ext/MurmurHash2.cpp",
-                               "ext/MurmurHash3.cpp"], language="c++",
+    Extension("index.lexicon", ["index/lexicon.pyx"], language="c++",
               include_dirs=includes),
     Extension("features.extractor", ["features/extractor.pyx"],
               language="c++", include_dirs=includes),
@@ -80,14 +75,13 @@ if sys.argv[1] == 'clean':
     map(clean, exts)
 
 distutils.core.setup(
-#    name='Redshift shift-reduce dependency parser',
     classifiers=[
         'Programming Language :: Python :: 2.7',
     ],
     description='Redshift shift-reduce dependency parser',
     keywords='natural-language syntactic dependency parser',
     long_description=open('README.rst').read(),
-    license='GPL',
+    license='GPL / Contact for commercial',
     name='redshift-parser',
     packages=['redshift'],
     author='Matthew Honnibal',

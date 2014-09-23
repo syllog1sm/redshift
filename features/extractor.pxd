@@ -1,6 +1,5 @@
 from libc.stdint cimport uint64_t, int64_t
-
-from ext.murmurhash cimport *
+from cymem.cymem cimport Pool
 
 DEF MAX_FEAT_LEN = 10
 
@@ -19,6 +18,7 @@ cdef struct MatchPred:
 
 
 cdef class Extractor:
+    cdef Pool _pool
     cdef size_t nr_template
     cdef Template* templates
     cdef size_t nr_match
