@@ -2,7 +2,6 @@
 from _state cimport *
 from redshift.sentence cimport Input, Sentence, Token
 
-from transitions cimport Transition, transition
 from cymem.cymem cimport Pool
 
 from libc.string cimport memcpy
@@ -12,6 +11,13 @@ from libcpp.queue cimport priority_queue
 from libcpp.pair cimport pair
 
 cimport cython
+
+
+include "compile_time_options.pxi"
+IF TRANSITION_SYSTEM == 'arc_eager':
+    from .arc_eager cimport *
+ELSE:
+    from .arc_hybrid cimport *
 
 
 cdef class Beam:

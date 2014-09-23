@@ -1,11 +1,17 @@
 from _state cimport *
-from transitions cimport Transition
 from sentence cimport Token
 from cymem.cymem cimport Pool
 
-
 from libcpp.queue cimport priority_queue
 from libcpp.pair cimport pair
+
+include "compile_time_options.pxi"
+IF TRANSITION_SYSTEM == 'arc_eager':
+    from .arc_eager cimport *
+ELSE:
+    from .arc_hybrid cimport *
+
+
 
 ctypedef pair[double, size_t] ScoredMove
 

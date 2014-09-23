@@ -2,8 +2,13 @@ from cymem.cymem cimport Pool
 from ._state cimport State
 from .sentence cimport Input
 from .sentence cimport Token
-from .ae_transitions cimport Transition
 
+
+include "compile_time_options.pxi"
+IF TRANSITION_SYSTEM == 'arc_eager':
+    from .arc_eager cimport *
+ELSE:
+    from .arc_hybrid cimport *
 
 cdef class PyState:
     cdef Pool mem

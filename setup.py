@@ -37,6 +37,13 @@ else:
 
 libs = []
 
+c_options = {
+    'transition_system': 'arc_eager'
+}
+with open(path.join(pwd, 'redshift', 'compile_time_options.pxi'), 'w') as file_:
+    for k, v in c_options.iteritems():
+        file_.write("DEF %s = '%s'\n" % (k.upper(), v))
+
 exts = [
     Extension('redshift.parser', ["redshift/parser.pyx"], language="c++",
               include_dirs=includes),
@@ -51,9 +58,7 @@ exts = [
               include_dirs=includes),
     Extension('redshift._parse_features', ["redshift/_parse_features.pyx"],
               language="c++", include_dirs=includes),
-    Extension('redshift.transitions', ["redshift/transitions.pyx"],
-        language="c++", include_dirs=includes),
-    Extension("index.hashes", ["index/hashes.pyx"], language="c++",
+   Extension("index.hashes", ["index/hashes.pyx"], language="c++",
               include_dirs=includes),
     Extension("index.lexicon", ["index/lexicon.pyx"], language="c++",
               include_dirs=includes),
@@ -65,9 +70,21 @@ exts = [
               extra_compile_args=['-O2'], extra_link_args=['-O2']), 
     Extension("redshift.pystate", ["redshift/pystate.pyx"], include_dirs=includes,
               language="c++"),
-    Extension("redshift.ae_transitions", ["redshift/ae_transitions.pyx"],
-              include_dirs=includes, language="c++")
 ]
+
+# The parser chooses one of these by a value in compile_time_options.pxi
+if c_options['transition_system'] == 'arc_eager':
+    exts.append(
+        Extension('redshift.arc_eager', ["redshift/arc_eager.pyx"],
+            language="c++", include_dirs=includes),
+    )
+elif c_options['transition_system'] == 'arc_hybrid':
+    exts.append(
+        Extension('redshift.arc_hybrid', ["redshift/arc_hybrid.pyx"],
+            language="c++", include_dirs=includes),
+    )
+else:
+    raise StandardError('Unknown transition system: %s' % c_options['transition_system'])
 
 
 if sys.argv[1] == 'clean':

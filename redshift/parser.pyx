@@ -12,11 +12,8 @@ from libc.string cimport memcpy, memset
 
 from _state cimport *
 from sentence cimport Input, Sentence, Token, Step
-from transitions cimport Transition, transition, fill_valid, fill_costs
-from transitions cimport get_nr_moves, fill_moves
-from transitions cimport *
-
 from cymem.cymem cimport Pool, Address
+
 from beam cimport Beam
 from tagger cimport Tagger
 from util import Config
@@ -31,8 +28,14 @@ cimport index.hashes
 from learn.thinc cimport LinearModel
 from learn.thinc cimport W
 
-
 from libc.stdint cimport uint64_t, int64_t
+
+
+include "compile_time_options.pxi"
+IF TRANSITION_SYSTEM == 'arc_eager':
+    from .arc_eager cimport *
+ELSE:
+    from .arc_hybrid cimport *
 
 
 VOCAB_SIZE = 1e6
@@ -100,7 +103,11 @@ def get_labels(sents):
 
 def get_templates(feats_str):
     match_feats = []
-    templates = _parse_features.arc_hybrid
+    # This value comes out of compile_time_options.pxi
+    IF TRANSITION_SYSTEM == 'arc_eager':
+        templates = _parse_features.arc_eager
+    ELSE:
+        templates = _parse_features.arc_hybrid
     if 'disfl' in feats_str:
         templates += _parse_features.disfl
         templates += _parse_features.new_disfl

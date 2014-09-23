@@ -1,9 +1,17 @@
 from libc.string cimport const_void
 from libc.stdint cimport uint64_t, int64_t
 
-from sentence cimport Sentence, Token
-from transitions cimport Transition
 from cymem.cymem cimport Pool
+
+from .sentence cimport Sentence, Token
+
+
+include "compile_time_options.pxi"
+IF TRANSITION_SYSTEM == 'arc_eager':
+    from .arc_eager cimport *
+ELSE:
+    from .arc_hybrid cimport *
+
 
 # From left-to-right in the string, the slot tokens are:
 # S2, S1, S0le, S0l, S0l2, S0l0, S0, S0r0, S0r2, S0r, S0re

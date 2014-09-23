@@ -1,5 +1,5 @@
 # cython: profile=True
-from _state cimport *
+from ._state cimport *
 import index.hashes
 
 # TODO: Link these with other compile constants
@@ -190,7 +190,7 @@ cdef size_t get_nr_moves(list left_labels, list right_labels, list dfl_labels,
 
 
 cdef int fill_moves(list left_labels, list right_labels, list dfl_labels,
-                    bint use_break, Transition* moves):
+                    bint use_break, Transition* moves) except -1:
     cdef size_t i = 0
     cdef size_t root_label = index.hashes.encode_label('ROOT')
     moves[i].move = SHIFT; moves[i].label = 0; i += 1

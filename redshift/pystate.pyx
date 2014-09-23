@@ -1,8 +1,12 @@
-from .ae_transitions cimport Transition, transition, fill_valid, fill_costs
-from .ae_transitions cimport get_nr_moves, fill_moves, move_name
 from ._state cimport init_state
 
 import index.hashes
+
+include "compile_time_options.pxi"
+IF TRANSITION_SYSTEM == 'arc_eager':
+    from .arc_eager cimport *
+ELSE:
+    from .arc_hybrid cimport *
 
 
 cdef class PyState:
