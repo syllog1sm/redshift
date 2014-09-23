@@ -18,6 +18,15 @@ cdef enum:
     N_MOVES
 
 
+cdef unicode move_name(Transition* t):
+    moves = [u'?', u'S', u'L', u'R', u'E', 'B']
+    name = moves[t.move]
+    if t.move == RIGHT or t.move == LEFT or t.move == EDIT:
+        name += u'-%s' % index.hashes.decode_label(t.label)
+    return name
+
+
+
 cdef inline bint can_shift(State* s):
     return not at_eol(s)
 
@@ -127,11 +136,13 @@ cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except
     costs[BREAK] = break_cost(s, gold) if can_break(s) else -1
     for i in range(n):
         classes[i].cost = costs[classes[i].move]
-        if classes[i].move == LEFT and classes[i].cost == 0:
+        if classes[i].move == LEFT and classes[i].cost == 0 and \
+          gold[s.top].head == s.i:
             classes[i].cost += gold[s.top].label != classes[i].label
-        elif classes[i].move == RIGHT and classes[i].cost == 0:
+        elif classes[i].move == RIGHT and classes[i].cost == 0 and \
+          gold[s.top].head == get_s1(s):
             classes[i].cost = gold[s.top].label != classes[i].label
-        elif classes[i].move == EDIT and classes[i].cost == 0:
+        elif classes[i].move == EDIT and classes[i].cost == 0 and gold[s.top].is_edit:
             classes[i].cost = gold[s.top].label != classes[i].label
 
 
