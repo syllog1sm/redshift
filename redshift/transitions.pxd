@@ -11,6 +11,9 @@ cdef struct Transition:
     int cost
     bint is_valid
 
+
+cdef unicode move_name(Transition* t)
+
 cdef size_t get_nr_moves(list left_labels, list right_labels, list dfl_labels,
                          bint use_break)
 

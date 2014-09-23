@@ -62,13 +62,16 @@ exts = [
     Extension("index.lexicon", ["index/lexicon.pyx", "ext/MurmurHash2.cpp",
                                "ext/MurmurHash3.cpp"], language="c++",
               include_dirs=includes),
-
-    Extension("features.extractor", ["features/extractor.pyx", "ext/MurmurHash2.cpp",
-              "ext/MurmurHash3.cpp"], language="c++", include_dirs=includes),
-    Extension("redshift.tagger", ["redshift/tagger.pyx", "ext/MurmurHash2.cpp",
-                                  "ext/MurmurHash3.cpp"], include_dirs=includes,
-        language="c++"),
-    #Extension("redshift.tester", ["redshift/tester.pyx"], include_dirs=includes)
+    Extension("features.extractor", ["features/extractor.pyx"],
+              language="c++", include_dirs=includes),
+    Extension("redshift.tagger", ["redshift/tagger.pyx"], include_dirs=includes,
+              language="c++"),
+    Extension("learn.thinc", ["learn/thinc.pyx"], include_dirs=includes, language="c++",
+              extra_compile_args=['-O2'], extra_link_args=['-O2']), 
+    Extension("redshift.pystate", ["redshift/pystate.pyx"], include_dirs=includes,
+              language="c++"),
+    Extension("redshift.ae_transitions", ["redshift/ae_transitions.pyx"],
+              include_dirs=includes, language="c++")
 ]
 
 
