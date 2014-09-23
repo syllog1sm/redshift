@@ -348,7 +348,6 @@ cdef int fill_context(size_t* context, SlotTokens* t, Token* parse) except -1:
     fill_token(context, N1w, t.n1)
     fill_token(context, N2w, t.n2)
 
-    # TODO: Distance
     if t.s0.i != 0:
         assert t.n0.i > t.s0.i
         context[dist] = t.n0.i - t.s0.i
@@ -407,6 +406,82 @@ cdef int fill_context(size_t* context, SlotTokens* t, Token* parse) except -1:
             else:
                 context[psexact] = 0
 
+
+arc_eager = (
+    (S0w, S0p),
+    (S0w,),
+    (S0p,),
+    (N0w, N0p),
+    (N0w,),
+    (N0p,),
+    (N1w, N1p),
+    (N1w,),
+    (N1p,),
+    (N2w, N2p),
+    (N2w,),
+    (N2p,),
+
+    (S0w, S0p, N0w, N0p),
+    (S0w, S0p, N0w),
+    (S0w, N0w, N0p),
+    (S0w, S0p, N0p),
+    (S0p, N0w, N0p),
+    (S0w, N0w),
+    (S0p, N0p),
+    (N0p, N1p),
+    (N0p, N1p, N2p),
+    (S0p, N0p, N1p),
+    (S1p, S0p, N0p),
+    (S0p, S0lp, N0p),
+    (S0p, S0rp, N0p),
+    (S0p, N0p, N0lp),
+    (dist, S0w),
+    (dist, S0p),
+    (dist, N0w),
+    (dist, N0p),
+    (dist, S0w, N0w),
+    (dist, S0p, N0p),
+    (S0w, S0rv),
+    (S0p, S0rv),
+    (S0w, S0lv),
+    (S0p, S0lv),
+    (N0w, N0lv),
+    (N0p, N0lv),
+    (S1w,),
+    (S1p,),
+    (S0lw,),
+    (S0lp,),
+    (S0rw,),
+    (S0rp,),
+    (N0lw,),
+    (N0lp,),
+    (S2w,),
+    (S2p,),
+    (S0l2w,),
+    (S0l2p,),
+    (S0r2w,),
+    (S0r2p,),
+    (N0l2w,),
+    (N0l2p,),
+    (S0p, S0lp, S0l2p),
+    (S0p, S0rp, S0r2p),
+    (S0p, S1p, S2p),
+    (N0p, N0lp, N0l2p),
+    (S0L,),
+    (S0lL,),
+    (S0rL,),
+    (N0lL,),
+    (S1L,),
+    (S0l2L,),
+    (S0r2L,),
+    (N0l2L,),
+    (S0w, S0rL, S0r2L),
+    (S0p, S0rL, S0r2L),
+    (S0w, S0lL, S0l2L),
+    (S0p, S0lL, S0l2L),
+    (N0w, N0lL, N0l2L),
+    (N0p, N0lL, N0l2L),
+)
 
 arc_hybrid = (
     # Single words
@@ -571,8 +646,6 @@ extra_labels = (
     (S1p, S0L, S0rL),
     (S1p, S0L, S0lL),
 )
-
-
 
 label_sets = (
    (S0w, S0lL, S0l0L, S0l2L),
