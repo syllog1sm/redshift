@@ -13,13 +13,14 @@ cdef enum:
     REDUCE
     LEFT
     RIGHT
+    EDIT
     N_MOVES
 
 
 cdef unicode move_name(Transition* t):
-    moves = [u'E', u'S', u'D', u'L', u'R']
+    moves = [u'?', u'S', u'D', u'L', u'R', u'E']
     name = moves[t.move]
-    if t.move == RIGHT or t.move == LEFT:
+    if t.move == RIGHT or t.move == LEFT or t.move == EDIT:
         name += u'-%s' % index.hashes.decode_label(t.label)
     return name
 
@@ -39,9 +40,29 @@ cdef inline bint can_left(State* s):
 cdef inline bint can_reduce(State* s):
     return s.stack_len >= 2 and s.parse[s.top].head != 0
 
+
+cdef bint USE_EDIT = False
+cdef inline bint can_edit(State* s):
+    return USE_EDIT and s.stack_len >= 1
+
+
+# Edit oracle:
+# - You can always Shift a disfluent word
+# - You can never Reduce a disfluent word headed by a fluent word
+# - You can always LeftArc from a disfluent word to a fluent word
+# - You can always RightArc to a disfluent word from a fluent word
+# - You can never LeftArc from a fluent word to a disfluent word
+# - You can never RightArc from a disfluent word to a fluent word
+# - You can always RightArc from a disfluent word to a disfluent word
+# - You can only LeftArc from a disfluent word to a disfluent word if it has no
+#   fluent children
+# - You can only Reduce a disfluent word if its head is disfluent
 cdef int shift_cost(State* s, Token* gold):
     assert not at_eol(s)
     cost = 0
+    # - You can always Shift a disfluent word
+    if gold[s.i].is_edit:
+        return cost
     cost += has_head_in_stack(s, s.i, gold)
     cost += has_child_in_stack(s, s.i, gold)
     return cost
@@ -49,9 +70,15 @@ cdef int shift_cost(State* s, Token* gold):
 
 cdef int right_cost(State* s, Token* gold):
     assert s.stack_len >= 1
-    if gold[s.i].head == s.top:
-        return 0
     cost = 0
+    if gold[s.i].head == s.top:
+        return cost
+    # - You can always RightArc to a disfluent word
+    if gold[s.i].is_edit:
+        return cost
+    # - You can't RightArc from a disfluent word to a fluent word
+    elif gold[s.top].is_edit or gold[s.i].is_edit:
+        cost += 1
     cost += has_head_in_buffer(s, s.i, gold)
     cost += has_child_in_stack(s, s.i, gold)
     cost += has_head_in_stack(s, s.i, gold)
@@ -61,6 +88,18 @@ cdef int right_cost(State* s, Token* gold):
 cdef int left_cost(State* s, Token* gold):
     assert s.stack_len >= 1
     cost = 0
+    # - You can always LeftArc from a disfluent word to a fluent word
+    if gold[s.i].is_edit and not gold[s.top].is_edit:
+        return cost
+    # - You can only LeftArc from a disfluent word to a disfluent word if it has no
+    #   fluent children
+    if gold[s.i].is_edit and gold[s.top].is_edit:
+        for i in range(s.parse[s.top].l_valency):
+            if not gold[s.l_children[s.top][i]].is_edit:
+                cost += 1
+    # - You can never arc from a fluent word to a disfluent word
+    if not gold[s.i].is_edit and gold[s.top].is_edit:
+        cost += 1
     if gold[s.top].head == s.i:
         return cost
     cost += has_head_in_buffer(s, s.top, gold)
@@ -71,8 +110,15 @@ cdef int left_cost(State* s, Token* gold):
 cdef int reduce_cost(State* s, Token* gold):
     assert s.stack_len >= 2
     cost = 0
+    if gold[s.top].is_edit and not gold[s.parse[s.top].head].is_edit:
+        cost += 1
     cost += has_child_in_buffer(s, s.top, gold)
     return cost
+
+
+cdef int edit_cost(State* s, Token* gold):
+    assert s.stack_len >= 1
+    return 0 if gold[s.top].is_edit else 1
 
 
 cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
@@ -81,6 +127,7 @@ cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
     valid[LEFT] = can_left(s)
     valid[RIGHT] = can_right(s)
     valid[REDUCE] = can_reduce(s)
+    valid[EDIT] = can_edit(s)
     for i in range(n):
         classes[i].is_valid = valid[classes[i].move]
     for i in range(n):
@@ -96,6 +143,7 @@ cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except
     costs[LEFT] = left_cost(s, gold) if can_left(s) else -1
     costs[RIGHT] = right_cost(s, gold) if can_right(s) else -1
     costs[REDUCE] = reduce_cost(s, gold) if can_reduce(s) else -1
+    costs[EDIT] = edit_cost(s, gold) if can_edit(s) else -1
     for i in range(n):
         classes[i].cost = costs[classes[i].move]
         if classes[i].move == LEFT and classes[i].cost == 0 and \
@@ -104,9 +152,14 @@ cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except
         elif classes[i].move == RIGHT and classes[i].cost == 0 and \
           gold[s.i].head == s.top:
             classes[i].cost += gold[s.i].label != classes[i].label
+        elif classes[i].move == EDIT and classes[i].cost == 0 and gold[s.top].is_edit:
+            classes[i].cost = gold[s.top].label != classes[i].label
 
 
 cdef int transition(Transition* t, State *s) except -1:
+    cdef size_t edited
+    cdef size_t child
+    cdef size_t i
     s.history[s.m] = t[0]
     s.m += 1 
     if t.move == SHIFT:
@@ -119,26 +172,43 @@ cdef int transition(Transition* t, State *s) except -1:
         push_stack(s)
     elif t.move == REDUCE:
         pop_stack(s)
+    elif t.move == EDIT:
+        edited = pop_stack(s)
+        while s.parse[edited].l_valency:
+            child = get_l(s, edited)
+            del_l_child(s, edited)
+            s.top = child
+            s.stack[s.stack_len] = child
+            s.stack_len += 1
+        for i in range(edited, s.parse[s.i].left_edge):
+            # We might have already set these as edits, under a different
+            # label.
+            if s.parse[i].is_edit:
+                break
+            s.parse[i].head = i
+            s.parse[i].label = t.label
+            s.parse[i].is_edit = True
     else:
         raise StandardError(t.move)
 
 
 cdef size_t get_nr_moves(list left_labels, list right_labels, list dfl_labels,
                          bint use_break):
-    assert not dfl_labels
-    assert not use_break
-    return 2 + len(left_labels) + len(right_labels)
+    global USE_EDIT
+    USE_EDIT = bool(dfl_labels) 
+    return 2 + len(left_labels) + len(right_labels) + len(dfl_labels)
 
 
 cdef int fill_moves(list left_labels, list right_labels, list dfl_labels,
         bint use_break, Transition* moves) except -1:
-    assert not dfl_labels
     assert not use_break
     cdef size_t i = 0
     cdef size_t root_label = index.hashes.encode_label('ROOT')
     moves[i].move = SHIFT; moves[i].label = 0; i += 1
     moves[i].move = REDUCE; moves[i].label = 0; i += 1
     cdef size_t label
+    for label in dfl_labels:
+        moves[i].move = EDIT; moves[i].label = label; i += 1
     for label in left_labels:
         moves[i].move = LEFT; moves[i].label = label; i += 1
     for label in right_labels:
