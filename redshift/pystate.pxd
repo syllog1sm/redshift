@@ -16,8 +16,10 @@ cdef class PyState:
     cdef State* state
     cdef list left_labels
     cdef list right_labels
+    cdef list dfl_labels
     cdef list encoded_left
     cdef list encoded_right
+    cdef list encoded_dfl
     cdef size_t nr_moves
     cdef Transition* moves
     cdef dict moves_by_name
