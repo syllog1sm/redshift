@@ -59,6 +59,7 @@ cdef class LinearModel:
     cdef list train_weights
     cdef ScoresCache cache
     cdef W* scores
+    cdef WeightLine* _weight_lines
 
     cdef TrainFeat* new_feat(self, I template_id, F feat_id) except NULL
     cdef I gather_weights(self, WeightLine* w_lines, F* feat_ids, I nr_active) except *

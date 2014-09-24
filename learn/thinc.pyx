@@ -126,6 +126,8 @@ cdef class LinearModel:
         self.train_weights = [PointerMap() for i in range(nr_templates)]
         self.mem = Pool()
         self.scores = <W*>self.mem.alloc(self.nr_class, sizeof(W))
+        self._weight_lines = <WeightLine*>self.mem.alloc(nr_class * nr_templates,
+                                                         sizeof(WeightLine))
 
     def __call__(self, list py_feats):
         feat_mem = Address(len(py_feats), sizeof(F))
@@ -171,11 +173,8 @@ cdef class LinearModel:
         return f_i
 
     cdef int score(self, W* scores, F* features, I nr_active) except -1:
-        cdef I nr_rows = nr_active * get_nr_rows(self.nr_class)
-        cdef Address weights_mem = Address(nr_rows, sizeof(WeightLine))
-        cdef WeightLine* weights = <WeightLine*>weights_mem.addr
-        cdef I f_i = self.gather_weights(weights, features, nr_active)
-        set_scores(scores, weights, f_i, self.nr_class)
+        cdef I f_i = self.gather_weights(self._weight_lines, features, nr_active)
+        set_scores(scores, self._weight_lines, f_i, self.nr_class)
 
     cpdef int update(self, dict updates) except -1:
         cdef I row
