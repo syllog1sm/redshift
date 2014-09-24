@@ -2,6 +2,7 @@
 from __future__ import division
 
 import plac
+import json
 
 from redshift.sentence import Input
 
@@ -103,24 +104,29 @@ def score_sbd(gold, test):
     return (c / n) * 100 
 
 
-def main(gold_loc, test_loc):
+def main(gold_loc, test_loc, out_loc=None):
     gold = ParsedFile(gold_loc)
     test = ParsedFile(test_loc)
     uas_scorer = Scorer(lambda g, t: g.label == 'P' or g.is_edit or g.label == 'discourse', eval_uas, gold, test)
     las_scorer = Scorer(lambda g, t: g.label == 'P' or g.is_edit or g.label == 'discourse', eval_las, gold, test)
-    print uas_scorer.t
-    print 'U: %.3f' % uas_scorer.percent
-    print 'L: %.3f' % las_scorer.percent
+    results = {}
+    results['UAS'] = uas_scorer.percent
+    results['LAS'] = las_scorer.percent
     p = Scorer(lambda g, t: g.label != 'discourse' and (not t.is_edit or t.label != 'erased'),
                lambda g, t: g.is_edit == t.is_edit, gold, test).percent
     r = Scorer(lambda g, t: g.label != 'discourse' and (not g.is_edit or g.label != 'erased'),
                  lambda g, t: g.is_edit == t.is_edit, gold, test).percent
     sbd_score = score_sbd(gold, test)
     if sbd_score is not None:
-        print 'SBD: %.3f' % sbd_score
-    print 'DIS P: %.2f' % p
-    print 'DIS R: %.2f' % r
-    print 'DIS F: %.2f' % ((2 * p * r) / (p + r))
+        results['SBD'] = sbd_score
+    results['DIS P'] = p
+    results['DIS R'] = r
+    results['DIS F'] = ((2 * p * r) / (p + r))
+    if out_loc is not None:
+        with open(out_loc, 'w') as file_:
+            json.dump(results, file_)
+    for result in ['UAS', 'LAS', 'SBD', 'DIS P', 'DIS R', 'DIS F']:
+        print '%s: %.3f' % (result, results[result])
 
 
 if __name__ == '__main__':
