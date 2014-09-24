@@ -87,6 +87,7 @@ cdef int left_cost(State* s, Token* gold):
     cost = 0
     if can_break(s):
         cost += gold[s.top].sent_id != gold[s.i].sent_id
+    # TODO: This is wrong!! What if s.top is an Edit, with fluent children??
     if gold[s.i].is_edit:
         return cost
     if not gold[s.i].is_edit and gold[s.top].is_edit:
