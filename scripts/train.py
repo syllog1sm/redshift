@@ -34,7 +34,7 @@ def main(train_loc, model_loc, n_iter=15,
         print "Using %d sents for training" % n_sents
         train_str = '\n\n'.join(train_str.split('\n\n')[:n_sents])
     redshift.parser.train(train_str.encode(codec), model_loc,
-        n_iter=n_iter,
+        n_iter=n_iter, seed=seed,
         beam_width=beam_width,
         feat_set=feat_set,
         feat_thresh=feat_thresh,

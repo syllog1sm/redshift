@@ -49,7 +49,7 @@ def set_debug(val):
 
 
 def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
-          feat_set='basic', feat_thresh=10,
+          feat_set='basic', feat_thresh=10, seed=0,
           use_edit=False, use_break=False, use_filler=False):
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
@@ -58,7 +58,7 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
                        train_str.strip().split('\n\n') if s.strip()]
     left_labels, right_labels, dfl_labels = get_labels(sents)
     Config.write(model_dir, 'config', beam_width=beam_width, features=feat_set,
-                 feat_thresh=feat_thresh,
+                 feat_thresh=feat_thresh, seed=seed,
                  left_labels=left_labels, right_labels=right_labels,
                  dfl_labels=dfl_labels, use_break=use_break)
     Config.write(model_dir, 'tagger', beam_width=4, features='basic',
