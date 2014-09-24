@@ -65,7 +65,7 @@ cdef class Tagger:
         if path.exists(path.join(model_dir, 'pos')):
             index.hashes.load_pos_idx(path.join(model_dir, 'pos'))
         nr_tag = index.hashes.get_nr_pos()
-        self.guide = LinearModel(nr_tag)
+        self.guide = LinearModel(nr_tag, self.extractor.nr_feat)
         if path.exists(path.join(model_dir, 'tagger.gz')):
             with open(path.join(model_dir, 'tagger.gz'), 'r') as file_:
                 self.guide.load(file_)
@@ -168,23 +168,15 @@ cdef class MaxViolnUpd:
                 continue
             fill_context(context, sent, gprev, gprevprev, i)
             extractor.extract(feats, context)
-            self._inc_feats(counts[gclas], feats, 1.0)
+            extractor.count(counts[g.clas], feats, 1.0)
             fill_context(context, sent, pprev, pprevprev, i)
             extractor.extract(feats, context)
-            self._inc_feats(counts[p.clas], feats, -1.0)
+            extractor.count(counts[p.clas], feats, -1.0)
             assert sent.tokens[i].word.norm == context[N0w]
             g = g.prev
             p = p.prev
             i -= 1
         return counts
-
-    cdef int _inc_feats(self, dict counts, uint64_t* feats, weight_t inc) except -1:
-        cdef size_t f = 0
-        while feats[f] != 0:
-            if feats[f] not in counts:
-                counts[feats[f]] = 0
-            counts[feats[f]] += inc
-            f += 1
 
 
 cdef enum:

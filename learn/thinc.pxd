@@ -55,12 +55,12 @@ cdef class LinearModel:
     cdef I n_corr
     cdef I total
     cdef Pool mem
-    cdef PointerMap weights
-    cdef PointerMap train_weights
+    cdef list weights
+    cdef list train_weights
     cdef ScoresCache cache
     cdef W* scores
 
-    cdef TrainFeat* new_feat(self, F feat_id) except NULL
+    cdef TrainFeat* new_feat(self, I template_id, F feat_id) except NULL
     cdef I gather_weights(self, WeightLine* w_lines, F* feat_ids, I nr_active) except *
     cdef int score(self, W* inplace, F* features, I nr_active) except -1
     cpdef int update(self, dict counts) except -1

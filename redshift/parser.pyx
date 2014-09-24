@@ -156,7 +156,7 @@ cdef class Parser:
         fill_moves(self.cfg.left_labels, self.cfg.right_labels, self.cfg.dfl_labels,
                    self.cfg.use_break, self.moves)
         
-        self.guide = LinearModel(self.nr_moves)
+        self.guide = LinearModel(self.nr_moves, self.extractor.nr_feat)
         if os.path.exists(pjoin(model_dir, 'model.gz')):
             with open(pjoin(model_dir, 'model.gz')) as file_:
                 self.guide.load(file_)

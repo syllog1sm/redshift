@@ -39,12 +39,16 @@ cdef class Extractor:
         self.nr_feat = self.nr_template + (self.nr_match * 2) + 2
 
     cdef int count(self, dict counts, uint64_t* features, double inc) except -1:
-        cdef size_t f = 0
-        while features[f] != 0:
-            if features[f] not in counts:
-                counts[features[f]] = 0
-            counts[features[f]] += inc
-            f += 1
+        cdef size_t template_id
+        cdef uint64_t feature
+        for template_id in range(self.nr_feat):
+            feature = features[template_id] 
+            if feature == 0:
+                continue
+            key = (template_id, feature)
+            if key not in counts:
+                counts[key] = 0
+            counts[key] += inc
 
     cdef int extract(self, uint64_t* features, size_t* context) except -1:
         cdef:
@@ -68,7 +72,9 @@ cdef class Extractor:
             if seen_non_zero:
                 pred.raws[pred.n] = pred.id
                 features[f] = hash64(pred.raws, sizeof(pred.raws), i)
-                f += 1
+            else:
+                features[f] = 0
+            f += 1
         cdef MatchPred* match_pred
         cdef size_t match_id
         for match_id in range(self.nr_match):
@@ -84,5 +90,9 @@ cdef class Extractor:
                 features[f] = hash64(match_pred.raws, sizeof(match_pred.raws),
                                      match_pred.id)
                 f += 1
-        features[f] = 0
-        return f
+            else:
+                features[f] = 0
+                f += 1
+                features[f] = 0
+                f += 1
+        return self.nr_feat
