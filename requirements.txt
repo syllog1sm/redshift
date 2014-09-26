@@ -1,7 +1,7 @@
 cython
 cymem
 murmurhash
-trustyc
+preshed
 humanize
 plac
 python-cjson

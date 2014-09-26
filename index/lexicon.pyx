@@ -36,7 +36,7 @@ def lexicon_size():
 cdef class Lexicon:
     def __cinit__(self, loc=None):
         self.mem = Pool()
-        self.words = PointerMap()
+        self.words = PreshMap()
         self.strings = {}
         cdef object line
         cdef size_t i, word_id, freq

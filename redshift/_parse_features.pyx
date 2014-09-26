@@ -635,17 +635,6 @@ arc_hybrid = (
     #(S0re_p, N0le_w)
 )
 
-extra_labels = (
-    (S0p, S0lL, S0lp),
-    (S0p, S0lL, S0l2L),
-    (S0p, S0rL, S0rp),
-    (S0p, S0rL, S0r2L),
-    (S0p, S0lL, S0rL),
-    (S0p, S0lL, S0l2L, S0l0L),
-    (S0p, S0rL, S0r2L, S0r0L),
-    (S1p, S0L, S0rL),
-    (S1p, S0L, S0lL),
-)
 
 label_sets = (
    (S0w, S0lL, S0l0L, S0l2L),

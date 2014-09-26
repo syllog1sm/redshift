@@ -9,6 +9,7 @@ from .util import Config
 from redshift.sentence cimport Input, Sentence
 from index.lexicon cimport Lexeme
 from cymem.cymem cimport Pool
+from preshed.maps cimport PreshMap
 
 from libc.stdint cimport uint64_t, int64_t
 from libcpp.queue cimport priority_queue
@@ -388,7 +389,7 @@ cdef class TaggerBeam:
         cdef TagState* s
         cdef TagState* prev
         cdef size_t addr
-        cdef PointerMap seen_equivs = PointerMap(self.k ** 2)
+        cdef PreshMap seen_equivs = PreshMap(self.k ** 2)
         self.bsize = 0
         while self.bsize < self.k and not next_moves.empty():
             data = next_moves.top()
