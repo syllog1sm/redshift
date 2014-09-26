@@ -2,6 +2,7 @@ from libc.stdint cimport uint64_t
 from libc.stdint cimport uint16_t
 
 from cymem.cymem cimport Pool
+
 from preshed.maps cimport PreshMap
 from preshed.maps cimport PreshMapArray
 from preshed.maps cimport MapStruct

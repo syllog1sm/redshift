@@ -116,7 +116,7 @@ cdef int average_weight(TrainFeat* feat, const C nr_class, const I time) except 
 
 
 cdef class LinearModel:
-    def __cinit__(self, nr_class, nr_templates):
+    def __init__(self, nr_class, nr_templates):
         self.total = 0
         self.n_corr = 0
         self.nr_class = nr_class
@@ -299,7 +299,7 @@ cdef class LinearModel:
 
 
 cdef class ScoresCache:
-    def __cinit__(self, size_t scores_size, size_t max_size=10000):
+    def __init__(self, size_t scores_size, size_t max_size=10000):
         self._cache = PreshMap()
         self._pool = Pool()
         self._arrays = <W**>self._pool.alloc(max_size, sizeof(W*))
