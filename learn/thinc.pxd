@@ -2,8 +2,10 @@ from libc.stdint cimport uint64_t
 from libc.stdint cimport uint16_t
 
 from cymem.cymem cimport Pool
-from trustyc.maps cimport PointerMap
-from trustyc.maps cimport Cell
+from preshed.maps cimport PreshMap
+from preshed.maps cimport PreshMapArray
+from preshed.maps cimport MapStruct
+from preshed.maps cimport Cell
 
 
 # Typedef numeric types, to make them easier to change and ensure consistency
@@ -42,7 +44,7 @@ cdef class ScoresCache:
     cdef Pool _pool
     cdef W** _arrays
     cdef W* _scores_if_full
-    cdef PointerMap _cache
+    cdef PreshMap _cache
     cdef size_t n_hit
     cdef size_t n_total
 
@@ -52,11 +54,12 @@ cdef class ScoresCache:
 cdef class LinearModel:
     cdef I time
     cdef C nr_class
+    cdef I nr_templates
     cdef I n_corr
     cdef I total
     cdef Pool mem
-    cdef list weights
-    cdef list train_weights
+    cdef PreshMapArray weights
+    cdef PreshMapArray train_weights
     cdef ScoresCache cache
     cdef W* scores
     cdef WeightLine* _weight_lines

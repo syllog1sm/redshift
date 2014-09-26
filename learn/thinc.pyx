@@ -120,10 +120,11 @@ cdef class LinearModel:
         self.total = 0
         self.n_corr = 0
         self.nr_class = nr_class
+        self.nr_templates = nr_templates
         self.time = 0
         self.cache = ScoresCache(nr_class)
-        self.weights = [PointerMap() for i in range(nr_templates)]
-        self.train_weights = [PointerMap() for i in range(nr_templates)]
+        self.weights = PreshMapArray(nr_templates)
+        self.train_weights = PreshMapArray(nr_templates)
         self.mem = Pool()
         self.scores = <W*>self.mem.alloc(self.nr_class, sizeof(W))
         self._weight_lines = <WeightLine*>self.mem.alloc(nr_class * nr_templates,
@@ -143,10 +144,8 @@ cdef class LinearModel:
 
     cdef TrainFeat* new_feat(self, I template_id, F feat_id) except NULL:
         cdef TrainFeat* feat = new_train_feat(self.mem, self.nr_class)
-        cdef PointerMap weights = self.weights[template_id]
-        cdef PointerMap train_weights = self.train_weights[template_id]
-        weights.set(feat_id, feat.weights)
-        train_weights.set(feat_id, feat)
+        self.weights.set(template_id, feat_id, feat.weights)
+        self.train_weights.set(template_id, feat_id, feat)
         return feat
 
     cdef I gather_weights(self, WeightLine* w_lines, F* feat_ids, I nr_active) except *:
@@ -154,7 +153,6 @@ cdef class LinearModel:
             W** feature
             F feat_id
             I template_id, row
-            PointerMap weights
         
         cdef I nr_rows = get_nr_rows(self.nr_class)
         cdef I f_i = 0
@@ -162,8 +160,7 @@ cdef class LinearModel:
             feat_id = feat_ids[template_id]
             if feat_id == 0:
                 continue
-            weights = self.weights[template_id]
-            feature = <W**>weights.get(feat_id)
+            feature = <W**>self.weights.get(template_id, feat_id)
             if feature != NULL:
                 for row in range(nr_rows):
                     if feature[row] != NULL:
@@ -184,7 +181,6 @@ cdef class LinearModel:
         cdef F feat_id
         cdef TrainFeat* feat
         cdef W upd
-        cdef PointerMap train_weights
         self.time += 1
         for clas, features in updates.items():
             row = get_row(clas)
@@ -193,8 +189,7 @@ cdef class LinearModel:
                 if upd == 0:
                     continue
                 assert feat_id != 0
-                train_weights = self.train_weights[template_id]
-                feat = <TrainFeat*>train_weights.get(feat_id)
+                feat = <TrainFeat*>self.train_weights.get(template_id, feat_id)
                 if feat == NULL:
                     feat = self.new_feat(template_id, feat_id)
                 if feat.weights[row] == NULL:
@@ -205,26 +200,24 @@ cdef class LinearModel:
                 update_weight(feat, clas, upd)
 
     def end_training(self):
+        cdef MapStruct* map_
         cdef size_t i
-        cdef PointerMap train_weights
-        for train_weights in self.train_weights:
-            for i in range(train_weights.size):
-                if train_weights.cells[i].key == 0:
+        for template_id in range(self.nr_templates):
+            map_ = &self.train_weights.maps[template_id]
+            for i in range(map_.length):
+                if map_.cells[i].key == 0:
                     continue
-                feat = <TrainFeat*>train_weights.cells[i].value
+                feat = <TrainFeat*>map_.cells[i].value
                 average_weight(feat, self.nr_class, self.time)
 
     def end_train_iter(self, iter_num, feat_thresh):
-        cdef PointerMap weights
-        cdef PointerMap train_weights
         pc = lambda a, b: '%.1f' % ((float(a) / (b + 1e-100)) * 100)
         acc = pc(self.n_corr, self.total)
 
         map_size = 0
-        for weights in self.weights:
-            map_size += weights.size * sizeof(Cell)
-        for train_weights in self.train_weights:
-            map_size += train_weights.size * sizeof(Cell)
+        for i in range(self.nr_templates):
+            map_size += self.weights.maps[i].length * sizeof(Cell)
+            map_size += self.train_weights.maps[i].length * sizeof(Cell)
         cache_str = '%s cache hit' % self.cache.utilization
         size_str = humanize.naturalsize(self.mem.size, gnu=True)
         size_str += ', ' + humanize.naturalsize(map_size, gnu=True)
@@ -239,11 +232,12 @@ cdef class LinearModel:
         cdef C row
         cdef I i
         cdef C nr_rows = get_nr_rows(self.nr_class)
-        cdef PointerMap weights
-        cdef PointerMap train_weights
-        for template_id, train_weights in enumerate(self.train_weights):
-            weights = self.weights[template_id]
-            for i in range(train_weights.size):
+        cdef MapStruct* train_weights
+        cdef MapStruct* weights
+        for template_id in range(self.nr_templates):
+            weights = &self.weights.maps[template_id]
+            train_weights = &self.train_weights.maps[template_id]
+            for i in range(train_weights.length):
                 if train_weights.cells[i].key == 0:
                     continue
                 feat_id = weights.cells[i].key
@@ -278,7 +272,6 @@ cdef class LinearModel:
         cdef bytes py_line
         cdef bytes token
         cdef W** feature
-        cdef PointerMap weights
         nr_rows = get_nr_rows(self.nr_class)
         nr_feats = 0
         nr_weights = 0
@@ -292,12 +285,11 @@ cdef class LinearModel:
             row = strtoul(token, NULL, 10)
             token = strtok(NULL, '\t')
             start = strtoul(token, NULL, 10)
-            weights = self.weights[template_id]
-            feature = <W**>weights.get(feat_id)
+            feature = <W**>self.weights.get(template_id, feat_id)
             if feature == NULL:
                 nr_feats += 1
                 feature = <W**>self.mem.alloc(nr_rows, sizeof(W*))
-                weights.set(feat_id, feature)
+                self.weights.set(template_id, feat_id, feature)
             feature[row] = <W*>self.mem.alloc(LINE_SIZE, sizeof(W))
             for col in range(LINE_SIZE):
                 token = strtok(NULL, '\t')
@@ -308,7 +300,7 @@ cdef class LinearModel:
 
 cdef class ScoresCache:
     def __cinit__(self, size_t scores_size, size_t max_size=10000):
-        self._cache = PointerMap()
+        self._cache = PreshMap()
         self._pool = Pool()
         self._arrays = <W**>self._pool.alloc(max_size, sizeof(W*))
         cdef size_t i
@@ -349,4 +341,4 @@ cdef class ScoresCache:
         self.i = 0
         self.n_hit = 0
         self.n_total = 0
-        self._cache = PointerMap(self._cache.size)
+        self._cache = PreshMap(self._cache.length)
