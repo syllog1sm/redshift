@@ -6,3 +6,4 @@ humanize
 plac
 python-cjson
 pytest
+thinc
