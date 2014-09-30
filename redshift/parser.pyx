@@ -18,15 +18,15 @@ from beam cimport Beam
 from tagger cimport Tagger
 from util import Config
 
-from features.extractor cimport Extractor
+from thinc.features.extractor cimport Extractor
 import _parse_features
 from _parse_features cimport *
 
 import index.hashes
 cimport index.hashes
 
-from learn.thinc cimport LinearModel
-from learn.thinc cimport W
+from thinc.ml.learner cimport LinearModel
+from thinc.ml.learner cimport W
 
 from libc.stdint cimport uint64_t, int64_t
 
@@ -62,7 +62,7 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
                  left_labels=left_labels, right_labels=right_labels,
                  dfl_labels=dfl_labels, use_break=use_break)
     Config.write(model_dir, 'tagger', beam_width=4, features='basic',
-                 feat_thresh=5)
+                 feat_thresh=5, tags={})
     parser = Parser(model_dir)
     indices = list(range(len(sents)))
     cdef Input py_sent
