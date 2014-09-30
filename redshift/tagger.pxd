@@ -40,11 +40,10 @@ cdef class TaggerBeam:
 cdef TagState* extend_state(TagState* s, size_t clas, weight_t* scores, size_t n,
                             Pool pool)
 
-cdef int fill_hist(Token* hist, TagState* s, int t) except -1
+cdef inline size_t get_p(TagState* s) nogil
 
-cdef size_t get_p(TagState* s)
+cdef inline size_t get_pp(TagState* s) nogil
 
-cdef size_t get_pp(TagState* s)
 
 cdef struct TagState:
     weight_t score

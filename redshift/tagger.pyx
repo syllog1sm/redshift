@@ -11,6 +11,9 @@ from index.lexicon cimport Lexeme
 from cymem.cymem cimport Pool
 from preshed.maps cimport PreshMap
 
+from ._tagger_features cimport fill_context
+from ._tagger_features import *
+
 from libc.stdint cimport uint64_t, int64_t
 from libcpp.queue cimport priority_queue
 from libcpp.utility cimport pair
@@ -59,7 +62,7 @@ cdef class Tagger:
         self.extractor = Extractor(basic + clusters + case + orth, [],
                                    bag_of_words=[])
         self._features = <uint64_t*>self._pool.alloc(self.extractor.nr_feat, sizeof(uint64_t))
-        self._context = <size_t*>self._pool.alloc(CONTEXT_SIZE, sizeof(size_t))
+        self._context = <size_t*>self._pool.alloc(context_size(), sizeof(size_t))
 
         self.beam_width = self.cfg.beam_width
 
@@ -87,7 +90,11 @@ cdef class Tagger:
                 self._predict(i, beam.parents[j], sent, self._beam_scores[j])
             beam.extend_states(self._beam_scores)
         s = <TagState*>beam.beam[0]
-        fill_hist(sent.tokens, s, sent.n - 1)
+        cdef int t = sent.n - 1
+        while t >= 1 and s.prev != NULL:
+            t -= 1
+            sent.tokens[t].tag = s.clas
+            s = s.prev
 
     cdef int train_sent(self, Input py_sent) except -1:
         cdef size_t  i, j 
@@ -173,187 +180,10 @@ cdef class MaxViolnUpd:
             fill_context(context, sent, pprev, pprevprev, i)
             extractor.extract(feats, context)
             extractor.count(counts[p.clas], feats, -1.0)
-            assert sent.tokens[i].word.norm == context[N0w]
             g = g.prev
             p = p.prev
             i -= 1
         return counts
-
-
-cdef enum:
-    P1p
-    P2p
-
-    N0w
-    N0c
-    N0c6
-    N0c4
-    N0pre
-    N0suff
-    N0title
-    N0upper
-    N0alpha
-
-    N1w
-    N1c
-    N1c6
-    N1c4
-    N1pre
-    N1suff
-    N1title
-    N1upper
-    N1alpha
-
-    N2w
-    N2c
-    N2c6
-    N2c4
-    N2pre
-    N2suff
-    N2title
-    N2upper
-    N2alpha
-
-    N3w
-    N3c
-    N3c6
-    N3c4
-    N3pre
-    N3suff
-    N3title
-    N3upper
-    N3alpha
-
-    P1w
-    P1c
-    P1c6
-    P1c4
-    P1pre
-    P1suff
-    P1title
-    P1upper
-    P1alpha
-
-    P2w
-    P2c
-    P2c6
-    P2c4
-    P2pre
-    P2suff
-    P2title
-    P2upper
-    P2alpha
-
-    CONTEXT_SIZE
-
-
-basic = (
-    (N0w,),
-    (N1w,),
-    (P1w,),
-    (P2w,),
-    (P1p,),
-    (P2p,),
-    (P1p, P2p),
-    (P1p, N0w),
-    (N0suff,),
-    (N1suff,),
-    (P1suff,),
-    (N2w,),
-    (N3w,),
-    (P1p,),
-)
-
-case = (
-    (N0title,),
-    (N0upper,),
-    (N0alpha,),
-    (N0title, N0suff),
-    (N0title, N0upper, N0alpha),
-    (P1title,),
-    (P1upper,),
-    (P1alpha,),
-    (N1title,),
-    (N1upper,),
-    (N1alpha,),
-    (P1title, N0title, N1title),
-    (P1p, N0title,),
-    (P1p, N0upper,),
-    (P1p, N0alpha,),
-    (P1title, N0w),
-    (P1upper, N0w),
-    (P1title, N0w, N1title),
-    (N0title, N0upper, N0c),
-)
-
-orth = (
-    (N0pre,),
-    (N1pre,),
-    (P1pre,),
-)
-
-clusters = (
-    (N0c,),
-    (N0c4,),
-    (N0c6,),
-    (P1c,),
-    (P1c4,),
-    (P1c6,),
-    (N1c,),
-    (N1c4,),
-    (N1c6,),
-    (N2c,),
-    (P1c, N0w),
-    (P1p, P1c6, N0w),
-    (P1c6, N0w),
-    (N0w, N1c),
-    (N0w, N1c6),
-    (N0w, N1c4),
-    (P2c4, P1c4, N0w)
-)
-
-
-cdef inline void fill_token(size_t* context, size_t i, Lexeme* word):
-    context[i] = word.norm
-    # We've read in the string little-endian, so now we can take & (2**n)-1
-    # to get the first n bits of the cluster.
-    # e.g. s = "1110010101"
-    # s = ''.join(reversed(s))
-    # first_4_bits = int(s, 2)
-    # print first_4_bits
-    # 5
-    # print "{0:b}".format(prefix).ljust(4, '0')
-    # 1110
-    # What we're doing here is picking a number where all bits are 1, e.g.
-    # 15 is 1111, 63 is 111111 and doing bitwise AND, so getting all bits in
-    # the source that are set to 1.
-    context[i+1] = word.cluster
-    context[i+2] = word.cluster & 63
-    context[i+3] = word.cluster & 15
-    context[i+4] = word.prefix
-    context[i+5] = word.suffix
-    context[i+6] = word.oft_title
-    context[i+7] = word.oft_upper
-    context[i+8] = word.non_alpha
-
-
-cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag,
-                      size_t i):
-    for j in range(CONTEXT_SIZE):
-        context[j] = 0
-    context[P1p] = ptag
-    context[P2p] = pptag
-    
-    fill_token(context, N0w, sent.tokens[i].word)
-    fill_token(context, N1w, sent.tokens[i+1].word)
-    if (i + 2) < sent.n:
-        fill_token(context, N2w, sent.tokens[i+2].word)
-    if (i + 3) < sent.n:
-        fill_token(context, N3w, sent.tokens[i+3].word)
-    if i >= 1:
-        fill_token(context, P1w, sent.tokens[i-1].word)
-    if i >= 2:
-        fill_token(context, P2w, sent.tokens[i-2].word)
 
 
 cdef class TaggerBeam:
@@ -427,23 +257,9 @@ cdef TagState* extend_state(TagState* s, size_t clas, weight_t* scores,
     return ext
 
 
-cdef int fill_hist(Token* tokens, TagState* s, int t) except -1:
-    while t >= 1 and s.prev != NULL:
-        t -= 1
-        tokens[t].tag = s.clas
-        s = s.prev
-
-cdef size_t get_p(TagState* s):
-    if s.prev == NULL:
-        return 0
-    else:
-        return s.prev.clas
+cdef inline size_t get_p(TagState* s) nogil:
+    return s.prev.clas if s.prev != NULL else 0
 
 
-cdef size_t get_pp(TagState* s):
-    if s.prev == NULL:
-        return 0
-    elif s.prev.prev == NULL:
-        return 0
-    else:
-        return s.prev.prev.clas
+cdef inline size_t get_pp(TagState* s) nogil:
+    return get_p(s.prev) if s.prev != NULL else 0
