@@ -1,6 +1,6 @@
-from features.extractor cimport Extractor
-from learn.thinc cimport LinearModel
-from learn.thinc cimport W as weight_t
+from thinc.features.extractor cimport Extractor
+from thinc.ml.learner cimport LinearModel
+from thinc.ml.learner cimport W as weight_t
 
 import index.hashes
 cimport index.hashes

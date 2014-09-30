@@ -1,10 +1,10 @@
-from features.extractor cimport Extractor
-from learn.thinc cimport LinearModel
+from thinc.features.extractor cimport Extractor
+from thinc.ml.learner cimport LinearModel
 from redshift.sentence cimport Input, Sentence, Token
 from cymem.cymem cimport Pool
 
 from libc.stdint cimport uint64_t, int64_t
-from learn.thinc cimport W as weight_t
+from thinc.ml.learner cimport W as weight_t
 
 
 cdef class Tagger:
