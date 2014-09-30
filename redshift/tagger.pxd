@@ -27,7 +27,7 @@ cdef class Tagger:
     cdef dict _count_feats(self, Sentence* sent, TagState* p, TagState* g, int i)
 
 
-cdef TagState* extend_state(TagState* s, size_t clas, weight_t* scores, size_t n,
+cdef TagState* extend_state(TagState* s, size_t clas, weight_t score, size_t cost,
                             Pool pool)
 
 cdef inline size_t get_p(TagState* s) nogil
