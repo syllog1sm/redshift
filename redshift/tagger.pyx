@@ -1,6 +1,7 @@
 from thinc.features.extractor cimport Extractor
 from thinc.ml.learner cimport LinearModel
 from thinc.ml.learner cimport W as weight_t
+from thinc.search.beam cimport MaxViolation
 
 import index.hashes
 cimport index.hashes
@@ -79,16 +80,18 @@ cdef class Tagger:
 
     cpdef int tag(self, Input py_sent) except -1:
         cdef Sentence* sent = py_sent.c_sent
-        cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.n, self.guide.nr_class)
+        cdef Beam beam = Beam(self.guide.nr_class, self.beam_width)
+        for i in range(self.beam_width):
+            beam.parents[i] = extend_state(NULL, 0, NULL, 0, self._pool)
         cdef size_t p_idx
         cdef TagState* s
         for i in range(sent.n - 1):
             # Extend beam
-            for j in range(beam.bsize):
+            for j in range(beam.size):
                 # At this point, beam.clas is the _last_ prediction, not the
                 # prediction for this instance
-                self._predict(i, beam.parents[j], sent, self._beam_scores[j])
-            beam.extend_states(self._beam_scores)
+                self._predict(i, <TagState*>beam.parents[j], sent, self._beam_scores[j])
+            beam_extend(beam, self._beam_scores)
         s = <TagState*>beam.states[0]
         cdef int t = sent.n - 1
         while t >= 1 and s.prev != NULL:
@@ -102,25 +105,32 @@ cdef class Tagger:
         cdef size_t nr_class = self.guide.nr_class
         cdef weight_t* scores = self.guide.scores
         cdef Pool tmp_mem = Pool()
-        cdef TaggerBeam beam = TaggerBeam(self.beam_width, sent.n, nr_class)
+        cdef Beam beam = Beam(self.guide.nr_class, self.beam_width)
+        for i in range(self.beam_width):
+            beam.parents[i] = extend_state(NULL, 0, NULL, 0, self._pool)
         cdef TagState* gold = extend_state(NULL, 0, NULL, 0, tmp_mem)
-        cdef MaxViolnUpd updater = MaxViolnUpd(nr_class)
+        cdef MaxViolation violn = MaxViolation()
+        cdef TagState* s
         for i in range(sent.n - 1):
             # Extend gold
             self._predict(i, gold, sent, scores)
             gold = extend_state(gold, sent.tokens[i].tag, scores, nr_class, tmp_mem)
             # Extend beam
-            for j in range(beam.bsize):
+            for j in range(beam.size):
                 # At this point, beam.clas is the _last_ prediction, not the
                 # prediction for this instance
-                self._predict(i, beam.parents[j], sent, self._beam_scores[j])
-            beam.extend_states(self._beam_scores)
-            updater.compare(beam.states[0], gold, i)
-            self.guide.n_corr += (gold.clas == beam.states[0].clas)
+                self._predict(i, <TagState*>beam.parents[j], sent, self._beam_scores[j])
+            beam_extend(beam, self._beam_scores)
+            for j in range(beam.size):
+                s = <TagState*>beam.states[j]
+                s.cost += s.clas != sent.tokens[i].tag
+            s = <TagState*>beam.states[0]
+            violn.check(s.cost, s.score, gold.score, s, gold, i)
+            self.guide.n_corr += (gold.clas == s.clas)
             self.guide.total += 1
-        if updater.delta != -1:
-            counts = updater.count_feats(self._features, self._context, sent,
-                                         self.extractor)
+        if violn.delta != -1:
+            counts = self._count_feats(sent, <TagState*>violn.pred, <TagState*>violn.gold,
+                                       violn.n)
             self.guide.update(counts)
 
     cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores):
@@ -128,37 +138,13 @@ cdef class Tagger:
         cdef size_t n = self.extractor.extract(self._features, self._context)
         self.guide.score(scores, self._features, n)
 
-
-cdef class MaxViolnUpd:
-    cdef TagState* pred
-    cdef TagState* gold
-    cdef Sentence* sent
-    cdef weight_t delta
-    cdef int length
-    cdef size_t nr_class
-    cdef size_t tmp
-    def __cinit__(self, size_t nr_class):
-        self.delta = -1
-        self.length = -1
-        self.nr_class = nr_class
-
-    cdef int compare(self, TagState* pred, TagState* gold, size_t i):
-        delta = pred.score - gold.score
-        if delta > self.delta:
-            self.delta = delta
-            self.pred = pred
-            self.gold = gold
-            self.length = i 
-
-    cdef dict count_feats(self, uint64_t* feats, size_t* context, Sentence* sent,
-                          Extractor extractor):
-        if self.length == -1:
+    cdef dict _count_feats(self, Sentence* sent, TagState* p, TagState* g, int i):
+        if i == -1:
             return {}
-        cdef TagState* g = self.gold
-        cdef TagState* p = self.pred
-        cdef int i = self.length
+        cdef uint64_t* feats = self._features
+        cdef size_t* context = self._context
         cdef dict counts = {}
-        for clas in range(self.nr_class):
+        for clas in range(self.guide.nr_class):
             counts[clas] = {} 
         cdef size_t gclas, gprev, gprevprev
         cdef size_t pclas, pprev, prevprev
@@ -175,49 +161,30 @@ cdef class MaxViolnUpd:
                 i -= 1
                 continue
             fill_context(context, sent, gprev, gprevprev, i)
-            extractor.extract(feats, context)
-            extractor.count(counts[g.clas], feats, 1.0)
+            self.extractor.extract(feats, context)
+            self.extractor.count(counts[g.clas], feats, 1.0)
             fill_context(context, sent, pprev, pprevprev, i)
-            extractor.extract(feats, context)
-            extractor.count(counts[p.clas], feats, -1.0)
+            self.extractor.extract(feats, context)
+            self.extractor.count(counts[p.clas], feats, -1.0)
             g = g.prev
             p = p.prev
             i -= 1
         return counts
 
 
-cdef class TaggerBeam:
-    def __cinit__(self, size_t k, size_t length, nr_tag=None):
-        self.nr_class = nr_tag
-        self.k = k
-        self.t = 0
-        self.bsize = 1
-        self.is_full = self.bsize >= self.k
-        self._pool = Pool()
-        self.beam = Beam(self.nr_class, k)
-        self.states = <TagState**>self._pool.alloc(k, sizeof(TagState*))
-        self.parents = <TagState**>self._pool.alloc(k, sizeof(TagState*))
-        cdef size_t i
-        for i in range(k):
-            self.parents[i] = extend_state(NULL, 0, NULL, 0, self._pool)
-
-    @cython.cdivision(True)
-    cdef int extend_states(self, weight_t** ext_scores) except -1:
-        self.beam.fill(ext_scores)
-        self.bsize = 0
-        cdef size_t i
-        cdef size_t clas
-        cdef TagState* prev
-        while self.bsize < self.k:
-            i, clas = self.beam.pop()
-            prev = self.parents[i]
-            self.states[self.bsize] = extend_state(prev, clas, ext_scores[i],
-                                                   self.nr_class, self._pool)
-            self.bsize += 1
-        for i in range(self.bsize):
-            self.parents[i] = self.states[i]
-        self.is_full = self.bsize >= self.k
-        self.t += 1
+cdef int beam_extend(Beam beam, weight_t** ext_scores) except -1:
+    beam.fill(ext_scores)
+    cdef size_t i
+    cdef size_t clas
+    cdef TagState* prev
+    beam.size = 0
+    while beam.size < beam.width:
+        i, clas = beam.pop()
+        prev = <TagState*>beam.parents[i]
+        ext = extend_state(prev, clas, ext_scores[i], beam.nr_class, beam.mem)
+        beam.states[beam.size] = ext
+        beam.size += 1
+    beam.parents, beam.states = beam.states, beam.parents
 
 
 cdef TagState* extend_state(TagState* s, size_t clas, weight_t* scores,
@@ -229,9 +196,11 @@ cdef TagState* extend_state(TagState* s, size_t clas, weight_t* scores,
     if s == NULL:
         ext.score = 0
         ext.length = 0
+        ext.cost = 0
     else:
         ext.score = s.score + scores[clas]
         ext.length = s.length + 1
+        ext.cost = s.cost
     return ext
 
 

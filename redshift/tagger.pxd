@@ -24,19 +24,7 @@ cdef class Tagger:
     cdef int train_sent(self, Input py_sent) except -1
 
     cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores)
-
-
-cdef class TaggerBeam:
-    cdef size_t nr_class
-    cdef size_t k
-    cdef size_t t
-    cdef size_t bsize
-    cdef bint is_full
-    cdef Beam beam
-    cdef TagState** states
-    cdef TagState** parents
-    cdef Pool _pool
-    cdef int extend_states(self, weight_t** scores) except -1
+    cdef dict _count_feats(self, Sentence* sent, TagState* p, TagState* g, int i)
 
 
 cdef TagState* extend_state(TagState* s, size_t clas, weight_t* scores, size_t n,
@@ -49,6 +37,7 @@ cdef inline size_t get_pp(TagState* s) nogil
 
 cdef struct TagState:
     weight_t score
+    int cost
     TagState* prev
     size_t clas
     size_t length
