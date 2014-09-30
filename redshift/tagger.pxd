@@ -3,6 +3,7 @@ from thinc.ml.learner cimport LinearModel
 from redshift.sentence cimport Input, Sentence, Token
 from cymem.cymem cimport Pool
 
+from thinc.search.beam cimport Beam
 from libc.stdint cimport uint64_t, int64_t
 from thinc.ml.learner cimport W as weight_t
 
@@ -31,7 +32,8 @@ cdef class TaggerBeam:
     cdef size_t t
     cdef size_t bsize
     cdef bint is_full
-    cdef TagState** beam
+    cdef Beam beam
+    cdef TagState** states
     cdef TagState** parents
     cdef Pool _pool
     cdef int extend_states(self, weight_t** scores) except -1

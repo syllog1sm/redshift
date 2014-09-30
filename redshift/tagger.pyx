@@ -89,7 +89,7 @@ cdef class Tagger:
                 # prediction for this instance
                 self._predict(i, beam.parents[j], sent, self._beam_scores[j])
             beam.extend_states(self._beam_scores)
-        s = <TagState*>beam.beam[0]
+        s = <TagState*>beam.states[0]
         cdef int t = sent.n - 1
         while t >= 1 and s.prev != NULL:
             t -= 1
@@ -115,8 +115,8 @@ cdef class Tagger:
                 # prediction for this instance
                 self._predict(i, beam.parents[j], sent, self._beam_scores[j])
             beam.extend_states(self._beam_scores)
-            updater.compare(beam.beam[0], gold, i)
-            self.guide.n_corr += (gold.clas == beam.beam[0].clas)
+            updater.compare(beam.states[0], gold, i)
+            self.guide.n_corr += (gold.clas == beam.states[0].clas)
             self.guide.total += 1
         if updater.delta != -1:
             counts = updater.count_feats(self._features, self._context, sent,
@@ -194,7 +194,8 @@ cdef class TaggerBeam:
         self.bsize = 1
         self.is_full = self.bsize >= self.k
         self._pool = Pool()
-        self.beam = <TagState**>self._pool.alloc(k, sizeof(TagState*))
+        self.beam = Beam(self.nr_class, k)
+        self.states = <TagState**>self._pool.alloc(k, sizeof(TagState*))
         self.parents = <TagState**>self._pool.alloc(k, sizeof(TagState*))
         cdef size_t i
         for i in range(k):
@@ -202,42 +203,19 @@ cdef class TaggerBeam:
 
     @cython.cdivision(True)
     cdef int extend_states(self, weight_t** ext_scores) except -1:
-        # Former states are now parents, beam will hold the extensions
-        cdef size_t i, clas, move_id
-        cdef weight_t parent_score, score
-        cdef weight_t* scores
-        cdef priority_queue[pair[weight_t, size_t]] next_moves
-        next_moves = priority_queue[pair[weight_t, size_t]]()
-        for i in range(self.bsize):
-            scores = ext_scores[i]
-            for clas in range(self.nr_class):
-                score = self.parents[i].score + scores[clas]
-                move_id = (i * self.nr_class) + clas
-                next_moves.push(pair[weight_t, size_t](score, move_id))
-        cdef pair[weight_t, size_t] data
-        # Apply extensions for best continuations
-        cdef TagState* s
-        cdef TagState* prev
-        cdef size_t addr
-        cdef PreshMap seen_equivs = PreshMap(self.k ** 2)
+        self.beam.fill(ext_scores)
         self.bsize = 0
-        while self.bsize < self.k and not next_moves.empty():
-            data = next_moves.top()
-            i = data.second / self.nr_class
-            clas = data.second % self.nr_class
+        cdef size_t i
+        cdef size_t clas
+        cdef TagState* prev
+        while self.bsize < self.k:
+            i, clas = self.beam.pop()
             prev = self.parents[i]
-            hashed = (clas * self.nr_class) + prev.clas
-            if seen_equivs.get(hashed):
-                next_moves.pop()
-                continue
-            seen_equivs.set(hashed, <void*>1)
-            self.beam[self.bsize] = extend_state(prev, clas, ext_scores[i],
-                                                 self.nr_class, self._pool)
-            addr = <size_t>self.beam[self.bsize]
-            next_moves.pop()
+            self.states[self.bsize] = extend_state(prev, clas, ext_scores[i],
+                                                   self.nr_class, self._pool)
             self.bsize += 1
         for i in range(self.bsize):
-            self.parents[i] = self.beam[i]
+            self.parents[i] = self.states[i]
         self.is_full = self.bsize >= self.k
         self.t += 1
 
