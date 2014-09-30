@@ -16,8 +16,6 @@ from ._tagger_features cimport fill_context
 from ._tagger_features import *
 
 from libc.stdint cimport uint64_t, int64_t
-from libcpp.queue cimport priority_queue
-from libcpp.utility cimport pair
 
 cimport cython
 import os
