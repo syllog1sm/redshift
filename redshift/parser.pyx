@@ -204,7 +204,7 @@ cdef class Parser:
         cdef Transition[1000] p_hist
         cdef Sentence* sent = py_sent.c_sent
         cdef Address tags_mem = Address(sent.n, sizeof(size_t))
-        cdef size_t* gold_tags = <size_t*>tags_mem.addr
+        cdef size_t* gold_tags = <size_t*>tags_mem.ptr
         for i in range(sent.n):
             gold_tags[i] = sent.tokens[i].tag
         if self.tagger:
