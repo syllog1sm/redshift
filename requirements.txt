@@ -1,5 +1,5 @@
 cython
-cymem
+cymem >= 0.8
 murmurhash
 preshed
 thinc
