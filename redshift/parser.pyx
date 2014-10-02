@@ -1,3 +1,4 @@
+# cython: profile=True
 """
 MALT-style dependency parser
 """
@@ -26,7 +27,6 @@ import index.hashes
 cimport index.hashes
 
 from thinc.ml.learner cimport LinearModel
-from thinc.ml.learner cimport W
 
 from libc.stdint cimport uint64_t, int64_t
 

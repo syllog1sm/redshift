@@ -1,6 +1,7 @@
+# cython: profile=True
 from thinc.features.extractor cimport Extractor
 from thinc.ml.learner cimport LinearModel
-from thinc.ml.learner cimport W as weight_t
+from thinc.ml.learner cimport weight_t
 from thinc.search.beam cimport MaxViolation
 
 import index.hashes

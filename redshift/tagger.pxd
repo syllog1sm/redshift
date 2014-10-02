@@ -5,7 +5,7 @@ from cymem.cymem cimport Pool
 
 from thinc.search.beam cimport Beam
 from libc.stdint cimport uint64_t, int64_t
-from thinc.ml.learner cimport W as weight_t
+from thinc.ml.learner cimport weight_t
 
 
 cdef class Tagger:
