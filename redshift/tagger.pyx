@@ -81,6 +81,7 @@ cdef class Tagger:
         cdef Beam beam = Beam(self.guide.nr_class, self.beam_width, sizeof(TagState))
         cdef size_t p_idx
         cdef TagState* s
+        cdef size_t i, j
         for i in range(sent.n - 1):
             # Extend beam
             for j in range(beam.size):
