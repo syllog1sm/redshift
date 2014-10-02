@@ -2,8 +2,8 @@ cython
 cymem
 murmurhash
 preshed
+thinc
 humanize
 plac
 python-cjson
 pytest
-thinc
