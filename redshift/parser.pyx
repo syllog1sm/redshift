@@ -130,8 +130,6 @@ cdef class Parser:
     cdef Extractor extractor
     cdef LinearModel guide
     cdef Tagger tagger
-    cdef size_t beam_width
-    cdef int feat_thresh
     cdef Transition* moves
     cdef uint64_t* _features
     cdef size_t* _context
@@ -145,9 +143,6 @@ cdef class Parser:
         self._features = <uint64_t*>self._pool.alloc(self.extractor.nr_feat, sizeof(uint64_t))
         self._context = <size_t*>self._pool.alloc(_parse_features.context_size(), sizeof(size_t))
 
-        self.feat_thresh = self.cfg.feat_thresh
-        self.beam_width = self.cfg.beam_width
- 
         if os.path.exists(pjoin(model_dir, 'labels')):
             index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
         self.nr_moves = get_nr_moves(self.cfg.left_labels, self.cfg.right_labels,
@@ -159,7 +154,7 @@ cdef class Parser:
         self.guide = LinearModel(self.nr_moves, self.extractor.nr_feat)
         if os.path.exists(pjoin(model_dir, 'model.gz')):
             with open(pjoin(model_dir, 'model.gz')) as file_:
-                self.guide.load(file_)
+                self.guide.load(file_, freq_thresh=0)
         if os.path.exists(pjoin(model_dir, 'pos')):
             index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
         self.tagger = Tagger(model_dir)
@@ -169,7 +164,7 @@ cdef class Parser:
         cdef size_t p_idx, i
         if self.tagger:
             self.tagger.tag(py_sent)
-        cdef Beam beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves,
+        cdef Beam beam = Beam(self.cfg.beam_width, <size_t>self.moves, self.nr_moves,
                               py_sent)
         self.guide.cache.flush()
         while not beam.is_finished:
@@ -209,8 +204,8 @@ cdef class Parser:
             gold_tags[i] = sent.tokens[i].tag
         if self.tagger:
             self.tagger.tag(py_sent)
-        g_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
-        p_beam = Beam(self.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+        g_beam = Beam(self.cfg.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
+        p_beam = Beam(self.cfg.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
         cdef Token* gold_parse = sent.tokens
         cdef double delta = 0
         cdef double max_violn = -1
