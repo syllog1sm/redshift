@@ -27,12 +27,12 @@ cdef class Beam:
         self.k = k
         self.i = 0
         self.is_finished = False
-        cdef size_t i
         self._pool = Pool()
         self.parents = <State**>self._pool.alloc(k, sizeof(State*))
         self.beam = <State**>self._pool.alloc(k, sizeof(State*))
         self.moves = <Transition**>self._pool.alloc(k, sizeof(Transition*))
         cdef Transition* moves = <Transition*>moves_addr
+        cdef size_t i, j
         for i in range(k):
             self.parents[i] = init_state(py_sent.c_sent, self._pool)
             self.beam[i] = init_state(py_sent.c_sent, self._pool)
