@@ -44,7 +44,7 @@ cdef class Beam:
                 self.moves[i][j].label = moves[j].label
                 self.moves[i][j].is_valid = True
                 self.moves[i][j].score = 0
-                self.moves[i][j].cost == 0
+                self.moves[i][j].cost = 0
         self.bsize = 1
         self.psize = 0
         self.t = 0
