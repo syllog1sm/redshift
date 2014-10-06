@@ -4,6 +4,8 @@ from thinc.ml.learner cimport LinearModel
 from thinc.ml.learner cimport weight_t
 from thinc.search.beam cimport MaxViolation
 
+from thinc.features.extractor cimport feat_t
+
 import index.hashes
 cimport index.hashes
 from .util import Config
@@ -16,7 +18,7 @@ from preshed.maps cimport PreshMap
 from ._tagger_features cimport fill_context
 from ._tagger_features import *
 
-from libc.stdint cimport uint64_t, int64_t
+from thinc.features.extractor cimport feat_t
 
 cimport cython
 import os
@@ -61,7 +63,6 @@ cdef class Tagger:
         self._pool = Pool()
         self.extractor = Extractor(basic + clusters + case + orth, [],
                                    bag_of_words=[])
-        self._features = <uint64_t*>self._pool.alloc(self.extractor.nr_feat, sizeof(uint64_t))
         self._context = <size_t*>self._pool.alloc(context_size(), sizeof(size_t))
 
         self.beam_width = self.cfg.beam_width
@@ -83,7 +84,7 @@ cdef class Tagger:
         cdef size_t p_idx
         cdef TagState* s
         cdef size_t i, j
-        for i in range(sent.n - 1):
+        for i in range(<int>sent.n - 1):
             # Extend beam
             for j in range(beam.size):
                 # At this point, beam.clas is the _last_ prediction, not the
@@ -91,7 +92,7 @@ cdef class Tagger:
                 self._predict(i, <TagState*>beam.parents[j], sent, self._beam_scores[j])
             beam_extend(beam, self._beam_scores, 0)
         s = <TagState*>beam.states[0]
-        cdef int t = sent.n - 1
+        cdef int t = <int>sent.n - 1
         while t >= 1 and s.prev != NULL:
             t -= 1
             sent.tokens[t].tag = s.clas
@@ -125,17 +126,17 @@ cdef class Tagger:
         if violn.delta != -1:
             counts = self._count_feats(sent, <TagState*>violn.pred,
                                        <TagState*>violn.gold, violn.n)
+            # TODO: Update guide even when no violation, to tick time
             self.guide.update(counts)
 
-    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores):
+    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores) except -1:
         fill_context(self._context, sent, s.clas, get_p(s), i)
-        cdef size_t n = self.extractor.extract(self._features, self._context)
-        self.guide.score(scores, self._features, n)
+        cdef feat_t* feats = self.extractor.extract(self._context)
+        self.guide.score(scores, feats, self.extractor.nr_feat)
 
     cdef dict _count_feats(self, Sentence* sent, TagState* p, TagState* g, int i):
         if i == -1:
             return {}
-        cdef uint64_t* feats = self._features
         cdef size_t* context = self._context
         cdef dict counts = {}
         for clas in range(self.guide.nr_class):
@@ -155,10 +156,10 @@ cdef class Tagger:
                 i -= 1
                 continue
             fill_context(context, sent, gprev, gprevprev, i)
-            self.extractor.extract(feats, context)
+            feats = self.extractor.extract(context)
             self.extractor.count(counts[g.clas], feats, 1.0)
             fill_context(context, sent, pprev, pprevprev, i)
-            self.extractor.extract(feats, context)
+            feats = self.extractor.extract(context)
             self.extractor.count(counts[p.clas], feats, -1.0)
             g = g.prev
             p = p.prev

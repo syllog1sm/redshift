@@ -7,6 +7,8 @@ from thinc.search.beam cimport Beam
 from libc.stdint cimport uint64_t, int64_t
 from thinc.ml.learner cimport weight_t
 
+from thinc.features.extractor cimport feat_t
+
 
 cdef class Tagger:
     cdef object cfg
@@ -17,13 +19,12 @@ cdef class Tagger:
     cdef size_t beam_width
 
     cdef size_t* _context
-    cdef uint64_t* _features
     cdef weight_t** _beam_scores
 
     cpdef int tag(self, Input py_sent) except -1
     cdef int train_sent(self, Input py_sent) except -1
 
-    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores)
+    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores) except -1
     cdef dict _count_feats(self, Sentence* sent, TagState* p, TagState* g, int i)
 
 

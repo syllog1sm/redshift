@@ -20,6 +20,7 @@ from tagger cimport Tagger
 from util import Config
 
 from thinc.features.extractor cimport Extractor
+from thinc.features.extractor cimport feat_t
 import _parse_features
 from _parse_features cimport *
 
@@ -27,8 +28,6 @@ import index.hashes
 cimport index.hashes
 
 from thinc.ml.learner cimport LinearModel
-
-from libc.stdint cimport uint64_t, int64_t
 
 
 include "compile_time_options.pxi"
@@ -131,7 +130,6 @@ cdef class Parser:
     cdef LinearModel guide
     cdef Tagger tagger
     cdef Transition* moves
-    cdef uint64_t* _features
     cdef size_t* _context
     cdef size_t nr_moves
 
@@ -140,7 +138,6 @@ cdef class Parser:
         self.cfg = Config.read(model_dir, 'config')
         self.extractor = Extractor(*get_templates(self.cfg.features))
         self._pool = Pool()
-        self._features = <uint64_t*>self._pool.alloc(self.extractor.nr_feat, sizeof(uint64_t))
         self._context = <size_t*>self._pool.alloc(_parse_features.context_size(), sizeof(size_t))
 
         if os.path.exists(pjoin(model_dir, 'labels')):
@@ -186,8 +183,8 @@ cdef class Parser:
         scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
         if not cache_hit:
             fill_context(self._context, &s.slots, s.parse)
-            nr_active = self.extractor.extract(self._features, self._context)
-            self.guide.score(scores, self._features, nr_active)
+            feats = self.extractor.extract(self._context)
+            self.guide.score(scores, feats, self.extractor.nr_feat)
         fill_valid(s, classes, self.nr_moves)
         cdef size_t i
         for i in range(self.nr_moves):
@@ -252,7 +249,7 @@ cdef class Parser:
     cdef dict _count_feats(self, Sentence* sent, size_t pt, size_t gt,
                            Transition* phist, Transition* ghist):
         cdef size_t d, i, f
-        cdef uint64_t* feats
+        cdef feat_t* feats
         cdef size_t clas
         cdef Pool tmp_pool = Pool()
         cdef State* gold_state = init_state(sent, tmp_pool)
@@ -261,6 +258,7 @@ cdef class Parser:
         for clas in range(self.nr_moves):
             counts[clas] = {}
         cdef bint seen_diff = False
+
         for i in range(max((pt, gt))):
             # Find where the states diverge
             if not seen_diff and ghist[i].clas == phist[i].clas:
@@ -271,13 +269,13 @@ cdef class Parser:
             if i < gt:
                 fill_slots(gold_state)
                 fill_context(self._context, &gold_state.slots, gold_state.parse)
-                self.extractor.extract(self._features, self._context)
-                self.extractor.count(counts[ghist[i].clas], self._features, 1.0)
+                feats = self.extractor.extract(self._context)
+                self.extractor.count(counts[ghist[i].clas], feats, 1.0)
                 transition(&ghist[i], gold_state)
             if i < pt:
                 fill_slots(pred_state)
                 fill_context(self._context, &pred_state.slots, pred_state.parse)
-                self.extractor.extract(self._features, self._context)
-                self.extractor.count(counts[phist[i].clas], self._features, -1.0)
+                feats = self.extractor.extract(self._context)
+                self.extractor.count(counts[phist[i].clas], feats, -1.0)
                 transition(&phist[i], pred_state)
         return counts
