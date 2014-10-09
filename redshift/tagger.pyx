@@ -4,8 +4,6 @@ from thinc.ml.learner cimport LinearModel
 from thinc.ml.learner cimport weight_t
 from thinc.search.beam cimport MaxViolation
 
-from thinc.features.extractor cimport feat_t
-
 import index.hashes
 cimport index.hashes
 from .util import Config
@@ -26,6 +24,8 @@ from os import path
 import random
 import shutil
 
+
+from thinc.ml.learner cimport class_t
 
 def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
           feat_thresh=10):
@@ -71,8 +71,11 @@ cdef class Tagger:
             index.hashes.load_pos_idx(path.join(model_dir, 'pos'))
         nr_tag = index.hashes.get_nr_pos()
         self.guide = LinearModel(nr_tag, self.extractor.nr_feat)
-        if path.exists(path.join(model_dir, 'tagger.gz')):
-            with open(path.join(model_dir, 'tagger.gz'), 'r') as file_:
+        if path.exists(path.join(model_dir, 'tagger_feats.gz')):
+            with open(path.join(model_dir, 'tagger_feats.gz')) as file_:
+                self.extractor.trie.load(file_)
+        if path.exists(path.join(model_dir, 'tagger_model.gz')):
+            with open(path.join(model_dir, 'tagger_model.gz'), 'r') as file_:
                 self.guide.load(file_)
         self._beam_scores = <weight_t**>self._pool.alloc(self.beam_width, sizeof(weight_t*))
         for i in range(self.beam_width):
@@ -99,9 +102,9 @@ cdef class Tagger:
             s = s.prev
 
     cdef int train_sent(self, Input py_sent) except -1:
-        cdef size_t  i, j 
+        cdef class_t  i, j 
         cdef Sentence* sent = py_sent.c_sent
-        cdef size_t nr_class = self.guide.nr_class
+        cdef class_t nr_class = self.guide.nr_class
         cdef weight_t* scores = self.guide.scores
         cdef Pool tmp_mem = Pool()
         cdef Beam beam = Beam(self.guide.nr_class, self.beam_width, sizeof(TagState))
@@ -132,7 +135,7 @@ cdef class Tagger:
     cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores) except -1:
         fill_context(self._context, sent, s.clas, get_p(s), i)
         cdef feat_t* feats = self.extractor.extract(self._context)
-        self.guide.score(scores, feats, self.extractor.nr_feat)
+        self.guide.score(scores, feats)
 
     cdef dict _count_feats(self, Sentence* sent, TagState* p, TagState* g, int i):
         if i == -1:
@@ -143,6 +146,7 @@ cdef class Tagger:
             counts[clas] = {} 
         cdef size_t gclas, gprev, gprevprev
         cdef size_t pclas, pprev, prevprev
+        cdef feat_t* feats
         while g != NULL and p != NULL and i >= 0:
             gclas = g.clas
             gprev = get_p(g)
@@ -183,7 +187,7 @@ cdef int beam_extend(Beam beam, weight_t** ext_scores, size_t gold) except -1:
         beam.parents[i] = beam.states[i]
 
 
-cdef TagState* extend_state(TagState* s, size_t clas, weight_t score, size_t cost,
+cdef TagState* extend_state(TagState* s, size_t clas, weight_t score, int cost,
                              Pool pool):
     ext = <TagState*>pool.alloc(1, sizeof(TagState))
     ext.prev = s

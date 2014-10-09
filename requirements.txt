@@ -7,3 +7,5 @@ humanize
 plac
 python-cjson
 pytest
+fabric
+fabtools

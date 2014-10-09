@@ -72,12 +72,22 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
             parser.train_sent(py_sent)
         print(parser.guide.end_train_iter(n, feat_thresh) + '\t' +
               parser.tagger.guide.end_train_iter(n, feat_thresh))
+        #parser.extractor.trie.revalue(
+        #    parser.guide.sort_by_freqs()
+        #)
+        #parser.tagger.extractor.revalue(
+        #    parser.tagger.guide.sort_by_freqs()
+        #)
         random.shuffle(indices)
     parser.guide.end_training()
     parser.tagger.guide.end_training()
-    with open(pjoin(model_dir, 'model.gz'), 'w') as file_:
+    with open(pjoin(model_dir, 'parser_feats.gz'), 'w') as file_:
+        parser.extractor.trie.dump(file_)
+    with open(pjoin(model_dir, 'tagger_feats.gz'), 'w') as file_:
+        parser.tagger.extractor.trie.dump(file_)
+    with open(pjoin(model_dir, 'parser_model.gz'), 'w') as file_:
         parser.guide.dump(file_, freq_thresh=2)
-    with open(pjoin(model_dir, 'tagger.gz'), 'w') as file_:
+    with open(pjoin(model_dir, 'tagger_model.gz'), 'w') as file_:
         parser.tagger.guide.dump(file_, freq_thresh=2)
     index.hashes.save_pos_idx(pjoin(model_dir, 'pos'))
     index.hashes.save_label_idx(pjoin(model_dir, 'labels'))
@@ -133,7 +143,7 @@ cdef class Parser:
     cdef size_t* _context
     cdef size_t nr_moves
 
-    def __cinit__(self, model_dir):
+    def __init__(self, model_dir):
         assert os.path.exists(model_dir) and os.path.isdir(model_dir)
         self.cfg = Config.read(model_dir, 'config')
         self.extractor = Extractor(*get_templates(self.cfg.features))
@@ -149,9 +159,15 @@ cdef class Parser:
                    self.cfg.use_break, self.moves)
         
         self.guide = LinearModel(self.nr_moves, self.extractor.nr_feat)
-        if os.path.exists(pjoin(model_dir, 'model.gz')):
-            with open(pjoin(model_dir, 'model.gz')) as file_:
+        print "Load model"
+        if os.path.exists(pjoin(model_dir, 'parser_model.gz')):
+            with open(pjoin(model_dir, 'parser_model.gz')) as file_:
                 self.guide.load(file_, freq_thresh=0)
+        print "Load feats"
+        if os.path.exists(pjoin(model_dir, 'parser_feats.gz')):
+            with open(pjoin(model_dir, 'parser_feats.gz')) as file_:
+                self.extractor.trie.load(file_)
+
         if os.path.exists(pjoin(model_dir, 'pos')):
             index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
         self.tagger = Tagger(model_dir)
@@ -179,12 +195,13 @@ cdef class Parser:
         if is_final(s):
             return 0
         cdef bint cache_hit = False
+        cdef feat_t* feats
         fill_slots(s)
         scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
         if not cache_hit:
             fill_context(self._context, &s.slots, s.parse)
             feats = self.extractor.extract(self._context)
-            self.guide.score(scores, feats, self.extractor.nr_feat)
+            self.guide.score(scores, feats)
         fill_valid(s, classes, self.nr_moves)
         cdef size_t i
         for i in range(self.nr_moves):
