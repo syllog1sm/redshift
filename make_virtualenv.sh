@@ -10,9 +10,9 @@ mkdir $HERE/.python
 make
 make install
 cd /tmp
-wget --no-check-certificate https://pypi.python.org/packages/source/v/virtualenv/virtualenv-1.5.2.tar.gz
-tar -zxvf virtualenv-1.5.2.tar.gz
-cd virtualenv-1.5.2/
+wget --no-check-certificate https://pypi.python.org/packages/source/v/virtualenv/virtualenv-1.11.6.tar.gz
+tar -zxvf virtualenv-1.11.6.tar.gz
+cd virtualenv-1.11.6/
 $HERE/.python/bin/python setup.py install
 cd $HERE
-$HERE/.python/bin/python /tmp/virtualenv-1.5.2/virtualenv.py .env -p $HERE/.python/bin/python2.7
+$HERE/.python/bin/python /tmp/virtualenv-1.11.6/virtualenv.py .env -p $HERE/.python/bin/python2.7
