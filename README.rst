@@ -83,6 +83,8 @@ The make_virtualenv.sh script downloads and compiles Python 2.7.5, and uses it t
 virtualenv is not a requirement, although it's useful.  If a virtualenv is not active (i.e. if the $VIRTUALENV
 environment variable is not set), you'll need to ensure that the setup.py file knows where to find the C headers that the murmurhash dependency installs.
 
+Installation requires a recent version of pip, which is provided by the version of virtualenv that the make_virtualenv.sh script downloads. If you don't use the make_virtualenv.sh script, ensure you're using a recent version of pip.
+
 Cython
 ------
 
