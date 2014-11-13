@@ -99,6 +99,7 @@ distutils.core.setup(
     license='Trial. Contact for full commercial license',
     name='redshift-parser',
     packages=['redshift', 'index'],
+    package_data={'redshift': ['*.pxd'], 'index': ['*.pxd', 'english.case', 'bllip-clusters']},
     author='Matthew Honnibal',
     author_email='honnibal@gmail.com',
     version='1.0',
