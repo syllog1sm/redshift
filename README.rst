@@ -70,7 +70,12 @@ The following commands will set up a virtualenv with Python 2.7.5, the parser, a
     $ git clone https://github.com/syllog1sm/redshift.git
     $ cd redshift
     $ git checkout develop
-    $ ./make_virtualenv.sh # Downloads Python 2.7.5 and virtualenv
+    
+    **EITHER**
+    a) $ virtualenv .env
+    **OR**
+    b) $ ./make_virtualenv.sh # Downloads Python 2.7.5 and virtualenv
+    
     $ source .env/bin/activate
     $ pip install distribute
     $ pip install cython
