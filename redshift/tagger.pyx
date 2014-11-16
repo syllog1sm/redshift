@@ -66,8 +66,8 @@ cdef class Tagger:
             index.hashes.load_pos_idx(path.join(model_dir, 'pos'))
         nr_tag = index.hashes.get_nr_pos()
         self.guide = LinearModel(nr_tag)
-        if path.exists(path.join(model_dir, 'tagger.gz')):
-            self.guide.load(path.join(model_dir, 'tagger.gz'))
+        if path.exists(path.join(model_dir, 'tagger')):
+            self.guide.load(path.join(model_dir, 'tagger'))
         self._beam_scores = <weight_t**>self._pool.alloc(self.beam_width, sizeof(weight_t*))
         for i in range(self.beam_width):
             self._beam_scores[i] = <weight_t*>self._pool.alloc(nr_tag, sizeof(weight_t))
@@ -89,7 +89,7 @@ cdef class Tagger:
         cdef int t = sent.n - 1
         while t >= 1 and s.prev != NULL:
             t -= 1
-            sent.tokens[t].tag = s.clas
+            sent.tokens[t].tag = s.clas+1
             s = s.prev
 
     cdef int train_sent(self, Input py_sent) except -1:
@@ -135,8 +135,8 @@ cdef class Tagger:
         cdef weight_t* values = self._values
         cdef atom_t* context = self._context
         cdef dict counts = {}
-        for clas in range(1, self.guide.nr_class):
-            counts[clas] = {} 
+        for clas in range(self.guide.nr_class):
+            counts[clas+1] = {} 
         cdef size_t gclas, gprev, gprevprev
         cdef size_t pclas, pprev, prevprev
         while g != NULL and p != NULL and i >= 1:
@@ -155,10 +155,10 @@ cdef class Tagger:
                 continue
             fill_context(context, sent, gprev, gprevprev, i)
             self.extractor.extract(feats, values, context, NULL)
-            self.extractor.count(counts[g.clas], feats, 1.0)
+            self.extractor.count(counts[g.clas+1], feats, 1.0)
             fill_context(context, sent, pprev, pprevprev, i)
             self.extractor.extract(feats, values, context, NULL)
-            self.extractor.count(counts[p.clas], feats, -1.0)
+            self.extractor.count(counts[p.clas+1], feats, -1.0)
             g = g.prev
             p = p.prev
             i -= 1
