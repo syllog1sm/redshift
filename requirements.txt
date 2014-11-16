@@ -2,7 +2,7 @@ cython
 cymem >= 0.8
 murmurhash
 preshed
-thinc >= 1.2
+thinc == 1.3
 humanize
 plac
 python-cjson
