@@ -1,11 +1,11 @@
-from thinc.features.extractor cimport Extractor
-from thinc.ml.learner cimport LinearModel
+from thinc.features cimport Extractor
+from thinc.learner cimport LinearModel
 from redshift.sentence cimport Input, Sentence, Token
 from cymem.cymem cimport Pool
 
-from thinc.search.beam cimport Beam
-from libc.stdint cimport uint64_t, int64_t
-from thinc.ml.learner cimport weight_t
+from thinc.search cimport Beam, MaxViolation
+from thinc.typedefs cimport atom_t, feat_t, weight_t
+
 
 
 cdef class Tagger:
@@ -16,8 +16,9 @@ cdef class Tagger:
     cdef object model_dir
     cdef size_t beam_width
 
-    cdef size_t* _context
-    cdef uint64_t* _features
+    cdef atom_t* _context
+    cdef feat_t* _features
+    cdef weight_t* _values
     cdef weight_t** _beam_scores
 
     cpdef int tag(self, Input py_sent) except -1

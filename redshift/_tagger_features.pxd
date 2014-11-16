@@ -1,5 +1,8 @@
 from redshift.sentence cimport Sentence
 
-cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag,
+from thinc.typedefs cimport atom_t
+
+
+cdef int fill_context(atom_t* context, Sentence* sent, size_t ptag, size_t pptag,
                       size_t i)
 

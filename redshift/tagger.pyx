@@ -1,8 +1,4 @@
 # cython: profile=True
-from thinc.features.extractor cimport Extractor
-from thinc.ml.learner cimport LinearModel
-from thinc.ml.learner cimport weight_t
-from thinc.search.beam cimport MaxViolation
 
 import index.hashes
 cimport index.hashes
@@ -15,6 +11,7 @@ from preshed.maps cimport PreshMap
 
 from ._tagger_features cimport fill_context
 from ._tagger_features import *
+from thinc.features cimport ConjFeat
 
 from libc.stdint cimport uint64_t, int64_t
 
@@ -49,8 +46,7 @@ def train(train_str, model_dir, beam_width=4, features='basic', nr_iter=10,
         tagger.guide.end_train_iter(n, feat_thresh)
         random.shuffle(indices)
     tagger.guide.end_training()
-    with open(path.join(model_dir, 'tagger.gz'), 'w') as file_:
-        tagger.guide.dump(file_)
+    tagger.guide.dump(path.join(model_dir, 'tagger'))
     index.hashes.save_pos_idx(path.join(model_dir, 'pos'))
     return tagger
 
@@ -59,20 +55,19 @@ cdef class Tagger:
     def __init__(self, model_dir):
         self.cfg = Config.read(model_dir, 'tagger')
         self._pool = Pool()
-        self.extractor = Extractor(basic + clusters + case + orth, [],
-                                   bag_of_words=[])
-        self._features = <uint64_t*>self._pool.alloc(self.extractor.nr_feat, sizeof(uint64_t))
-        self._context = <size_t*>self._pool.alloc(context_size(), sizeof(size_t))
+        templates = basic + clusters + case + orth
+        self.extractor = Extractor(templates, [ConjFeat for _ in templates])
+        self._features = <feat_t*>self._pool.alloc(len(templates), sizeof(feat_t))
+        self._context = <atom_t*>self._pool.alloc(context_size(), sizeof(atom_t))
 
         self.beam_width = self.cfg.beam_width
 
         if path.exists(path.join(model_dir, 'pos')):
             index.hashes.load_pos_idx(path.join(model_dir, 'pos'))
         nr_tag = index.hashes.get_nr_pos()
-        self.guide = LinearModel(nr_tag, self.extractor.nr_feat)
+        self.guide = LinearModel(nr_tag)
         if path.exists(path.join(model_dir, 'tagger.gz')):
-            with open(path.join(model_dir, 'tagger.gz'), 'r') as file_:
-                self.guide.load(file_)
+            self.guide.load(path.join(model_dir, 'tagger.gz'))
         self._beam_scores = <weight_t**>self._pool.alloc(self.beam_width, sizeof(weight_t*))
         for i in range(self.beam_width):
             self._beam_scores[i] = <weight_t*>self._pool.alloc(nr_tag, sizeof(weight_t))
@@ -107,7 +102,7 @@ cdef class Tagger:
         cdef TagState* gold = <TagState*>tmp_mem.alloc(1, sizeof(TagState))
         cdef MaxViolation violn = MaxViolation()
         cdef TagState* s
-        for i in range(sent.n - 1):
+        for i in range(1, sent.n - 1):
             # Extend gold
             self._predict(i, gold, sent, scores)
             gold = extend_state(gold, sent.tokens[i].tag, scores[sent.tokens[i].tag],
@@ -129,24 +124,28 @@ cdef class Tagger:
 
     cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores):
         fill_context(self._context, sent, s.clas, get_p(s), i)
-        cdef size_t n = self.extractor.extract(self._features, self._context)
-        self.guide.score(scores, self._features, n)
+        cdef size_t n = self.extractor.extract(self._features, self._values,
+                                               self._context, NULL)
+        self.guide.score(scores, self._features, self._values)
 
     cdef dict _count_feats(self, Sentence* sent, TagState* p, TagState* g, int i):
         if i == -1:
             return {}
-        cdef uint64_t* feats = self._features
-        cdef size_t* context = self._context
+        cdef feat_t* feats = self._features
+        cdef weight_t* values = self._values
+        cdef atom_t* context = self._context
         cdef dict counts = {}
-        for clas in range(self.guide.nr_class):
+        for clas in range(1, self.guide.nr_class):
             counts[clas] = {} 
         cdef size_t gclas, gprev, gprevprev
         cdef size_t pclas, pprev, prevprev
-        while g != NULL and p != NULL and i >= 0:
+        while g != NULL and p != NULL and i >= 1:
             gclas = g.clas
             gprev = get_p(g)
             gprevprev = get_pp(g)
             pclas = p.clas
+            assert gclas != 0
+            assert pclas != 0
             pprev = get_p(p)
             pprevprev = get_pp(p)
             if gclas == pclas and pprev == gprev and gprevprev == pprevprev:
@@ -155,10 +154,10 @@ cdef class Tagger:
                 i -= 1
                 continue
             fill_context(context, sent, gprev, gprevprev, i)
-            self.extractor.extract(feats, context)
+            self.extractor.extract(feats, values, context, NULL)
             self.extractor.count(counts[g.clas], feats, 1.0)
             fill_context(context, sent, pprev, pprevprev, i)
-            self.extractor.extract(feats, context)
+            self.extractor.extract(feats, values, context, NULL)
             self.extractor.count(counts[p.clas], feats, -1.0)
             g = g.prev
             p = p.prev

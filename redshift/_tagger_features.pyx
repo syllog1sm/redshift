@@ -70,7 +70,7 @@ def context_size():
     return CONTEXT_SIZE
 
 
-cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag,
+cdef int fill_context(atom_t* context, Sentence* sent, size_t ptag, size_t pptag,
                       size_t i):
     for j in range(CONTEXT_SIZE):
         context[j] = 0
@@ -89,7 +89,7 @@ cdef int fill_context(size_t* context, Sentence* sent, size_t ptag, size_t pptag
         fill_token(context, P2w, sent.tokens[i-2].word)
 
 
-cdef inline void fill_token(size_t* context, size_t i, Lexeme* word):
+cdef inline void fill_token(atom_t* context, size_t i, Lexeme* word):
     context[i] = word.norm
     # We've read in the string little-endian, so now we can take & (2**n)-1
     # to get the first n bits of the cluster.

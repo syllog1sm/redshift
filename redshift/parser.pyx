@@ -11,6 +11,8 @@ import json
 
 from libc.string cimport memcpy, memset
 
+from thinc.typedefs cimport weight_t, class_t, feat_t, atom_t
+
 from _state cimport *
 from sentence cimport Input, Sentence, Token, Step
 from cymem.cymem cimport Pool, Address
@@ -19,16 +21,15 @@ from beam cimport Beam
 from tagger cimport Tagger
 from util import Config
 
-from thinc.features.extractor cimport Extractor
+from thinc.features cimport Extractor
+from thinc.features cimport ConjFeat
 import _parse_features
 from _parse_features cimport *
 
 import index.hashes
 cimport index.hashes
 
-from thinc.ml.learner cimport LinearModel
-
-from libc.stdint cimport uint64_t, int64_t
+from thinc.learner cimport LinearModel
 
 
 include "compile_time_options.pxi"
@@ -76,10 +77,8 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
         random.shuffle(indices)
     parser.guide.end_training()
     parser.tagger.guide.end_training()
-    with open(pjoin(model_dir, 'model.gz'), 'w') as file_:
-        parser.guide.dump(file_, freq_thresh=2)
-    with open(pjoin(model_dir, 'tagger.gz'), 'w') as file_:
-        parser.tagger.guide.dump(file_, freq_thresh=2)
+    parser.guide.dump(pjoin(model_dir, 'model'))
+    parser.tagger.guide.dump(pjoin(model_dir, 'tagger'))
     index.hashes.save_pos_idx(pjoin(model_dir, 'pos'))
     index.hashes.save_label_idx(pjoin(model_dir, 'labels'))
     return parser
@@ -121,7 +120,7 @@ def get_templates(feats_str):
         templates += _parse_features.clusters
     if 'bitags' in feats_str:
         templates += _parse_features.pos_bigrams()
-    return templates, match_feats
+    return templates, [ConjFeat for _ in templates]
 
 
 cdef class Parser:
@@ -131,8 +130,9 @@ cdef class Parser:
     cdef LinearModel guide
     cdef Tagger tagger
     cdef Transition* moves
-    cdef uint64_t* _features
-    cdef size_t* _context
+    cdef feat_t* _features
+    cdef weight_t* _values
+    cdef atom_t* _context
     cdef size_t nr_moves
 
     def __cinit__(self, model_dir):
@@ -140,8 +140,9 @@ cdef class Parser:
         self.cfg = Config.read(model_dir, 'config')
         self.extractor = Extractor(*get_templates(self.cfg.features))
         self._pool = Pool()
-        self._features = <uint64_t*>self._pool.alloc(self.extractor.nr_feat, sizeof(uint64_t))
-        self._context = <size_t*>self._pool.alloc(_parse_features.context_size(), sizeof(size_t))
+        self._features = <feat_t*>self._pool.alloc(self.extractor.n, sizeof(feat_t))
+        self._values = <weight_t*>self._pool.alloc(self.extractor.n, sizeof(weight_t))
+        self._context = <atom_t*>self._pool.alloc(_parse_features.context_size(), sizeof(atom_t))
 
         if os.path.exists(pjoin(model_dir, 'labels')):
             index.hashes.load_label_idx(pjoin(model_dir, 'labels'))
@@ -151,10 +152,9 @@ cdef class Parser:
         fill_moves(self.cfg.left_labels, self.cfg.right_labels, self.cfg.dfl_labels,
                    self.cfg.use_break, self.moves)
         
-        self.guide = LinearModel(self.nr_moves, self.extractor.nr_feat)
-        if os.path.exists(pjoin(model_dir, 'model.gz')):
-            with open(pjoin(model_dir, 'model.gz')) as file_:
-                self.guide.load(file_, freq_thresh=0)
+        self.guide = LinearModel(self.nr_moves)
+        if os.path.exists(pjoin(model_dir, 'model')):
+            self.guide.load(pjoin(model_dir, 'model'))
         if os.path.exists(pjoin(model_dir, 'pos')):
             index.hashes.load_pos_idx(pjoin(model_dir, 'pos'))
         self.tagger = Tagger(model_dir)
@@ -186,8 +186,8 @@ cdef class Parser:
         scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
         if not cache_hit:
             fill_context(self._context, &s.slots, s.parse)
-            nr_active = self.extractor.extract(self._features, self._context)
-            self.guide.score(scores, self._features, nr_active)
+            nr_active = self.extractor.extract(self._features, self._values, self._context, NULL)
+            self.guide.score(scores, self._features, self._values)
         fill_valid(s, classes, self.nr_moves)
         cdef size_t i
         for i in range(self.nr_moves):
@@ -259,7 +259,7 @@ cdef class Parser:
         cdef State* pred_state = init_state(sent, tmp_pool)
         cdef dict counts = {}
         for clas in range(self.nr_moves):
-            counts[clas] = {}
+            counts[clas+1] = {}
         cdef bint seen_diff = False
         for i in range(max((pt, gt))):
             # Find where the states diverge
@@ -271,13 +271,13 @@ cdef class Parser:
             if i < gt:
                 fill_slots(gold_state)
                 fill_context(self._context, &gold_state.slots, gold_state.parse)
-                self.extractor.extract(self._features, self._context)
-                self.extractor.count(counts[ghist[i].clas], self._features, 1.0)
+                self.extractor.extract(self._features, self._values, self._context, NULL)
+                self.extractor.count(counts[ghist[i].clas+1], self._features, 1.0)
                 transition(&ghist[i], gold_state)
             if i < pt:
                 fill_slots(pred_state)
                 fill_context(self._context, &pred_state.slots, pred_state.parse)
-                self.extractor.extract(self._features, self._context)
-                self.extractor.count(counts[phist[i].clas], self._features, -1.0)
+                self.extractor.extract(self._features, self._values, self._context, NULL)
+                self.extractor.count(counts[phist[i].clas+1], self._features, -1.0)
                 transition(&phist[i], pred_state)
         return counts
