@@ -3,7 +3,7 @@ from thinc.learner cimport LinearModel
 from redshift.sentence cimport Input, Sentence, Token
 from cymem.cymem cimport Pool
 
-from thinc.search cimport Beam, MaxViolation
+from ._tagger_beam cimport Beam, MaxViolation
 from thinc.typedefs cimport atom_t, feat_t, weight_t
 
 

@@ -66,6 +66,8 @@ exts = [
               language="c++"),
     Extension("redshift._tagger_features", ["redshift/_tagger_features.pyx"],
               include_dirs=includes, language="c++"),
+    Extension("redshift._tagger_beam", ["redshift/_tagger_beam.pyx"],
+              include_dirs=includes, language="c++"),
     Extension("redshift.pystate", ["redshift/pystate.pyx"], include_dirs=includes,
               language="c++"),
 ]
