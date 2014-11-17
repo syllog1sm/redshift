@@ -289,7 +289,7 @@ def get_kernel_tokens():
 def context_size():
     return CONTEXT_SIZE
 
-cdef inline void fill_token(atom_t* context, size_t i, Token token):
+cdef inline void fill_token(atom_t* context, size_t i, Token token) nogil:
     cdef Lexeme* word = token.word
     context[i] = word.norm
     context[i+1] = token.tag
@@ -348,8 +348,8 @@ cdef int fill_context(atom_t* context, SlotTokens* t, Token* parse) except -1:
     fill_token(context, N1w, t.n1)
     fill_token(context, N2w, t.n2)
 
+    cdef int i
     if t.s0.i != 0:
-        assert t.n0.i > t.s0.i
         context[dist] = t.n0.i - t.s0.i
     else:
         context[dist] = 0
