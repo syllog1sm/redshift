@@ -143,8 +143,6 @@ cdef class Tagger:
             gprev = get_p(g)
             gprevprev = get_pp(g)
             pclas = p.clas
-            assert gclas != 0
-            assert pclas != 0
             pprev = get_p(p)
             pprevprev = get_pp(p)
             if gclas == pclas and pprev == gprev and gprevprev == pprevprev:
