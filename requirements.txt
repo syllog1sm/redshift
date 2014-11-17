@@ -1,5 +1,5 @@
 cython
-cymem >= 0.8
+cymem == 1.0
 murmurhash
 preshed
 thinc == 1.3
