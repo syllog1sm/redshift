@@ -24,7 +24,7 @@ cdef class Tagger:
     cpdef int tag(self, Input py_sent) except -1
     cdef int train_sent(self, Input py_sent) except -1
 
-    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores)
+    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores) except -1
     cdef dict _count_feats(self, Sentence* sent, TagState* p, TagState* g, int i)
 
 

@@ -13,8 +13,6 @@ from ._tagger_features cimport fill_context
 from ._tagger_features import *
 from thinc.features cimport ConjFeat
 
-from libc.stdint cimport uint64_t, int64_t
-
 cimport cython
 import os
 from os import path
@@ -57,8 +55,9 @@ cdef class Tagger:
         self._pool = Pool()
         templates = basic + clusters + case + orth
         self.extractor = Extractor(templates, [ConjFeat for _ in templates])
-        self._features = <feat_t*>self._pool.alloc(len(templates), sizeof(feat_t))
+        self._features = <feat_t*>self._pool.alloc(self.extractor.n, sizeof(feat_t))
         self._context = <atom_t*>self._pool.alloc(context_size(), sizeof(atom_t))
+        self._values = <weight_t*>self._pool.alloc(self.extractor.n, sizeof(weight_t))
 
         self.beam_width = self.cfg.beam_width
 
@@ -89,7 +88,7 @@ cdef class Tagger:
         cdef int t = sent.n - 1
         while t >= 1 and s.prev != NULL:
             t -= 1
-            sent.tokens[t].tag = s.clas+1
+            sent.tokens[t].tag = s.clas
             s = s.prev
 
     cdef int train_sent(self, Input py_sent) except -1:
@@ -122,7 +121,7 @@ cdef class Tagger:
                                        <TagState*>violn.gold, violn.n)
             self.guide.update(counts)
 
-    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores):
+    cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores) except -1:
         fill_context(self._context, sent, s.clas, get_p(s), i)
         cdef size_t n = self.extractor.extract(self._features, self._values,
                                                self._context, NULL)
@@ -136,7 +135,7 @@ cdef class Tagger:
         cdef atom_t* context = self._context
         cdef dict counts = {}
         for clas in range(self.guide.nr_class):
-            counts[clas+1] = {} 
+            counts[clas] = {} 
         cdef size_t gclas, gprev, gprevprev
         cdef size_t pclas, pprev, prevprev
         while g != NULL and p != NULL and i >= 1:
@@ -155,10 +154,10 @@ cdef class Tagger:
                 continue
             fill_context(context, sent, gprev, gprevprev, i)
             self.extractor.extract(feats, values, context, NULL)
-            self.extractor.count(counts[g.clas+1], feats, 1.0)
+            self.extractor.count(counts[g.clas], feats, 1.0)
             fill_context(context, sent, pprev, pprevprev, i)
             self.extractor.extract(feats, values, context, NULL)
-            self.extractor.count(counts[p.clas+1], feats, -1.0)
+            self.extractor.count(counts[p.clas], feats, -1.0)
             g = g.prev
             p = p.prev
             i -= 1

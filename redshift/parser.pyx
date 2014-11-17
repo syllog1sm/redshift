@@ -135,7 +135,7 @@ cdef class Parser:
     cdef atom_t* _context
     cdef size_t nr_moves
 
-    def __cinit__(self, model_dir):
+    def __init__(self, model_dir):
         assert os.path.exists(model_dir) and os.path.isdir(model_dir)
         self.cfg = Config.read(model_dir, 'config')
         self.extractor = Extractor(*get_templates(self.cfg.features))
@@ -252,14 +252,13 @@ cdef class Parser:
     cdef dict _count_feats(self, Sentence* sent, size_t pt, size_t gt,
                            Transition* phist, Transition* ghist):
         cdef size_t d, i, f
-        cdef uint64_t* feats
         cdef size_t clas
         cdef Pool tmp_pool = Pool()
         cdef State* gold_state = init_state(sent, tmp_pool)
         cdef State* pred_state = init_state(sent, tmp_pool)
         cdef dict counts = {}
         for clas in range(self.nr_moves):
-            counts[clas+1] = {}
+            counts[clas] = {}
         cdef bint seen_diff = False
         for i in range(max((pt, gt))):
             # Find where the states diverge
@@ -272,12 +271,12 @@ cdef class Parser:
                 fill_slots(gold_state)
                 fill_context(self._context, &gold_state.slots, gold_state.parse)
                 self.extractor.extract(self._features, self._values, self._context, NULL)
-                self.extractor.count(counts[ghist[i].clas+1], self._features, 1.0)
+                self.extractor.count(counts[ghist[i].clas], self._features, 1.0)
                 transition(&ghist[i], gold_state)
             if i < pt:
                 fill_slots(pred_state)
                 fill_context(self._context, &pred_state.slots, pred_state.parse)
                 self.extractor.extract(self._features, self._values, self._context, NULL)
-                self.extractor.count(counts[phist[i].clas+1], self._features, -1.0)
+                self.extractor.count(counts[phist[i].clas], self._features, -1.0)
                 transition(&phist[i], pred_state)
         return counts
