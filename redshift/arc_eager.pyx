@@ -25,24 +25,24 @@ cdef unicode move_name(Transition* t):
     return name
 
 
-cdef inline bint can_shift(State* s):
+cdef inline bint can_shift(State* s) nogil:
     return not at_eol(s)
 
 
-cdef inline bint can_right(State* s):
+cdef inline bint can_right(State* s) nogil:
     return s.stack_len >= 1 and not at_eol(s)
 
 
-cdef inline bint can_left(State* s):
+cdef inline bint can_left(State* s) nogil:
     return s.stack_len >= 1 and s.parse[s.top].head == 0
 
 
-cdef inline bint can_reduce(State* s):
+cdef inline bint can_reduce(State* s) nogil:
     return s.stack_len >= 2 and s.parse[s.top].head != 0
 
 
 cdef bint USE_EDIT = False
-cdef inline bint can_edit(State* s):
+cdef inline bint can_edit(State* s) nogil:
     return USE_EDIT and s.stack_len >= 1
 
 
