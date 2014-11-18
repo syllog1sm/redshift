@@ -134,7 +134,8 @@ cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
         if classes[i].is_valid:
             break
     else:
-        raise StandardError
+        props = (s.i, s.n, s.stack_len)
+        raise StandardError('No valid classes. i=%d, n=%d, stack_len=%d' % props)
 
 
 cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except -1:
@@ -154,6 +155,9 @@ cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except
             classes[i].cost += gold[s.i].label != classes[i].label
         elif classes[i].move == EDIT and classes[i].cost == 0 and gold[s.top].is_edit:
             classes[i].cost = gold[s.top].label != classes[i].label
+        # Set is_valid here as well, so we can just over-write it if we don't
+        # want to follow gold
+        classes[i].is_valid = classes[i].cost == 0
 
 
 cdef int transition(Transition* t, State *s) except -1:
