@@ -124,6 +124,17 @@ def train(unicode train_str, unicode model_dir, n_iter=15, beam_width=8,
 
 
 def get_labels(sents):
+    '''Get alphabetically-sorted lists of left, right and disfluency labels that
+    occur in a sample of sentences. Used to determine the set of legal transitions
+    from the training set.
+
+    Args:
+        sentences (list[Input]): A list of Input objects, usually the training set.
+
+    Returns:
+        labels (tuple[list, list, list]): Sorted lists of left, right and disfluency
+            labels.
+    '''
     left_labels = set()
     right_labels = set()
     dfl_labels = set()
@@ -217,7 +228,7 @@ cdef class Parser:
         _fill_parse(sent.tokens, <State*>beam.at(0))
         sent.score = beam.score
 
-    cdef int train_sent(self, Input py_sent) except -1:
+    cpdef int train_sent(self, Input py_sent) except -1:
         '''Receive a training example, and update weights if the prediction
         is incorrect.
 
