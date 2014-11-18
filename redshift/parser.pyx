@@ -280,11 +280,11 @@ cdef int _fill_parse(Token* parse, State* s) except -1:
         parse[i] = s.parse[i]
 
 
-cdef void* _init_callback(Pool mem, int n, void* extra_args) except NULL:
+cdef void* _init_callback(Pool mem, int n, void* extra_args):
     return init_state(<Sentence*>extra_args, mem)
 
 
-cdef int _transition_callback(void* dest, void* src, class_t clas, void* extra_args) except -1:
+cdef int _transition_callback(void* dest, void* src, class_t clas, void* extra_args):
     state = <State*>dest
     parent = <State*>src
     moves = <Transition*>extra_args
@@ -292,5 +292,5 @@ cdef int _transition_callback(void* dest, void* src, class_t clas, void* extra_a
     transition(&moves[clas], state)
 
 
-cdef int _is_done_callback(void* state, void* extra_args) except -1:
+cdef int _is_done_callback(void* state, void* extra_args):
     return is_final(<State*>state)
