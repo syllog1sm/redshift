@@ -199,6 +199,11 @@ cdef class Parser:
         self.tagger = Tagger(model_dir)
 
     cpdef int parse(self, Input py_sent) except -1:
+        '''Parse a sentence, setting heads, labels and tags in-place.
+
+        Args:
+            py_sent (Input): The sentence to be parsed.
+        '''
         cdef Sentence* sent = py_sent.c_sent
         cdef Token* gold_parse = sent.tokens
         if self.tagger:
@@ -213,6 +218,19 @@ cdef class Parser:
         sent.score = beam.score
 
     cdef int train_sent(self, Input py_sent) except -1:
+        '''Receive a training example, and update weights if the prediction
+        is incorrect.
+
+        In order to account for "spurious ambiguity" in the transition system,
+        we perform two searches given the current weights, constraining one so
+        that the parser can only follow "zero-cost" transitions, where the cost
+        is determined by an oracle which calculates the loss of the best parse
+        reachable via that derivation. This allows us to find the best gold-standard
+        derivation given our current weights.
+        
+        We then use the maximum violation strategy (Huang, 2012) to find a
+        state-sequence to calculate the update.
+        '''
         cdef Sentence* sent = py_sent.c_sent
         cdef Address tags_mem = Address(sent.n, sizeof(size_t))
         cdef size_t* gold_tags = <size_t*>tags_mem.ptr
