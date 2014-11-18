@@ -164,7 +164,7 @@ cdef class Tagger:
 
 cdef int beam_extend(Beam beam, weight_t** ext_scores, size_t gold) except -1:
     beam.fill(ext_scores)
-    cdef size_t i
+    cdef int i
     cdef size_t clas
     cdef TagState* prev
     beam.size = 0
