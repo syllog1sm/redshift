@@ -11,13 +11,13 @@ import json
 
 from libc.string cimport memcpy, memset
 
+from cymem.cymem cimport Pool, Address
 from thinc.typedefs cimport weight_t, class_t, feat_t, atom_t
+from thinc.search cimport Beam, MaxViolation
 
 from _state cimport *
 from sentence cimport Input, Sentence, Token, Step
-from cymem.cymem cimport Pool, Address
 
-from beam cimport Beam
 from tagger cimport Tagger
 from util import Config
 
@@ -72,6 +72,7 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
             py_sent = sents[i]
             parser.tagger.train_sent(py_sent)
             parser.train_sent(py_sent)
+        acc = float(parser.guide.n_corr) / parser.guide.total
         print(parser.guide.end_train_iter(n, feat_thresh) + '\t' +
               parser.tagger.guide.end_train_iter(n, feat_thresh))
         random.shuffle(indices)
@@ -81,7 +82,7 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
     parser.tagger.guide.dump(pjoin(model_dir, 'tagger'))
     index.hashes.save_pos_idx(pjoin(model_dir, 'pos'))
     index.hashes.save_label_idx(pjoin(model_dir, 'labels'))
-    return parser
+    return acc
 
 
 def get_labels(sents):
@@ -161,22 +162,76 @@ cdef class Parser:
 
     cpdef int parse(self, Input py_sent) except -1:
         cdef Sentence* sent = py_sent.c_sent
-        cdef size_t p_idx, i
+        cdef Token* gold_parse = sent.tokens
         if self.tagger:
             self.tagger.tag(py_sent)
-        cdef Beam beam = Beam(self.cfg.beam_width, <size_t>self.moves, self.nr_moves,
-                              py_sent)
+        cdef Beam beam = Beam(self.nr_moves, self.cfg.beam_width)
+        beam.initialize(_init_callback, sent.n, sent)
         self.guide.cache.flush()
-        while not beam.is_finished:
-            for i in range(beam.bsize):
-                if not is_final(beam.beam[i]):
-                    self._predict(beam.beam[i], beam.moves[i])
-                # The False flag tells it to allow non-gold predictions
-                beam.enqueue(i, False)
-            beam.extend()
-        beam.fill_parse(sent.tokens)
-        py_sent.segment()
-        sent.score = beam.beam[0].score
+        cdef int i
+        while not beam.is_done:
+            self._advance_beam(beam, NULL, False)
+        _fill_parse(sent.tokens, <State*>beam.at(0))
+        sent.score = beam.score
+
+    cdef int train_sent(self, Input py_sent) except -1:
+        cdef Sentence* sent = py_sent.c_sent
+        cdef Address tags_mem = Address(sent.n, sizeof(size_t))
+        cdef size_t* gold_tags = <size_t*>tags_mem.ptr
+        cdef Token* gold_parse = sent.tokens
+        cdef int i
+        #print py_sent.words
+        for i in range(sent.n):
+            gold_tags[i] = gold_parse[i].tag
+        if self.tagger:
+            self.tagger.tag(py_sent)
+        cdef Beam p_beam = Beam(self.nr_moves, self.cfg.beam_width)
+        cdef Beam g_beam = Beam(self.nr_moves, self.cfg.beam_width)
+        p_beam.initialize(_init_callback, sent.n, sent)
+        g_beam.initialize(_init_callback, sent.n, sent)
+
+        cdef MaxViolation violn = MaxViolation()
+
+        self.guide.cache.flush()
+        cdef Transition* m
+        cdef State* state
+        while not p_beam.is_done and not g_beam.is_done:
+            self._advance_beam(p_beam, gold_parse, False)
+            self._advance_beam(g_beam, gold_parse, True)
+            violn.check(p_beam, g_beam)
+       
+        counts = {}
+        if violn.delta >= 0:
+            self._count_feats(counts, sent, violn.g_hist, 1)
+            self._count_feats(counts, sent, violn.p_hist, -1)
+            self.guide.update(counts)
+        else:
+            self.guide.update({})
+        t = 0
+        for clas, clas_counts in counts.items():
+            for c, f in clas_counts.items():
+                t += abs(f)
+        for i in range(sent.n):
+            sent.tokens[i].tag = gold_tags[i]
+        self.guide.n_corr += violn.cost == 0
+        self.guide.total += 1
+
+    cdef int _advance_beam(self, Beam beam, Token* gold_parse, bint follow_gold) except -1:
+        cdef int i, j
+        for i in range(beam.size):
+            state = <State*>beam.at(i)
+            if is_final(state):
+                continue
+            if gold_parse != NULL:
+                fill_costs(state, self.moves, self.nr_moves, gold_parse)
+            if not follow_gold:
+                fill_valid(state, self.moves, self.nr_moves)
+            self._predict(state, self.moves)
+            for j in range(self.nr_moves):
+                m = &self.moves[j]
+                beam.set_cell(i, j, m.score, m.is_valid, m.cost)
+        beam.advance(_transition_callback, self.moves)
+        beam.check_done(_is_done_callback, NULL)
 
     cdef int _predict(self, State* s, Transition* classes) except -1:
         if is_final(s):
@@ -186,97 +241,56 @@ cdef class Parser:
         scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
         if not cache_hit:
             fill_context(self._context, &s.slots, s.parse)
-            nr_active = self.extractor.extract(self._features, self._values, self._context, NULL)
+            nr_active = self.extractor.extract(self._features, self._values,
+                                               self._context, NULL)
             self.guide.score(scores, self._features, self._values)
-        fill_valid(s, classes, self.nr_moves)
         cdef size_t i
         for i in range(self.nr_moves):
             classes[i].score = scores[i]
 
-    cdef int train_sent(self, Input py_sent) except -1:
-        cdef size_t i
-        cdef Transition[1000] g_hist
-        cdef Transition[1000] p_hist
-        cdef Sentence* sent = py_sent.c_sent
-        cdef Address tags_mem = Address(sent.n, sizeof(size_t))
-        cdef size_t* gold_tags = <size_t*>tags_mem.ptr
-        for i in range(sent.n):
-            gold_tags[i] = sent.tokens[i].tag
-        if self.tagger:
-            self.tagger.tag(py_sent)
-        g_beam = Beam(self.cfg.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
-        p_beam = Beam(self.cfg.beam_width, <size_t>self.moves, self.nr_moves, py_sent)
-        cdef Token* gold_parse = sent.tokens
-        cdef double delta = 0
-        cdef double max_violn = -1
-        cdef size_t pt = 0
-        cdef size_t gt = 0
-        cdef State* p
-        cdef State* g
-        cdef Transition* moves
-        words = py_sent.words
-        self.guide.cache.flush()
-        while not p_beam.is_finished and not g_beam.is_finished:
-            for i in range(p_beam.bsize):
-                self._predict(p_beam.beam[i], p_beam.moves[i])
-                # Fill costs so we can see whether the prediction is gold-standard
-                fill_costs(p_beam.beam[i], p_beam.moves[i], self.nr_moves, gold_parse)
-                # The False flag tells it to allow non-gold predictions
-                p_beam.enqueue(i, False)
-            p_beam.extend()
-            for i in range(g_beam.bsize):
-                g = g_beam.beam[i]
-                moves = g_beam.moves[i]
-                self._predict(g, moves)
-                fill_costs(g, moves, self.nr_moves, gold_parse)
-                g_beam.enqueue(i, True)
-            g_beam.extend()
-            g = g_beam.beam[0]; p = p_beam.beam[0] 
-            delta = p.score - g.score
-            if delta > max_violn and p.cost >= 1:
-                max_violn = delta
-                pt = p.m
-                gt = g.m
-                memcpy(p_hist, p.history, pt * sizeof(Transition))
-                memcpy(g_hist, g.history, gt * sizeof(Transition))
-        if max_violn >= 0:
-            counted = self._count_feats(sent, pt, gt, p_hist, g_hist)
-            self.guide.update(counted)
-        else:
-            self.guide.time += 1
-        for i in range(sent.n):
-            sent.tokens[i].tag = gold_tags[i]
-        self.guide.n_corr += p_beam.beam[0].cost == 0
-        self.guide.total += 1
+    cdef dict _count_feats(self, dict counts, Sentence* sent, list hist, int inc):
+        cdef Pool mem = Pool()
+        cdef State* state = init_state(sent, mem)
+        cdef class_t clas
+        for clas in hist:
+            fill_slots(state)
+            fill_context(self._context, &state.slots, state.parse)
+            self.extractor.extract(self._features, self._values, self._context, NULL)
+            self.extractor.count(counts.setdefault(clas, {}), self._features, inc)
+            transition(&self.moves[clas], state)
+        for clas, class_counts in list(counts.items()):
+            pruned = {}
+            for feat, feat_count in class_counts.items():
+                if abs(feat_count) >= 1:
+                    pruned[feat] = feat_count
+            counts[clas] = pruned
 
-    cdef dict _count_feats(self, Sentence* sent, size_t pt, size_t gt,
-                           Transition* phist, Transition* ghist):
-        cdef size_t d, i, f
-        cdef size_t clas
-        cdef Pool tmp_pool = Pool()
-        cdef State* gold_state = init_state(sent, tmp_pool)
-        cdef State* pred_state = init_state(sent, tmp_pool)
-        cdef dict counts = {}
-        for clas in range(self.nr_moves):
-            counts[clas] = {}
-        cdef bint seen_diff = False
-        for i in range(max((pt, gt))):
-            # Find where the states diverge
-            if not seen_diff and ghist[i].clas == phist[i].clas:
-                transition(&ghist[i], gold_state)
-                transition(&phist[i], pred_state)
-                continue
-            seen_diff = True
-            if i < gt:
-                fill_slots(gold_state)
-                fill_context(self._context, &gold_state.slots, gold_state.parse)
-                self.extractor.extract(self._features, self._values, self._context, NULL)
-                self.extractor.count(counts[ghist[i].clas], self._features, 1.0)
-                transition(&ghist[i], gold_state)
-            if i < pt:
-                fill_slots(pred_state)
-                fill_context(self._context, &pred_state.slots, pred_state.parse)
-                self.extractor.extract(self._features, self._values, self._context, NULL)
-                self.extractor.count(counts[phist[i].clas], self._features, -1.0)
-                transition(&phist[i], pred_state)
-        return counts
+
+cdef int _fill_parse(Token* parse, State* s) except -1:
+    cdef int i, head 
+    for i in range(1, s.n-1):
+        head = i
+        while s.parse[head].head != head and \
+                s.parse[head].head < (s.n-1) and \
+                s.parse[head].head != 0:
+            head = s.parse[head].head
+        s.parse[i].sent_id = head
+    # No need to copy heads for root and start symbols
+    for i in range(1, s.n - 1):
+        parse[i] = s.parse[i]
+
+
+cdef void* _init_callback(Pool mem, int n, void* extra_args) except NULL:
+    return init_state(<Sentence*>extra_args, mem)
+
+
+cdef int _transition_callback(void* dest, void* src, class_t clas, void* extra_args) except -1:
+    state = <State*>dest
+    parent = <State*>src
+    moves = <Transition*>extra_args
+    copy_state(state, parent)
+    transition(&moves[clas], state)
+
+
+cdef int _is_done_callback(void* state, void* extra_args) except -1:
+    return is_final(<State*>state)
