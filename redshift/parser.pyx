@@ -22,7 +22,7 @@ from tagger cimport Tagger
 from util import Config
 
 from thinc.features cimport Extractor
-from thinc.features cimport ConjFeat
+from thinc.features cimport NonZeroConjFeat
 import _parse_features
 from _parse_features cimport *
 
@@ -50,7 +50,7 @@ def set_debug(val):
 
 
 def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
-          feat_set='basic', feat_thresh=10, seed=0,
+          feat_set='basic', feat_thresh=0, seed=0,
           use_edit=False, use_break=False, use_filler=False):
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
@@ -78,7 +78,7 @@ def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
         random.shuffle(indices)
     parser.guide.end_training()
     parser.tagger.guide.end_training()
-    parser.guide.dump(pjoin(model_dir, 'model'))
+    parser.guide.dump(pjoin(model_dir, 'model'), freq_thresh=0)
     parser.tagger.guide.dump(pjoin(model_dir, 'tagger'))
     index.hashes.save_pos_idx(pjoin(model_dir, 'pos'))
     index.hashes.save_label_idx(pjoin(model_dir, 'labels'))
@@ -121,7 +121,7 @@ def get_templates(feats_str):
         templates += _parse_features.clusters
     if 'bitags' in feats_str:
         templates += _parse_features.pos_bigrams()
-    return templates, [ConjFeat for _ in templates]
+    return templates, [NonZeroConjFeat for _ in templates]
 
 
 cdef class Parser:
@@ -180,7 +180,6 @@ cdef class Parser:
         cdef size_t* gold_tags = <size_t*>tags_mem.ptr
         cdef Token* gold_parse = sent.tokens
         cdef int i
-        #print py_sent.words
         for i in range(sent.n):
             gold_tags[i] = gold_parse[i].tag
         if self.tagger:
@@ -258,12 +257,6 @@ cdef class Parser:
             self.extractor.extract(self._features, self._values, self._context, NULL)
             self.extractor.count(counts.setdefault(clas, {}), self._features, inc)
             transition(&self.moves[clas], state)
-        for clas, class_counts in list(counts.items()):
-            pruned = {}
-            for feat, feat_count in class_counts.items():
-                if abs(feat_count) >= 1:
-                    pruned[feat] = feat_count
-            counts[clas] = pruned
 
 
 cdef int _fill_parse(Token* parse, State* s) except -1:
