@@ -47,8 +47,6 @@ with open(path.join(pwd, 'redshift', 'compile_time_options.pxi'), 'w') as file_:
 exts = [
     Extension('redshift.parser', ["redshift/parser.pyx"], language="c++",
               include_dirs=includes),
-    Extension('redshift.beam', ["redshift/beam.pyx"], language="c++",
-              include_dirs=includes),
     Extension('redshift._state', ["redshift/_state.pyx"],
                                   language="c++", include_dirs=includes),
     Extension('redshift.sentence', ["redshift/sentence.pyx"], language="c++",
