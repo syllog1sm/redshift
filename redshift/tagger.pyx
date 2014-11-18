@@ -101,7 +101,7 @@ cdef class Tagger:
         cdef TagState* gold = <TagState*>tmp_mem.alloc(1, sizeof(TagState))
         cdef MaxViolation violn = MaxViolation()
         cdef TagState* s
-        for i in range(1, sent.n - 1):
+        for i in range(sent.n-1):
             # Extend gold
             self._predict(i, gold, sent, scores)
             gold = extend_state(gold, sent.tokens[i].tag, scores[sent.tokens[i].tag],
@@ -138,7 +138,7 @@ cdef class Tagger:
             counts[clas] = {} 
         cdef size_t gclas, gprev, gprevprev
         cdef size_t pclas, pprev, prevprev
-        while g != NULL and p != NULL and i >= 1:
+        while g != NULL and p != NULL and i >= 0:
             gclas = g.clas
             gprev = get_p(g)
             gprevprev = get_pp(g)
