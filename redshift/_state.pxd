@@ -73,15 +73,38 @@ cdef int del_r_child(State *s, size_t head) except -1
 cdef size_t pop_stack(State *s) except 0
 cdef int push_stack(State *s) except -1
 
-cdef size_t get_l(State *s, size_t head)
-cdef size_t get_l2(State *s, size_t head)
-cdef size_t get_r(State *s, size_t head)
-cdef size_t get_r2(State *s, size_t head)
+cdef inline size_t get_s1(State *s) nogil:
+    if s.stack_len < 2:
+        return 0
+    return s.stack[s.stack_len - 2]
 
-cdef size_t get_s1(State *s)
+cdef inline size_t get_l(State *s, size_t head) nogil:
+    if s.parse[head].l_valency == 0:
+        return 0
+    return s.l_children[head][s.parse[head].l_valency - 1]
 
-cdef bint at_eol(State *s)
-cdef bint is_final(State *s)
+cdef inline size_t get_l2(State *s, size_t head) nogil:
+    if s.parse[head].l_valency < 2:
+        return 0
+    return s.l_children[head][s.parse[head].l_valency - 2]
+
+cdef inline size_t get_r(State *s, size_t head) nogil:
+    if s.parse[head].r_valency == 0:
+        return 0
+    return s.r_children[head][s.parse[head].r_valency - 1]
+
+cdef inline size_t get_r2(State *s, size_t head) nogil:
+    if s.parse[head].r_valency < 2:
+        return 0
+    return s.r_children[head][s.parse[head].r_valency - 2]
+
+
+cdef inline bint at_eol(State *s) nogil:
+    return s.i >= (s.n - 1)
+
+cdef inline bint is_final(State *s) nogil:
+    return at_eol(s) and s.stack_len == 0
+
 
 cdef int has_child_in_buffer(State *s, size_t word, Token* gold) except -1
 cdef int has_head_in_buffer(State *s, size_t word, Token* gold) except -1

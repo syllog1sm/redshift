@@ -87,32 +87,6 @@ cdef int fill_slots(State *s) except -1:
     s.slots.s0n = s.parse[s.top + 1 if s.top and s.top < (s.n - 1) else 0]
     s.slots.s0nn = s.parse[s.top + 1 if s.top and s.top < (s.n - 2) else 0]
 
-
-cdef size_t get_s1(State *s):
-    if s.stack_len < 2:
-        return 0
-    return s.stack[s.stack_len - 2]
-
-cdef size_t get_l(State *s, size_t head):
-    if s.parse[head].l_valency == 0:
-        return 0
-    return s.l_children[head][s.parse[head].l_valency - 1]
-
-cdef size_t get_l2(State *s, size_t head):
-    if s.parse[head].l_valency < 2:
-        return 0
-    return s.l_children[head][s.parse[head].l_valency - 2]
-
-cdef size_t get_r(State *s, size_t head):
-    if s.parse[head].r_valency == 0:
-        return 0
-    return s.r_children[head][s.parse[head].r_valency - 1]
-
-cdef size_t get_r2(State *s, size_t head):
-    if s.parse[head].r_valency < 2:
-        return 0
-    return s.r_children[head][s.parse[head].r_valency - 2]
-
 cdef int has_child_in_buffer(State *s, size_t word, Token* gold) except -1:
     assert word != 0
     cdef size_t buff_i
@@ -152,13 +126,6 @@ cdef int has_head_in_stack(State *s, size_t word, Token* gold) except -1:
         if gold[word].head == stack_i:
             return 1
     return 0
-
-
-cdef bint at_eol(State *s):
-    return s.i >= (s.n - 1)
-
-cdef bint is_final(State *s):
-    return at_eol(s) and s.stack_len == 0
 
 DEF PADDING = 5
 
