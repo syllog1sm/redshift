@@ -49,9 +49,47 @@ def set_debug(val):
     DEBUG = val
 
 
-def train(train_str, model_dir, n_iter=15, beam_width=8, train_tagger=True,
-          feat_set='basic', feat_thresh=0, seed=0,
+def train(unicode train_str, unicode model_dir, n_iter=15, beam_width=8,
+          train_tagger=True, unicode feat_set='basic', feat_thresh=0, seed=0,
           use_edit=False, use_break=False, use_filler=False):
+    """Train a model from a CoNLL-formatted training string, creating a model in
+    model_dir.
+
+    Args:
+        train_str (unicode): A CoNLL-formatted string, describing the training
+            sentences. See Input.from_conll.
+        model_dir (unicode): The path that the model will be saved in. Will be
+            wiped if it exists, and re-created.
+        n_iter (int): The number of iterations to train for. Default 15.
+        beam_width (int): The number of candidates to maintain in the `beam'. Efficiency
+            is usually slightly less than linear in the width of the beam (because)
+            we do some caching). Accuracy typically plateaus between 16 and 32
+            on English. If the model is more accurate, less beam width is necessary.
+        train_tagger (bool): Whether to train a tagger alongside the parser. The
+            parser is trained with tags predicted by the current tagger model,
+            allowing it to see semi-realistic examples of predicted tags. This
+            tends to be as good as jack-knife training the tagger, but with less
+            complexity.
+        feat_set (unicode): A string describing the features to be used. See the
+            get_templates function for details about the various feature-set
+            names. The string is searched for the presence of substrings, so there's
+            some flexibility in how you can write the string. For instance, both
+            clusters+bitags and clusters/bitags will add the "clusters" and "bitags"
+            feature sets. The basic feature set is added by default.
+        feat_thresh (int): Post-prune the feature set, removing features that occur
+            N or fewer times. This is currently not recommended --- it performs
+            poorly with the ADADELTA training.
+        seed (int): Seed the shuffling of sentences between iterations. This is
+            useful to conduct N trials of an experimental configuration, allowing
+            significance testing. Variance is often 0.1-0.3% UAS, making this
+            quite a powerful way to tell whether two runs are meaningfully
+            different.
+        use_edit (bint): Controls whether to use the Edit transition, for speech
+            parsing.
+        use_break (bint): Controls whether to use the Break transition, for
+            speech parsing.
+        """
+
     if os.path.exists(model_dir):
         shutil.rmtree(model_dir)
     os.mkdir(model_dir)
