@@ -92,12 +92,10 @@ cdef class Beam:
             if not is_final(s):
                 s.cost += t.cost
                 transition(t, s)
-                assert s.m != 0
             self.bsize += 1
             self.queue.pop()
         self.t += 1
         self.is_full = self.bsize >= self.k
-        assert self.beam[0].m != 0
         for i in range(self.bsize):
             if not is_final(self.beam[i]):
                 self.is_finished = False
