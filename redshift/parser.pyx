@@ -49,16 +49,16 @@ def set_debug(val):
     DEBUG = val
 
 
-def train(unicode train_str, unicode model_dir, n_iter=15, beam_width=8,
-          train_tagger=True, unicode feat_set='basic', feat_thresh=0, seed=0,
+def train(train_str, model_dir, n_iter=15, beam_width=8,
+          train_tagger=True, feat_set=u'basic', feat_thresh=0, seed=0,
           use_edit=False, use_break=False, use_filler=False):
     """Train a model from a CoNLL-formatted training string, creating a model in
     model_dir.
 
     Args:
-        train_str (unicode): A CoNLL-formatted string, describing the training
+        train_str (bytes): A CoNLL-formatted string, describing the training
             sentences. See Input.from_conll.
-        model_dir (unicode): The path that the model will be saved in. Will be
+        model_dir (bytes): The path that the model will be saved in. Will be
             wiped if it exists, and re-created.
         n_iter (int): The number of iterations to train for. Default 15.
         beam_width (int): The number of candidates to maintain in the `beam'. Efficiency
@@ -151,6 +151,12 @@ def get_labels(sents):
 
 
 def get_templates(feats_str):
+    '''Interpret feats_str, returning a list of template tuples. Each template
+    is a tuple of numeric indices, referring to positions in the context
+    array. See _parse_features.pyx for examples. The templates are applied by
+    thinc.features.Extractor, which picks out the appointed values and hashes
+    the resulting array, to produce a single feature code.
+    '''
     match_feats = []
     # This value comes out of compile_time_options.pxi
     IF TRANSITION_SYSTEM == 'arc_eager':
@@ -273,10 +279,6 @@ cdef class Parser:
             self.guide.update(counts)
         else:
             self.guide.update({})
-        t = 0
-        for clas, clas_counts in counts.items():
-            for c, f in clas_counts.items():
-                t += abs(f)
         for i in range(sent.n):
             sent.tokens[i].tag = gold_tags[i]
         self.guide.n_corr += violn.cost == 0
