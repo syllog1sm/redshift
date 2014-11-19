@@ -9,7 +9,8 @@ from redshift.sentence import Input
 
 
 @plac.annotations(
-    train_loc=("Training location", "positional"),
+    train_loc=("Training (input file) location", "positional"),
+    model_loc=("Model (output) location", "positional", None, str),
     codec=("Codec to be used to read training file", "option", "c", str),
     n_iter=("Number of Perceptron iterations", "option", "i", int),
     feat_thresh=("Feature pruning threshold", "option", "f", int),
@@ -22,7 +23,7 @@ from redshift.sentence import Input
 )
 def main(train_loc, model_loc, n_iter=15,
          codec="utf8",
-         feat_set="", feat_thresh=10,
+         feat_set="", feat_thresh=0,
          n_sents=0,
          use_break=False,
          debug=False, seed=0, beam_width=4):
