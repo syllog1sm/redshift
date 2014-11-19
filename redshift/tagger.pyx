@@ -152,10 +152,10 @@ cdef class Tagger:
                 continue
             fill_context(context, sent, gprev, gprevprev, i)
             self.extractor.extract(feats, values, context, NULL)
-            self.extractor.count(counts[g.clas], feats, 1.0)
+            self.extractor.count(counts[g.clas], feats, 1)
             fill_context(context, sent, pprev, pprevprev, i)
             self.extractor.extract(feats, values, context, NULL)
-            self.extractor.count(counts[p.clas], feats, -1.0)
+            self.extractor.count(counts[p.clas], feats, -1)
             g = g.prev
             p = p.prev
             i -= 1
