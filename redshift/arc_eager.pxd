@@ -1,3 +1,5 @@
+from thinc.typedefs cimport weight_t
+
 from ._state cimport State 
 
 from .sentence cimport Token
@@ -7,7 +9,7 @@ cdef struct Transition:
     size_t clas
     size_t move
     size_t label
-    double score
+    weight_t score
     int cost
     bint is_valid
 
