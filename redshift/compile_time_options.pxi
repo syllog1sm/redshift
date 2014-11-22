@@ -1,1 +1,1 @@
-DEF TRANSITION_SYSTEM = 'arc_eager'
+DEF TRANSITION_SYSTEM = 'arc_eager_tree'

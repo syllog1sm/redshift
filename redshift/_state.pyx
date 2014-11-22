@@ -140,6 +140,7 @@ cdef State* init_state(Sentence* sent, Pool pool):
     s.score = 0
     s.top = 0
     s.stack_len = 0
+    s.eol = False
     n = sent.n + PADDING
     s.stack = <size_t*>pool.alloc(n, sizeof(size_t))
     s.l_children = <size_t**>pool.alloc(n, sizeof(size_t*))
@@ -167,6 +168,7 @@ cdef int copy_state(State* s, State* old) except -1:
     s.i = old.i
     s.m = old.m
     s.n = old.n
+    s.eol = old.eol
     s.stack_len = old.stack_len
     s.top = old.top
     s.cost = old.cost

@@ -7,6 +7,8 @@ from .sentence cimport Token
 include "compile_time_options.pxi"
 IF TRANSITION_SYSTEM == 'arc_eager':
     from .arc_eager cimport *
+ELIF TRANSITION_SYSTEM == 'arc_eager_tree':
+    from .arc_eager_tree cimport *
 ELSE:
     from .arc_hybrid cimport *
 
