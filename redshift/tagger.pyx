@@ -11,7 +11,7 @@ from preshed.maps cimport PreshMap
 
 from ._tagger_features cimport fill_context
 from ._tagger_features import *
-from thinc.features cimport ConjFeat
+from thinc.features cimport count_feats
 
 cimport cython
 import os
@@ -54,17 +54,15 @@ cdef class Tagger:
         self.cfg = Config.read(model_dir, 'tagger')
         self._pool = Pool()
         templates = basic + clusters + case + orth
-        self.extractor = Extractor(templates, [ConjFeat for _ in templates])
-        self._features = <feat_t*>self._pool.alloc(self.extractor.n, sizeof(feat_t))
+        self.extractor = Extractor(templates)
         self._context = <atom_t*>self._pool.alloc(context_size(), sizeof(atom_t))
-        self._values = <weight_t*>self._pool.alloc(self.extractor.n, sizeof(weight_t))
 
         self.beam_width = self.cfg.beam_width
 
         if path.exists(path.join(model_dir, 'pos')):
             index.hashes.load_pos_idx(path.join(model_dir, 'pos'))
         nr_tag = index.hashes.get_nr_pos()
-        self.guide = LinearModel(nr_tag)
+        self.guide = LinearModel(nr_tag, self.extractor.n_templ)
         if path.exists(path.join(model_dir, 'tagger')):
             self.guide.load(path.join(model_dir, 'tagger'))
         self._beam_scores = <weight_t**>self._pool.alloc(self.beam_width, sizeof(weight_t*))
@@ -123,21 +121,21 @@ cdef class Tagger:
 
     cdef int _predict(self, size_t i, TagState* s, Sentence* sent, weight_t* scores) except -1:
         fill_context(self._context, sent, s.clas, get_p(s), i)
-        cdef size_t n = self.extractor.extract(self._features, self._values,
-                                               self._context, NULL)
-        self.guide.score(scores, self._features, self._values)
+        cdef int n_feats = 0
+        cdef Feature* feats = self.extractor.get_feats(self._context, &n_feats)
+        self.guide.set_scores(scores, feats, n_feats)
 
     cdef dict _count_feats(self, Sentence* sent, TagState* p, TagState* g, int i):
         if i == -1:
             return {}
-        cdef feat_t* feats = self._features
-        cdef weight_t* values = self._values
         cdef atom_t* context = self._context
         cdef dict counts = {}
         for clas in range(self.guide.nr_class):
             counts[clas] = {} 
         cdef size_t gclas, gprev, gprevprev
         cdef size_t pclas, pprev, prevprev
+        cdef int n_feats = 0
+        cdef Feature* feats
         while g != NULL and p != NULL and i >= 0:
             gclas = g.clas
             gprev = get_p(g)
@@ -151,11 +149,13 @@ cdef class Tagger:
                 i -= 1
                 continue
             fill_context(context, sent, gprev, gprevprev, i)
-            self.extractor.extract(feats, values, context, NULL)
-            self.extractor.count(counts[g.clas], feats, 1)
+            feats = self.extractor.get_feats(context, &n_feats)
+            count_feats(counts[g.clas], feats, n_feats, 1)
+
             fill_context(context, sent, pprev, pprevprev, i)
-            self.extractor.extract(feats, values, context, NULL)
-            self.extractor.count(counts[p.clas], feats, -1)
+            feats = self.extractor.get_feats(context, &n_feats)
+            count_feats(counts[p.clas], feats, n_feats, -1)
+            
             g = g.prev
             p = p.prev
             i -= 1

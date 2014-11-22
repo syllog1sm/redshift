@@ -5,6 +5,7 @@ from cymem.cymem cimport Pool
 
 from ._tagger_beam cimport Beam, MaxViolation
 from thinc.typedefs cimport atom_t, feat_t, weight_t
+from thinc.features cimport Feature
 
 
 
@@ -17,8 +18,6 @@ cdef class Tagger:
     cdef size_t beam_width
 
     cdef atom_t* _context
-    cdef feat_t* _features
-    cdef weight_t* _values
     cdef weight_t** _beam_scores
 
     cpdef int tag(self, Input py_sent) except -1
