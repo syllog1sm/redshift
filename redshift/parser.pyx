@@ -112,7 +112,7 @@ def train(train_str, model_dir, n_iter=15, beam_width=8,
         for i in indices:
             py_sent = sents[i]
             parser.tagger.train_sent(py_sent)
-            parser.train_sent(py_sent)
+            parser.train_sent(py_sent, n)
         acc = float(parser.guide.n_corr) / parser.guide.total
         print(parser.guide.end_train_iter(n, feat_thresh) + '\t' +
               parser.tagger.guide.end_train_iter(n, feat_thresh))
@@ -229,12 +229,17 @@ cdef class Parser:
         beam.initialize(_init_callback, sent.n, sent)
         self.guide.cache.flush()
         cdef int i
+        words = py_sent.words
+        #print words
         while not beam.is_done:
-            self._advance_beam(beam, NULL, False)
+            self._advance_beam(beam, NULL, False, 0)
+            state = <State*>beam.at(0)
+            #print move_name(&self.moves[beam.histories[0][-1]]),
+            #print words[get_s1(state)], words[state.top], '|', words[state.i]
         _fill_parse(sent.tokens, <State*>beam.at(0))
         sent.score = beam.score
 
-    cpdef int train_sent(self, Input py_sent) except -1:
+    cpdef int train_sent(self, Input py_sent, int iter_num) except -1:
         '''Receive a training example, and update weights if the prediction
         is incorrect.
 
@@ -267,29 +272,36 @@ cdef class Parser:
         self.guide.cache.flush()
         cdef Transition* m
         cdef State* state
+        words = py_sent.words
         while not p_beam.is_done and not g_beam.is_done:
-            self._advance_beam(p_beam, gold_parse, False)
-            self._advance_beam(g_beam, gold_parse, True)
+            self._advance_beam(g_beam, gold_parse, True, iter_num)
+            self._advance_beam(p_beam, gold_parse, False, iter_num)
             violn.check(p_beam, g_beam)
-       
         counts = {}
-        if violn.delta >= 0:
-            self._count_feats(counts, sent, violn.g_hist, 1)
-            self._count_feats(counts, sent, violn.p_hist, -1)
+        if violn.cost >= 1 and p_beam._states[0].loss >= 1:
+            #print violn.cost, violn.delta
+            self._count_feats(counts, sent, violn.g_hist, 1, words)
+            #print
+            self._count_feats(counts, sent, violn.p_hist, -1, words)
             self.guide.update(counts)
         else:
             self.guide.update({})
         for i in range(sent.n):
             sent.tokens[i].tag = gold_tags[i]
-        self.guide.n_corr += violn.cost == 0
+        self.guide.n_corr += p_beam._states[0].loss == 0
         self.guide.total += 1
 
-    cdef int _advance_beam(self, Beam beam, Token* gold_parse, bint follow_gold) except -1:
+    cdef int _advance_beam(self, Beam beam, Token* gold_parse, bint follow_gold, int iter_num) except -1:
         cdef int i, j
+        if beam.is_done:
+            return 0
         for i in range(beam.size):
             state = <State*>beam.at(i)
             if is_final(state):
                 continue
+            if follow_gold:
+                for j in range(state.n):
+                    state.unshifted[j] = random.random() >= 0.2
             if gold_parse != NULL:
                 fill_costs(state, self.moves, self.nr_moves, gold_parse)
             if not follow_gold:
@@ -313,7 +325,7 @@ cdef class Parser:
         for i in range(self.nr_moves):
             classes[i].score = scores[i]
 
-    cdef dict _count_feats(self, dict counts, Sentence* sent, list hist, int inc):
+    cdef dict _count_feats(self, dict counts, Sentence* sent, list hist, int inc, list words):
         cdef atom_t* context = self._context
         cdef Pool mem = Pool()
         cdef State* state = init_state(sent, mem)
@@ -326,6 +338,8 @@ cdef class Parser:
             feats = self.extractor.get_feats(context, &n_feats)
             count_feats(counts.setdefault(clas, {}), feats, n_feats, inc)
             transition(&self.moves[clas], state)
+            #print move_name(&self.moves[clas]), words[get_s1(state)], words[state.top],
+            #print '|', words[state.i], words[get_n1(state)]
 
 
 cdef int _fill_parse(Token* parse, State* s) except -1:
@@ -346,7 +360,7 @@ cdef void* _init_callback(Pool mem, int n, void* extra_args):
     return init_state(<Sentence*>extra_args, mem)
 
 
-cdef int _transition_callback(void* dest, void* src, class_t clas, void* extra_args):
+cdef int _transition_callback(void* dest, void* src, class_t clas, void* extra_args) except -1:
     state = <State*>dest
     parent = <State*>src
     moves = <Transition*>extra_args

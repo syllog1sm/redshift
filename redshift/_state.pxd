@@ -59,6 +59,7 @@ cdef struct State:
     bint eol
 
     size_t* stack
+    bint* unshifted
     
     size_t** l_children
     size_t** r_children
@@ -75,6 +76,16 @@ cdef int del_r_child(State *s, size_t head) except -1
 
 cdef size_t pop_stack(State *s) except 0
 cdef int push_stack(State *s) except -1
+
+
+cdef inline size_t get_n1(State *s) nogil:
+    cdef int i
+    for i in range(s.i+1, s.n):
+        if s.parse[i].head == 0:
+            return i
+    else:
+        return s.n-1
+
 
 cdef inline size_t get_s1(State *s) nogil:
     if s.stack_len < 2:
@@ -102,8 +113,10 @@ cdef inline size_t get_r2(State *s, size_t head) nogil:
     return s.r_children[head][s.parse[head].r_valency - 2]
 
 
+
 cdef inline bint at_eol(State *s) nogil:
     return s.i >= (s.n - 1)
+
 
 cdef inline bint is_final(State *s) nogil:
     return at_eol(s) and s.stack_len == 0

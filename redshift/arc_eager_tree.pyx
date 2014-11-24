@@ -28,15 +28,27 @@ cdef unicode move_name(Transition* t):
 
 
 cdef inline bint can_shift(State* s) nogil:
-    return not at_eol(s)
+    if s.i >= (s.n-1):
+        return False
+    elif s.stack_len and get_n1(s) == (s.n - 1):
+        return False
+    else:
+        return True
 
 
 cdef inline bint can_right(State* s) nogil:
-    return s.stack_len >= 1 and not at_eol(s)
+    return s.stack_len >= 1 and s.i < (s.n-1)
 
 
 cdef inline bint can_left(State* s) nogil:
-    return s.stack_len >= 1 and s.parse[s.top].head == 0
+    if s.stack_len == 0:
+        return False
+    elif s.parse[s.top].head != 0:
+        return False
+    elif s.i == (s.n-1):
+        return False
+    else:
+        return True
 
 
 cdef inline bint can_reduce(State* s) nogil:
@@ -44,17 +56,17 @@ cdef inline bint can_reduce(State* s) nogil:
 
 
 cdef inline bint can_unshift(State* s) nogil:
-    if not at_eol(s):
-        return False
-    elif s.stack_len < 2:
+    if s.stack_len < 2:
         return False
     elif s.parse[s.top].head != 0:
+        return False
+    elif s.unshifted[s.top] and (s.i < (s.n-1)):
         return False
     return True
 
 
 cdef inline bint can_terminate(State* s) nogil:
-    return False
+    return s.i == s.n-1 and s.stack_len == 1
 
 
 cdef bint USE_EDIT = False
@@ -74,13 +86,13 @@ cdef inline bint can_edit(State* s) nogil:
 #   fluent children
 # - You can only Reduce a disfluent word if its head is disfluent
 cdef int shift_cost(State* s, Token* gold):
-    assert not at_eol(s)
     cost = 0
     # - You can always Shift a disfluent word
     if gold[s.i].is_edit:
         return cost
-    cost += has_head_in_stack(s, s.i, gold)
-    cost += has_child_in_stack(s, s.i, gold)
+    if s.unshifted[s.i]:
+        cost += has_head_in_stack(s, s.i, gold)
+        cost += has_child_in_stack(s, s.i, gold)
     return cost
 
 
@@ -116,6 +128,9 @@ cdef int left_cost(State* s, Token* gold):
     # - You can never arc from a fluent word to a disfluent word
     if not gold[s.i].is_edit and gold[s.top].is_edit:
         cost += 1
+    if not s.unshifted[s.top]:
+        cost += has_head_in_stack(s, s.top, gold)
+        cost += has_child_in_stack(s, s.top, gold)
     if gold[s.top].head == s.i:
         return cost
     cost += has_head_in_buffer(s, s.top, gold)
@@ -133,11 +148,11 @@ cdef int reduce_cost(State* s, Token* gold):
 
 
 cdef int unshift_cost(State* s, Token* gold):
-    return 1
+    return 0
 
 
 cdef int terminate_cost(State* s, Token* gold):
-    return 1
+    return 0
 
 
 cdef int edit_cost(State* s, Token* gold):
@@ -166,13 +181,13 @@ cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
 
 cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except -1:
     cdef int[N_MOVES] costs
-    costs[SHIFT] = shift_cost(s, gold) if can_shift(s) else -1
-    costs[LEFT] = left_cost(s, gold) if can_left(s) else -1
-    costs[RIGHT] = right_cost(s, gold) if can_right(s) else -1
-    costs[REDUCE] = reduce_cost(s, gold) if can_reduce(s) else -1
-    costs[UNSHIFT] = unshift_cost(s, gold) if can_unshift(s) else -1
-    costs[TERMINATE] = terminate_cost(s, gold) if can_terminate(s) else -1
-    costs[EDIT] = edit_cost(s, gold) if can_edit(s) else -1
+    costs[SHIFT] = shift_cost(s, gold) if can_shift(s) else 1
+    costs[LEFT] = left_cost(s, gold) if can_left(s) else 1
+    costs[RIGHT] = right_cost(s, gold) if can_right(s) else 1
+    costs[REDUCE] = reduce_cost(s, gold) if can_reduce(s) else 1
+    costs[UNSHIFT] = unshift_cost(s, gold) if can_unshift(s) else 1
+    costs[TERMINATE] = terminate_cost(s, gold) if can_terminate(s) else 1
+    costs[EDIT] = edit_cost(s, gold) if can_edit(s) else 1
     for i in range(n):
         classes[i].cost = costs[classes[i].move]
         if classes[i].move == LEFT and classes[i].cost == 0 and \
@@ -203,6 +218,12 @@ cdef int transition(Transition* t, State *s) except -1:
         add_dep(s, s.top, s.i, t.label)
         push_stack(s)
     elif t.move == REDUCE:
+        pop_stack(s)
+    elif t.move == UNSHIFT:
+        s.unshifted[s.top] = True
+        s.i = pop_stack(s)
+    elif t.move == TERMINATE:
+        add_dep(s, s.n-1, s.top, t.label)
         pop_stack(s)
     elif t.move == EDIT:
         edited = pop_stack(s)
