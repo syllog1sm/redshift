@@ -14,13 +14,12 @@ cdef enum:
     LEFT
     RIGHT
     UNSHIFT
-    TERMINATE
     EDIT
     N_MOVES
 
 
 cdef unicode move_name(Transition* t):
-    moves = [u'?', u'S', u'D', u'L', u'R', u'U', u'T', u'E']
+    moves = [u'?', u'S', u'D', u'L', u'R', u'U', u'E']
     name = moves[t.move]
     if t.move == RIGHT or t.move == LEFT or t.move == EDIT:
         name += u'-%s' % index.hashes.decode_label(t.label)
@@ -29,8 +28,6 @@ cdef unicode move_name(Transition* t):
 
 cdef inline bint can_shift(State* s) nogil:
     if s.i >= (s.n-1):
-        return False
-    elif s.stack_len and get_n1(s) == (s.n - 1):
         return False
     else:
         return True
@@ -45,7 +42,7 @@ cdef inline bint can_left(State* s) nogil:
         return False
     elif s.parse[s.top].head != 0:
         return False
-    elif s.i == (s.n-1):
+    elif s.i == (s.n-1) and s.stack_len >= 2 and not s.unshifted[s.top]:
         return False
     else:
         return True
@@ -60,13 +57,9 @@ cdef inline bint can_unshift(State* s) nogil:
         return False
     elif s.parse[s.top].head != 0:
         return False
-    elif s.unshifted[s.top] and (s.i < (s.n-1)):
+    elif s.unshifted[s.top]:
         return False
     return True
-
-
-cdef inline bint can_terminate(State* s) nogil:
-    return s.i == s.n-1 and s.stack_len == 1
 
 
 cdef bint USE_EDIT = False
@@ -148,11 +141,14 @@ cdef int reduce_cost(State* s, Token* gold):
 
 
 cdef int unshift_cost(State* s, Token* gold):
-    return 0
-
-
-cdef int terminate_cost(State* s, Token* gold):
-    return 0
+    cdef int i
+    for i in range(s.stack_len-1):
+        if s.parse[s.stack[i]].head == s.top:
+            return 1
+        elif s.parse[s.top].head == s.stack[i]:
+            return 1
+    else:
+        return 0
 
 
 cdef int edit_cost(State* s, Token* gold):
@@ -167,7 +163,6 @@ cdef int fill_valid(State* s, Transition* classes, size_t n) except -1:
     valid[RIGHT] = can_right(s)
     valid[REDUCE] = can_reduce(s)
     valid[UNSHIFT] = can_unshift(s)
-    valid[TERMINATE] = can_terminate(s)
     valid[EDIT] = can_edit(s)
     for i in range(n):
         classes[i].is_valid = valid[classes[i].move]
@@ -186,7 +181,6 @@ cdef int fill_costs(State* s, Transition* classes, size_t n, Token* gold) except
     costs[RIGHT] = right_cost(s, gold) if can_right(s) else 1
     costs[REDUCE] = reduce_cost(s, gold) if can_reduce(s) else 1
     costs[UNSHIFT] = unshift_cost(s, gold) if can_unshift(s) else 1
-    costs[TERMINATE] = terminate_cost(s, gold) if can_terminate(s) else 1
     costs[EDIT] = edit_cost(s, gold) if can_edit(s) else 1
     for i in range(n):
         classes[i].cost = costs[classes[i].move]
@@ -222,9 +216,6 @@ cdef int transition(Transition* t, State *s) except -1:
     elif t.move == UNSHIFT:
         s.unshifted[s.top] = True
         s.i = pop_stack(s)
-    elif t.move == TERMINATE:
-        add_dep(s, s.n-1, s.top, t.label)
-        pop_stack(s)
     elif t.move == EDIT:
         edited = pop_stack(s)
         while s.parse[edited].l_valency:
@@ -249,7 +240,7 @@ cdef size_t get_nr_moves(list left_labels, list right_labels, list dfl_labels,
                          bint use_break):
     global USE_EDIT
     USE_EDIT = bool(dfl_labels) 
-    return 4 + len(left_labels) + len(right_labels) + len(dfl_labels)
+    return 3 + len(left_labels) + len(right_labels) + len(dfl_labels)
 
 
 cdef int fill_moves(list left_labels, list right_labels, list dfl_labels,
@@ -260,7 +251,6 @@ cdef int fill_moves(list left_labels, list right_labels, list dfl_labels,
     moves[i].move = SHIFT; moves[i].label = 0; i += 1
     moves[i].move = REDUCE; moves[i].label = 0; i += 1
     moves[i].move = UNSHIFT; moves[i].label = 0; i += 1
-    moves[i].move = TERMINATE; moves[i].label = root_label; i += 1
     cdef size_t label
     for label in dfl_labels:
         moves[i].move = EDIT; moves[i].label = label; i += 1
