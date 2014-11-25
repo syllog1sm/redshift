@@ -353,6 +353,7 @@ cdef int fill_context(atom_t* context, SlotTokens* t, Token* parse) except -1:
         context[dist] = t.n0.i - t.s0.i
     else:
         context[dist] = 0
+
     # Disfluency match features
     context[prev_edit] = t.p1.is_edit
     context[prev_edit_wmatch] = t.p1.is_edit and t.p1.word == t.n0.word

@@ -81,12 +81,13 @@ cdef int fill_slots(State *s) except -1:
     s.slots.n0l0 = s.parse[s.l_children[s.i][0]]
     s.slots.n0 = s.parse[s.i]
     s.slots.n1 = s.parse[get_n1(s)]
-    s.slots.n2 = s.parse[s.i + 2 if s.i < (s.n - 2) else 0]
+    s.slots.n2 = s.parse[get_n2(s)]
 
     s.slots.p1 = s.parse[s.i - 1 if s.i >= 1 else 0]
     s.slots.p2 = s.parse[s.i - 2 if s.i >= 2 else 0]
     s.slots.s0n = s.parse[s.top + 1 if s.top and s.top < (s.n - 1) else 0]
     s.slots.s0nn = s.parse[s.top + 1 if s.top and s.top < (s.n - 2) else 0]
+
 
 cdef int has_child_in_buffer(State *s, size_t word, Token* gold) except -1:
     assert word != 0
