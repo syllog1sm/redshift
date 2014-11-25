@@ -84,7 +84,17 @@ cdef inline size_t get_n1(State *s) nogil:
         if s.parse[i].head == 0:
             return i
     else:
-        return s.n-1
+        return 0
+
+
+cdef inline size_t get_n2(State *s) nogil:
+    cdef int i
+    cdef int n1 = get_n1(s)
+    for i in range(n1, s.n):
+        if s.parse[i].head == 0:
+            return i
+    else:
+        return 0
 
 
 cdef inline size_t get_s1(State *s) nogil:
