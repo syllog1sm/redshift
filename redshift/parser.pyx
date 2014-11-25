@@ -52,6 +52,14 @@ def set_debug(val):
     DEBUG = val
 
 
+cdef str print_state(State* s, list words):
+    top = words[s.top]
+    second = words[get_s1(s)]
+    n0 = words[s.i]
+    n1 = words[get_n1(s)]
+    return ' '.join((second, top, '|', n0, n1))
+
+
 def train(train_str, model_dir, n_iter=15, beam_width=8,
           train_tagger=True, feat_set=u'basic', feat_thresh=0, seed=0,
           use_edit=False, use_break=False, use_filler=False):
