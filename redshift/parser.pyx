@@ -238,12 +238,9 @@ cdef class Parser:
         self.guide.cache.flush()
         cdef int i
         words = py_sent.words
-        #print words
         while not beam.is_done:
             self._advance_beam(beam, NULL, False, 0)
             state = <State*>beam.at(0)
-            #print move_name(&self.moves[beam.histories[0][-1]]),
-            #print words[get_s1(state)], words[state.top], '|', words[state.i]
         _fill_parse(sent.tokens, <State*>beam.at(0))
         sent.score = beam.score
 
@@ -274,30 +271,34 @@ cdef class Parser:
         cdef Beam g_beam = Beam(self.nr_moves, self.cfg.beam_width)
         p_beam.initialize(_init_callback, sent.n, sent)
         g_beam.initialize(_init_callback, sent.n, sent)
+        if iter_num < 5 or random.random() >= 0.5:
+            for i in range(g_beam.width):
+                state = <State*>g_beam.at(i)
+                memset(state.unshifted, 1, state.n * sizeof(bint))
 
         cdef MaxViolation violn = MaxViolation()
 
         self.guide.cache.flush()
         cdef Transition* m
-        cdef State* state
         words = py_sent.words
         while not p_beam.is_done and not g_beam.is_done:
             self._advance_beam(g_beam, gold_parse, True, iter_num)
+            s = <State*>g_beam.at(0)
             self._advance_beam(p_beam, gold_parse, False, iter_num)
             violn.check(p_beam, g_beam)
         counts = {}
         if violn.cost >= 1 and p_beam._states[0].loss >= 1:
-            #print violn.cost, violn.delta
             self._count_feats(counts, sent, violn.g_hist, 1, words)
-            #print
             self._count_feats(counts, sent, violn.p_hist, -1, words)
             self.guide.update(counts)
         else:
             self.guide.update({})
         for i in range(sent.n):
             sent.tokens[i].tag = gold_tags[i]
-        self.guide.n_corr += p_beam._states[0].loss == 0
+        is_true = p_beam._states[0].loss == 0
+        self.guide.n_corr += is_true
         self.guide.total += 1
+        return is_true
 
     cdef int _advance_beam(self, Beam beam, Token* gold_parse, bint follow_gold, int iter_num) except -1:
         cdef int i, j
@@ -307,9 +308,6 @@ cdef class Parser:
             state = <State*>beam.at(i)
             if is_final(state):
                 continue
-            if follow_gold:
-                for j in range(state.n):
-                    state.unshifted[j] = random.random() >= 0.2
             if gold_parse != NULL:
                 fill_costs(state, self.moves, self.nr_moves, gold_parse)
             if not follow_gold:
@@ -346,8 +344,6 @@ cdef class Parser:
             feats = self.extractor.get_feats(context, &n_feats)
             count_feats(counts.setdefault(clas, {}), feats, n_feats, inc)
             transition(&self.moves[clas], state)
-            #print move_name(&self.moves[clas]), words[get_s1(state)], words[state.top],
-            #print '|', words[state.i], words[get_n1(state)]
 
 
 cdef int _fill_parse(Token* parse, State* s) except -1:
