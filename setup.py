@@ -38,7 +38,7 @@ else:
 libs = []
 
 c_options = {
-    'transition_system': 'arc_eager'
+    'transition_system': 'arc_eager_tree'
 }
 with open(path.join(pwd, 'redshift', 'compile_time_options.pxi'), 'w') as file_:
     for k, v in c_options.iteritems():
@@ -75,6 +75,11 @@ if c_options['transition_system'] == 'arc_eager':
     exts.append(
         Extension('redshift.arc_eager', ["redshift/arc_eager.pyx"],
             language="c++", include_dirs=includes),
+    )
+elif c_options['transition_system'] == 'arc_eager_tree':
+    exts.append(
+        Extension('redshift.arc_eager_tree', ["redshift/arc_eager_tree.pyx"],
+            language="c++", include_dirs=includes)
     )
 elif c_options['transition_system'] == 'arc_hybrid':
     exts.append(
