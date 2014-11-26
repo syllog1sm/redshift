@@ -38,7 +38,7 @@ else:
 libs = []
 
 c_options = {
-    'transition_system': 'arc_eager_tree'
+    'transition_system': 'arc_eager'
 }
 with open(path.join(pwd, 'redshift', 'compile_time_options.pxi'), 'w') as file_:
     for k, v in c_options.iteritems():
