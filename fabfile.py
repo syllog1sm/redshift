@@ -30,6 +30,9 @@ def clean():
     local('python setup.py clean --all')
 
 def make():
+    local('python setup.py build_ext --inplace > /tmp/stdout 2> /tmp/stderr')
+
+def vmake():
     local('python setup.py build_ext --inplace')
 
 def test():
