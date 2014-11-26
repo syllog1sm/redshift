@@ -170,7 +170,7 @@ def get_templates(feats_str):
     '''
     match_feats = []
     # This value comes out of compile_time_options.pxi
-    IF TRANSITION_SYSTEM == 'arc_eager':
+    IF TRANSITION_SYSTEM == 'arc_eager' or TRANSITION_SYSTEM == 'arc_eager_tree':
         templates = _parse_features.arc_eager
     ELSE:
         templates = _parse_features.arc_hybrid
@@ -271,7 +271,7 @@ cdef class Parser:
         cdef Beam g_beam = Beam(self.nr_moves, self.cfg.beam_width)
         p_beam.initialize(_init_callback, sent.n, sent)
         g_beam.initialize(_init_callback, sent.n, sent)
-        if iter_num < 5 or random.random() >= 0.5:
+        if iter_num < 5 or random.random() >= 0.25:
             for i in range(g_beam.width):
                 state = <State*>g_beam.at(i)
                 memset(state.unshifted, 1, state.n * sizeof(bint))
@@ -287,7 +287,8 @@ cdef class Parser:
             self._advance_beam(p_beam, gold_parse, False, iter_num)
             violn.check(p_beam, g_beam)
         counts = {}
-        if violn.cost >= 1 and p_beam._states[0].loss >= 1:
+        is_true = p_beam._states[0].loss == 0
+        if not is_true:
             self._count_feats(counts, sent, violn.g_hist, 1, words)
             self._count_feats(counts, sent, violn.p_hist, -1, words)
             self.guide.update(counts)
@@ -295,7 +296,6 @@ cdef class Parser:
             self.guide.update({})
         for i in range(sent.n):
             sent.tokens[i].tag = gold_tags[i]
-        is_true = p_beam._states[0].loss == 0
         self.guide.n_corr += is_true
         self.guide.total += 1
         return is_true
