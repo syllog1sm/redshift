@@ -17,8 +17,6 @@ cdef class Tagger:
     cdef size_t beam_width
 
     cdef atom_t* _context
-    cdef feat_t* _features
-    cdef weight_t* _values
     cdef weight_t** _beam_scores
 
     cpdef int tag(self, Input py_sent) except -1
