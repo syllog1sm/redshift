@@ -13,6 +13,7 @@ from libc.string cimport memcpy, memset
 
 from cymem.cymem cimport Pool, Address
 from thinc.typedefs cimport weight_t, class_t, feat_t, atom_t
+from thinc.features cimport Feature, count_feats
 from thinc.search cimport Beam, MaxViolation
 
 from _state cimport *
@@ -22,7 +23,6 @@ from tagger cimport Tagger
 from util import Config
 
 from thinc.features cimport Extractor
-from thinc.features cimport NonZeroConjFeat
 import _parse_features
 from _parse_features cimport *
 
@@ -176,7 +176,7 @@ def get_templates(feats_str):
         templates += _parse_features.clusters
     if 'bitags' in feats_str:
         templates += _parse_features.pos_bigrams()
-    return templates, [NonZeroConjFeat for _ in templates]
+    return templates
 
 
 cdef class Parser:
@@ -186,18 +186,14 @@ cdef class Parser:
     cdef LinearModel guide
     cdef Tagger tagger
     cdef Transition* moves
-    cdef feat_t* _features
-    cdef weight_t* _values
     cdef atom_t* _context
     cdef size_t nr_moves
 
     def __init__(self, model_dir):
         assert os.path.exists(model_dir) and os.path.isdir(model_dir)
         self.cfg = Config.read(model_dir, 'config')
-        self.extractor = Extractor(*get_templates(self.cfg.features))
+        self.extractor = Extractor(get_templates(self.cfg.features))
         self._pool = Pool()
-        self._features = <feat_t*>self._pool.alloc(self.extractor.n, sizeof(feat_t))
-        self._values = <weight_t*>self._pool.alloc(self.extractor.n, sizeof(weight_t))
         self._context = <atom_t*>self._pool.alloc(_parse_features.context_size(), sizeof(atom_t))
 
         if os.path.exists(pjoin(model_dir, 'labels')):
@@ -208,7 +204,7 @@ cdef class Parser:
         fill_moves(self.cfg.left_labels, self.cfg.right_labels, self.cfg.dfl_labels,
                    self.cfg.use_break, self.moves)
         
-        self.guide = LinearModel(self.nr_moves)
+        self.guide = LinearModel(self.nr_moves, self.extractor.n_templ)
         if os.path.exists(pjoin(model_dir, 'model')):
             self.guide.load(pjoin(model_dir, 'model'))
         if os.path.exists(pjoin(model_dir, 'pos')):
@@ -305,26 +301,29 @@ cdef class Parser:
         if is_final(s):
             return 0
         cdef bint cache_hit = False
+        cdef int nr_active
+        cdef Feature* features
         fill_slots(s)
         scores = self.guide.cache.lookup(sizeof(SlotTokens), &s.slots, &cache_hit)
         if not cache_hit:
             fill_context(self._context, &s.slots, s.parse)
-            nr_active = self.extractor.extract(self._features, self._values,
-                                               self._context, NULL)
-            self.guide.score(scores, self._features, self._values)
+            features = self.extractor.get_feats(self._context, &nr_active)
+            self.guide.set_scores(scores, features, nr_active)
         cdef size_t i
         for i in range(self.nr_moves):
             classes[i].score = scores[i]
 
     cdef dict _count_feats(self, dict counts, Sentence* sent, list hist, int inc):
+        cdef Feature* feats
+        cdef int nr_active
         cdef Pool mem = Pool()
         cdef State* state = init_state(sent, mem)
         cdef class_t clas
         for clas in hist:
             fill_slots(state)
             fill_context(self._context, &state.slots, state.parse)
-            self.extractor.extract(self._features, self._values, self._context, NULL)
-            self.extractor.count(counts.setdefault(clas, {}), self._features, inc)
+            feats = self.extractor.get_feats(self._context, &nr_active)
+            count_feats(counts.setdefault(clas, {}), feats, nr_active, inc)
             transition(&self.moves[clas], state)
 
 
@@ -342,11 +341,12 @@ cdef int _fill_parse(Token* parse, State* s) except -1:
         parse[i] = s.parse[i]
 
 
-cdef void* _init_callback(Pool mem, int n, void* extra_args):
+cdef void* _init_callback(Pool mem, int n, void* extra_args) except NULL:
     return init_state(<Sentence*>extra_args, mem)
 
 
-cdef int _transition_callback(void* dest, void* src, class_t clas, void* extra_args):
+cdef int _transition_callback(void* dest, void* src, class_t clas,
+                              void* extra_args) except -1:
     state = <State*>dest
     parent = <State*>src
     moves = <Transition*>extra_args
@@ -354,5 +354,5 @@ cdef int _transition_callback(void* dest, void* src, class_t clas, void* extra_a
     transition(&moves[clas], state)
 
 
-cdef int _is_done_callback(void* state, void* extra_args):
+cdef int _is_done_callback(void* state, void* extra_args) except -1:
     return is_final(<State*>state)
