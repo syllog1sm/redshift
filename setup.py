@@ -27,7 +27,7 @@ def clean(ext):
 pwd = os.path.dirname(__file__)
 virtual_env = os.environ.get('VIRTUAL_ENV', '')
 
-includes = []
+includes = ['.', path.join(sys.prefix, 'include')]
 
 if 'VIRTUAL_ENV' in os.environ:
     includes += glob(path.join(os.environ['VIRTUAL_ENV'], 'include', 'site', '*'))
