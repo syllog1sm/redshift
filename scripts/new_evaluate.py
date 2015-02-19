@@ -31,7 +31,7 @@ class Scorer(object):
 
     @property
     def percent(self):
-        return (self.t / (self.t + self.f)) * 100
+        return (self.t / (self.t + self.f + 1e-100)) * 100
 
 
 class ParsedFile(object):
@@ -94,9 +94,9 @@ def score_sbd(gold, test):
             fn += gold_break and not test_break
             c += gold_break == test_break
             n += 1
-    p = tp / (tp + fp)
-    r = tp / (tp + fn)
-    f = (2 * p * r) / (p + r)
+    p = tp / (tp + fp + 1e-100)
+    r = tp / (tp + fn + 1e-100)
+    f = (2 * p * r) / (p + r + 1e-100)
     print "SBD p: %.2f" % (p * 100)
     print "SBD r: %.2f" % (r * 100)
     print "SBD f: %.2f" % (f * 100)
@@ -121,7 +121,7 @@ def main(gold_loc, test_loc, out_loc=None):
         results['SBD'] = sbd_score
     results['DIS P'] = p
     results['DIS R'] = r
-    results['DIS F'] = ((2 * p * r) / (p + r))
+    results['DIS F'] = ((2 * p * r) / (p + r + 1e-100))
     if out_loc is not None:
         with open(out_loc, 'w') as file_:
             json.dump(results, file_)
