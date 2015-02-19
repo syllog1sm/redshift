@@ -270,8 +270,9 @@ cdef class Parser:
             self._advance_beam(g_beam, gold_parse, True)
             violn.check(p_beam, g_beam)
        
+        is_true = p_beam._states[0].loss == 0
         counts = {}
-        if violn.delta >= 0:
+        if not is_true:
             self._count_feats(counts, sent, violn.g_hist, 1)
             self._count_feats(counts, sent, violn.p_hist, -1)
             self.guide.update(counts)
@@ -279,8 +280,9 @@ cdef class Parser:
             self.guide.update({})
         for i in range(sent.n):
             sent.tokens[i].tag = gold_tags[i]
-        self.guide.n_corr += violn.cost == 0
+        self.guide.n_corr += is_true
         self.guide.total += 1
+        return is_true
 
     cdef int _advance_beam(self, Beam beam, Token* gold_parse, bint follow_gold) except -1:
         cdef int i, j
@@ -306,7 +308,7 @@ cdef class Parser:
         fill_context(self._context, &s.slots, s.parse)
         cdef int n_feats = 0
         cdef Feature* feats = self.extractor.get_feats(self._context, &n_feats)
-        cdef weight_t* scores = self.guide.get_scores(feats, n_feats)
+        cdef const weight_t* scores = self.guide.get_scores(feats, n_feats)
         cdef int i
         for i in range(self.nr_moves):
             classes[i].score = scores[i]
@@ -340,11 +342,11 @@ cdef int _fill_parse(Token* parse, State* s) except -1:
         parse[i] = s.parse[i]
 
 
-cdef void* _init_callback(Pool mem, int n, void* extra_args):
+cdef void* _init_callback(Pool mem, int n, void* extra_args) except NULL:
     return init_state(<Sentence*>extra_args, mem)
 
 
-cdef int _transition_callback(void* dest, void* src, class_t clas, void* extra_args):
+cdef int _transition_callback(void* dest, void* src, class_t clas, void* extra_args) except -1:
     state = <State*>dest
     parent = <State*>src
     moves = <Transition*>extra_args
@@ -352,5 +354,5 @@ cdef int _transition_callback(void* dest, void* src, class_t clas, void* extra_a
     transition(&moves[clas], state)
 
 
-cdef int _is_done_callback(void* state, void* extra_args):
+cdef int _is_done_callback(void* state, void* extra_args) except -1:
     return is_final(<State*>state)
