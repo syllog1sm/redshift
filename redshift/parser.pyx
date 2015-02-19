@@ -100,6 +100,7 @@ def train(train_str, model_dir, n_iter=15, beam_width=8,
     Config.write(model_dir, 'config', beam_width=beam_width, features=feat_set,
                  feat_thresh=feat_thresh, seed=seed,
                  left_labels=left_labels, right_labels=right_labels,
+                 train_tagger=train_tagger,
                  dfl_labels=dfl_labels, use_break=use_break)
     Config.write(model_dir, 'tagger', beam_width=4, features='basic',
                  feat_thresh=5, tags={})
@@ -110,7 +111,8 @@ def train(train_str, model_dir, n_iter=15, beam_width=8,
         for i in indices:
             py_sent = sents[i]
             parser.train_sent(py_sent)
-            parser.tagger.train_sent(py_sent)
+            if train_tagger:
+                parser.tagger.train_sent(py_sent)
         acc = float(parser.guide.n_corr) / parser.guide.total
         print(parser.guide.end_train_iter(n, feat_thresh) + '\t' +
               parser.tagger.guide.end_train_iter(n, feat_thresh))
@@ -221,7 +223,7 @@ cdef class Parser:
         '''
         cdef Sentence* sent = py_sent.c_sent
         cdef Token* gold_parse = sent.tokens
-        if self.tagger:
+        if self.cfg.train_tagger:
             self.tagger.tag(py_sent)
         cdef Beam beam = Beam(self.nr_moves, self.cfg.beam_width)
         beam.initialize(_init_callback, sent.n, sent)
@@ -253,7 +255,7 @@ cdef class Parser:
         cdef int i
         for i in range(sent.n):
             gold_tags[i] = gold_parse[i].tag
-        if self.tagger:
+        if self.cfg.train_tagger:
             self.tagger.tag(py_sent)
         cdef Beam p_beam = Beam(self.nr_moves, self.cfg.beam_width)
         cdef Beam g_beam = Beam(self.nr_moves, self.cfg.beam_width)
