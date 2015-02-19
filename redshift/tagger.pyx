@@ -77,7 +77,7 @@ cdef class Tagger:
         cdef size_t p_idx
         cdef TagState* s
         cdef size_t i, j
-        for i in range(1, sent.n - 1):
+        for i in range(sent.n - 1):
             # Extend beam
             for j in range(beam.size):
                 # At this point, beam.clas is the _last_ prediction, not the
@@ -101,7 +101,7 @@ cdef class Tagger:
         cdef TagState* gold = <TagState*>tmp_mem.alloc(1, sizeof(TagState))
         cdef MaxViolation violn = MaxViolation()
         cdef TagState* s
-        for i in range(1, sent.n-1):
+        for i in range(sent.n-1):
             # Extend gold
             self._predict(i, gold, sent, scores)
             gold = extend_state(gold, sent.tokens[i].tag, scores[sent.tokens[i].tag],
@@ -139,7 +139,7 @@ cdef class Tagger:
         cdef size_t pclas, pprev, prevprev
         cdef int n_feats = 0
         cdef Feature* feats
-        while g != NULL and p != NULL and i >= 1:
+        while g != NULL and p != NULL and i >= 0:
             gclas = g.clas
             gprev = get_p(g)
             gprevprev = get_pp(g)
