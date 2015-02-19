@@ -1,5 +1,7 @@
 # cython: profile=True
 
+from libc.string cimport memset
+
 import index.hashes
 cimport index.hashes
 from .util import Config
@@ -123,6 +125,7 @@ cdef class Tagger:
         fill_context(self._context, sent, s.clas, get_p(s), i)
         cdef int n_feats = 0
         cdef Feature* feats = self.extractor.get_feats(self._context, &n_feats)
+        memset(scores, 0, self.guide.nr_class * sizeof(weight_t))
         self.guide.set_scores(scores, feats, n_feats)
 
     cdef dict _count_feats(self, Sentence* sent, TagState* p, TagState* g, int i):
