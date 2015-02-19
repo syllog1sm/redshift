@@ -51,7 +51,7 @@ def set_debug(val):
 
 
 def train(train_str, model_dir, n_iter=15, beam_width=8,
-          train_tagger=True, feat_set=u'basic', feat_thresh=0, seed=0,
+          train_tagger=True, feat_set=u'bitags+clusters', feat_thresh=0, seed=0,
           use_edit=False, use_break=False, use_filler=False):
     """Train a model from a CoNLL-formatted training string, creating a model in
     model_dir.
@@ -109,8 +109,8 @@ def train(train_str, model_dir, n_iter=15, beam_width=8,
     for n in range(n_iter):
         for i in indices:
             py_sent = sents[i]
-            parser.tagger.train_sent(py_sent)
             parser.train_sent(py_sent)
+            parser.tagger.train_sent(py_sent)
         acc = float(parser.guide.n_corr) / parser.guide.total
         print(parser.guide.end_train_iter(n, feat_thresh) + '\t' +
               parser.tagger.guide.end_train_iter(n, feat_thresh))
