@@ -3,7 +3,7 @@ Redshift
 
 **This library is research code, and is in maintainence mode.**
 
-**For my actively developed, commercially-focussed NLP library, see http://honnibal.github.io/spaCy/ **
+**For my actively developed, commercially-focussed NLP library, see http://honnibal.github.io/spaCy/**
 
 
 Redshift is a natural-language syntactic dependency parser.  The current release features fast and accurate parsing,
@@ -84,6 +84,7 @@ The following commands will set up a virtualenv with Python 2.7.5, the parser, a
     $ source .env/bin/activate
     $ pip install distribute
     $ pip install cython
+    $ pip install thinc
     $ pip install -r requirements.txt
     $ export PYTHONPATH=`pwd`:$PYTHONPATH # ...and set PYTHONPATH.
     $ fab make test
