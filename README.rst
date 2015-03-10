@@ -1,6 +1,11 @@
 Redshift
 ========
 
+**This library is research code, and is in maintainence mode.**
+
+**For my actively developed, commercially-focussed NLP library, see http://honnibal.github.io/spaCy/ **
+
+
 Redshift is a natural-language syntactic dependency parser.  The current release features fast and accurate parsing,
 but requires the text to be pre-processed.  Future releases will integrate tokenisation and part-of-speech tagging,
 and have special features for parsing informal text.
