@@ -115,13 +115,9 @@ but currently it feels strange to have a "source" release that users wouldn't be
 LICENSE
 ---------------
 
-I'm still working out how to specify the license, but my intention at the moment is:
+This software is available for non-commercial use only. You may download, run and modify the code for research purposes,
+personal interest, education, teaching, etc. My commercial NLP suite is spaCy: http://spacy.io .
 
-- FOSS for non-commercial use
-- Modifications should be distributed
-- Commercial use licenses available on request. These will be granted pretty much automatically to any company that isn't yet profitable, or really anyone who isn't big.
-- RESTful parser APIs to make it easier to start using the parser.
-    
 ::
 
     Copyright (C) 2014 Matthew Honnibal
