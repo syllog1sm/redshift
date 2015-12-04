@@ -29,8 +29,8 @@ env.use_ssh_config = True
 def clean():
     local('python setup.py clean --all')
 
-def make():
-    local('python setup.py build_ext --inplace')
+def make(env='.env'):
+    local('source %s/bin/activate && python setup.py build_ext --inplace' % env)
 
 def test():
     local('py.test')
