@@ -1,6 +1,6 @@
 cython
 cymem == 1.10
-murmurhash
+murmurhash == 0.24
 preshed == 0.35
 thinc == 1.73
 humanize
