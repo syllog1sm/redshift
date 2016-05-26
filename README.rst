@@ -3,7 +3,7 @@ Redshift
 
 **This library is research code, and is in maintainence mode.**
 
-**For my actively developed, commercially-focussed NLP library, see http://honnibal.github.io/spaCy/**
+**For my actively developed, commercially-focussed NLP library, see https://spacy.io/**
 
 
 Redshift is a natural-language syntactic dependency parser.  The current release features fast and accurate parsing,
